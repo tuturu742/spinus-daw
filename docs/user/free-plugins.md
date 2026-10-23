@@ -5,12 +5,12 @@ ones their projects publish for your system:
 
 | Plugins | What they are | Linux | Windows | License |
 |---|---|---|---|---|
-| **Surge XT** (Surge Synth Team) | A big synthesizer with over 2,000 sounds and wavetables, plus Surge XT Effects | 350 MB | 302 MB | GPL-3.0 |
-| **LSP Plugins** | Parametric EQ, compressor, limiter, gate, multiband compressor, spectrum analyzer | 39 MB | not published | LGPL-3.0 |
-| **Dragonfly Reverb** | Hall, room and plate reverbs, and early reflections | 2 MB | 22 MB | GPL-3.0 |
-| **Odin 2** (TheWaveWarden) | A synthesizer with analog-style, wavetable, FM and chiptune oscillators, with its factory presets | 67 MB | installer only | GPL-3.0 |
-| **OB-Xf** (Surge Synth Team) | An analog-style polyphonic synthesizer in the spirit of the Oberheim OB-X, the successor of OB-Xd | 22 MB | 9 MB | GPL-3.0 |
-| **PeakEater** | A clipper and waveshaper (hard, soft, cubic and more) with oversampling | 5 MB | 4 MB | GPL-3.0 |
+| [**Surge XT**](https://surge-synthesizer.github.io/) (Surge Synth Team) | A big synthesizer with over 2,000 sounds and wavetables, plus Surge XT Effects | 350 MB | 302 MB | GPL-3.0 |
+| [**LSP Plugins**](https://lsp-plug.in/) | Parametric EQ, compressor, limiter, gate, multiband compressor, spectrum analyzer | 39 MB | not published | LGPL-3.0 |
+| [**Dragonfly Reverb**](https://michaelwillis.github.io/dragonfly-reverb/) | Hall, room and plate reverbs, and early reflections | 2 MB | 22 MB | GPL-3.0 |
+| [**Odin 2**](https://thewavewarden.com/pages/odin-2) (TheWaveWarden) | A synthesizer with analog-style, wavetable, FM and chiptune oscillators, with its factory presets | 67 MB | installer only | GPL-3.0 |
+| [**OB-Xf**](https://github.com/surge-synthesizer/OB-Xf) (Surge Synth Team) | An analog-style polyphonic synthesizer in the spirit of the Oberheim OB-X, the successor of OB-Xd | 22 MB | 9 MB | GPL-3.0 |
+| [**PeakEater**](https://github.com/vvvar/PeakEater) | A clipper and waveshaper (hard, soft, cubic and more) with oversampling | 5 MB | 4 MB | GPL-3.0 |
 
 In the [Browser](browser.md), Odin 2 and OB-Xf are with the instruments, PeakEater with the effects.
 
