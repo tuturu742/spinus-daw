@@ -82,6 +82,10 @@ struct OriginalEnvironment
     }();
 };
 
+// No Mono or Gecko install prompts (they block a plugin), and no menu entries: Windows installers in Spinus's
+// own prefix would otherwise add their programs to the desktop's application menu.
+constexpr const char* wineDllOverrides = "mscoree,mshtml=;winemenubuilder.exe=d";
+
 const OriginalEnvironment& original()
 {
     static const OriginalEnvironment env;
@@ -440,7 +444,7 @@ void WindowsPlugins::applyEnvironment (const Runtime& r)
     // No .NET or Internet Explorer install questions when a plugin starts Wine (they block the plugin);
     // a choice of the user's own stays.
     if (! o.dllOverrides)
-        setenv ("WINEDLLOVERRIDES", "mscoree,mshtml=", 1);
+        setenv ("WINEDLLOVERRIDES", wineDllOverrides, 1);
     if (r.kind == Runtime::Kind::spinus)
         setenv ("WINELOADER", r.wine.getFullPathName().toRawUTF8(), 1);
     else if (o.wineloader)
@@ -456,7 +460,7 @@ juce::StringArray WindowsPlugins::wineCommand (const Runtime& r, const juce::Str
     juce::StringArray command { "env",
                                 "WINEPREFIX=" + getPrefix().getFullPathName(),
                                 "WINEDEBUG=-all",
-                                "WINEDLLOVERRIDES=mscoree,mshtml=", // no Mono or Gecko install prompts
+                                "WINEDLLOVERRIDES=" + juce::String (wineDllOverrides),
                                 "PATH=" + pathFor (r),
                                 "WINELOADER=" + r.wine.getFullPathName(),
                                 r.wine.getFullPathName() };
@@ -1072,7 +1076,7 @@ WindowsPlugins::TestResult WindowsPlugins::test (const Runtime& r, const juce::F
     options.scannerExecutable = scannerExecutable;
     options.timeoutMs = 120000; // the first start of a prefix can take a while
     options.environment = { "-u", "WINEPREFIX", "PATH=" + pathFor (r), "WINELOADER=" + r.wine.getFullPathName(),
-                            "WINEDLLOVERRIDES=mscoree,mshtml=" };
+                            "WINEDLLOVERRIDES=" + juce::String (wineDllOverrides) };
     juce::OwnedArray<juce::PluginDescription> found;
     const auto scanned = PluginScanner (options).scanFile ("CLAP", bridge.getFullPathName(), found);
     if (scanned.failed())

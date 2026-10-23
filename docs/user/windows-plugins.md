@@ -63,6 +63,9 @@ window says it is **waiting for a plugin's own window**. Answer it (for a remind
 a browser the plugin opened for its website stays where it is. If you still can't see the window, look
 for it in the taskbar.
 
+Installers run inside Spinus's own Windows folder, so they add nothing to your desktop's application
+menu.
+
 ## Removing a plugin
 
 Each plugin in the list has a **Remove** button. Spinus asks first, then deletes the plugin from its
