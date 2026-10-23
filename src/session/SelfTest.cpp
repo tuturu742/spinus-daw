@@ -160,6 +160,15 @@ bool runSelfTest (tracktion::Engine& engine, const juce::File& folder,
                    (demoRead.wasOk() ? juce::String() : ": " + demoRead.getErrorMessage()));
     }
 
+    // 7. A font to draw the window's text with (on Linux, from the system: without one, no text shows).
+    const juce::Font font { juce::FontOptions (14.0f) };
+    const auto typeface = font.getTypefacePtr();
+    check (juce::GlyphArrangement::getStringWidth (font, "Spinus") > 0.0f && typeface != nullptr,
+           "a font for the window's text (" +
+               (typeface != nullptr && typeface->getName().isNotEmpty()
+                    ? typeface->getName()
+                    : juce::String ("none found: install one, e.g. DejaVu Sans")) +
+               ")");
     return allPassed;
 }
 

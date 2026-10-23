@@ -12,6 +12,11 @@ It makes, saves, reopens and exports a short song without sound card or window, 
 works here." If a line fails, it says what is wrong. (From the AppImage: `./Spinus-*.AppImage
 --self-test ~/spinus-check`.) Delete `~/spinus-check` afterwards.
 
+## The window has no text
+
+Spinus draws its text with a font from your system. Install one, for example DejaVu Sans (on Arch:
+`sudo pacman -S ttf-dejavu`), and start Spinus again. The self-test above says which font it found.
+
 ## No sound
 
 - Open [Audio settings](audio-settings.md) (**F10**) and click **Test** beside **Play through**. No beep:

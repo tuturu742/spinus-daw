@@ -11,9 +11,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # ttf-dejavu: a container has no fonts, and without one no text is laid out (as on a desktop, which has fonts).
   ARCH_PACKAGES: >-
     base-devel git cmake ninja ccache clang
-    alsa-lib jack2 freetype2 fontconfig
+    alsa-lib jack2 freetype2 fontconfig ttf-dejavu
     libx11 libxrandr libxinerama libxcursor libxext libxcomposite libxi libxrender mesa
     lv2 lilv curl xorg-server-xvfb xorg-xauth openbox
     libsndfile cairo rubberband

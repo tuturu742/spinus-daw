@@ -159,8 +159,8 @@ On Windows, in PowerShell:
 & "$env:LOCALAPPDATA\Programs\Spinus DAW\spinus.exe" --self-test "$HOME\spinus-check" | Out-Host
 ```
 
-Spinus makes a short song, saves it, opens it again and exports it, then checks its helper programs
-and the Python its AI features use. It needs no sound card or window, and prints a line per check,
+Spinus makes a short song, saves it, opens it again and exports it, then checks its helper programs,
+the Python its AI features use, the demo songs, and that there is a font to draw its text with. It needs no sound card or window, and prints a line per check,
 ending with "Spinus works here." Without the AI features installed, their line says "skipped": Spinus
 works without them. The song and the exported WAV are left in `~/spinus-check` to look at;
 delete the folder afterwards.

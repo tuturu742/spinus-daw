@@ -15,8 +15,8 @@ namespace spinus
 
 /** `spinus --self-test <folder>`: checks, without an audio device, that this build of
     Spinus can make a song, save it, open it again and export it with sound, that its helper programs
-    start, that the AI service's Python has what it needs and that the demo songs are there. For checking
-    packages on other systems.
+    start, that the AI service's Python has what it needs, that the demo songs are there and that there
+    is a font for the window's text. For checking packages on other systems.
 
     Writes a line per check through `say` ("ok: ...", "FAILED: ...", or "skipped: ..." for the AI service
     when no Python for it is installed: AI is optional); true when no check failed.
