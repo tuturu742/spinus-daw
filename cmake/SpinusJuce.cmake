@@ -54,15 +54,21 @@ target_compile_definitions (spinus_juce
 # FST stands in for the VST2 SDK headers JUCE's VST2 host expects; only the JUCE module sources see it.
 # JUCE sizes VstSpeakerArrangement as if `speakers` held 8 entries inline (it only allocates extra room
 # beyond 8), but FST declares a flexible array, so JUCE overflows the heap when it fills in a stereo
-# arrangement. Compile against a copy of fst.h with `speakers[8]`; the submodule stays untouched.
+# arrangement. MidiKeyName's flexible `keyName` has the same problem: JUCE puts one on the stack for the
+# plugin to write a name of up to 64 characters into (and MSVC refuses to build it). Compile against a
+# copy of fst.h with `speakers[8]` and the SDK's MidiKeyName layout; the submodule stays untouched.
 set (fstGenerated "${CMAKE_BINARY_DIR}/generated/fst")
 file (READ "${PROJECT_SOURCE_DIR}/external/fst/fst/fst.h" fstHeader)
 string (REPLACE "t_fstSpeakerProperties speakers[];" "t_fstSpeakerProperties speakers[8]; /* Spinus: JUCE layout */"
         fstPatched "${fstHeader}")
+string (REPLACE "char keyName[]; /* length: kVstMaxNameLen */"
+        "char keyName[64]; t_fstInt32 reserved; t_fstInt32 flags; /* Spinus: the SDK's layout */"
+        fstPatched2 "${fstPatched}")
 
-if (fstPatched STREQUAL fstHeader)
-    message (FATAL_ERROR "external/fst changed: re-check the VstSpeakerArrangement fix in cmake/SpinusJuce.cmake")
+if (fstPatched STREQUAL fstHeader OR fstPatched2 STREQUAL fstPatched)
+    message (FATAL_ERROR "external/fst changed: re-check the fst.h fixes in cmake/SpinusJuce.cmake")
 endif()
+set (fstPatched "${fstPatched2}")
 
 file (CONFIGURE OUTPUT "${fstGenerated}/fst/fst.h" CONTENT "${fstPatched}" @ONLY)
 foreach (header aeffect.h aeffectx.h)
