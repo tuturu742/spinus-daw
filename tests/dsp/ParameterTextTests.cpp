@@ -59,7 +59,7 @@ TEST_CASE ("Every Spinus number setting reads back the text it shows", "[dsp][pa
                 INFO (text);
                 const auto v = param::normalisedForText (*p, text);
                 REQUIRE (v.has_value());
-                CHECK (p->getText (*v, 200) == text);
+                CHECK (p->getText (v.value(), 200) == text);
                 CHECK (p->getText (p->getValueForText (text), 200) == text); // a knob's text box: the same
             }
         }
@@ -191,7 +191,7 @@ TEST_CASE ("Typed units: what reads and what agrees", "[dsp][parameters]")
     CHECK (kind ("-6 dB").value == Catch::Approx (-6.0));
     CHECK (kind ("4:1").kind == UnitKind::ratio);
     CHECK (kind ("30% L").value == Catch::Approx (-30.0));
-    CHECK (param::read (juce::String (juce::CharPointer_UTF8 ("90\xc2\xb0")))->kind == UnitKind::degrees);
+    CHECK (param::read (juce::String (juce::CharPointer_UTF8 ("90\xc2\xb0"))).value().kind == UnitKind::degrees);
     CHECK (kind ("12").kind == UnitKind::none);
     CHECK (! param::read ("Centre").has_value());
     CHECK (param::unitsAgree ("250 ms", "1.20 s"));
