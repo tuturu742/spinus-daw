@@ -139,9 +139,11 @@ bool runSelfTest (tracktion::Engine& engine, const juce::File& folder,
                                     "'); import spinus_ai.service, httpx, keyring, numpy; print('ready')" },
             core::ChildProcess::wantStdOut | core::ChildProcess::wantStdErr);
         const auto output = pythonRan ? python.readAllProcessOutput() : juce::String();
-        check (output.contains ("ready"),
-               "the AI service's Python (" + installation.python.getFullPathName() + ")" +
-                   (output.contains ("ready") ? juce::String() : ": " + output.trim().getLastCharacters (300)));
+        // A line of its own: an error quotes the command, print('ready') included.
+        const auto lines = juce::StringArray::fromLines (output.trim());
+        const bool ready = lines.contains ("ready");
+        check (ready, "the AI service's Python (" + installation.python.getFullPathName() + ")" +
+                          (ready ? juce::String() : ": " + lines[lines.size() - 1].getLastCharacters (300)));
     }
 
     // 6. The demo songs are there (the Browser's Projects) and read.
@@ -157,6 +159,7 @@ bool runSelfTest (tracktion::Engine& engine, const juce::File& folder,
                "the demo song " + demoSong.getFileName() + " (" + demoSong.getFullPathName() + ")" +
                    (demoRead.wasOk() ? juce::String() : ": " + demoRead.getErrorMessage()));
     }
+
     return allPassed;
 }
 
