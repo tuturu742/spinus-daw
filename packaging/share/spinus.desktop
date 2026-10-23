@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Spinus DAW
+GenericName=Digital Audio Workstation
+Comment=Make music with patterns, a piano roll, a playlist and a mixer
+Exec=spinus %f
+Icon=spinus
+Terminal=false
+Categories=AudioVideo;Audio;Midi;Sequencer;Music;
+MimeType=application/x-spinus-project;
+Keywords=music;daw;sequencer;synth;beat;
+StartupWMClass=Spinus

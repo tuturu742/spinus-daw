@@ -1,0 +1,336 @@
+# spinus_core: everything except the executable entry point, so tests can link it.
+
+add_library (spinus_core STATIC
+    ai/AiService.cpp
+    ai/AiService.h
+    ai/Proposal.cpp
+    ai/Proposal.h
+    commands/Command.cpp
+    commands/Command.h
+    commands/CommandHistory.cpp
+    commands/CommandHistory.h
+    commands/CommandRegistry.cpp
+    commands/CommandRegistry.h
+    core/ChildProcess.cpp
+    core/ChildProcess.h
+    core/DBus.cpp
+    core/DBus.h
+    core/FileDialog.cpp
+    core/FileDialog.h
+    core/FileDialogPortal.cpp
+    core/FileDialogPortal.h
+    dsp/DeviceControls.cpp
+    dsp/DeviceControls.h
+    dsp/NoteExpression.h
+    dsp/OwnEffect.h
+    dsp/OwnEffectParameters.h
+    dsp/ducker/DuckerEditor.cpp
+    dsp/ducker/DuckerEditor.h
+    dsp/ducker/DuckerEngine.cpp
+    dsp/ducker/DuckerEngine.h
+    dsp/ducker/DuckerProcessor.cpp
+    dsp/ducker/DuckerProcessor.h
+    dsp/dynamics/CompressorEngine.cpp
+    dsp/dynamics/CompressorEngine.h
+    dsp/dynamics/DynamicsEditors.cpp
+    dsp/dynamics/DynamicsEditors.h
+    dsp/dynamics/DynamicsProcessors.cpp
+    dsp/dynamics/DynamicsProcessors.h
+    dsp/dynamics/GateEngine.cpp
+    dsp/dynamics/GateEngine.h
+    dsp/dynamics/LimiterEngine.cpp
+    dsp/dynamics/LimiterEngine.h
+    dsp/eq/EqEditor.cpp
+    dsp/eq/EqEditor.h
+    dsp/eq/EqEngine.cpp
+    dsp/eq/EqEngine.h
+    dsp/eq/EqProcessor.cpp
+    dsp/eq/EqProcessor.h
+    dsp/filter/FilterEditor.cpp
+    dsp/filter/FilterEditor.h
+    dsp/filter/FilterEngine.cpp
+    dsp/filter/FilterEngine.h
+    dsp/filter/FilterProcessor.cpp
+    dsp/filter/FilterProcessor.h
+    dsp/SpinusPluginFormat.cpp
+    dsp/drums/DrumMachineEditor.cpp
+    dsp/drums/DrumMachineEditor.h
+    dsp/drums/DrumMachineProcessor.cpp
+    dsp/drums/DrumMachineProcessor.h
+    dsp/drums/DrumSynth.cpp
+    dsp/drums/DrumSynth.h
+    dsp/SpinusPluginFormat.h
+    dsp/sampler/SampleSet.cpp
+    dsp/sampler/SampleStorage.cpp
+    dsp/sampler/SampleStorage.h
+    dsp/sampler/SampleSet.h
+    dsp/sampler/SamplerEditor.cpp
+    dsp/sampler/SamplerEditor.h
+    dsp/sampler/SamplerEngine.cpp
+    dsp/sampler/SamplerEngine.h
+    dsp/sampler/SamplerProcessor.cpp
+    dsp/sampler/SamplerProcessor.h
+    dsp/slicer/BeatSlicerEditor.cpp
+    dsp/slicer/BeatSlicerEditor.h
+    dsp/slicer/BeatSlicerProcessor.cpp
+    dsp/slicer/BeatSlicerProcessor.h
+    dsp/slicer/Slicing.cpp
+    dsp/slicer/Slicing.h
+    dsp/threeosc/ThreeOscEditor.cpp
+    dsp/threeosc/ThreeOscEditor.h
+    dsp/threeosc/ThreeOscEngine.cpp
+    dsp/threeosc/ThreeOscEngine.h
+    dsp/threeosc/ThreeOscProcessor.cpp
+    dsp/threeosc/ThreeOscPresets.cpp
+    dsp/threeosc/ThreeOscPresets.h
+    dsp/threeosc/ThreeOscProcessor.h
+    dsp/loudness/LoudnessEngine.cpp
+    dsp/loudness/LoudnessEngine.h
+    dsp/loudness/LoudnessMeterEditor.cpp
+    dsp/loudness/LoudnessMeterEditor.h
+    dsp/loudness/LoudnessMeterProcessor.cpp
+    dsp/loudness/LoudnessMeterProcessor.h
+    dsp/utility/StereoUtilityEditor.cpp
+    dsp/utility/StereoUtilityEditor.h
+    dsp/utility/StereoUtilityEngine.cpp
+    dsp/utility/StereoUtilityEngine.h
+    dsp/utility/StereoUtilityProcessor.cpp
+    dsp/utility/StereoUtilityProcessor.h
+    dsp/tune/PitchDetector.cpp
+    dsp/tune/PitchDetector.h
+    dsp/tune/TuneEngine.cpp
+    dsp/tune/TuneEditor.cpp
+    dsp/tune/TuneEditor.h
+    dsp/tune/TuneEngine.h
+    dsp/tune/TuneProcessor.cpp
+    dsp/tune/TuneProcessor.h
+    engine/AudioGuardPlugin.cpp
+    engine/AudioGuardPlugin.h
+    engine/OutputCapturePlugin.cpp
+    engine/OutputCapturePlugin.h
+    engine/MutePlugin.cpp
+    engine/MutePlugin.h
+    engine/ParameterIds.cpp
+    engine/ParameterIds.h
+    engine/StemCapturePlugin.cpp
+    engine/StemCapturePlugin.h
+    engine/AudioSetup.cpp
+    engine/AudioSetup.h
+    engine/BundledDevices.cpp
+    engine/BundledDevices.h
+    engine/DeviceFactory.cpp
+    engine/DeviceFactory.h
+    engine/EngineAdapter.cpp
+    engine/Beats.h
+    engine/EngineAdapter.h
+    engine/Exporter.cpp
+    engine/Exporter.h
+    engine/ExpressiveMidi.cpp
+    engine/TuneRender.cpp
+    engine/TuneRender.h
+    engine/ExpressiveMidi.h
+    engine/PluginCrashGuard.cpp
+    engine/PluginCrashGuard.h
+    engine/SamplePreview.cpp
+    engine/SamplePreview.h
+    engine/EngineHost.cpp
+    engine/PipeWireInput.cpp
+    engine/EngineHost.h
+    model/Automation.cpp
+    model/Chords.cpp
+    model/NoteTools.cpp
+    model/Automation.h
+    model/Freeze.cpp
+    model/Freeze.h
+    model/Ids.h
+    model/Scales.cpp
+    model/Scales.h
+    model/Migrations.cpp
+    model/Migrations.h
+    model/Model.cpp
+    model/Model.h
+    model/ModelJson.cpp
+    model/ModelJson.h
+    model/StockDevices.cpp
+    model/StockDevices.h
+    model/Validation.cpp
+    model/Validation.h
+    plugins/DeviceList.cpp
+    plugins/DeviceList.h
+    plugins/PluginCatalog.cpp
+    plugins/PluginCatalog.h
+    plugins/ArchiveReader.cpp
+    plugins/ArchiveReader.h
+    plugins/PluginDownloads.cpp
+    plugins/PluginDownloads.h
+    plugins/PluginScanner.cpp
+    plugins/PluginScanner.h
+    plugins/SandboxList.cpp
+    plugins/SandboxList.h
+    plugins/sandbox/SandboxHost.cpp
+    plugins/sandbox/SandboxHost.h
+    plugins/sandbox/SandboxPluginFormat.cpp
+    plugins/sandbox/SandboxPluginFormat.h
+    plugins/sandbox/SandboxProtocol.cpp
+    plugins/sandbox/SandboxProtocol.h
+    plugins/SurgePresets.cpp
+    plugins/SurgePresets.h
+    project/AudioImport.cpp
+    project/ProjectFiles.cpp
+    project/ProjectFiles.h
+    session/SelfTest.cpp
+    session/TextLocale.cpp
+    session/TextLocale.h
+    session/SelfTest.h
+    session/Freezer.cpp
+    session/LiveExport.cpp
+    session/LiveExport.h
+    session/Freezer.h
+    session/AudioRecorder.cpp
+    session/BuiltInPresets.cpp
+    session/BuiltInPresets.h
+    session/IdeaRecorder.cpp
+    session/RecordingTime.cpp
+    session/IdeaRecorder.h
+    session/IdeaToNotes.cpp
+    session/IdeaToNotes.h
+    session/MidiRecorder.cpp
+    session/MidiRecorder.h
+    session/LauncherRecorder.cpp
+    session/LauncherRecorder.h
+    session/DemoSong.cpp
+    session/DemoSong.h
+    session/ProjectDocument.cpp
+    session/ProjectDocument.h
+    session/ProjectList.cpp
+    session/ProjectList.h
+    session/Session.cpp
+    session/SlicesToPattern.cpp
+    session/StemSamples.cpp
+    session/HiddenInstrument.cpp
+    session/InstrumentPresets.cpp
+    session/PresetPreviews.cpp
+    session/SynthMatch.cpp
+    session/SynthProfile.cpp
+    session/Suggestions.cpp
+    session/Suggestions.h
+    session/Tuner.cpp
+    session/Tuner.h
+    session/SlicesToPattern.h
+    session/StemSamples.h
+    session/HiddenInstrument.h
+    session/PresetPreviews.h
+    session/SynthMatch.h
+    session/Session.h
+    ui/About.cpp
+    ui/About.h
+    ui/AiSettingsDialog.cpp
+    ui/AiSettingsDialog.h
+    ui/Analyzer.cpp
+    ui/AudioTracks.cpp
+    ui/AudioTracks.h
+    ui/AutomationEditor.cpp
+    ui/AutomationEditor.h
+    ui/Automixer.cpp
+    ui/Launcher.cpp
+    ui/Analyzer.h
+    ui/Automixer.h
+    ui/Launcher.h
+    ui/AnalysisEnginePage.cpp
+    ui/AnalysisEnginePage.h
+    ui/AssistantPanel.cpp
+    ui/AssistantPanel.h
+    ui/AudioSettings.cpp
+    ui/AudioSettings.h
+    ui/Browser.cpp
+    ui/Browser.h
+    ui/ChannelRack.cpp
+    ui/ManualDemo.cpp
+    ui/ChannelRack.h
+    ui/DeviceMenu.cpp
+    ui/DeviceMenu.h
+    ui/ExportDialog.cpp
+    ui/ExportDialog.h
+    ui/HintBar.cpp
+    ui/HintBar.h
+    ui/HistoryPanel.cpp
+    ui/HistoryPanel.h
+    ui/Logo.cpp
+    ui/Manual.cpp
+    ui/Manual.h
+    ui/Markdown.cpp
+    ui/Markdown.h
+    ui/MainView.cpp
+    ui/MainView.h
+    ui/Mixer.cpp
+    ui/Mixer.h
+    ui/PatternGenerator.cpp
+    ui/PatternGenerator.h
+    ui/PianoRoll.cpp
+    ui/PianoRoll.h
+    ui/PluginDownloadDialog.cpp
+    ui/PluginDownloadDialog.h
+    ui/Playlist.cpp
+    ui/Playlist.h
+    ui/PluginWindow.cpp
+    ui/PluginWindow.h
+    ui/RecordIdea.cpp
+    ui/RecordIdea.h
+    ui/SpinusTune.cpp
+    ui/SpinusTune.h
+    ui/TempoControl.cpp
+    ui/TypingKeyboard.cpp
+    ui/TypingKeyboard.h
+    ui/TempoControl.h
+    ui/Theme.cpp
+    ui/Theme.h
+    ui/WindowStacking.cpp
+    ui/WindowStacking.h
+    ui/WindowsPluginsDialog.cpp
+    ui/WindowsPluginsDialog.h
+    ui/RoutingView.cpp
+    ui/RoutingView.h
+    ui/WindowLayouts.cpp
+    ui/WindowLayouts.h
+    ui/Workspace.cpp
+    ui/Workspace.h
+    plugins/clap/ClapPluginFormat.cpp
+    plugins/clap/ClapPluginFormat.h
+    plugins/windows/PluginDialogs.cpp
+    plugins/windows/PluginDialogs.h
+    plugins/windows/WindowsPlugins.cpp
+    plugins/windows/WindowsPlugins.h)
+
+target_include_directories (spinus_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+include ("${PROJECT_SOURCE_DIR}/cmake/SpinusRubberBand.cmake") # Spinus Tune's rendering
+
+# The logo (packaging/share/spinus.svg), for the toolbar and the window's icon; the third-party credits for
+# Help › About Spinus (ui/About), so they are there in every package.
+juce_add_binary_data (spinus_art HEADER_NAME SpinusArt.h NAMESPACE SpinusArt
+    SOURCES ${PROJECT_SOURCE_DIR}/packaging/share/spinus.svg ${PROJECT_SOURCE_DIR}/THIRD_PARTY.md)
+
+target_link_libraries (spinus_core
+    PUBLIC spinus_juce
+    PRIVATE spinus_art spinus_warnings ${CMAKE_DL_LIBS} spinus_rubberband)
+
+if (WIN32)
+    # Downloads go through JUCE (WinINet) and unpack with JUCE's zip and gzip readers. The AI service's
+    # connection uses Winsock; the crash guard lists loaded modules with psapi.
+    target_link_libraries (spinus_core PRIVATE ws2_32 psapi)
+else()
+    # Downloading the free plugins: libcurl (curl license) and libarchive (BSD-2-Clause), both
+    # part of every Arch install (pacman uses them). The system's copies, not Linuxbrew's.
+    find_package (CURL REQUIRED)
+    find_package (LibArchive REQUIRED)
+    target_link_libraries (spinus_core PRIVATE CURL::libcurl LibArchive::LibArchive)
+endif()
+
+# CLAP SDK: header-only, MIT.
+target_include_directories (spinus_core PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+
+configure_file (SpinusVersion.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/SpinusVersion.h @ONLY)
+target_include_directories (spinus_core PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
+# Development builds find the AI service in the source tree (ai/, with the uv environment in ai/.venv);
+# installed Spinus finds it next to its executable first (AiService::findInstallation).
+target_compile_definitions (spinus_core PRIVATE SPINUS_SOURCE_DIR="${SPINUS_BUILT_IN_PATH_PREFIX}${PROJECT_SOURCE_DIR}")

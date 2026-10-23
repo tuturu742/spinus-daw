@@ -1,0 +1,96 @@
+name: Windows
+
+# Builds Spinus for Windows with MSVC on Windows, runs its tests and self-test, and makes the installer
+# (packaging/windows). On a v* tag the installer is attached to that tag's GitHub Release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # attaching the installer to a release
+
+jobs:
+  windows:
+    name: Windows x64 (MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true # not recursive: Tracktion's own JUCE and Surge's libraries are not used here
+
+      - name: Visual Studio developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: uv (the AI service's Python environment, and the installer's packages)
+        uses: astral-sh/setup-uv@v6
+
+      - name: NSIS
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            $nsis = "${env:ProgramFiles(x86)}\NSIS"
+            if (-not (Test-Path "$nsis\makensis.exe")) { choco install nsis -y --no-progress }
+            "$nsis" | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
+
+      - name: Configure
+        run: cmake --preset windows -DSPINUS_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build --preset windows
+
+      - name: AI service environment (for the self-test)
+        working-directory: ai
+        run: uv sync --frozen
+
+      - name: Tests
+        # The AI service's own checks (label ai) run on Linux; they use shell-script fakes.
+        run: ctest --test-dir build/windows --output-on-failure --timeout 900 -j 4 -LE ai
+
+      - name: Installer
+        shell: pwsh
+        run: |
+          python packaging/windows/stage.py --build build/windows --out build/windows-stage
+          makensis /DSTAGE=build\windows-stage packaging\windows\spinus.nsi
+
+      - name: The installed Spinus checks itself
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem build\Spinus-*-Setup.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList "/S"
+          $exe = "$env:LOCALAPPDATA\Programs\Spinus DAW\spinus.exe"
+          $out = & $exe --self-test "$env:RUNNER_TEMP\spinus-check" | Out-String
+          Write-Output $out
+          if ($out -notmatch "Spinus works here") { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spinus-windows-installer
+          path: build/Spinus-*-Setup.exe
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $setup = (Get-ChildItem build\Spinus-*-Setup.exe | Select-Object -First 1).FullName
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $create = @($tag, "--title", "Spinus $($tag.TrimStart('v'))", "--notes", "See CHANGELOG.md.")
+            if ($tag -match "-rc") { $create += "--prerelease" }
+            gh release create @create
+          }
+          gh release upload $tag $setup --clobber

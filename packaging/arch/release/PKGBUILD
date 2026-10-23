@@ -1,0 +1,67 @@
+# Spinus DAW for Arch Linux, one release. Build and install:  cd packaging/arch/release && makepkg -si
+# For the newest code instead, see ../PKGBUILD.
+#
+# What is built: Spinus, its plugin scanner and plugin host, the AI service (run by the system's Python),
+# and Spinus's own Sampler, Drum Machine and 3x Osc (also as VST3/LV2 plugins for other programs).
+#
+# The free open-source plugins Spinus works with (Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2,
+# OB-Xf, PeakEater) are not part of this package: Spinus offers to download them from their projects
+# on first launch. If they are installed from the Arch repositories (see optdepends),
+# Spinus uses those instead.
+#
+# prepare() fetches the git submodules (JUCE, Tracktion Engine, ...), so building needs network
+# access, like -git packages.
+
+pkgname=spinus
+_tag=v0.1.0-rc1
+_name=spinus-daw
+pkgver=0.1.0rc1
+pkgrel=1
+pkgdesc="A Linux-first, FL Studio-style digital audio workstation"
+arch=('x86_64')
+url="https://github.com/tuturu742/spinus-daw"
+license=('AGPL-3.0-or-later' 'ISC' 'MIT' 'BSD-3-Clause')
+# curl and libarchive download and unpack the free plugins; cairo, libsndfile and the X libraries are
+# also what those plugins need.
+depends=('alsa-lib' 'cairo' 'curl' 'fontconfig' 'freetype2' 'gcc-libs' 'glibc' 'libarchive' 'libglvnd'
+         'libsndfile' 'libx11' 'libxcursor' 'libxext' 'libxinerama' 'libxrandr' 'libxrender' 'jack' 'rubberband')
+makedepends=('cmake' 'git' 'mesa' 'ninja' 'pkgconf' 'python')
+optdepends=('pipewire-jack: low-latency audio through PipeWire (recommended)'
+            'python-httpx: AI features (off until turned on in Options > AI)'
+            'python-keyring: storing AI connection keys in the system keyring'
+            'python-onnxruntime-cpu: local embedding models for manual search (with python-numpy)'
+            'python-numpy: hum, sing or beatbox an idea to notes; local embedding models for manual search'
+            'uv: installing the analysis engine (PyTorch) for song analysis'
+            'lame: MP3 export'
+            'ffmpeg: M4A, AAC and other audio files; AAC export'
+            'surge-xt-clap: Surge XT from the Arch repositories, instead of downloading it'
+            'lsp-plugins-clap: LSP Plugins from the Arch repositories, instead of downloading them'
+            'dragonfly-reverb-clap: Dragonfly Reverb from the Arch repositories, instead of downloading it'
+            "xdg-desktop-portal: your desktop's own file dialogs (KDE Plasma and GNOME install it)")
+conflicts=('spinus-git')
+source=("${_name}::git+${url}.git#tag=${_tag}")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "${_name}"
+  # Not external/surge: the package does not build Surge XT.
+  git submodule update --init --recursive --depth 1 -- external/JUCE external/tracktion_engine external/clap external/fst
+}
+
+build() {
+  cmake -S "${_name}" -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DSPINUS_BUILD_TESTS=OFF \
+    -DSPINUS_BUILD_SURGE=OFF \
+    -DSPINUS_BUILD_BUNDLED_PLUGINS=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="${pkgdir}" cmake --install build
+  install -Dm644 "${_name}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 "${_name}/THIRD_PARTY.md" "${pkgdir}/usr/share/licenses/${pkgname}/THIRD_PARTY.md"
+  install -Dm644 -t "${pkgdir}/usr/share/doc/spinus" "${_name}"/docs/user/*.md
+  install -Dm644 -t "${pkgdir}/usr/share/doc/spinus/images" "${_name}"/docs/user/images/*.png
+}

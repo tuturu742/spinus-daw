@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ARCH_PACKAGES: >-
+    base-devel git cmake ninja ccache clang
+    alsa-lib jack2 freetype2 fontconfig
+    libx11 libxrandr libxinerama libxcursor libxext libxcomposite libxi libxrender mesa
+    lv2 lilv curl xorg-server-xvfb xorg-xauth openbox
+    libsndfile cairo rubberband
+
+jobs:
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: pacman -Syu --noconfirm --needed git clang
+      - uses: actions/checkout@v4
+      - name: Check formatting of Spinus code
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          files=$(git ls-files 'app/*.cpp' 'app/*.h' 'src/*.cpp' 'src/*.h' 'tests/*.cpp' 'tests/*.h')
+          clang-format --dry-run --Werror $files
+
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Release
+            preset: release
+            tidy: true
+            surge: "ON"
+          - name: Debug + AddressSanitizer
+            preset: asan
+            tidy: false
+            surge: "OFF"   # Surge is a separately built plugin; building it twice doubles CI time
+    steps:
+      - name: Install Arch packages
+        run: pacman -Syu --noconfirm --needed $ARCH_PACKAGES
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: true   # not recursive: Tracktion's own JUCE submodule is not used
+
+      - name: Fetch Surge XT's submodules
+        if: matrix.surge == 'ON'
+        run: |
+          git config --global --add safe.directory '*'
+          git submodule update --init --recursive --depth 1 external/surge
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.preset }}-
+
+      - name: Configure
+        run: >-
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DSPINUS_WARNINGS_AS_ERRORS=ON
+          -DSPINUS_BUILD_SURGE=${{ matrix.surge }}
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+
+      - name: Unit tests
+        # A window manager inside the virtual display: detaching panels into their own windows needs
+        # the window-manager properties that a desktop always provides.
+        run: xvfb-run -a sh -c 'openbox & sleep 1; ctest --preset ${{ matrix.preset }}'
+
+      - name: App starts and reports its version
+        run: xvfb-run -a ./build/${{ matrix.preset }}/spinus --version
+
+      - name: clang-tidy
+        if: matrix.tidy
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          files=$(git ls-files 'app/*.cpp' 'src/*.cpp' 'tests/*.cpp')
+          # GCC-only warning flags and -Werror in the compile database must not trip clang.
+          clang-tidy -p build/${{ matrix.preset }} --quiet \
+            --extra-arg=-Wno-unknown-warning-option --extra-arg=-Wno-error $files

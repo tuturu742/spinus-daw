@@ -1,0 +1,17 @@
+/build/
+/.cache/
+compile_commands.json
+CMakeUserPresets.json
+.vscode/
+.idea/
+*.swp
+__pycache__/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# The owner's own testing notes and files kept beside the code, never published
+/docs/testing/
+/logo.jpeg

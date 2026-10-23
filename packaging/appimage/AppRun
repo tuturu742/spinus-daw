@@ -1,0 +1,16 @@
+#!/bin/sh
+# Starts Spinus from its AppImage.
+here="$(dirname "$(readlink -f "$0")")"
+
+# The bundled curl looks for certificates where Ubuntu keeps them; point it at this system's.
+if [ -z "${CURL_CA_BUNDLE:-}" ]; then
+    for bundle in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem \
+                  /etc/ca-certificates/extracted/tls-ca-bundle.pem; do
+        if [ -f "$bundle" ]; then
+            export CURL_CA_BUNDLE="$bundle"
+            break
+        fi
+    done
+fi
+
+exec "$here/usr/lib/spinus/spinus" "$@"

@@ -1,0 +1,13 @@
+# LeakSanitizer suppressions for the AddressSanitizer test runs. Every entry needs a reason.
+
+# libX11 keeps its locale and text-conversion caches for the life of the process; they are allocated the
+# first time a window title is set (detached panel windows) and never freed. Not a Spinus leak.
+leak:juce::XWindowSystem::setTitle
+
+# libX11's other internal caches (input method and locale data), allocated when windows open, e.g. plugin
+# windows. tests/CMakeLists.txt links libX11 into the ASan test build so these frames can be named.
+leak:libX11.so
+
+# fontconfig keeps the patterns of a fallback-font lookup (e.g. for a "●" a font lacks) in its caches for the
+# life of the process. Not a Spinus leak.
+leak:libfontconfig.so

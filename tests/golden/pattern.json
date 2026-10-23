@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "settings": {
+    "tempoBpm": 150.0,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "sampleRate": 48000.0,
+    "title": "",
+    "author": "",
+    "comments": ""
+  },
+  "channels": [
+    {
+      "id": 3,
+      "name": "Synth",
+      "colour": "#ff5c8dd6",
+      "instrument": {
+        "id": 4,
+        "kind": "stock",
+        "stockType": "spinus.sampler",
+        "bypassed": false
+      },
+      "volumeDb": 0.0,
+      "pan": 0.0,
+      "pitchCents": 0.0,
+      "muted": false,
+      "solo": false,
+      "targetInsert": 2
+    }
+  ],
+  "patterns": [
+    {
+      "id": 5,
+      "name": "Riff",
+      "colour": "#ff6aa84f",
+      "length": 3840,
+      "channels": [
+        {
+          "channel": 3,
+          "notes": [
+            {
+              "start": 0,
+              "length": 240,
+              "pitch": 48,
+              "velocity": 0.800000011920929,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            },
+            {
+              "start": 960,
+              "length": 240,
+              "pitch": 55,
+              "velocity": 0.600000023841858,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            },
+            {
+              "start": 1920,
+              "length": 240,
+              "pitch": 60,
+              "velocity": 0.800000011920929,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            },
+            {
+              "start": 2880,
+              "length": 240,
+              "pitch": 55,
+              "velocity": 0.400000005960464,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "playlist": {
+    "lanes": [
+      {
+        "id": 6,
+        "name": "A",
+        "colour": "#ff3d4450",
+        "muted": false
+      },
+      {
+        "id": 7,
+        "name": "Muted",
+        "colour": "#ff3d4450",
+        "muted": true
+      }
+    ],
+    "clips": [
+      {
+        "id": 8,
+        "lane": 6,
+        "start": 0,
+        "length": 3840,
+        "muted": false,
+        "type": "pattern",
+        "pattern": 5,
+        "offset": 0
+      },
+      {
+        "id": 9,
+        "lane": 6,
+        "start": 7680,
+        "length": 3840,
+        "muted": false,
+        "type": "pattern",
+        "pattern": 5,
+        "offset": 1920
+      },
+      {
+        "id": 10,
+        "lane": 7,
+        "start": 3840,
+        "length": 3840,
+        "muted": false,
+        "type": "pattern",
+        "pattern": 5,
+        "offset": 0
+      }
+    ]
+  },
+  "mixer": {
+    "master": {
+      "id": 1,
+      "name": "Master",
+      "colour": "#ff8a8f99",
+      "icon": "",
+      "volumeDb": 0.0,
+      "pan": 0.0,
+      "stereoWidth": 1.0,
+      "muted": false,
+      "solo": false,
+      "effects": [],
+      "sends": [],
+      "sidechainSources": []
+    },
+    "inserts": [
+      {
+        "id": 2,
+        "name": "Synth",
+        "colour": "#ff8a8f99",
+        "icon": "",
+        "volumeDb": 0.0,
+        "pan": 0.0,
+        "stereoWidth": 1.0,
+        "muted": false,
+        "solo": false,
+        "output": 1,
+        "effects": [],
+        "sends": [],
+        "sidechainSources": []
+      }
+    ]
+  },
+  "nextId": 11
+}

@@ -1,0 +1,18 @@
+[submodule "external/JUCE"]
+	path = external/JUCE
+	url = https://github.com/juce-framework/JUCE.git
+[submodule "external/tracktion_engine"]
+	path = external/tracktion_engine
+	url = https://github.com/Tracktion/tracktion_engine.git
+[submodule "external/Catch2"]
+	path = external/Catch2
+	url = https://github.com/catchorg/Catch2.git
+[submodule "external/surge"]
+	path = external/surge
+	url = https://github.com/surge-synthesizer/surge.git
+[submodule "external/clap"]
+	path = external/clap
+	url = https://github.com/free-audio/clap.git
+[submodule "external/fst"]
+	path = external/fst
+	url = https://git.iem.at/zmoelnig/FST.git

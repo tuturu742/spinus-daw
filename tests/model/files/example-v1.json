@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "settings": {
+    "tempoBpm": 140.0,
+    "timeSignature": {
+      "numerator": 3,
+      "denominator": 4
+    },
+    "sampleRate": 48000.0,
+    "title": "Example",
+    "author": "Spinus tests",
+    "comments": "",
+    "key": {
+      "tonic": 9,
+      "scale": "minor"
+    }
+  },
+  "channels": [
+    {
+      "id": 7,
+      "name": "Kick",
+      "colour": "#ff5c8dd6",
+      "instrument": {
+        "id": 8,
+        "kind": "stock",
+        "stockType": "spinus.sampler",
+        "bypassed": false
+      },
+      "volumeDb": 0.0,
+      "pan": 0.0,
+      "pitchCents": 0.0,
+      "muted": false,
+      "solo": false,
+      "targetInsert": 2
+    },
+    {
+      "id": 9,
+      "name": "Surge",
+      "colour": "#ff5c8dd6",
+      "instrument": {
+        "id": 10,
+        "kind": "stock",
+        "stockType": "bundled.surge-xt",
+        "bypassed": false
+      },
+      "volumeDb": -3.0,
+      "pan": 0.25,
+      "pitchCents": 0.0,
+      "muted": false,
+      "solo": false,
+      "targetInsert": 6
+    }
+  ],
+  "patterns": [
+    {
+      "id": 11,
+      "name": "Beat",
+      "colour": "#ff6aa84f",
+      "length": 15360,
+      "channels": [
+        {
+          "channel": 7,
+          "notes": [
+            {
+              "start": 0,
+              "length": 240,
+              "pitch": 36,
+              "velocity": 1.0,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            },
+            {
+              "start": 960,
+              "length": 240,
+              "pitch": 36,
+              "velocity": 1.0,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            },
+            {
+              "start": 1920,
+              "length": 240,
+              "pitch": 36,
+              "velocity": 1.0,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            },
+            {
+              "start": 2880,
+              "length": 240,
+              "pitch": 36,
+              "velocity": 1.0,
+              "releaseVelocity": 0.5,
+              "pan": 0.0,
+              "finePitchCents": 0.0
+            }
+          ]
+        },
+        {
+          "channel": 9,
+          "notes": [
+            {
+              "start": 0,
+              "length": 1920,
+              "pitch": 45,
+              "velocity": 0.75,
+              "releaseVelocity": 0.5,
+              "pan": -0.5,
+              "finePitchCents": 12.5,
+              "expressions": {
+                "brightness": 0.300000011920929
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "playlist": {
+    "lanes": [
+      {
+        "id": 12,
+        "name": "Track 1",
+        "colour": "#ff3d4450",
+        "muted": false
+      },
+      {
+        "id": 13,
+        "name": "Track 2",
+        "colour": "#ff3d4450",
+        "muted": true
+      }
+    ],
+    "clips": [
+      {
+        "id": 14,
+        "lane": 12,
+        "start": 0,
+        "length": 15360,
+        "muted": false,
+        "type": "pattern",
+        "pattern": 11,
+        "offset": 0
+      },
+      {
+        "id": 15,
+        "lane": 12,
+        "start": 15360,
+        "length": 15360,
+        "muted": false,
+        "type": "pattern",
+        "pattern": 11,
+        "offset": 960
+      },
+      {
+        "id": 16,
+        "lane": 13,
+        "start": 0,
+        "length": 7680,
+        "muted": false,
+        "type": "audio",
+        "file": "vocals.wav",
+        "channel": 0,
+        "offset": 0,
+        "gainDb": -2.0,
+        "pitchSemitones": 0.0,
+        "stretchMode": "tempo-sync",
+        "fadeIn": 96,
+        "fadeOut": 480
+      },
+      {
+        "id": 17,
+        "lane": 13,
+        "start": 0,
+        "length": 3840,
+        "muted": false,
+        "type": "automation",
+        "target": {
+          "kind": "deviceParameter",
+          "device": 5,
+          "parameterId": "size"
+        },
+        "points": [
+          {
+            "time": 0,
+            "value": 0.0,
+            "curve": 0.0
+          },
+          {
+            "time": 3840,
+            "value": 1.0,
+            "curve": 0.5
+          }
+        ]
+      }
+    ]
+  },
+  "mixer": {
+    "master": {
+      "id": 1,
+      "name": "Master",
+      "colour": "#ff8a8f99",
+      "icon": "",
+      "volumeDb": 0.0,
+      "pan": 0.0,
+      "stereoWidth": 1.0,
+      "muted": false,
+      "solo": false,
+      "effects": [],
+      "sends": [],
+      "sidechainSources": []
+    },
+    "inserts": [
+      {
+        "id": 2,
+        "name": "Drums",
+        "colour": "#ff8a8f99",
+        "icon": "",
+        "volumeDb": 0.0,
+        "pan": 0.0,
+        "stereoWidth": 1.0,
+        "muted": false,
+        "solo": false,
+        "output": 1,
+        "effects": [
+          {
+            "device": {
+              "id": 3,
+              "kind": "stock",
+              "stockType": "bundled.lsp.compressor-stereo",
+              "bypassed": false
+            },
+            "mix": 1.0
+          }
+        ],
+        "sends": [
+          {
+            "target": 4,
+            "levelDb": -12.0
+          }
+        ],
+        "sidechainSources": []
+      },
+      {
+        "id": 4,
+        "name": "Reverb",
+        "colour": "#ff8a8f99",
+        "icon": "",
+        "volumeDb": 0.0,
+        "pan": 0.0,
+        "stereoWidth": 1.0,
+        "muted": false,
+        "solo": false,
+        "output": 1,
+        "effects": [
+          {
+            "device": {
+              "id": 5,
+              "kind": "plugin",
+              "plugin": {
+                "format": "CLAP",
+                "name": "Dragonfly Hall Reverb",
+                "manufacturer": "Michael Willis",
+                "fileOrIdentifier": "/usr/lib/spinus/plugins/DragonflyHallReverb.clap",
+                "uniqueId": 1234
+              },
+              "bypassed": false
+            },
+            "mix": 0.5
+          }
+        ],
+        "sends": [],
+        "sidechainSources": []
+      },
+      {
+        "id": 6,
+        "name": "Bass",
+        "colour": "#ff8a8f99",
+        "icon": "",
+        "volumeDb": 0.0,
+        "pan": 0.0,
+        "stereoWidth": 1.0,
+        "muted": false,
+        "solo": false,
+        "output": 1,
+        "effects": [],
+        "sends": [],
+        "sidechainSources": [
+          2
+        ]
+      }
+    ]
+  },
+  "nextId": 23,
+  "launcher": {
+    "tracks": [
+      {
+        "id": 18,
+        "name": "Jam",
+        "colour": "#ff3d4450"
+      }
+    ],
+    "scenes": [
+      {
+        "id": 19,
+        "name": "Verse"
+      },
+      {
+        "id": 20,
+        "name": "Chorus"
+      }
+    ],
+    "clips": [
+      {
+        "id": 21,
+        "length": 15360,
+        "type": "pattern",
+        "pattern": 11,
+        "offset": 0,
+        "track": 18,
+        "scene": 19,
+        "loop": true
+      },
+      {
+        "id": 22,
+        "length": 7680,
+        "type": "audio",
+        "file": "vocals.wav",
+        "channel": 0,
+        "offset": 0,
+        "gainDb": -2.0,
+        "pitchSemitones": 0.0,
+        "stretchMode": "off",
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "track": 18,
+        "scene": 20,
+        "loop": false
+      }
+    ],
+    "quantize": "beat"
+  }
+}

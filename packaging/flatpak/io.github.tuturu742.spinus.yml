@@ -1,0 +1,120 @@
+# Spinus as a Flatpak. Build and install for this user:
+#   flatpak-builder --user --install --install-deps-from=flathub --force-clean build/flatpak \
+#       packaging/flatpak/io.github.tuturu742.spinus.yml
+# Every download is pinned with its SHA-256. The AI service gets its own Python 3.12 (the same standalone
+# build uv installs) with the packages ai/uv.lock pins (python-wheels.json, made by
+# tools/flatpak-python-sources.py), and uv for installing the analysis engine later.
+app-id: io.github.tuturu742.spinus
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: spinus
+rename-desktop-file: spinus.desktop
+rename-icon: spinus
+
+finish-args:
+  - --share=ipc
+  # 32-bit Windows programs (installers): without it the sandbox stops 32-bit programs (SIGSYS). The
+  # 32-bit libraries come from the Compat.i386 extension below.
+  - --allow=multiarch
+  - --socket=x11
+  - --socket=pulseaudio        # sound through PipeWire or PulseAudio (ALSA in the sandbox goes there)
+  - --filesystem=xdg-run/pipewire-0
+  - --device=all               # MIDI keyboards, and the GPU for song analysis
+  - --share=network            # downloading the free plugins, AI connections
+  - --filesystem=home          # projects, samples, and plugins in ~/.vst3, ~/.clap, ~/.lv2
+  # The plugins the computer's package manager installed (/usr/lib/vst3 and so on), read-only at
+  # /run/host/usr. Those built against the computer's newer libraries cannot load here; Spinus lists them
+  # under Problem plugins with the reason (docs/user/install.md).
+  - --filesystem=host-os:ro
+  # Wine keeps the server of a Windows folder in /tmp/.wine-<uid>. The Flatpak shares the Windows folder
+  # with a native Spinus; with the same /tmp, both use one Wine server for it instead of two that would
+  # overwrite each other's settings.
+  - --filesystem=/tmp
+  - --talk-name=org.freedesktop.secrets  # AI connection keys in the system keyring
+
+# Plugins packaged for Flatpak DAWs (Flathub's org.freedesktop.LinuxAudio.Plugins.*) appear here.
+add-extensions:
+  org.freedesktop.LinuxAudio.Plugins:
+    directory: extensions/Plugins
+    version: '25.08'
+    add-ld-path: lib
+    merge-dirs: vst3;clap;lv2;vst;ladspa
+    subdirectories: true
+    no-autodownload: true
+  # 32-bit Linux libraries, as Flathub's Wine apps have them: Wine's 32-bit starter needs them to run
+  # 32-bit Windows programs (many plugin installers, and helpers that installers start). Installed with
+  # Spinus from Flathub; with the bundle, Spinus says how to install it (docs/user/install.md).
+  org.freedesktop.Platform.Compat.i386:
+    directory: lib/i386-linux-gnu
+    version: '25.08'
+
+modules:
+  # Where the 32-bit libraries appear (the runtime's /usr/lib/i386-linux-gnu and /lib/ld-linux.so.2 lead
+  # there), and the loader's search path for them.
+  - name: compat-i386
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib/i386-linux-gnu
+      - install -Dm644 ld.so.conf /app/etc/ld.so.conf
+    sources:
+      - type: inline
+        dest-filename: ld.so.conf
+        contents: |
+          /app/lib/i386-linux-gnu
+
+  - name: rubberband
+    buildsystem: meson
+    config-opts:
+      - -Dfft=builtin
+      - -Dresampler=builtin
+      - -Djni=disabled
+      - -Dladspa=disabled
+      - -Dlv2=disabled
+      - -Dvamp=disabled
+      - -Dcmdline=disabled
+      - -Dtests=disabled
+    sources:
+      - type: archive
+        url: https://breakfastquay.com/files/releases/rubberband-4.0.0.tar.bz2
+        sha256: af050313ee63bc18b35b2e064e5dce05b276aaf6d1aa2b8a82ced1fe2f8028e9
+
+  - name: spinus
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DSPINUS_BUILD_TESTS=OFF
+      - -DSPINUS_BUILD_SURGE=OFF
+      - -DSPINUS_BUILD_BUNDLED_PLUGINS=OFF
+      - -DSPINUS_BUILD_OWN_PLUGINS=OFF
+    post-install:
+      - mkdir -p /app/extensions/Plugins
+      - install -Dm644 LICENSE THIRD_PARTY.md -t /app/share/doc/spinus
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - build
+          - ai/.venv
+
+  - name: spinus-ai-python
+    buildsystem: simple
+    # Python and the wheels come built; stripping or splitting their debug info breaks them.
+    build-options:
+      strip: false
+      no-debuginfo: true
+    build-commands:
+      - mkdir -p /app/lib/spinus/ai/python /app/lib/spinus/ai/bin
+      - cp -a python/. /app/lib/spinus/ai/python/
+      - /app/lib/spinus/ai/python/bin/python3 -m pip install --no-index --no-deps --no-compile wheels/*.whl
+      - install -Dm755 uv/uv /app/lib/spinus/ai/bin/uv
+    sources:
+      - type: archive
+        url: https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.12.14+20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
+        sha256: 269b2c99e4db15b242bf01832f4fea1e8f1a664f273cff519393f296e9820b41
+        dest: python
+      - type: archive
+        url: https://github.com/astral-sh/uv/releases/download/0.12.24/uv-x86_64-unknown-linux-gnu.tar.gz
+        sha256: b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6
+        dest: uv
+      - python-wheels.json

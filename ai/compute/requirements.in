@@ -1,0 +1,14 @@
+# The analysis engine's packages besides torch. Each build's lock in
+# ai/spinus_ai/compute/locks/ is made from these plus its torch by tools/compute-locks.py.
+numpy>=2
+# Stem separation: Demucs 4.1.0 (MIT, code and weights), loaded from files Spinus
+# downloads itself.
+demucs==4.1.0
+# Beats, downbeats and tempo: Beat This! 1.1.0 (MIT, code and weights), without madmom.
+beat-this==1.1.0
+# Sound similarity for "closest preset": LAION-CLAP's audio tower through Hugging Face
+# transformers 5.19.0 (Apache-2.0; weights laion/larger_clap_music, Apache-2.0, downloaded on request).
+transformers==5.19.0
+# Many-instrument separation (the MVSep Mega 53 stems model, optional) runs BS-RoFormer from
+# spinus_ai/compute/bs_roformer.py with einops, rotary-embedding-torch and PyYAML, which the packages above
+# already bring (Demucs, Beat This!); nothing more to install.

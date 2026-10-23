@@ -1,0 +1,266 @@
+{
+ "python": "3.12",
+ "pypi": "https://pypi.org/simple",
+ "builds": [
+  {
+   "id": "cpu",
+   "vendor": "cpu",
+   "label": "CPU only",
+   "torch": "torch==2.14.0+cpu",
+   "index": "https://download.pytorch.org/whl/cpu",
+   "download": 266754116,
+   "disk": 983473410,
+   "tested": true
+  },
+  {
+   "id": "cuda-13",
+   "vendor": "nvidia",
+   "label": "Nvidia (CUDA 13)",
+   "torch": "torch==2.14.0+cu130",
+   "index": "https://download.pytorch.org/whl/cu130",
+   "download": 3068635904,
+   "disk": 5721777358,
+   "tested": false
+  },
+  {
+   "id": "cuda-12",
+   "vendor": "nvidia",
+   "label": "Nvidia (CUDA 12, older cards and drivers)",
+   "torch": "torch==2.14.0+cu126",
+   "index": "https://download.pytorch.org/whl/cu126",
+   "download": 3717084713,
+   "disk": 6788251665,
+   "tested": false
+  },
+  {
+   "id": "xpu",
+   "vendor": "intel",
+   "label": "Intel (XPU)",
+   "torch": "torch==2.14.0+xpu",
+   "index": "https://download.pytorch.org/whl/xpu",
+   "download": 2500217689,
+   "disk": 7371987715,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1010",
+   "vendor": "amd",
+   "label": "AMD (gfx1010)",
+   "torch": "torch[device-gfx1010]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1010",
+   "download": 1499918351,
+   "disk": 5895935012,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1011",
+   "vendor": "amd",
+   "label": "AMD (gfx1011)",
+   "torch": "torch[device-gfx1011]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1011",
+   "download": 1499315339,
+   "disk": 5894934641,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1012",
+   "vendor": "amd",
+   "label": "AMD (gfx1012)",
+   "torch": "torch[device-gfx1012]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1012",
+   "download": 1499318116,
+   "disk": 5894935177,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1030",
+   "vendor": "amd",
+   "label": "AMD (gfx1030)",
+   "torch": "torch[device-gfx1030]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1030",
+   "download": 1917448202,
+   "disk": 6694669978,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1031",
+   "vendor": "amd",
+   "label": "AMD (gfx1031)",
+   "torch": "torch[device-gfx1031]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1031",
+   "download": 1504743407,
+   "disk": 5909983444,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1032",
+   "vendor": "amd",
+   "label": "AMD (gfx1032)",
+   "torch": "torch[device-gfx1032]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1032",
+   "download": 1504736665,
+   "disk": 5909984988,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1033",
+   "vendor": "amd",
+   "label": "AMD (gfx1033)",
+   "torch": "torch[device-gfx1033]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1033",
+   "download": 1504746166,
+   "disk": 5909987213,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1034",
+   "vendor": "amd",
+   "label": "AMD (gfx1034)",
+   "torch": "torch[device-gfx1034]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1034",
+   "download": 1504745026,
+   "disk": 5909985918,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1035",
+   "vendor": "amd",
+   "label": "AMD (gfx1035)",
+   "torch": "torch[device-gfx1035]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1035",
+   "download": 1504737101,
+   "disk": 5909984734,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1036",
+   "vendor": "amd",
+   "label": "AMD (gfx1036)",
+   "torch": "torch[device-gfx1036]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1036",
+   "download": 1504742395,
+   "disk": 5909983999,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1100",
+   "vendor": "amd",
+   "label": "AMD (gfx1100)",
+   "torch": "torch[device-gfx1100]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1100",
+   "download": 1982532396,
+   "disk": 6687360567,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1101",
+   "vendor": "amd",
+   "label": "AMD (gfx1101)",
+   "torch": "torch[device-gfx1101]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1101",
+   "download": 1976247919,
+   "disk": 6652397751,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1102",
+   "vendor": "amd",
+   "label": "AMD (gfx1102)",
+   "torch": "torch[device-gfx1102]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1102",
+   "download": 1974418737,
+   "disk": 6657907892,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1103",
+   "vendor": "amd",
+   "label": "AMD (gfx1103)",
+   "torch": "torch[device-gfx1103]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1103",
+   "download": 1807816548,
+   "disk": 6212161429,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1150",
+   "vendor": "amd",
+   "label": "AMD (gfx1150)",
+   "torch": "torch[device-gfx1150]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1150",
+   "download": 1827864491,
+   "disk": 6499679163,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1151",
+   "vendor": "amd",
+   "label": "AMD (gfx1151)",
+   "torch": "torch[device-gfx1151]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1151",
+   "download": 1850340101,
+   "disk": 6523943621,
+   "tested": true
+  },
+  {
+   "id": "rocm-gfx1152",
+   "vendor": "amd",
+   "label": "AMD (gfx1152)",
+   "torch": "torch[device-gfx1152]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1152",
+   "download": 1827712512,
+   "disk": 6499361666,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1153",
+   "vendor": "amd",
+   "label": "AMD (gfx1153)",
+   "torch": "torch[device-gfx1153]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1153",
+   "download": 1827864726,
+   "disk": 6499510863,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1200",
+   "vendor": "amd",
+   "label": "AMD (gfx1200)",
+   "torch": "torch[device-gfx1200]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1200",
+   "download": 2020476971,
+   "disk": 6725454735,
+   "tested": false
+  },
+  {
+   "id": "rocm-gfx1201",
+   "vendor": "amd",
+   "label": "AMD (gfx1201)",
+   "torch": "torch[device-gfx1201]==2.14.0+rocm10.1.0",
+   "index": "https://stable.repo.amd.com/rocm/whl-next/",
+   "target": "gfx1201",
+   "download": 1958996751,
+   "disk": 6701703520,
+   "tested": false
+  }
+ ]
+}

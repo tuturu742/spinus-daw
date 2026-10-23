@@ -1,0 +1,27 @@
+// spinus-plugin-scanner: loads one plugin file in its own process so that a plugin that crashes or
+// hangs while loading cannot take Spinus down. Started by spinus::plugins::PluginScanner.
+//
+// Usage: spinus-plugin-scanner --format <VST3|CLAP|LV2|VST|...> --file <path> --output <result.xml>
+
+#include <juce_events/juce_events.h>
+
+#include "plugins/PluginScanner.h"
+
+int main (int argc, char* argv[])
+{
+    const juce::ScopedJuceInitialiser_GUI juce; // many plugins need a message manager while loading
+    const juce::StringArray args (argv, argc);
+
+    auto value = [&] (const char* flag)
+    { return args.indexOf (flag) >= 0 ? args[args.indexOf (flag) + 1] : juce::String(); };
+    const auto format = value ("--format"), file = value ("--file"), output = value ("--output");
+
+    if (format.isEmpty() || file.isEmpty() || output.isEmpty())
+    {
+        std::cerr << "Usage: spinus-plugin-scanner --format <format> --file <plugin> --output <result.xml>\n";
+        return 1;
+    }
+
+    return spinus::plugins::runScannerProcess (format, file,
+                                               juce::File::getCurrentWorkingDirectory().getChildFile (output));
+}

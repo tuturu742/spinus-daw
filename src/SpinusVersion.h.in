@@ -1,0 +1,7 @@
+#pragma once
+
+namespace spinus
+{
+    inline constexpr const char* versionString = "@SPINUS_VERSION@";
+    inline constexpr const char* productName   = "Spinus DAW";
+}

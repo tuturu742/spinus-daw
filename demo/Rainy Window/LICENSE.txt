@@ -1,0 +1,14 @@
+Rainy Window, a lo-fi hip hop demo song that comes with Spinus DAW
+by Spinus DAW contributors (https://github.com/tuturu742/spinus-daw)
+
+This song (its project file, plugin states, the samples inside them and its audio clips) is licensed
+under the Creative Commons Attribution 4.0 International License (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+You may share and adapt it, also commercially, as long as you give credit ("Rainy Window" by
+Spinus DAW contributors, CC BY 4.0), link to the license and say if you changed it.
+
+Every sound in it was synthesised for it (no recordings or samples from elsewhere). Spinus DAW itself
+is free software under the GNU AGPL-3.0-or-later. The song plays on Spinus's own instruments and
+effects and on free plugins downloaded separately (Surge XT, Dragonfly Reverb), which have licenses
+of their own.

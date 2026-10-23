@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A Spinus project file: Song/Song.spn inside the project folder. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-spinus-project">
+    <comment>Spinus DAW project</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.spn"/>
+    <icon name="spinus"/>
+  </mime-type>
+</mime-info>

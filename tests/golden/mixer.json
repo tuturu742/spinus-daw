@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "settings": {
+    "tempoBpm": 120.0,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "sampleRate": 48000.0,
+    "title": "",
+    "author": "",
+    "comments": ""
+  },
+  "channels": [
+    {
+      "id": 6,
+      "name": "Tone",
+      "colour": "#ff5c8dd6",
+      "instrument": {
+        "id": 7,
+        "kind": "stock",
+        "stockType": "test.tone",
+        "bypassed": false
+      },
+      "volumeDb": 0.0,
+      "pan": 0.0,
+      "pitchCents": 0.0,
+      "muted": false,
+      "solo": false,
+      "targetInsert": 4
+    }
+  ],
+  "patterns": [],
+  "playlist": {
+    "lanes": [],
+    "clips": []
+  },
+  "mixer": {
+    "master": {
+      "id": 1,
+      "name": "Master",
+      "colour": "#ff8a8f99",
+      "icon": "",
+      "volumeDb": -2.0,
+      "pan": 0.0,
+      "stereoWidth": 1.0,
+      "muted": false,
+      "solo": false,
+      "effects": [],
+      "sends": [],
+      "sidechainSources": []
+    },
+    "inserts": [
+      {
+        "id": 4,
+        "name": "Lead",
+        "colour": "#ff8a8f99",
+        "icon": "",
+        "volumeDb": -3.0,
+        "pan": -0.5,
+        "stereoWidth": 1.0,
+        "muted": false,
+        "solo": false,
+        "output": 1,
+        "effects": [
+          {
+            "device": {
+              "id": 5,
+              "kind": "stock",
+              "stockType": "bundled.lsp.compressor-stereo",
+              "bypassed": false
+            },
+            "mix": 1.0
+          }
+        ],
+        "sends": [
+          {
+            "target": 2,
+            "levelDb": -6.0
+          }
+        ],
+        "sidechainSources": []
+      },
+      {
+        "id": 2,
+        "name": "Reverb",
+        "colour": "#ff8a8f99",
+        "icon": "",
+        "volumeDb": 0.0,
+        "pan": 0.0,
+        "stereoWidth": 1.0,
+        "muted": false,
+        "solo": false,
+        "output": 1,
+        "effects": [
+          {
+            "device": {
+              "id": 3,
+              "kind": "stock",
+              "stockType": "spinus.reverb",
+              "bypassed": false
+            },
+            "mix": 1.0
+          }
+        ],
+        "sends": [],
+        "sidechainSources": []
+      }
+    ]
+  },
+  "nextId": 8
+}

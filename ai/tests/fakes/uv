@@ -1,0 +1,16 @@
+#!/bin/sh
+if [ "$1" = venv ]; then
+    mkdir -p "$4/bin"
+    printf '#!/bin/sh\nPYTHONPATH="%s:$PYTHONPATH" exec "%s" "$@"\n' "$FAKE_TORCH" "$REAL_PYTHON" > "$4/bin/python"
+    chmod +x "$4/bin/python"
+    exit 0
+fi
+python=$4
+case "$FAKE_UV" in
+    fail) echo "error: no matching wheel for torch" >&2; exit 2 ;;
+    hang) echo $$ > "$FAKE_PID"; sleep 60 ;;
+esac
+mkdir -p "$UV_CACHE_DIR/archive" "$(dirname "$python")/../lib"
+head -c 300000 /dev/zero > "$UV_CACHE_DIR/archive/torch.so"
+ln "$UV_CACHE_DIR/archive/torch.so" "$(dirname "$python")/../lib/torch.so"
+sleep 2.5

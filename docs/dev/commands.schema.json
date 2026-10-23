@@ -1,0 +1,2031 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Spinus DAW command API",
+  "commands": {
+    "project.setTempo": {
+      "description": "Set the project tempo.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "bpm": {
+            "type": "number",
+            "minimum": 20.0,
+            "maximum": 999.0,
+            "description": "Tempo in beats per minute"
+          }
+        },
+        "required": [
+          "bpm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "project.setTimeSignature": {
+      "description": "Set the song's time signature (patterns without their own follow it, as whole bars of it that hold their notes).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "numerator": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32,
+            "description": "Beats per bar"
+          },
+          "denominator": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32,
+            "description": "The beat's note value: 1, 2, 4, 8, 16 or 32"
+          }
+        },
+        "required": [
+          "numerator",
+          "denominator"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "project.setKey": {
+      "description": "Set the song's key (its first note and scale), or clear it by giving neither.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tonic": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 11,
+            "description": "First note of the key: 0 = C ... 11 = B"
+          },
+          "scale": {
+            "enum": [
+              "major",
+              "minor",
+              "harmonic minor",
+              "major pentatonic",
+              "minor pentatonic",
+              "blues",
+              "dorian",
+              "mixolydian",
+              "chromatic"
+            ],
+            "description": "Scale name"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "channel.add": {
+      "description": "Add a channel to the channel rack, by default with its own new mixer insert.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Channel name"
+          },
+          "instrument": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "stock",
+                  "plugin"
+                ]
+              },
+              "stockType": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "description": "Instrument device (without id)"
+          },
+          "insert": {
+            "type": [
+              "string",
+              "integer"
+            ],
+            "description": "\"new\" (default), \"master\", or an insert ID"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Position in the channel rack"
+          },
+          "audioTrack": {
+            "type": "boolean",
+            "description": "An audio track (no instrument; for recording and audio clips) instead of a Channel Rack channel"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "channel.remove": {
+      "description": "Remove a channel, its notes in every pattern, and automation of it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "channel.set": {
+      "description": "Change a channel's name, colour, volume, pan, pitch, mute, solo or group (the Channel Rack's filter group, e.g. \"Drums\"; empty for none), or an audio track's recording: its input, stereo, and whether it is armed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name"
+          },
+          "colour": {
+            "type": "string",
+            "description": "Colour as #AARRGGBB"
+          },
+          "volumeDb": {
+            "type": "number",
+            "minimum": -100.0,
+            "maximum": 12.0,
+            "description": "Volume in dB"
+          },
+          "pan": {
+            "type": "number",
+            "minimum": -1.0,
+            "maximum": 1.0,
+            "description": "Pan, -1 left to 1 right"
+          },
+          "pitchCents": {
+            "type": "number",
+            "minimum": -4800.0,
+            "maximum": 4800.0,
+            "description": "Pitch offset in cents"
+          },
+          "muted": {
+            "type": "boolean",
+            "description": "Muted"
+          },
+          "solo": {
+            "type": "boolean",
+            "description": "Solo"
+          },
+          "group": {
+            "type": "string",
+            "description": "Its group in the Channel Rack; empty for none"
+          },
+          "recordInput": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 256,
+            "description": "Audio track: the sound card input it records from, from 1 (0: the input chosen in the audio settings)"
+          },
+          "recordStereo": {
+            "type": "boolean",
+            "description": "Audio track: records that input and the next as a stereo pair"
+          },
+          "recordArmed": {
+            "type": "boolean",
+            "description": "Audio track: Record audio records it"
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "channel.freeze": {
+      "description": "Freeze a channel: its instrument is rendered to audio, which plays instead of the plugin to save CPU. Unfreeze to edit the instrument again.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          },
+          "frozen": {
+            "type": "boolean",
+            "description": "true to freeze (the default), false to unfreeze"
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "channel.route": {
+      "description": "Send a channel's output to a mixer insert.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          },
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Target insert ID (1 = master)"
+          }
+        },
+        "required": [
+          "channel",
+          "insert"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "channel.move": {
+      "description": "Move a channel to another position in the channel rack.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "New position"
+          }
+        },
+        "required": [
+          "channel",
+          "index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.add": {
+      "description": "Add a mixer insert.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Insert name"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Position in the mixer"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "insert.addBus": {
+      "description": "Add a bus: a new mixer insert (after the last of them) that the given inserts play into instead of where they went; the bus plays into that place. The result has the new insert ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The bus's name, e.g. Drums"
+          },
+          "inserts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minItems": 1,
+            "description": "The inserts to play into it (IDs)"
+          }
+        },
+        "required": [
+          "inserts"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.remove": {
+      "description": "Remove a mixer insert. Channels and inserts that fed it go to master; its sends, sidechains and automation are removed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID"
+          }
+        },
+        "required": [
+          "insert"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.set": {
+      "description": "Change an insert's name, colour, icon, volume, pan, stereo width, mute or solo.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID (1 = master)"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name"
+          },
+          "colour": {
+            "type": "string",
+            "description": "Colour as #AARRGGBB"
+          },
+          "icon": {
+            "type": "string",
+            "description": "Icon name"
+          },
+          "volumeDb": {
+            "type": "number",
+            "minimum": -100.0,
+            "maximum": 12.0,
+            "description": "Volume in dB"
+          },
+          "pan": {
+            "type": "number",
+            "minimum": -1.0,
+            "maximum": 1.0,
+            "description": "Pan, -1 left to 1 right"
+          },
+          "stereoWidth": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 2.0,
+            "description": "0 mono, 1 unchanged, 2 extra wide"
+          },
+          "muted": {
+            "type": "boolean",
+            "description": "Muted"
+          },
+          "solo": {
+            "type": "boolean",
+            "description": "Solo"
+          }
+        },
+        "required": [
+          "insert"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.move": {
+      "description": "Move a mixer insert to another position (routing is kept).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "New position"
+          }
+        },
+        "required": [
+          "insert",
+          "index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.freeze": {
+      "description": "Freeze a mixer insert: everything playing into it and its effects are rendered to audio, which plays instead of those plugins to save CPU. Not possible when something inside it also plays elsewhere.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID (not the master)"
+          },
+          "frozen": {
+            "type": "boolean",
+            "description": "true to freeze (the default), false to unfreeze"
+          }
+        },
+        "required": [
+          "insert"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.setOutput": {
+      "description": "Route an insert's output to another insert (no feedback loops).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID"
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Target insert ID (1 = master)"
+          }
+        },
+        "required": [
+          "insert",
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.setSidechain": {
+      "description": "Feed another insert's sound into this insert's sidechain input (for a ducker or a sidechain compressor), or remove it. No feedback loops.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID (1 = master)"
+          },
+          "source": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert whose sound feeds the sidechain; leave out to remove it"
+          }
+        },
+        "required": [
+          "insert"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.setNotesFrom": {
+      "description": "Send a channel's notes to an insert's effects as MIDI (e.g. the notes Spinus Tune pulls a voice to), or stop.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID (not the master)"
+          },
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel whose notes the effects receive; leave out to stop"
+          }
+        },
+        "required": [
+          "insert"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.setSend": {
+      "description": "Add a send from one insert to another, or change its level.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Source insert ID"
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Target insert ID"
+          },
+          "levelDb": {
+            "type": "number",
+            "minimum": -100.0,
+            "maximum": 12.0,
+            "description": "Send level in dB"
+          }
+        },
+        "required": [
+          "insert",
+          "target",
+          "levelDb"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.removeSend": {
+      "description": "Remove the send from one insert to another.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Source insert ID"
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Target insert ID"
+          }
+        },
+        "required": [
+          "insert",
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.addEffect": {
+      "description": "Add an effect to an insert (any number of effects). The result has the new device ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Insert ID (1 = master)"
+          },
+          "device": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "stock",
+                  "plugin"
+                ]
+              },
+              "stockType": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "description": "Effect device (without id)"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Slot position; default after the last effect"
+          }
+        },
+        "required": [
+          "insert",
+          "device"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.removeEffect": {
+      "description": "Remove an effect from its insert, with its automation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The effect's device ID"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.moveEffect": {
+      "description": "Move an effect to another slot, on the same insert or another one. It keeps its settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The effect's device ID"
+          },
+          "insert": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Target insert ID; default the effect's own insert"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "New slot position"
+          }
+        },
+        "required": [
+          "device",
+          "index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "device.setParameters": {
+      "description": "Change settings of an instrument or effect, by the parameter ID automation uses (a Spinus device's own; for other plugins the position: 0, 1...). 'text': a Spinus device's settings as it shows them, \"35%\", \"220 ms\", \"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, milliseconds for times, hertz for frequencies). 'values': numbers from 0 to 1 over each setting's whole range, for any device.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The instrument's or effect's device ID"
+          },
+          "values": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "description": "Parameter ID to value, 0 to 1 over the setting's whole range"
+          },
+          "text": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Spinus devices only: parameter ID or setting name to its value as the device shows it (\"35%\", \"220 ms\", \"1.5 s\", \"-6 dB\", \"1.2 kHz\", \"4:1\", \"30% L\", \"Low pass\")"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "device.loadPreset": {
+      "description": "Load one of 3x Osc's built-in presets: every setting of the instrument is set to the preset's (\"Default\": a new 3x Osc's settings). One undo step.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The 3x Osc's device ID"
+          },
+          "preset": {
+            "type": "string",
+            "examples": [
+              "Default",
+              "Sub Bass",
+              "Reese Bass",
+              "Pluck Bass",
+              "Acid Bass",
+              "Square Bass",
+              "Saw Lead",
+              "Square Lead",
+              "Bright Lead",
+              "Flute Lead",
+              "Warm Pad",
+              "String Pad",
+              "Choir Pad",
+              "Sweep Pad",
+              "Pluck",
+              "Bell",
+              "Organ",
+              "Soft Keys",
+              "Synth Brass",
+              "Chip Square",
+              "Thump",
+              "Hat",
+              "Zap",
+              "Noise Riser"
+            ],
+            "description": "The preset's name, e.g. \"Reese Bass\" (any case), or \"Default\""
+          }
+        },
+        "required": [
+          "device",
+          "preset"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "insert.setEffect": {
+      "description": "Bypass an effect or enable it again.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The effect's device ID"
+          },
+          "bypassed": {
+            "type": "boolean",
+            "description": "Bypassed"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.add": {
+      "description": "Add an empty pattern.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Pattern name"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length in ticks (3840 = one 4/4 bar)"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "pattern.clone": {
+      "description": "Copy a pattern with all its notes; the copy comes right after it. The result has the new pattern ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the copy (default: the name with the next number)"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.makeUnique": {
+      "description": "Give a playlist pattern clip a copy of its pattern of its own, so it can change without changing the pattern's other clips. The result has the new pattern ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Clip ID (a pattern clip on the playlist)"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.remove": {
+      "description": "Remove a pattern and its clips from the playlist.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.setLength": {
+      "description": "Set a pattern's length (its notes stay; notes past the end do not play). The next note or time signature change fits it to its notes again: whole bars, at least one.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length in ticks (3840 = one 4/4 bar)"
+          }
+        },
+        "required": [
+          "pattern",
+          "length"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.setTimeSignature": {
+      "description": "Give a pattern its own time signature, or make it follow the song's by giving neither. The pattern becomes whole bars of it (at least one) that hold its notes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "numerator": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32,
+            "description": "Beats per bar"
+          },
+          "denominator": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32,
+            "description": "The beat's note value: 1, 2, 4, 8, 16 or 32"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.set": {
+      "description": "Rename a pattern or change its colour.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name"
+          },
+          "colour": {
+            "type": "string",
+            "description": "Colour as #AARRGGBB"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.setSwing": {
+      "description": "Set a pattern's swing: notes on every second Channel Rack step play later, by up to half a step at 1 (a dotted feel); 0 is straight. Notes are not moved.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "swing": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "0 (straight) to 1"
+          }
+        },
+        "required": [
+          "pattern",
+          "swing"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.setTripletSteps": {
+      "description": "Make a pattern's Channel Rack steps sixteenth-note triplets (six per beat) or sixteenths (four per beat, the default). Notes are not moved.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "triplets": {
+            "type": "boolean",
+            "description": "true for triplet steps, false for sixteenths"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pattern.setNotes": {
+      "description": "Replace all notes of one channel in one pattern. The pattern's length follows its notes: whole bars of its time signature, at least one.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Start in ticks (960 per quarter note)"
+                },
+                "length": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647,
+                  "description": "Length in ticks"
+                },
+                "pitch": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127,
+                  "description": "MIDI note number"
+                },
+                "velocity": {
+                  "type": "number",
+                  "minimum": 0.0,
+                  "maximum": 1.0,
+                  "description": "Velocity"
+                },
+                "releaseVelocity": {
+                  "type": "number",
+                  "minimum": 0.0,
+                  "maximum": 1.0,
+                  "description": "Release velocity"
+                },
+                "pan": {
+                  "type": "number",
+                  "minimum": -1.0,
+                  "maximum": 1.0,
+                  "description": "Per-note pan"
+                },
+                "finePitchCents": {
+                  "type": "number",
+                  "minimum": -100.0,
+                  "maximum": 100.0,
+                  "description": "Fine pitch"
+                },
+                "expressions": {
+                  "type": "object",
+                  "description": "Per-note modulation values by name; \"volume\" is the per-note volume, 0-1"
+                }
+              },
+              "required": [
+                "start",
+                "length",
+                "pitch"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The channel's complete note list"
+          },
+          "description": {
+            "type": "string",
+            "description": "Undo history text, e.g. \"Add note\""
+          }
+        },
+        "required": [
+          "pattern",
+          "channel",
+          "notes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "lane.add": {
+      "description": "Add a playlist track (lane).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Track name"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Position"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "lane.remove": {
+      "description": "Remove a playlist track and the clips on it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Lane ID"
+          }
+        },
+        "required": [
+          "lane"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "lane.set": {
+      "description": "Rename, mute, colour, group or fold a playlist track. A track grouped under another is muted and hidden (folded) with it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Lane ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name"
+          },
+          "muted": {
+            "type": "boolean",
+            "description": "Muted"
+          },
+          "colour": {
+            "type": "string",
+            "description": "Colour as #AARRGGBB"
+          },
+          "group": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "The track it is grouped under (lane ID), or 0 for none"
+          },
+          "collapsed": {
+            "type": "boolean",
+            "description": "Folded: the tracks grouped under it are hidden"
+          }
+        },
+        "required": [
+          "lane"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "marker.add": {
+      "description": "Add a named point (a marker) on the playlist's ruler, e.g. where the chorus starts. The result has the new marker ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Where, in ticks"
+          },
+          "name": {
+            "type": "string",
+            "description": "Its name (default: Marker 1, 2...)"
+          }
+        },
+        "required": [
+          "at"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "marker.set": {
+      "description": "Rename or move a marker.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "marker": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Marker ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name"
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "New place, in ticks"
+          }
+        },
+        "required": [
+          "marker"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "marker.remove": {
+      "description": "Remove a marker.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "marker": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Marker ID"
+          }
+        },
+        "required": [
+          "marker"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.addPattern": {
+      "description": "Place a pattern on the playlist.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Lane ID"
+          },
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Start in ticks"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length in ticks (default: the pattern's length)"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Where in the pattern to start, in ticks"
+          }
+        },
+        "required": [
+          "lane",
+          "pattern",
+          "start"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.addAudio": {
+      "description": "Place an audio file on the playlist. It plays through `channel`, or through a new channel (with its own mixer insert) called `name` when no channel is given.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Lane ID"
+          },
+          "file": {
+            "type": "string",
+            "description": "The audio file: relative to the project's audio/ folder, or an absolute path"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Start in ticks"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length in ticks"
+          },
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel to play through (default: a new one)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the new channel (default: the file name)"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Where in the file to start, in ticks"
+          },
+          "gainDb": {
+            "type": "number",
+            "minimum": -100.0,
+            "maximum": 24.0,
+            "description": "Clip volume in dB"
+          },
+          "fadeIn": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Fade-in length in ticks"
+          },
+          "fadeOut": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Fade-out length in ticks"
+          }
+        },
+        "required": [
+          "lane",
+          "file",
+          "start",
+          "length"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.setAudio": {
+      "description": "Change an audio clip's file, volume, fades, pitch, speed or direction. A pitch or speed of its own time-stretches the clip (stretch \"stretch\") unless \"resample\" is chosen.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Clip ID"
+          },
+          "file": {
+            "type": "string",
+            "description": "New audio file (relative to audio/, or absolute)"
+          },
+          "gainDb": {
+            "type": "number",
+            "minimum": -100.0,
+            "maximum": 24.0,
+            "description": "Clip volume in dB"
+          },
+          "fadeIn": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Fade-in length in ticks"
+          },
+          "fadeOut": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Fade-out length in ticks"
+          },
+          "pitch": {
+            "type": "number",
+            "minimum": -24.0,
+            "maximum": 24.0,
+            "description": "Semitones up or down"
+          },
+          "speed": {
+            "type": "number",
+            "minimum": 0.25,
+            "maximum": 4.0,
+            "description": "How fast it plays: 2 = twice as fast (half as long), 0.5 = half as fast"
+          },
+          "stretch": {
+            "type": "string",
+            "enum": [
+              "off",
+              "stretch",
+              "stretch-drums",
+              "resample"
+            ],
+            "description": "off (as recorded), stretch (pitch and speed apart), stretch-drums (the same, keeping hits sharp) or resample (faster is higher, like a record)"
+          },
+          "reversed": {
+            "type": "boolean",
+            "description": "Play it backwards"
+          },
+          "fit": {
+            "type": "boolean",
+            "description": "Keep the same audio in the clip: its length follows the new speed"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.addTake": {
+      "description": "Record a take into an audio track: the first on a lane of its own, later ones on new lanes (\"Take 2\"...) grouped under the first take's lane. A take plays where it was recorded; the earlier takes' parts there are muted (cut where needed). The result has the new clip and lane IDs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The audio track (channel) the takes play through"
+          },
+          "file": {
+            "type": "string",
+            "description": "The audio file: relative to the project's audio/ folder, or an absolute path"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Start in ticks"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length in ticks"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Where in the file to start, in ticks"
+          }
+        },
+        "required": [
+          "channel",
+          "file",
+          "start",
+          "length"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.useTake": {
+      "description": "Comping: this audio clip plays, and the other clips of its audio track (other takes) are muted where it plays, cut where they reach past it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Clip ID"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.setTune": {
+      "description": "Spinus Tune: replace an audio clip's tuned notes (how each sung note is moved, straightened or its vibrato changed). An empty list plays the clip as recorded.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Audio clip ID"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Seconds into the clip's file"
+                },
+                "end": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Seconds into the clip's file (after start)"
+                },
+                "pitch": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 127,
+                  "description": "The note as sung (MIDI, fractional)"
+                },
+                "shift": {
+                  "type": "number",
+                  "minimum": -24,
+                  "maximum": 24,
+                  "description": "Semitones to move it"
+                },
+                "drift": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "1 = as sung, 0 = straight"
+                },
+                "vibrato": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "1 = as sung, 0 = none"
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "pitch"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The notes, in time order, not overlapping"
+          },
+          "description": {
+            "type": "string",
+            "description": "Undo history text, e.g. \"Move note\""
+          }
+        },
+        "required": [
+          "clip",
+          "notes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.addAutomation": {
+      "description": "Add an automation clip: a curve for one parameter (a channel's or insert's volume or pan, or a device parameter by its ID). Without `lane`, it goes on a new lane at the bottom called `laneName`.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Lane ID (default: a new lane)"
+          },
+          "laneName": {
+            "type": "string",
+            "description": "Name of the new lane"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Start in ticks"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length in ticks"
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "channelVolume",
+                  "channelPan",
+                  "insertVolume",
+                  "insertPan",
+                  "deviceParameter"
+                ]
+              },
+              "channel": {
+                "type": "integer"
+              },
+              "insert": {
+                "type": "integer"
+              },
+              "device": {
+                "type": "integer"
+              },
+              "parameterId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "description": "What the clip automates"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Ticks from the clip's start"
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "0..1 of the parameter's range"
+                },
+                "curve": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1,
+                  "description": "Shape of the segment that starts here; 0 = straight"
+                }
+              },
+              "required": [
+                "time",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The curve's points, at least one"
+          }
+        },
+        "required": [
+          "start",
+          "length",
+          "target",
+          "points"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.setPoints": {
+      "description": "Replace the points of an automation clip.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Clip ID"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Ticks from the clip's start"
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "0..1 of the parameter's range"
+                },
+                "curve": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1,
+                  "description": "Shape of the segment that starts here; 0 = straight"
+                }
+              },
+              "required": [
+                "time",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The curve's points, at least one"
+          }
+        },
+        "required": [
+          "clip",
+          "points"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.set": {
+      "description": "Move, resize, mute or re-offset a playlist clip.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Clip ID"
+          },
+          "lane": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "New lane"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "New start in ticks"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "New length in ticks"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "New offset in ticks"
+          },
+          "muted": {
+            "type": "boolean",
+            "description": "Muted"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.remove": {
+      "description": "Delete a playlist clip.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Clip ID"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clip.split": {
+      "description": "Cut a playlist clip in two at a song time (ticks). The second part is a new clip that plays on from there; its ID is in the result.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Clip ID"
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Where to cut, in song ticks (inside the clip)"
+          }
+        },
+        "required": [
+          "clip",
+          "at"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.addTrack": {
+      "description": "Add a clip launcher track (a column of slots).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Track name"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Position"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "launcher.removeTrack": {
+      "description": "Remove a clip launcher track and the clips in it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "track": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Launcher track ID"
+          }
+        },
+        "required": [
+          "track"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.setTrack": {
+      "description": "Rename a clip launcher track or change its colour.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "track": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Launcher track ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name"
+          },
+          "colour": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{8}$",
+            "description": "Colour as #aarrggbb"
+          }
+        },
+        "required": [
+          "track"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.addScene": {
+      "description": "Add a clip launcher scene (a row of slots).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Scene name"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Position"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "launcher.removeScene": {
+      "description": "Remove a clip launcher scene and the clips in it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "scene": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Scene ID"
+          }
+        },
+        "required": [
+          "scene"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.setScene": {
+      "description": "Rename a clip launcher scene.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "scene": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Scene ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name"
+          }
+        },
+        "required": [
+          "scene",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.addPattern": {
+      "description": "Put a pattern in a clip launcher slot (replacing what is there). Launched, it plays on the pattern's channels, looped over `length`.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "track": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Launcher track ID"
+          },
+          "scene": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Scene ID"
+          },
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length of one pass in ticks (default: the pattern's length)"
+          },
+          "loop": {
+            "type": "boolean",
+            "description": "Loop (default true); false plays it once"
+          }
+        },
+        "required": [
+          "track",
+          "scene",
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.addAudio": {
+      "description": "Put an audio file in a clip launcher slot (replacing what is there). It plays through `channel`, or through a new channel (with its own mixer insert) called `name` when no channel is given.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "track": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Launcher track ID"
+          },
+          "scene": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Scene ID"
+          },
+          "file": {
+            "type": "string",
+            "description": "The audio file: relative to the project's audio/ folder, or an absolute path"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length of one pass in ticks"
+          },
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel to play through (default: a new one)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the new channel (default: the file name)"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Where in the file to start, in ticks"
+          },
+          "gainDb": {
+            "type": "number",
+            "minimum": -100.0,
+            "maximum": 24.0,
+            "description": "Clip volume in dB"
+          },
+          "loop": {
+            "type": "boolean",
+            "description": "Loop (default true); false plays it once"
+          }
+        },
+        "required": [
+          "track",
+          "scene",
+          "file",
+          "length"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.setClip": {
+      "description": "Move a clip launcher clip to another slot (replacing what is there), or change its length or looping.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Launcher clip ID"
+          },
+          "track": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Launcher track to move it to"
+          },
+          "scene": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Scene to move it to"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Length of one pass in ticks"
+          },
+          "loop": {
+            "type": "boolean",
+            "description": "Loop; false plays it once"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.removeClip": {
+      "description": "Empty a clip launcher slot.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Launcher clip ID"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "launcher.setQuantize": {
+      "description": "When launched clips start: at once, on the next beat or on the next bar.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "quantize": {
+            "type": "string",
+            "enum": [
+              "none",
+              "beat",
+              "bar"
+            ],
+            "description": "none, beat or bar"
+          }
+        },
+        "required": [
+          "quantize"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

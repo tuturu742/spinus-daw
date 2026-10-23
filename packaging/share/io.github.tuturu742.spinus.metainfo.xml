@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What software centres (GNOME Software, KDE Discover, Flathub) show about Spinus. Validate with:
+     appstreamcli validate packaging/share/io.github.tuturu742.spinus.metainfo.xml -->
+<component type="desktop-application">
+  <id>io.github.tuturu742.spinus</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>Spinus DAW</name>
+  <summary>Make music with patterns, a piano roll, a playlist and a mixer</summary>
+  <developer id="io.github.tuturu742">
+    <name>The Spinus DAW contributors</name>
+  </developer>
+  <description>
+    <p>
+      Spinus is a free, open-source digital audio workstation for Linux and Windows with an FL Studio-style workflow:
+      build beats in the Channel Rack, write melodies in the Piano Roll, arrange patterns and audio on
+      the Playlist and mix them in a mixer with as many inserts as you need.
+    </p>
+    <ul>
+      <li>Step sequencer, piano roll with chord stamps and note tools, playlist with takes, and a clip launcher for jamming</li>
+      <li>Its own Sampler, Drum Machine, 3x Osc, Beat Slicer, EQ, Compressor, Limiter and Gate, and Surge XT, LSP and Dragonfly as free downloads</li>
+      <li>VST3, CLAP, LV2 and VST2 plugins, and Windows plugins through Wine without manual setup</li>
+      <li>Audio recording from one microphone or many inputs at once</li>
+      <li>Optional AI help: an assistant that only changes your project when you approve, a pattern generator, hum-to-notes, a song analyzer and an automixer</li>
+      <li>Export to WAV, FLAC, MP3, Opus and AAC, as a full mix or stems</li>
+    </ul>
+    <p>Spinus works fully without AI; the AI features are off until you turn them on.</p>
+  </description>
+  <launchable type="desktop-id">spinus.desktop</launchable>
+  <icon type="stock">spinus</icon>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+  </categories>
+  <keywords>
+    <keyword>DAW</keyword>
+    <keyword>music</keyword>
+    <keyword>sequencer</keyword>
+    <keyword>beat</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/tuturu742/spinus-daw</url>
+  <url type="bugtracker">https://github.com/tuturu742/spinus-daw/issues</url>
+  <url type="vcs-browser">https://github.com/tuturu742/spinus-daw</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The Channel Rack and the Piano Roll</caption>
+      <image>https://raw.githubusercontent.com/tuturu742/spinus-daw/main/docs/user/images/main-window.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The Mixer</caption>
+      <image>https://raw.githubusercontent.com/tuturu742/spinus-daw/main/docs/user/images/mixer.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The clip launcher</caption>
+      <image>https://raw.githubusercontent.com/tuturu742/spinus-daw/main/docs/user/images/launcher.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">1024</display_length>
+  </requires>
+  <releases>
+    <release version="0.1.0~rc1" date="2026-10-21" type="development">
+      <description>
+        <p>The first release candidate, for testers.</p>
+      </description>
+    </release>
+  </releases>
+</component>

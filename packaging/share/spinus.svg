@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 1024 1024">
+  <!-- Spinus DAW logo: a siskin (genus Spinus) with a knob on its wing, drawn from the owner's design. -->
+  <rect x="32" y="32" width="960" height="960" rx="182" fill="#25292e"/>
+  <g transform="translate(512.0 521.6) scale(0.6578) translate(-536.5 -452.5)">
+    <path d="M30 805 L325 505 L560 560 L660 582 L150 805 Z" fill="#7f7e22"/>
+    <path d="M545 215 C600 95 690 25 795 25 C900 25 945 110 945 200 L942 330 C940 560 790 720 560 720 C480 720 420 708 370 688 L115 718 L420 505 Z" fill="#8c8a24"/>
+    <path d="M150 805 L165 880 L392 692 L282 676 Z" fill="#fdda02"/>
+    <path d="M942 330 C940 560 790 720 560 720 C530 720 525 720 520 719 C640 690 700 640 735 570 C770 480 800 380 870 345 C895 333 920 330 942 330 Z" fill="#fdda02"/>
+    <path d="M370 688 C420 708 470 716 520 719 C640 690 700 640 735 570 C752 530 760 490 768 445 C700 520 640 560 570 590 C500 620 430 650 370 688 Z" fill="#fff"/>
+    <path d="M115 718 L420 512 L545 555 L560 500 L690 500 L768 445 C755 530 700 560 640 585 C470 640 300 680 115 718 Z" fill="#0c1517"/>
+    <path d="M650 82 C690 45 740 25 795 25 C875 25 930 70 946 128 L920 192 C905 120 860 85 800 82 Z" fill="#0c1517"/>
+    <circle cx="788" cy="182" r="101" fill="#fdda02"/>
+    <circle cx="828" cy="163" r="36" fill="#0c1517"/>
+    <circle cx="838" cy="152" r="13" fill="#fff"/>
+    <path d="M946 128 L1043 190 L918 192 Z" fill="#7a6f31"/>
+    <path d="M918 192 L1043 190 L930 246 Z" fill="#4a3530"/>
+    <path d="M70 25 L660 275 L700 300 L560 560 L545 555 C420 520 300 490 230 445 C185 410 168 370 162 332 L175 336 L175 300 L105 265 C90 235 82 205 80 172 L150 195 L150 165 C110 130 75 85 70 25 Z" fill="#cfc914"/>
+    <path d="M150 163 L415 272 L410 315 L150 195 Z" fill="#0c1517"/>
+    <path d="M168 300 L412 396 L408 438 L175 336 Z" fill="#0c1517"/>
+    <circle cx="616" cy="420" r="148" fill="#0c1517"/>
+    <path d="M717 425 A100 100 0 0 1 667 512" fill="none" stroke="#7f7e26" stroke-width="30" stroke-linecap="round"/>
+    <path d="M567 512 A100 100 0 1 1 717 425" fill="none" stroke="#fdda02" stroke-width="30" stroke-linecap="round"/>
+    <circle cx="718" cy="425" r="31" fill="#4a9cc8"/>
+  </g>
+</svg>

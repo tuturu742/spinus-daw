@@ -1,0 +1,19 @@
+# Checks run in CI on Spinus code (src/, app/, tests/). Third-party headers are excluded.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-virtual-class-destructor,
+  misc-redundant-expression,
+  misc-unused-using-decls,
+  modernize-use-override,
+  modernize-use-nullptr,
+  performance-*,
+  -performance-enum-size,
+  readability-container-size-empty,
+  readability-redundant-smartptr-get
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/(src|app|tests)/.*'
+ExcludeHeaderFilterRegex: '.*/(external|build)/.*'

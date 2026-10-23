@@ -1,0 +1,54 @@
+[project]
+name = "spinus-ai"
+version = "0.1.0rc1"
+description = "Spinus DAW's AI service: LLM connections, the assistant and its proposals"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+# Arch packages: python-httpx, python-keyring (the Spinus package depends on them).
+dependencies = ["httpx>=0.27", "keyring>=24"]
+
+[project.optional-dependencies]
+# Local embedding models for manual search. Arch: python-onnxruntime-cpu, python-numpy;
+# python-tokenizers (AUR) only for models without vocab.txt.
+embeddings = ["onnxruntime>=1.18", "numpy>=1.26", "tokenizers>=0.19"]
+# Hum, sing or beatbox to notes. Arch: python-numpy.
+listening = ["numpy>=1.26"]
+# Turning a song's parts into notes with Basic Pitch. Arch: python-onnxruntime-cpu, python-numpy.
+# The packages (AppImage, Flatpak, Windows) include it.
+notes = ["onnxruntime>=1.18", "numpy>=1.26"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6", "mypy>=1.11", "onnxruntime>=1.18", "numpy>=1.26",
+       "tokenizers>=0.19"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["spinus_ai"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+exclude = ["tests/fakes/"]
+
+[[tool.mypy.overrides]]
+# Runs only in the analysis engine's environment (PyTorch), which the AI service's has not.
+module = ["spinus_ai.compute.bs_roformer"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["keyring", "keyring.*", "onnxruntime", "onnxruntime.*", "tokenizers", "tokenizers.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
