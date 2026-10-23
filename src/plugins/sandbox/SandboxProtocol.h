@@ -112,4 +112,26 @@ private:
 #endif
 };
 
+/** This process's ID: the host tells Spinus, which watches the process with it (ProcessWatch). */
+int64_t currentProcessId() noexcept;
+
+/** Spinus watching the host's process. On Windows the pipe stays open on Spinus's side when the host
+    crashes (Spinus would notice only when its pings time out, seconds later); the process itself shows it
+    has ended at once. On Linux the socket closes with the process, so there is nothing to watch. */
+class ProcessWatch
+{
+public:
+    explicit ProcessWatch (int64_t processId);
+    ~ProcessWatch();
+
+    /** True once the process has ended (never on Linux). Cheap: for a timer. */
+    bool hasEnded() const noexcept;
+
+private:
+#if JUCE_WINDOWS
+    void* process = nullptr; // a HANDLE
+#endif
+    JUCE_DECLARE_NON_COPYABLE (ProcessWatch)
+};
+
 } // namespace spinus::plugins::sandbox
