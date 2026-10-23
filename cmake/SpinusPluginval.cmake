@@ -7,14 +7,23 @@
 
 set (SPINUS_PLUGINVAL_VERSION 1.0.4)
 set (pluginvalDir "${CMAKE_BINARY_DIR}/pluginval-${SPINUS_PLUGINVAL_VERSION}")
-set (SPINUS_PLUGINVAL "${pluginvalDir}/pluginval")
+# Each system has its own build of pluginval: the one for the system the tests run on.
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set (pluginvalPackage pluginval_Windows.zip)
+    set (pluginvalHash c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab)
+    set (SPINUS_PLUGINVAL "${pluginvalDir}/pluginval.exe")
+else()
+    set (pluginvalPackage pluginval_Linux.zip)
+    set (pluginvalHash c01c49d8063965c4c2dea8324468336768f5c9139e0b1caebde14c2400b55352)
+    set (SPINUS_PLUGINVAL "${pluginvalDir}/pluginval")
+endif()
 
 if (NOT EXISTS "${SPINUS_PLUGINVAL}")
-    set (pluginvalZip "${pluginvalDir}/pluginval_Linux.zip")
+    set (pluginvalZip "${pluginvalDir}/${pluginvalPackage}")
     file (DOWNLOAD
-        "https://github.com/Tracktion/pluginval/releases/download/v${SPINUS_PLUGINVAL_VERSION}/pluginval_Linux.zip"
+        "https://github.com/Tracktion/pluginval/releases/download/v${SPINUS_PLUGINVAL_VERSION}/${pluginvalPackage}"
         "${pluginvalZip}"
-        EXPECTED_HASH SHA256=c01c49d8063965c4c2dea8324468336768f5c9139e0b1caebde14c2400b55352
+        EXPECTED_HASH SHA256=${pluginvalHash}
         STATUS pluginvalStatus)
     list (GET pluginvalStatus 0 pluginvalError)
 
