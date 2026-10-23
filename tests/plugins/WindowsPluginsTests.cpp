@@ -498,8 +498,9 @@ TEST_CASE ("Spinus's default font reaches new and existing prefixes once", "[plu
     REQUIRE (arial.replaceWithText ("font"));
     const auto commands = WindowsPlugins::getPrefixSettingsCommands (r);
     REQUIRE (commands.size() == 1);
-    CHECK (commands[0] == juce::StringArray { "reg", "add", "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
-                                              "/v", " Spinus default (TrueType)", "/t", "REG_SZ", "/d",
+    CHECK (commands[0] == juce::StringArray { "reg", "add",
+                                              "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", "/v",
+                                              " Spinus default (TrueType)", "/t", "REG_SZ", "/d",
                                               "Z:" + arial.getFullPathName().replaceCharacter ('/', '\\'), "/f" });
     CHECK (commands[0][4] < "@"); // sorts before every font name, Wine's "@" vertical ones too
 
@@ -538,7 +539,8 @@ TEST_CASE ("Spinus's default font reaches new and existing prefixes once", "[plu
     REQUIRE (made.size() == 3);
     CHECK (made[0] == "wineboot -i");
     CHECK (made[1] == "-w");
-    CHECK (made[2].startsWith ("reg add HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts /v  Spinus default "));
+    CHECK (made[2].startsWith (
+        "reg add HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts /v  Spinus default "));
 
     // Nothing to do the next time.
     REQUIRE (w.createPrefix (r).wasOk());

@@ -16,9 +16,9 @@ using namespace spinus;
 using namespace spinus::ui;
 using namespace spinus::test::analysis;
 
-// A song the Analyzer turned into many instruments (53 parts, each on an instrument of its own): every part on a channel of its own with hundreds to thousands of notes
-// in a song-long pattern, the song's sections as patterns on the Playlist, and automation. Opening patterns,
-// selecting channels and saving must stay quick.
+// A song the Analyzer turned into many instruments (53 parts, each on an instrument of its own): every part on a
+// channel of its own with hundreds to thousands of notes in a song-long pattern, the song's sections as patterns on the
+// Playlist, and automation. Opening patterns, selecting channels and saving must stay quick.
 
 namespace
 {

@@ -15,10 +15,7 @@ using namespace spinus;
 namespace
 {
 /** The demo song in the source tree, as the packages ship it. */
-juce::File sourceDemo()
-{
-    return juce::File (SPINUS_TEST_FILES_DIR).getSiblingFile ("demo").getChildFile ("Siskin");
-}
+juce::File sourceDemo() { return juce::File (SPINUS_TEST_FILES_DIR).getSiblingFile ("demo").getChildFile ("Siskin"); }
 
 struct TempFolder
 {

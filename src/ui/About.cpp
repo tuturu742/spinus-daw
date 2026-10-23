@@ -64,10 +64,9 @@ AboutSpinus::AboutSpinus() : logo (createLogo())
     description.setFont (juce::FontOptions (13.5f));
     description.setJustificationType (juce::Justification::topLeft);
     licenses.setText (
-        juce::String::fromUTF8 (
-            "License: GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later).\n"
-            "The demo song \xe2\x80\x9cSiskin\xe2\x80\x9d: CC BY 4.0, by Spinus DAW contributors.\n"
-            "Made with JUCE and Tracktion Engine."),
+        juce::String::fromUTF8 ("License: GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later).\n"
+                                "The demo song \xe2\x80\x9cSiskin\xe2\x80\x9d: CC BY 4.0, by Spinus DAW contributors.\n"
+                                "Made with JUCE and Tracktion Engine."),
         juce::dontSendNotification);
     licenses.setFont (juce::FontOptions (12.5f));
     licenses.setJustificationType (juce::Justification::topLeft);
