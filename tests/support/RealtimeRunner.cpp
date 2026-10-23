@@ -20,6 +20,12 @@ RealtimeRunner::RealtimeRunner (tracktion::Engine& e, Params p)
     device.initialise (hp);
     device.prepareToPlay (params.sampleRate, params.blockSize);
     engine.getDeviceManager().dispatchPendingUpdates();
+    // In a new profile (on CI, every run) a Session made just before has created Spinus's computer-keyboard
+    // MIDI input, which Tracktion adds on a 5 ms timer of the message thread, reopening the playback
+    // devices. Once playing, the song is silent after it: let it happen now, before the test plays. (In Spinus
+    // it happens at the first start, before anything can be played.)
+    if (auto* mm = juce::MessageManager::getInstanceWithoutCreating(); mm != nullptr && mm->isThisTheMessageThread())
+        mm->runDispatchLoopUntil (20);
 
     capacity = (int64_t)(params.maxSeconds * params.sampleRate);
     output.assign ((size_t)params.outputChannels, std::vector<float> ((size_t)capacity, 0.0f));
