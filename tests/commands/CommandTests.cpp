@@ -465,7 +465,7 @@ TEST_CASE ("docs/dev/commands.schema.json matches the registry", "[commands]")
         REQUIRE (file.replaceWithText (schema, false, false, "\n"));
 
     INFO ("Out of date: regenerate with SPINUS_WRITE_COMMAND_SCHEMA=1 spinus_tests \"[commands]\"");
-    CHECK (file.loadFileAsString() == schema);
+    CHECK (file.loadFileAsString().replace ("\r\n", "\n") == schema); // a Windows checkout may have CRLF
 }
 
 TEST_CASE ("An audio clip plays through its own new channel, or an existing one", "[commands]")

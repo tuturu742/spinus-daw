@@ -183,6 +183,8 @@ TEST_CASE ("Bundled plugins open their own windows, from the Mixer and the Chann
     // attribute. The window code itself is covered under ASan by the tests above.
     SKIP ("real plugin GUIs are not run under AddressSanitizer");
 #endif
+    if (! bundledPlugins().getChildFile ("DragonflyHallReverb.clap").existsAsFile())
+        SKIP ("bundled plugins not built");
     Fixture f;
     const auto bus = f.addInsertWith ({ "bundled.dragonfly.hall" });
     REQUIRE (f.mixer.renameInsert (bus, "Reverb"));
