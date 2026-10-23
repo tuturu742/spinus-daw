@@ -32,6 +32,7 @@ pkgbase = spinus-git
 	depends = libxrender
 	depends = jack
 	depends = rubberband
+	depends = ttf-font
 	optdepends = pipewire-jack: low-latency audio through PipeWire (recommended)
 	optdepends = python-httpx: AI features (off until turned on in Options > AI)
 	optdepends = python-keyring: storing AI connection keys in the system keyring

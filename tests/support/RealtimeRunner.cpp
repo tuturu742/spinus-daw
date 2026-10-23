@@ -1,10 +1,67 @@
 #include "RealtimeRunner.h"
 
 #include <chrono>
+#include <memory>
 #include <utility>
 
 namespace spinus::test
 {
+
+namespace
+{
+/** Tracktion applies MIDI device changes (an input made or turned on, as Spinus's computer keyboard on a
+    first start) on a 5 ms timer of its DeviceManager, and applying them stops every playhead. Whether that
+    timer fires before or after a test presses Play depends on the machine; apply them now, until no more
+    come (each applied change can make its listeners turn on another input). */
+void applyPendingDeviceChanges (tracktion::DeviceManager& devices)
+{
+    // The DeviceManager is a private juce::Timer, whose only use is this rescan (or a slow hardware check).
+    auto& rescan = (juce::Timer&)devices; // NOLINT: a C-style cast is the only way to reach a private base
+    for (int i = 0; i < 16; ++i)
+    {
+        devices.dispatchPendingMessages();
+        devices.dispatchPendingUpdates();
+        if (! rescan.isTimerRunning() || rescan.getTimerInterval() >= 1000)
+            break;
+        rescan.stopTimer();
+        rescan.timerCallback();
+    }
+}
+
+/** Runs the message loop until every message posted so far has been delivered (they come in order). */
+void deliverPostedMessages()
+{
+    auto delivered = std::make_shared<bool> (false);
+    juce::MessageManager::callAsync ([delivered] { *delivered = true; });
+    for (int i = 0; i < 10000 && ! *delivered; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (1);
+}
+
+/** Brings every playback graph up to date with the edits made so far. Tracktion rebuilds a graph on a
+    1 ms timer after a change, and some changes (an input routed to another track) only ask for that from
+    a posted message. A sound card plays in real time, so those land within a block; blocks pumped faster
+    than real time, or a busy machine, would render seconds with the old graph, or rebuild it mid-note. */
+void applyPendingGraphChanges (tracktion::Engine& engine)
+{
+    for (int pass = 0; pass < 8; ++pass)
+    {
+        deliverPostedMessages();
+        applyPendingDeviceChanges (engine.getDeviceManager());
+        bool rebuilt = false;
+        for (auto* edit : engine.getActiveEdits().getEdits())
+        {
+            // An Edit is a private juce::Timer, run only to rebuild its graph.
+            if (auto& rebuild = (juce::Timer&)*edit; rebuild.isTimerRunning()) // NOLINT: private base
+            {
+                edit->dispatchPendingUpdatesSynchronously();
+                rebuilt = true;
+            }
+        }
+        if (! rebuilt)
+            return;
+    }
+}
+} // namespace
 
 RealtimeRunner::RealtimeRunner (tracktion::Engine& e, Params p)
     : engine (e), params (std::move (p)), device (e.getDeviceManager().getHostedAudioDeviceInterface())
@@ -19,13 +76,7 @@ RealtimeRunner::RealtimeRunner (tracktion::Engine& e, Params p)
     hp.outputChannels = params.outputChannels;
     device.initialise (hp);
     device.prepareToPlay (params.sampleRate, params.blockSize);
-    engine.getDeviceManager().dispatchPendingUpdates();
-    // In a new profile (on CI, every run) a Session made just before has created Spinus's computer-keyboard
-    // MIDI input, which Tracktion adds on a 5 ms timer of the message thread, reopening the playback
-    // devices. Once playing, the song is silent after it: let it happen now, before the test plays. (In Spinus
-    // it happens at the first start, before anything can be played.)
-    if (auto* mm = juce::MessageManager::getInstanceWithoutCreating(); mm != nullptr && mm->isThisTheMessageThread())
-        mm->runDispatchLoopUntil (20);
+    applyPendingDeviceChanges (engine.getDeviceManager());
 
     capacity = (int64_t)(params.maxSeconds * params.sampleRate);
     output.assign ((size_t)params.outputChannels, std::vector<float> ((size_t)capacity, 0.0f));
@@ -52,12 +103,7 @@ juce::String RealtimeRunner::getOutputDeviceID (int pairIndex) const
 void RealtimeRunner::start()
 {
     jassert (! running);
-    // Edits made just before starting rebuild the playback graph on a 1 ms timer of the message thread.
-    // A sound card plays real time, so that rebuild comes within a block; blocks pumped faster than real
-    // time (or on a busy machine) would otherwise render seconds with the old graph. Rebuild it now.
-    for (auto* edit : engine.getActiveEdits().getEdits())
-        edit->dispatchPendingUpdatesSynchronously();
-
+    applyPendingGraphChanges (engine);
     running = true;
     thread = std::thread ([this] { audioThreadLoop(); });
 }
