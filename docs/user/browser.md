@@ -73,7 +73,8 @@ The **Projects** section at the top is the quick way back to your songs.
 - **Your folders of projects:** click **+ Add a folder of projects...** (or right-click **Projects**) and
   choose a folder, for example the one you keep all your songs in. Spinus looks through it and its
   subfolders (up to six folders deep) and lists every project it finds, with the subfolder it is in after
-  the name. It skips hidden folders and doesn't look inside projects. Looking happens in the background,
+  the name. It skips hidden folders (and, on Windows too, folders whose name starts with a dot, such as
+  `.git`) and doesn't look inside projects. Looking happens in the background,
   so Spinus stays quick even with a big folder; the list from last time shows at once on the next start.
   A project inside one of your folders is listed only there, not again under **Opened**.
 
@@ -98,7 +99,8 @@ vocals you have downloaded or bought.
   **Samples**) and choose the folder. Add as many as you like; Spinus remembers them. Your files are
   never moved, copied or changed by adding a folder.
 - **Browse:** click a folder to open it. Subfolders come first, then the audio files (WAV, AIFF, FLAC,
-  Ogg, MP3, Opus, and M4A and others when ffmpeg is installed). Other files are not shown.
+  Ogg, MP3, Opus, and M4A and others when ffmpeg is installed). Other files are not shown, nor are hidden
+  files and folders (on Windows too, those whose name starts with a dot).
 - **Search:** type in the search box at the top. It finds samples by name in all your folders, with the
   folder each is in shown after the name.
 - **Listen:** click a sample to hear it once (the first 30 seconds of a long file). A ▶ shows while it

@@ -1,5 +1,6 @@
 #include "ProjectList.h"
 
+#include "core/HiddenFiles.h"
 #include "project/ProjectFiles.h"
 
 namespace spinus
@@ -121,6 +122,8 @@ juce::Array<juce::File> ProjectList::findProjects (const juce::File& root, int d
                  folder, false, "*", juce::File::findFilesAndDirectories | juce::File::ignoreHiddenFiles))
         {
             const auto& f = entry.getFile();
+            if (core::isHidden (f))
+                continue;
             if (entry.isDirectory())
             {
                 if (depth < depthLimit && ! isSkipped (f))
