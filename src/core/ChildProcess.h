@@ -87,4 +87,11 @@ private:
     JUCE_DECLARE_NON_COPYABLE (ChildProcess)
 };
 
+/** For Spinus's helper programs (the plugin scanner and the plugin host), called first in main(): a crash
+    ends the program at once. On Windows a crashed program otherwise stays for seconds while Windows Error
+    Reporting writes its report (or shows a box), and Spinus, waiting on its pipe, would only notice when
+    it times out. Error boxes for a library that cannot be loaded are not shown either. On Linux a crash
+    ends a program at once already: nothing to do. */
+void endAtOnceOnCrash();
+
 } // namespace spinus::core
