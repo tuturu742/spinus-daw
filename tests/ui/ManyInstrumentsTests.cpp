@@ -120,7 +120,7 @@ Song addSong (Session& session, int parts, int notesPerPart)
 
     Song song;
     Steps steps (session.getProject());
-    std::mt19937 random (42);
+    std::mt19937 random (42); // NOLINT(bugprone-random-generator-seed): the same song every run
     const auto whole = (int)steps.add (
         "pattern.add", object ({ { "name", "Analysis: Song" }, { "length", (juce::int64)(bar * bars) } }))["pattern"];
     song.patterns.push_back (model::PatternId { (uint32_t)whole });
@@ -177,7 +177,7 @@ Song addSong (Session& session, int parts, int notesPerPart)
     for (int i = 0; i < 24; ++i)
         steps.add ("clip.addPattern", object ({ { "lane", sectionLane },
                                                 { "pattern", sections[(size_t)i % sections.size()] },
-                                                { "start", (juce::int64)(i * 4 * bar) } }));
+                                                { "start", (juce::int64)i * 4 * bar } }));
     for (int part = 0; part < parts; part += 4)
     {
         juce::Array<juce::var> points;
@@ -226,7 +226,7 @@ double openPattern (MainView& view, Session& session, model::PatternId pattern, 
     view.createComponentSnapshot (view.getLocalBounds());
     if (std::getenv ("SPINUS_PERF_VERBOSE") != nullptr)
         std::cout << "  engine " << engine << ", updates " << updates - engine << ", piano roll drawn "
-                  << roll - updates << ", window drawn " << msSince (start) - roll << std::endl;
+                  << roll - updates << ", window drawn " << msSince (start) - roll << '\n';
     return msSince (start);
 }
 
@@ -252,7 +252,7 @@ Timings measure (int parts, int notesPerPart, bool save)
     settle();
     timings.add = msSince (start);
     if (std::getenv ("SPINUS_PERF_VERBOSE") != nullptr)
-        std::cout << "added: " << timings.add << " ms" << std::endl;
+        std::cout << "added: " << timings.add << " ms" << '\n';
     REQUIRE ((int)session.getProject().channels.size() == parts);
 
     // Every pattern, each with a few of its channels, and back to the song-long one.
@@ -269,7 +269,7 @@ Timings measure (int parts, int notesPerPart, bool save)
             timings.totalOpen += ms;
             ++timings.opens;
             if (std::getenv ("SPINUS_PERF_VERBOSE") != nullptr)
-                std::cout << "open " << timings.opens << ": " << ms << " ms" << std::endl;
+                std::cout << "open " << timings.opens << ": " << ms << " ms" << '\n';
         }
     }
     // Editing the song-long pattern: notes added and moved in the Piano Roll, one undo step each.
@@ -279,12 +279,12 @@ Timings measure (int parts, int notesPerPart, bool save)
         for (int i = 0; i < 4; ++i)
         {
             const auto begin = Clock::now();
-            REQUIRE (roll->addNote (60 + i, 3840 * (i + 1), 240, 0.8f));
+            REQUIRE (roll->addNote (60 + i, 3840 * (model::Ticks)(i + 1), 240, 0.8f));
             REQUIRE (roll->moveNote (0, 240, 1));
             settle();
             timings.worstEdit = std::max (timings.worstEdit, msSince (begin) / 2.0);
             if (std::getenv ("SPINUS_PERF_VERBOSE") != nullptr)
-                std::cout << "edit " << i << ": " << msSince (begin) / 2.0 << " ms" << std::endl;
+                std::cout << "edit " << i << ": " << msSince (begin) / 2.0 << " ms" << '\n';
         }
         CHECK ((int)roll->getNotes().size() == notesPerPart + 4);
     }
@@ -296,14 +296,14 @@ Timings measure (int parts, int notesPerPart, bool save)
         {
             const auto begin = Clock::now();
             view.createComponentSnapshot (view.getLocalBounds());
-            std::cout << "paint " << i << ": " << msSince (begin) << " ms" << std::endl;
+            std::cout << "paint " << i << ": " << msSince (begin) << " ms" << '\n';
         }
     if (const auto* switches = std::getenv ("SPINUS_PERF_SWITCHES"))
         for (int i = 0; i < juce::String (switches).getIntValue(); ++i)
         {
             const auto begin = Clock::now();
             session.setCurrentPattern (song.patterns[(size_t)(i % 2 == 0 ? 1 : 0)]);
-            std::cout << "switch " << i << ": " << msSince (begin) << " ms" << std::endl;
+            std::cout << "switch " << i << ": " << msSince (begin) << " ms" << '\n';
         }
 
     if (save)
@@ -329,7 +329,7 @@ Timings measure (int parts, int notesPerPart, bool save)
               << " opens); an edit " << timings.worstEdit << " ms at worst";
     if (save)
         std::cout << "; autosaved in " << timings.autosave << " ms, saved in " << timings.save << " ms";
-    std::cout << std::endl;
+    std::cout << '\n';
     return timings;
 }
 } // namespace

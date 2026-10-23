@@ -12,6 +12,10 @@
 #include <vector>
 
 extern char** environ; // NOLINT: POSIX declares it nowhere else
+#else
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <cstdlib>
 #endif
 
 namespace spinus::core
@@ -43,6 +47,22 @@ bool ChildProcess::waitForProcessToFinish (int timeoutMs) const { return process
 juce::uint32 ChildProcess::getExitCode() const { return process.getExitCode(); }
 
 bool ChildProcess::kill() { return process.kill(); }
+
+namespace
+{
+LONG WINAPI endProcess (EXCEPTION_POINTERS* exception)
+{
+    TerminateProcess (GetCurrentProcess(), exception->ExceptionRecord->ExceptionCode);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+} // namespace
+
+void endAtOnceOnCrash()
+{
+    SetErrorMode (SetErrorMode (0) | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    SetUnhandledExceptionFilter (endProcess);
+    _set_abort_behavior (0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT); // abort(): no box, no report
+}
 
 #else
 
@@ -246,6 +266,8 @@ bool ChildProcess::kill()
         return true;
     return ::kill (pid, SIGKILL) == 0;
 }
+
+void endAtOnceOnCrash() {}
 
 #endif
 

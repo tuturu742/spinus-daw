@@ -110,7 +110,10 @@ TEST_CASE ("A plugin moved into its own process keeps playing, and a crash there
                                  { .outputChannels = 2, .maxSeconds = 10.0, .paceInRealTime = true });
     const auto sr = runner.getParams().sampleRate;
     auto level = [&] (double from, double to)
-    { return test::checks::rms (runner.getChannel (0), (int64_t)(from * sr), (int64_t)(to * sr)); };
+    {
+        REQUIRE (to <= runner.getSecondsProcessed()); // within what was played (slow steps can use it up)
+        return test::checks::rms (runner.getChannel (0), (int64_t)(from * sr), (int64_t)(to * sr));
+    };
     runner.start();
     session.setMode (Session::Mode::song);
     session.play();

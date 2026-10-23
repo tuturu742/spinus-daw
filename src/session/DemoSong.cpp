@@ -1,6 +1,7 @@
 #include "DemoSong.h"
 
 #include "ProgramFolder.h"
+#include "core/HiddenFiles.h"
 #include "project/ProjectFiles.h"
 
 namespace spinus::demo
@@ -13,7 +14,7 @@ juce::Array<juce::File> listDemos (const juce::File& demoFolder)
         return demos;
     for (const auto& entry : juce::RangedDirectoryIterator (
              demoFolder, false, "*", juce::File::findDirectories | juce::File::ignoreHiddenFiles))
-        if (project::isProjectFolder (entry.getFile()))
+        if (! core::isHidden (entry.getFile()) && project::isProjectFolder (entry.getFile()))
             demos.add (entry.getFile());
     struct SiskinFirst
     {

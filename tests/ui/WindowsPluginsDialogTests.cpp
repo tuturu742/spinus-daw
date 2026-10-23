@@ -316,12 +316,17 @@ TEST_CASE ("In the Flatpak without 32-bit support, a 32-bit installer is not sta
 
     auto& modal = *juce::ModalComponentManager::getInstance();
     const auto before = modal.getNumModalComponents();
+    const auto windowsBefore = juce::TopLevelWindow::getNumTopLevelWindows();
     dialog.addPlugin (installer);
     CHECK (! dialog.isBusy()); // nothing started
     CHECK (dialog.getStatusText().contains ("AME_Installer.exe was not started: it is a 32-bit Windows program"));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (100); // the message box opens
-    CHECK (modal.getNumModalComponents() == before + 1);             // the message with the command
+    for (int i = 0; i < 250 && modal.getNumModalComponents() == before; ++i) // the message box opens
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+    CHECK (modal.getNumModalComponents() == before + 1); // the message with the command
     CHECK (! windows.getPrefix().getChildFile ("drive_c/windows").exists());
     modal.cancelAllModalComponents();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    // Closed message boxes are deleted a message or two later: wait for that, however busy the machine.
+    for (int i = 0; i < 250 && juce::TopLevelWindow::getNumTopLevelWindows() > windowsBefore; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+    CHECK (juce::TopLevelWindow::getNumTopLevelWindows() == windowsBefore);
 }

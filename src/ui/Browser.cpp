@@ -1,6 +1,7 @@
 #include "Browser.h"
 
 #include "Theme.h"
+#include "core/HiddenFiles.h"
 #include "dsp/sampler/SamplerProcessor.h"
 #include "project/AudioImport.h"
 #include "project/ProjectFiles.h"
@@ -245,6 +246,8 @@ std::pair<juce::Array<juce::File>, juce::Array<juce::File>> listFolder (const ju
              folder, false, "*", juce::File::findFilesAndDirectories | juce::File::ignoreHiddenFiles))
     {
         const auto& f = entry.getFile();
+        if (core::isHidden (f))
+            continue;
         if (entry.isDirectory())
             folders.add (f);
         else if (isSampleFile (f))
@@ -451,7 +454,7 @@ const std::vector<juce::File>& Browser::getSampleIndex()
             {
                 if ((int)sampleIndex.size() >= maxIndexedFiles)
                     break;
-                if (isSampleFile (entry.getFile()))
+                if (isSampleFile (entry.getFile()) && ! core::isHiddenBelow (entry.getFile(), folder))
                     sampleIndex.push_back (entry.getFile());
             }
         // By folder, then name, as the folders list them.

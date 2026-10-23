@@ -106,6 +106,24 @@ bool SharedMemory::waitForFinished (int milliseconds) noexcept
     return WaitForSingleObject (finished, (DWORD)milliseconds) == WAIT_OBJECT_0;
 }
 
+int64_t currentProcessId() noexcept { return (int64_t)GetCurrentProcessId(); }
+
+ProcessWatch::ProcessWatch (int64_t processId)
+    : process (processId > 0 ? OpenProcess (SYNCHRONIZE, FALSE, (DWORD)processId) : nullptr)
+{
+}
+
+ProcessWatch::~ProcessWatch()
+{
+    if (process != nullptr)
+        CloseHandle (process);
+}
+
+bool ProcessWatch::hasEnded() const noexcept
+{
+    return process != nullptr && WaitForSingleObject (process, 0) == WAIT_OBJECT_0;
+}
+
 #else
 namespace
 {
@@ -198,6 +216,11 @@ void SharedMemory::postWork() noexcept { sem_post (&shared->work); }
 void SharedMemory::postFinished() noexcept { sem_post (&shared->finished); }
 bool SharedMemory::waitForWork (int milliseconds) noexcept { return waitFor (shared->work, milliseconds); }
 bool SharedMemory::waitForFinished (int milliseconds) noexcept { return waitFor (shared->finished, milliseconds); }
+int64_t currentProcessId() noexcept { return (int64_t)getpid(); }
+
+ProcessWatch::ProcessWatch (int64_t) {}
+bool ProcessWatch::hasEnded() const noexcept { return false; }
+
 #endif
 
 } // namespace spinus::plugins::sandbox
