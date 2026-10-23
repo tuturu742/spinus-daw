@@ -22,7 +22,7 @@ struct Sweep
     double next (double t)
     {
         const auto f = to + (from - to) * std::exp (-t * speed);
-        phase += 2.0 * M_PI * f / rate;
+        phase += 2.0 * juce::MathConstants<double>::pi * f / rate;
         return std::sin (phase);
     }
 };
@@ -105,8 +105,12 @@ std::vector<SynthDrum> makeSynthKit (double rate)
     add ("Mid Tom", tom (rate, 120.0));
     add ("High Tom", tom (rate, 170.0));
     add ("Rim",
-         filtered (render (rate, 0.06, 6, [&] (double t, float n)
-                           { return (std::sin (2.0 * M_PI * 1700.0 * t) + 0.5 * n) * std::exp (-t * 90.0); }),
+         filtered (render (rate, 0.06, 6,
+                           [&] (double t, float n)
+                           {
+                               return (std::sin (2.0 * juce::MathConstants<double>::pi * 1700.0 * t) + 0.5 * n) *
+                                      std::exp (-t * 90.0);
+                           }),
                    juce::IIRCoefficients::makeHighPass (rate, 400.0)),
          0.7f);
     add ("Cowbell",
@@ -114,7 +118,7 @@ std::vector<SynthDrum> makeSynthKit (double rate)
                            [&] (double t, float)
                            {
                                auto square = [t] (double f)
-                               { return std::sin (2.0 * M_PI * f * t) > 0.0 ? 1.0 : -1.0; };
+                               { return std::sin (2.0 * juce::MathConstants<double>::pi * f * t) > 0.0 ? 1.0 : -1.0; };
                                return (square (540.0) + square (800.0)) * 0.5 * std::exp (-t * 12.0);
                            }),
                    juce::IIRCoefficients::makeBandPass (rate, 900.0, 2.0)),
@@ -131,13 +135,14 @@ std::vector<SynthDrum> makeSynthKit (double rate)
          render (rate, 1.5, 11,
                  [] (double t, float n)
                  {
-                     const auto bell = std::sin (2.0 * M_PI * 3100.0 * t) + std::sin (2.0 * M_PI * 4250.0 * t);
+                     const auto bell = std::sin (2.0 * juce::MathConstants<double>::pi * 3100.0 * t) +
+                                       std::sin (2.0 * juce::MathConstants<double>::pi * 4250.0 * t);
                      return (0.25 * bell + 0.35 * n) * std::exp (-t * 3.0);
                  }),
          0.45f);
     add ("Perc",
-         render (rate, 0.12, 12,
-                 [] (double t, float) { return std::sin (2.0 * M_PI * 1000.0 * t) * std::exp (-t * 40.0); }),
+         render (rate, 0.12, 12, [] (double t, float)
+                 { return std::sin (2.0 * juce::MathConstants<double>::pi * 1000.0 * t) * std::exp (-t * 40.0); }),
          0.7f);
     return kit;
 }
