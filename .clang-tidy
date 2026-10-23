@@ -1,9 +1,12 @@
 # Checks run in CI on Spinus code (src/, app/, tests/). Third-party headers are excluded.
+# Left out: throwing-static-initialization (file-scope constants such as a juce::File can only throw when
+# memory runs out at start). Optional access through value() is checked: it throws.
 Checks: >
   -*,
   bugprone-*,
   -bugprone-easily-swappable-parameters,
   -bugprone-exception-escape,
+  -bugprone-throwing-static-initialization,
   cppcoreguidelines-slicing,
   cppcoreguidelines-virtual-class-destructor,
   misc-redundant-expression,
@@ -17,3 +20,5 @@ Checks: >
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*/(src|app|tests)/.*'
 ExcludeHeaderFilterRegex: '.*/(external|build)/.*'
+CheckOptions:
+  bugprone-unchecked-optional-access.IgnoreValueCalls: true

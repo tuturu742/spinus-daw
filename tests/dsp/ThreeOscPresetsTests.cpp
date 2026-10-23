@@ -267,7 +267,7 @@ TEST_CASE ("Choosing a 3x Osc preset in its window is one undo step and sets the
     Session session (host.getEngine(), std::move (devices));
     ui::ChannelRack rack (session);
     REQUIRE (rack.addChannel ("spinus.3x-osc", "3x Osc"));
-    const auto device = session.getProject().channels.back().instrument->id;
+    const auto device = session.getProject().channels.back().instrument.value().id;
     auto* external = dynamic_cast<tracktion::ExternalPlugin*> (session.getAdapter().getDevicePlugin (device));
     REQUIRE (external != nullptr);
     auto* synth = dynamic_cast<ThreeOscProcessor*> (external->getAudioPluginInstance());

@@ -177,7 +177,7 @@ ProcessStats process (juce::AudioPluginInstance& plugin, double sampleRate, int 
             }
         }
 
-        samples += 2 * blockSize;
+        samples += 2 * (int64_t)blockSize;
         stats.blocksWithNaN += nan ? 1 : 0;
         ++stats.blocks;
     }

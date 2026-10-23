@@ -571,7 +571,7 @@ juce::String toJsonText (const Project& p)
     // JUCE writes \r\n line breaks by default; project files use \n on every platform so they diff cleanly.
     // Written so by the stream: replacing them afterwards copies the whole text once per line, which took
     // minutes for a song of many instruments (and the save never finished).
-    juce::MemoryOutputStream out (1 << 16);
+    juce::MemoryOutputStream out (65536); // 64 KiB to start with
     out.setNewLineString ("\n");
     juce::JSON::writeToStream (out, toJson (p),
                                juce::JSON::FormatOptions().withSpacing (juce::JSON::Spacing::multiLine));
