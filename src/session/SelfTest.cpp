@@ -121,20 +121,28 @@ bool runSelfTest (tracktion::Engine& engine, const juce::File& folder,
     check (starts (getHelperProgram (programs, "spinus-plugin-scanner"), {}), "the plugin scanner starts");
     check (starts (getHelperProgram (programs, "spinus-plugin-host"), {}), "the plugin host starts");
 
-    // 5. The AI service's Python has what the service needs (it runs only when AI is turned on).
+    // 5. The AI service's Python has what the service needs (it runs only when AI is turned on). AI is
+    //    optional: with no Python for it at all, Spinus works without AI; a Python that is there but
+    //    lacks what the service needs is a failure.
     const auto installation = ai::AiService::findInstallation();
-    core::ChildProcess python;
-    const bool pythonRan =
-        installation.python.existsAsFile() &&
-        python.start (juce::StringArray { installation.python.getFullPathName(), "-c",
-                                          "import sys; sys.path.insert(0, '" +
-                                              installation.package.getParentDirectory().getFullPathName() +
-                                              "'); import spinus_ai.service, httpx, keyring, numpy; print('ready')" },
-                      core::ChildProcess::wantStdOut | core::ChildProcess::wantStdErr);
-    const auto output = pythonRan ? python.readAllProcessOutput() : juce::String();
-    check (output.contains ("ready"),
-           "the AI service's Python (" + installation.python.getFullPathName() + ")" +
-               (output.contains ("ready") ? juce::String() : ": " + output.trim().getLastCharacters (300)));
+    if (installation.python == juce::File())
+    {
+        say ("skipped: the AI service's Python (not installed; AI is optional, Spinus works without it)");
+    }
+    else
+    {
+        core::ChildProcess python;
+        const bool pythonRan = python.start (
+            juce::StringArray { installation.python.getFullPathName(), "-c",
+                                "import sys; sys.path.insert(0, '" +
+                                    installation.package.getParentDirectory().getFullPathName() +
+                                    "'); import spinus_ai.service, httpx, keyring, numpy; print('ready')" },
+            core::ChildProcess::wantStdOut | core::ChildProcess::wantStdErr);
+        const auto output = pythonRan ? python.readAllProcessOutput() : juce::String();
+        check (output.contains ("ready"),
+               "the AI service's Python (" + installation.python.getFullPathName() + ")" +
+                   (output.contains ("ready") ? juce::String() : ": " + output.trim().getLastCharacters (300)));
+    }
 
     // 6. The demo songs are there (the Browser's Projects) and read.
     const auto demos = demo::findBundledDemos();

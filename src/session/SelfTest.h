@@ -18,7 +18,8 @@ namespace spinus
     start, that the AI service's Python has what it needs and that the demo songs are there. For checking
     packages on other systems.
 
-    Writes a line per check through `say` ("ok: ..." or "FAILED: ..."); true when every check passed.
+    Writes a line per check through `say` ("ok: ...", "FAILED: ...", or "skipped: ..." for the AI service
+    when no Python for it is installed: AI is optional); true when no check failed.
     Message thread only; it waits for the export. */
 bool runSelfTest (tracktion::Engine&, const juce::File& folder, const std::function<void (const juce::String&)>& say);
 
