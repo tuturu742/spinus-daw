@@ -4,8 +4,12 @@
 
 A free, open-source digital audio workstation with an FL Studio-style workflow and built-in AI assistance.
 
-> **Status: 0.1.0-rc1, a release candidate for testers.** Spinus runs on Linux and Windows (the Windows
-> build has had the least testing). Expect rough edges: see [Known issues](docs/user/known-issues.md) and
+*Spinus* is a genus of small songbirds in the finch family (Fringillidae): the siskins and goldfinches.
+The bird in the logo is a siskin.
+
+> **Status: 0.1.0-rc1, a release candidate for testers.** Spinus is in an early, fast-moving stage of
+> development: expect bugs, and save your work often. It runs on Linux and Windows (the Windows build
+> has had the least testing). See [Known issues](docs/user/known-issues.md) and
 > [what's new](CHANGELOG.md), and please [report what you find](https://github.com/tuturu742/spinus-daw/issues).
 
 <p align="center"><img src="docs/user/images/main-window.png" alt="Spinus with its demo song open: the Channel Rack, the Playlist and the Piano Roll"></p>
