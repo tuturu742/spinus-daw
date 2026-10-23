@@ -219,7 +219,6 @@ bool SharedMemory::waitForFinished (int milliseconds) noexcept { return waitFor 
 int64_t currentProcessId() noexcept { return (int64_t)getpid(); }
 
 ProcessWatch::ProcessWatch (int64_t) {}
-ProcessWatch::~ProcessWatch() = default;
 bool ProcessWatch::hasEnded() const noexcept { return false; }
 
 #endif

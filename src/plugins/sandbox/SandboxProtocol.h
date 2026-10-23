@@ -122,7 +122,9 @@ class ProcessWatch
 {
 public:
     explicit ProcessWatch (int64_t processId);
+#if JUCE_WINDOWS
     ~ProcessWatch();
+#endif
 
     /** True once the process has ended (never on Linux). Cheap: for a timer. */
     bool hasEnded() const noexcept;
