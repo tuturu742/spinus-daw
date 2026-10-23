@@ -47,7 +47,7 @@ jobs:
         run: cmake --preset windows -DSPINUS_BUILD_TESTS=ON
 
       - name: Build
-        run: cmake --build --preset windows
+        run: cmake --build --preset windows -- -k 0 # report every error, not only the first
 
       - name: AI service environment (for the self-test)
         working-directory: ai

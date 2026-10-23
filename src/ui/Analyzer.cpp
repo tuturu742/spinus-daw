@@ -741,10 +741,10 @@ bool Analyzer::separate (int count)
                         stems.clear();
                         juce::StringArray names;
                         if (auto* o = result["stems"].getDynamicObject())
-                            for (auto& [name, path] : o->getProperties())
+                            for (auto& property : o->getProperties())
                             {
-                                stems[name.toString()] = juce::File (path.toString());
-                                names.add (name.toString());
+                                stems[property.name.toString()] = juce::File (property.value.toString());
+                                names.add (property.name.toString());
                             }
                         stemsText.setText (names.joinIntoString (", "), juce::dontSendNotification);
                         updateNoteChoices();
