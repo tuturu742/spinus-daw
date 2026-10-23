@@ -121,20 +121,32 @@ bool runSelfTest (tracktion::Engine& engine, const juce::File& folder,
     check (starts (getHelperProgram (programs, "spinus-plugin-scanner"), {}), "the plugin scanner starts");
     check (starts (getHelperProgram (programs, "spinus-plugin-host"), {}), "the plugin host starts");
 
-    // 5. The AI service's Python has what the service needs (it runs only when AI is turned on).
+    // 5. The AI service's Python has what the service needs (it runs only when AI is turned on). AI is
+    //    optional: with no Python for it at all, Spinus works without AI; a Python that is there but
+    //    lacks what the service needs is a failure.
     const auto installation = ai::AiService::findInstallation();
-    core::ChildProcess python;
-    const bool pythonRan =
-        installation.python.existsAsFile() &&
-        python.start (juce::StringArray { installation.python.getFullPathName(), "-c",
-                                          "import sys; sys.path.insert(0, '" +
-                                              installation.package.getParentDirectory().getFullPathName() +
-                                              "'); import spinus_ai.service, httpx, keyring, numpy; print('ready')" },
-                      core::ChildProcess::wantStdOut | core::ChildProcess::wantStdErr);
-    const auto output = pythonRan ? python.readAllProcessOutput() : juce::String();
-    check (output.contains ("ready"),
-           "the AI service's Python (" + installation.python.getFullPathName() + ")" +
-               (output.contains ("ready") ? juce::String() : ": " + output.trim().getLastCharacters (300)));
+    if (installation.python == juce::File())
+    {
+        say ("skipped: the AI service's Python (not installed; AI is optional, Spinus works without it)");
+    }
+    else
+    {
+        core::ChildProcess python;
+        // The folder goes in as an argument, not inside the Python text: a Windows path's backslashes
+        // (C:\Users\...) would be read there as escapes.
+        const bool pythonRan =
+            python.start (juce::StringArray { installation.python.getFullPathName(), "-c",
+                                              "import sys; sys.path.insert(0, sys.argv[1]); "
+                                              "import spinus_ai.service, httpx, keyring, numpy; print('ready')",
+                                              installation.package.getParentDirectory().getFullPathName() },
+                          core::ChildProcess::wantStdOut | core::ChildProcess::wantStdErr);
+        const auto output = pythonRan ? python.readAllProcessOutput() : juce::String();
+        // A line of its own: an error quotes the command, print('ready') included.
+        const auto lines = juce::StringArray::fromLines (output.trim());
+        const bool ready = lines.contains ("ready");
+        check (ready, "the AI service's Python (" + installation.python.getFullPathName() + ")" +
+                          (ready ? juce::String() : ": " + lines[lines.size() - 1].getLastCharacters (300)));
+    }
 
     // 6. The demo songs are there (the Browser's Projects) and read.
     const auto demos = demo::findBundledDemos();
@@ -149,6 +161,16 @@ bool runSelfTest (tracktion::Engine& engine, const juce::File& folder,
                "the demo song " + demoSong.getFileName() + " (" + demoSong.getFullPathName() + ")" +
                    (demoRead.wasOk() ? juce::String() : ": " + demoRead.getErrorMessage()));
     }
+
+    // 7. A font to draw the window's text with (on Linux, from the system: without one, no text shows).
+    const juce::Font font { juce::FontOptions (14.0f) };
+    const auto typeface = font.getTypefacePtr();
+    check (juce::GlyphArrangement::getStringWidth (font, "Spinus") > 0.0f && typeface != nullptr,
+           "a font for the window's text (" +
+               (typeface != nullptr && typeface->getName().isNotEmpty()
+                    ? typeface->getName()
+                    : juce::String ("none found: install one, e.g. DejaVu Sans")) +
+               ")");
     return allPassed;
 }
 

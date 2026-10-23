@@ -219,6 +219,7 @@ private:
                          { "latency", instance->getLatencySamples() },
                          { "tail", instance->getTailLengthSeconds() },
                          { "hasEditor", instance->hasEditor() },
+                         { "process", (juce::int64)currentProcessId() },
                          { "parameters", parameters } });
     }
 

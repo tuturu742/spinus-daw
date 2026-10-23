@@ -61,7 +61,9 @@ jobs:
         shell: pwsh
         run: |
           python packaging/windows/stage.py --build build/windows --out build/windows-stage
-          makensis /DSTAGE=build\windows-stage packaging\windows\spinus.nsi
+          # makensis reads the script from its own folder: the stage goes in as a full path.
+          makensis "/DSTAGE=$((Resolve-Path build\windows-stage).Path)" packaging\windows\spinus.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: The installed Spinus checks itself
         shell: pwsh

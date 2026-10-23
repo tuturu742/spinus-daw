@@ -19,6 +19,7 @@ add_library (spinus_core STATIC
     core/FileDialog.h
     core/FileDialogPortal.cpp
     core/FileDialogPortal.h
+    core/HiddenFiles.h
     dsp/DeviceControls.cpp
     dsp/DeviceControls.h
     dsp/NoteExpression.h

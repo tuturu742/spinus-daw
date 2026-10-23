@@ -298,7 +298,7 @@ TEST_CASE ("A song of many instruments becomes project text quickly, with plain 
         channel.name = "Part " + juce::String (c + 1);
         auto& notes = pattern.notes[channel.id];
         for (int i = 0; i < 2000; ++i)
-            notes.push_back ({ i * 240, 120, 36 + (i + c) % 48, 0.75f, 0.5f, 0.0f, 0.0f, {} });
+            notes.push_back ({ (Ticks)i * 240, 120, 36 + (i + c) % 48, 0.75f, 0.5f, 0.0f, 0.0f, {} });
         p.channels.push_back (channel);
     }
     pattern.length = p.fittedLength (pattern);

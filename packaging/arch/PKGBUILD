@@ -21,9 +21,11 @@ arch=('x86_64')
 url="https://github.com/tuturu742/spinus-daw"
 license=('AGPL-3.0-or-later' 'ISC' 'MIT' 'BSD-3-Clause')
 # curl and libarchive download and unpack the free plugins; cairo, libsndfile and the X libraries are
-# also what those plugins need.
+# also what those plugins need. ttf-font: any font package (DejaVu, Noto, Liberation...); without one the
+# window has no text.
 depends=('alsa-lib' 'cairo' 'curl' 'fontconfig' 'freetype2' 'gcc-libs' 'glibc' 'libarchive' 'libglvnd'
-         'libsndfile' 'libx11' 'libxcursor' 'libxext' 'libxinerama' 'libxrandr' 'libxrender' 'jack' 'rubberband')
+         'libsndfile' 'libx11' 'libxcursor' 'libxext' 'libxinerama' 'libxrandr' 'libxrender' 'jack' 'rubberband'
+         'ttf-font')
 makedepends=('cmake' 'git' 'mesa' 'ninja' 'pkgconf' 'python')
 optdepends=('pipewire-jack: low-latency audio through PipeWire (recommended)'
             'python-httpx: AI features (off until turned on in Options > AI)'

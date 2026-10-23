@@ -144,7 +144,7 @@ TEST_CASE ("Every command performs, undoes exactly and redoes", "[commands]")
         project.playlist.clips.push_back ({ project.allocateId<ClipId>(), LaneId { 12 }, 0, 960, true,
                                             std::get<AudioClip> (project.findClip (ClipId { 16 })->content) });
         if (name == "device.loadPreset")
-            project.channels[0].instrument->stockType = "spinus.3x-osc"; // only 3x Osc has built-in presets
+            project.channels[0].instrument.value().stockType = "spinus.3x-osc"; // only 3x Osc has built-in presets
         CommandHistory history (project);
         const auto before = history.getProject();
 
@@ -465,7 +465,7 @@ TEST_CASE ("docs/dev/commands.schema.json matches the registry", "[commands]")
         REQUIRE (file.replaceWithText (schema, false, false, "\n"));
 
     INFO ("Out of date: regenerate with SPINUS_WRITE_COMMAND_SCHEMA=1 spinus_tests \"[commands]\"");
-    CHECK (file.loadFileAsString() == schema);
+    CHECK (file.loadFileAsString().replace ("\r\n", "\n") == schema); // a Windows checkout may have CRLF
 }
 
 TEST_CASE ("An audio clip plays through its own new channel, or an existing one", "[commands]")

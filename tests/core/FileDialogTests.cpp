@@ -277,6 +277,7 @@ TEST_CASE ("Portal details: patterns in any case, request paths, which dialogs i
     CHECK (! portal::canShow ((int)((unsigned)openFiles | (unsigned)Browser::canSelectDirectories)));
 }
 
+#if JUCE_LINUX // the portal is Linux's; its answers are Linux paths
 TEST_CASE ("Portal responses: chosen files, cancelled, failed", "[core][filedialog]")
 {
     auto results = [] (const juce::StringArray& uris)
@@ -313,7 +314,6 @@ TEST_CASE ("Portal responses: chosen files, cancelled, failed", "[core][filedial
     CHECK (portal::documentId (juce::File ("/home/me/Song.spn"), docs).isEmpty());
 }
 
-#if JUCE_LINUX
 TEST_CASE ("File dialogs use Spinus's own browser without a portal", "[core][filedialog][ui]")
 {
     // No bus at all (what the tests use everywhere): Spinus's own browser at once.

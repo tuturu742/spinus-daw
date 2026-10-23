@@ -510,25 +510,31 @@ TEST_CASE ("Removing a pack deletes its folder, plugin files first", "[plugins][
                                                  0755);
                                       } };
 
-    // The plugin file cannot be deleted (here: the folder is read-only; on Windows: it is loaded): nothing is,
-    // and the pack is still installed.
-    REQUIRE (chmod (folder.getFullPathName().toRawUTF8(), 0555) == 0);
-    auto result = f.downloads.remove (f.pack);
-    CHECK (result.failed());
-    CHECK (result.getErrorMessage().contains ("Fake Synth.clap"));
-    CHECK (f.downloads.isInstalled (f.pack));
-    CHECK (folder.getChildFile ("Data/patches/Bass.fxp").existsAsFile());
-    REQUIRE (chmod (folder.getFullPathName().toRawUTF8(), 0755) == 0);
+    // Read-only folders make files undeletable, except for root (as in a CI container), who may delete anyway.
+    if (geteuid() == 0)
+        WARN ("Running as root: read-only folders cannot make deleting fail; that part is not tested");
+    else
+    {
+        // The plugin file cannot be deleted (here: the folder is read-only; on Windows: it is loaded): nothing is,
+        // and the pack is still installed.
+        REQUIRE (chmod (folder.getFullPathName().toRawUTF8(), 0555) == 0);
+        auto result = f.downloads.remove (f.pack);
+        CHECK (result.failed());
+        CHECK (result.getErrorMessage().contains ("Fake Synth.clap"));
+        CHECK (f.downloads.isInstalled (f.pack));
+        CHECK (folder.getChildFile ("Data/patches/Bass.fxp").existsAsFile());
+        REQUIRE (chmod (folder.getFullPathName().toRawUTF8(), 0755) == 0);
 
-    // The plugin goes, but some sounds stay: removed, and the leftovers are named.
-    REQUIRE (chmod (folder.getChildFile ("Data/patches").getFullPathName().toRawUTF8(), 0555) == 0);
-    result = f.downloads.remove (f.pack);
-    chmod (folder.getChildFile ("Data/patches").getFullPathName().toRawUTF8(), 0755);
-    CHECK (result.failed());
-    CHECK (result.getErrorMessage().startsWith ("Removed Fake Synth, but"));
-    CHECK (result.getErrorMessage().contains ("Bass.fxp"));
-    CHECK (! f.downloads.isInstalled (f.pack));
-    CHECK (! folder.getChildFile ("Fake Synth.clap").exists());
+        // The plugin goes, but some sounds stay: removed, and the leftovers are named.
+        REQUIRE (chmod (folder.getChildFile ("Data/patches").getFullPathName().toRawUTF8(), 0555) == 0);
+        result = f.downloads.remove (f.pack);
+        chmod (folder.getChildFile ("Data/patches").getFullPathName().toRawUTF8(), 0755);
+        CHECK (result.failed());
+        CHECK (result.getErrorMessage().startsWith ("Removed Fake Synth, but"));
+        CHECK (result.getErrorMessage().contains ("Bass.fxp"));
+        CHECK (! f.downloads.isInstalled (f.pack));
+        CHECK (! folder.getChildFile ("Fake Synth.clap").exists());
+    }
 
     // The rest; and removing what is not there is fine.
     CHECK (f.downloads.remove (f.pack).wasOk());

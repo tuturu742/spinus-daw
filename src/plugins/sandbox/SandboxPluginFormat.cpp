@@ -160,7 +160,7 @@ public:
           description (std::move (d)), real (std::move (r)), name (info["name"].toString()),
           numIn ((int)info["inputs"]), numOut ((int)info["outputs"]), midiIn ((bool)info["acceptsMidi"]),
           midiOut ((bool)info["producesMidi"]), editor ((bool)info["hasEditor"]), pluginLatency ((int)info["latency"]),
-          tail ((double)info["tail"])
+          tail ((double)info["tail"]), watch ((juce::int64)info["process"])
     {
         if (auto* list = info["parameters"].getArray())
             for (int i = 0; i < list->size(); ++i)
@@ -456,6 +456,13 @@ private:
         }
         s.ringRead.store (read, std::memory_order_release);
 
+        // A crash: on Windows the process shows it at once, where the pipe would only time out.
+        if (watch.hasEnded())
+        {
+            auto expected = Failure::none;
+            failure.compare_exchange_strong (expected, Failure::crashed);
+        }
+
         // A hang is noticed on the audio thread; the process is ended here.
         if (failure == Failure::hung && ! killed)
         {
@@ -472,6 +479,7 @@ private:
     bool midiIn = false, midiOut = false, editor = false, killed = false;
     int pluginLatency = 0, bufferedLatency = 0;
     double tail = 0.0;
+    ProcessWatch watch;
     std::atomic<Failure> failure { Failure::none };
     juce::MemoryBlock lastState;
 

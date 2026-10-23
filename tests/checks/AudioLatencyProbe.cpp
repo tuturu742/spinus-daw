@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <vector>
@@ -185,7 +186,7 @@ double percentile (std::vector<double> v, double p)
         return 0.0;
 
     std::sort (v.begin(), v.end());
-    return v[std::min (v.size() - 1, (size_t)(p * (double)(v.size() - 1) + 0.5))];
+    return v[std::min (v.size() - 1, (size_t)std::lround (p * (double)(v.size() - 1)))];
 }
 
 int run (const Options& o)

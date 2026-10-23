@@ -30,7 +30,16 @@ namespace
 //==============================================================================
 // A .clap file is a shared library (Linux) or a DLL (Windows).
 #if JUCE_WINDOWS
-void* openLibrary (const juce::String& path) { return LoadLibraryW (path.toWideCharPointer()); }
+void* openLibrary (const juce::String& path)
+{
+    // A file that is not a DLL (or needs a DLL that is missing) fails quietly instead of showing an error
+    // box, which would wait for a click, in Spinus or in the plugin scanner.
+    DWORD previous = 0;
+    SetThreadErrorMode (SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX, &previous);
+    auto* library = LoadLibraryW (path.toWideCharPointer());
+    SetThreadErrorMode (previous, nullptr);
+    return library;
+}
 void* findSymbol (void* library, const char* name)
 {
     return reinterpret_cast<void*> (GetProcAddress (static_cast<HMODULE> (library), name));

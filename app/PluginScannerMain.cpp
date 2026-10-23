@@ -5,10 +5,12 @@
 
 #include <juce_events/juce_events.h>
 
+#include "core/ChildProcess.h"
 #include "plugins/PluginScanner.h"
 
 int main (int argc, char* argv[])
 {
+    spinus::core::endAtOnceOnCrash();           // Spinus notices at once, and carries on
     const juce::ScopedJuceInitialiser_GUI juce; // many plugins need a message manager while loading
     const juce::StringArray args (argv, argc);
 

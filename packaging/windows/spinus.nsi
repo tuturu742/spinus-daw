@@ -1,7 +1,9 @@
 ; The Spinus installer for Windows (NSIS 3). Made from the folder packaging/windows/stage.py fills:
 ;
 ;   python packaging/windows/stage.py --build build/windows --out build/windows-stage
-;   makensis /DSTAGE=build\windows-stage packaging\windows\spinus.nsi     (writes Spinus-<version>-Setup.exe)
+;   makensis /DSTAGE=<full path of build\windows-stage> packaging\windows\spinus.nsi   (writes Spinus-<version>-Setup.exe)
+;
+; STAGE is a full path: makensis works in this script's folder, so a relative one is not found.
 ;
 ; It installs for the current user only (no administrator rights): into %LOCALAPPDATA%\Programs\Spinus DAW,
 ; with a Start menu entry, .spn projects opening in Spinus, and an uninstaller in Settings > Apps. Settings
