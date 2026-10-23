@@ -46,6 +46,12 @@ juce::String RealtimeRunner::getOutputDeviceID (int pairIndex) const
 void RealtimeRunner::start()
 {
     jassert (! running);
+    // Edits made just before starting rebuild the playback graph on a 1 ms timer of the message thread.
+    // A sound card plays real time, so that rebuild comes within a block; blocks pumped faster than real
+    // time (or on a busy machine) would otherwise render seconds with the old graph. Rebuild it now.
+    for (auto* edit : engine.getActiveEdits().getEdits())
+        edit->dispatchPendingUpdatesSynchronously();
+
     running = true;
     thread = std::thread ([this] { audioThreadLoop(); });
 }
