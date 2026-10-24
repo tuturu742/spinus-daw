@@ -516,6 +516,9 @@ void PluginDownloadDialog::timerCallback()
         return;
     }
 
+    // Read "done" before the results: the thread stores each result before it sets done, so a snapshot
+    // taken after done reads true holds every result, and no installed pack misses its onInstalled.
+    const bool done = thread->done;
     const auto state = thread->getState();
     for (size_t i = 0; i < thread->packs.size(); ++i)
         if (auto* row = findRow (thread->packs[i]->id);
@@ -543,7 +546,7 @@ void PluginDownloadDialog::timerCallback()
         if (state.results[reportedInstalls].second.wasOk() && onInstalled)
             onInstalled();
 
-    if (thread->done)
+    if (done)
         finished();
 }
 
