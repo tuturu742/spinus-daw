@@ -34,6 +34,7 @@
 #include "PluginWindow.h"
 #include "TempoControl.h"
 #include "commands/CommandRegistry.h"
+#include "core/Log.h"
 #include "model/StockDevices.h"
 #include "session/DemoSong.h"
 #include "session/ProgramFolder.h"
@@ -929,6 +930,7 @@ void MainView::changeListenerCallback (juce::ChangeBroadcaster*)
 
 void MainView::showProblem (const juce::String& title, const juce::String& message)
 {
+    core::Logs::warning ("shown", title + ": " + message);
     messageBox (juce::MessageBoxOptions::makeOptionsOk (juce::MessageBoxIconType::WarningIcon, title, message), {});
 }
 
@@ -1609,6 +1611,7 @@ juce::PopupMenu MainView::getMenuForIndex (int index, const juce::String&)
     case 4:
         menu.addCommandItem (cm, showManual);
         menu.addSeparator();
+        menu.addCommandItem (cm, openLogFolder);
         menu.addCommandItem (cm, showAbout);
         break;
     default:
@@ -1773,7 +1776,8 @@ void MainView::getAllCommands (juce::Array<juce::CommandID>& ids)
                     toolSlice,
                     toolSelect,
                     showManual,
-                    showAbout });
+                    showAbout,
+                    openLogFolder });
 }
 
 void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -1926,6 +1930,12 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
         break;
     case showAbout:
         info.setInfo ("About Spinus", "Spinus's version, license and the projects it is built with", "Help", 0);
+        break;
+    case openLogFolder:
+        info.setInfo ("Open log folder",
+                      "The folder with Spinus's logs of its last runs, to attach to a bug report (they hold no keys "
+                      "or personal paths)",
+                      "Help", 0);
         break;
     case getFreePlugins:
         info.setInfo (
@@ -2182,6 +2192,17 @@ bool MainView::perform (const InvocationInfo& info)
     case showAbout:
         AboutSpinus::show (this);
         return true;
+
+    case openLogFolder:
+    {
+        auto folder = core::Logs::getFolder();
+        if (folder == juce::File())
+            folder = getLogFolder();
+        folder.createDirectory();
+        if (! folder.startAsProcess())
+            showProblem ("Could not open the log folder", "The logs are in " + folder.getFullPathName());
+        return true;
+    }
 
     case windowsPlugins:
         showWindowsPlugins();

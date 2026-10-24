@@ -187,6 +187,8 @@ add_library (spinus_core STATIC
     session/SelfTest.h
     session/SystemInfo.cpp
     session/SystemInfo.h
+    session/AudioDeviceLog.cpp
+    session/AudioDeviceLog.h
     session/Freezer.cpp
     session/LiveExport.cpp
     session/LiveExport.h

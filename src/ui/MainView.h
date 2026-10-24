@@ -71,8 +71,9 @@ public:
         toolPaint,
         toolSlice,
         toolSelect,
-        showManual, // Help › Manual (F1)
-        showAbout,  // Help › About Spinus
+        showManual,    // Help › Manual (F1)
+        showAbout,     // Help › About Spinus
+        openLogFolder, // Help › Open log folder: the session logs (core::Logs)
     };
 
     explicit MainView (Session&, ProjectDocument* document = nullptr);
