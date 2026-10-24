@@ -654,7 +654,19 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   Each comes with a synth-match profile and tagged presets. Spinus offers them under Get free plugins.
   Each is named after a *Spinus* species. The first is **Psaltria**, an additive resynthesis synth that
   works with the track analyzer (§12.7); its `PLUGINS.md` lists the others (Spinescens, Magellanicus,
-  Pinus, Crassirostris, Cucullatus, Tristis). Spinus's own devices (§11) stay in Spinus as the defaults that are always there.
+  Pinus, Crassirostris, Cucullatus, Tristis). Spinus's own devices (§11) stay in Spinus as the defaults that are always there, except Spinus Tune
+  (next item).
+- **Spinus Tune moves to Spinus Plugins in 0.2.0** (§12.6). The pitch engine, the live plugin and its
+  window move to the spinus-plugins repository, where Tristis also uses the engine. The engine is
+  released there under the GPL-3.0-or-later as well; Spinus includes GPL code under its AGPL. They take
+  with them the shared pieces they use: the device controls (`dsp/DeviceControls`) and the parameter text
+  rules (`dsp/ParameterText`). Spinus's other devices then use those pieces from there too.
+  - Spinus includes spinus-plugins as a git submodule, pinned to a release, and builds Spinus Tune
+    with every package as before. It stays a default that is always there.
+  - Graphical mode stays in Spinus (`ui/SpinusTune`, `session/Tuner`, `engine/TuneRender`), because it
+    edits the project through commands. It uses the engine from the submodule.
+  - Spinus Tune keeps its device type and saved state, so older projects open unchanged.
+  - Before the move, spinus-plugins is public and its CI builds and tests on Linux and Windows.
 - **Automation editor with finer control.**
 - An MPE switch for VST3/LV2 synths; recording MPE controllers' per-note bends and pressure.
 - Presets in the Browser (§8.1).
