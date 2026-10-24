@@ -613,6 +613,27 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   makes no sound and passes audio through; it can sit on any insert or as an instrument without notes.
 - **Flathub:** publish the Flatpak there. **Windows:** a signed installer.
 - **The track analyzer out of experimental** (§12.7), and the analysis engine on Windows.
+- **Track creator** (experimental, after 0.1.0): the user gives a few reference songs (an album or a
+  selection) and gets a new, editable Spinus project in a similar style.
+  - **Style summary.** The track analyzer (§12.7) summarizes what the references share: tempo range,
+    key and mode, chord habits, drum grooves, the instruments, sections and their lengths, and loudness.
+  - **New song.** The Assistant (§12.9) writes a new song from that summary through commands, as a
+    proposal applied in one undo step. The user can redo one part at a time ("new bassline", "darker
+    chords").
+  - **Sounds from what is installed.** The creator considers every instrument and effect plugin the user
+    has installed, besides Spinus's own devices and the free downloads. For each part it picks the one
+    that fits best, then tunes its sound toward the references: closest preset, then synth match (§12.7).
+    Effects are picked and set the same way, then the automixer (§12.5) balances the mix.
+  - **Similar, never copied.** The style is taken; the references' melodies, lyrics and audio are not
+    reproduced. Notes and settings are generated, not audio: no audio-generating models (their weights
+    are mostly non-commercial, §3).
+- **Spinus Plugins** (after 0.1.0): new open-source instruments and effects for sounds that open source
+  doesn't cover well yet, in their own repository ([spinus-plugins](https://github.com/tuturu742/spinus-plugins),
+  GPL-3.0-or-later). They are built as CLAP, VST3 and LV2 for Linux and Windows, so they work in any DAW.
+  Each comes with a synth-match profile and tagged presets. Spinus offers them under Get free plugins.
+  Each is named after a *Spinus* species. The first is **Psaltria**, an additive resynthesis synth that
+  works with the track analyzer (§12.7); its `PLUGINS.md` lists the others (Spinescens, Magellanicus,
+  Pinus, Crassirostris, Cucullatus, Tristis). Spinus's own devices (§11) stay in Spinus as the defaults that are always there.
 - **Automation editor with finer control.**
 - An MPE switch for VST3/LV2 synths; recording MPE controllers' per-note bends and pressure.
 - Presets in the Browser (§8.1).
