@@ -21,7 +21,7 @@ class LogRedactor
 {
 public:
     /** `homeFolders`: the full paths that become ~ (the home folder, and where its link points). */
-    explicit LogRedactor (juce::StringArray homeFolders = {});
+    explicit LogRedactor (const juce::StringArray& homeFolders = {});
 
     /** This computer's home folder. */
     static LogRedactor forThisComputer();
@@ -69,7 +69,7 @@ public:
     {
         juce::File folder;
         int keepRuns = 10;
-        juce::int64 maxBytes = 4 * 1024 * 1024;
+        juce::int64 maxBytes = juce::int64 { 4194304 }; // 4 MB
         juce::Time startTime = juce::Time::getCurrentTime();
         juce::StringArray header; // lines describing this run (session/SystemInfo)
     };

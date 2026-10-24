@@ -29,6 +29,8 @@ namespace
 {
 bool isAsciiAlnum (char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 
+bool isAsciiLetter (char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+
 char lowerAscii (char c) { return c >= 'A' && c <= 'Z' ? (char)(c - 'A' + 'a') : c; }
 
 bool equalsIgnoreCaseAt (const std::string& s, size_t pos, std::string_view word)
@@ -180,8 +182,7 @@ void maskWindowsUserFolders (std::string& s)
             --before;
         if (before == at)
             continue;
-        const bool drive =
-            before >= 2 && s[before - 1] == ':' && ((s[before - 2] | 0x20) >= 'a' && (s[before - 2] | 0x20) <= 'z');
+        const bool drive = before >= 2 && s[before - 1] == ':' && isAsciiLetter (s[before - 2]);
         const bool wine = before >= 7 && equalsIgnoreCaseAt (s, before - 7, "drive_c");
         if (! drive && ! wine)
             continue;
@@ -232,7 +233,7 @@ void maskEmails (std::string& s)
             continue;
         bool letters = true;
         for (auto c : host.substr (dot + 1))
-            letters = letters && ((c | 0x20) >= 'a' && (c | 0x20) <= 'z');
+            letters = letters && isAsciiLetter (c);
         if (! letters)
             continue; // "plugin@1.2.30"
         s.replace (start, end - start, "<email>");
@@ -240,10 +241,7 @@ void maskEmails (std::string& s)
     }
 }
 
-bool hasDriveLetter (const std::string& path)
-{
-    return path.size() >= 2 && path[1] == ':' && ((path[0] | 0x20) >= 'a' && (path[0] | 0x20) <= 'z');
-}
+bool hasDriveLetter (const std::string& path) { return path.size() >= 2 && path[1] == ':' && isAsciiLetter (path[0]); }
 
 void replaceHome (std::string& s, const std::string& home)
 {
@@ -260,7 +258,7 @@ void replaceHome (std::string& s, const std::string& home)
 }
 } // namespace
 
-LogRedactor::LogRedactor (juce::StringArray homeFolders)
+LogRedactor::LogRedactor (const juce::StringArray& homeFolders)
 {
     for (auto home : homeFolders)
     {
@@ -480,7 +478,7 @@ struct State
     bool active = false, child = false, full = false;
     Native file = noFile, runLock = noFile;
     juce::File folder, current, aiFile, unexpected;
-    juce::int64 maxBytes = 4 * 1024 * 1024;
+    juce::int64 maxBytes = juce::int64 { 4194304 };
     int dropped = 0;
     juce::String label; // a helper program's "[plugin host 4242] "
     LogRedactor redactor = LogRedactor::forThisComputer();
@@ -576,7 +574,7 @@ void writeLine (State& s, const juce::String& text, bool always)
         if (! s.full && ! s.child)
         {
             const auto note = timestamp() + " WARN  The log reached its size limit (" +
-                              juce::String (s.maxBytes / (1024 * 1024)) +
+                              juce::String (s.maxBytes / (juce::int64 { 1024 } * 1024)) +
                               " MB): later lines are left out, apart from the last one.\n";
             writeAll (s.file, note.toRawUTF8(), std::strlen (note.toRawUTF8()));
         }

@@ -294,6 +294,7 @@ TEST_CASE ("Lines from several threads land whole", "[core][log]")
     const ScratchFolder scratch;
     REQUIRE (Logs::start (optionsFor (scratch.folder)));
     std::vector<std::thread> threads;
+    threads.reserve (4);
     for (int t = 0; t < 4; ++t)
         threads.emplace_back (
             [t]
