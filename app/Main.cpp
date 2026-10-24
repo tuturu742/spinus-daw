@@ -11,12 +11,15 @@
 
 #include "commands/CommandRegistry.h"
 #include "core/FileDialog.h"
+#include "core/Log.h"
 #include "core/FileDialogPortal.h"
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
 #include "engine/PluginCrashGuard.h"
 #include "session/ProgramFolder.h"
+#include "session/AudioDeviceLog.h"
 #include "session/SelfTest.h"
+#include "session/SystemInfo.h"
 #include "session/TextLocale.h"
 #include "plugins/SandboxList.h"
 #include "plugins/PluginCatalog.h"
@@ -114,6 +117,9 @@ public:
             const bool passed = runSelfTest (host.getEngine(), folder, [] (const juce::String& line)
                                              { std::cout << line << '\n'
                                                          << std::flush; });
+            // Where a tester finds the logs to attach to a report (the self-test itself writes none).
+            std::cout << "Logs of Spinus's last runs (Help > Open log folder): " << getLogFolder().getFullPathName()
+                      << '\n';
             std::cout << (passed ? "Spinus works here." : "Some checks failed.") << '\n' << std::flush;
             setApplicationReturnValue (passed ? 0 : 1);
             quit();
@@ -134,16 +140,35 @@ public:
         }
         const auto snapshotIndex = args.indexOf ("--snapshot");
 
+        // This run's log (Help > Open log folder); not for snapshots, which are made by tools.
+        const auto started = juce::Time::getMillisecondCounter();
+        if (snapshotIndex < 0)
+            startLog (commandLine);
+
         // A plugin that took Spinus down last time is named here; from now on a crash in one is noted.
         const auto crashRecord = getSettingsFolder().getChildFile ("plugin-crash.json");
         const auto crashed = engine::PluginCrashGuard::takeRecorded (crashRecord);
         getSettingsFolder().createDirectory();
         engine::PluginCrashGuard::install (crashRecord);
+        if (crashed)
+            core::Logs::warning ("start", "A plugin took Spinus down last time: " + crashed->name +
+                                              ". Spinus offers to run it in a separate process.");
 
         EngineHost::Options options;
         options.openAudioDevice = ! args.contains ("--no-audio") && snapshotIndex < 0;
 
         engineHost = std::make_unique<EngineHost> (options);
+        if (snapshotIndex < 0)
+        {
+            core::Logs::info ("start", options.openAudioDevice
+                                           ? juce::String ("Audio engine ready")
+                                           : juce::String ("Audio engine ready, without a device (--no-audio)"));
+            if (engineHost->getFirstStartAudioChoice().isNotEmpty())
+                core::Logs::info ("audio", "First start: chose " + engineHost->getFirstStartAudioChoice());
+            if (options.openAudioDevice)
+                audioLog = std::make_unique<session::AudioDeviceLog> (
+                    engineHost->getEngine().getDeviceManager().deviceManager);
+        }
 
         // The free open-source plugins: downloaded on request into the user's data folder,
         // or found in a development build's plugins/ folder or the system's CLAP folders.
@@ -172,6 +197,9 @@ public:
         // snapshots, which look the same on every machine.)
         catalog = std::make_unique<plugins::PluginCatalog> (getPluginListFolder(), getProgramFolder());
         catalog->load();
+        core::Logs::info ("plugins", "Plugin list: " + juce::String (catalog->getKnownPlugins().getNumTypes()) +
+                                         " plugins, " + juce::String ((int)catalog->getProblems().getAll().size()) +
+                                         " problem plugins (" + getPluginListFolder().getFullPathName() + ")");
 #if ! JUCE_WINDOWS // Windows plugins through Wine; on Windows they are simply plugins
         windows = std::make_unique<plugins::WindowsPlugins> (getWindowsPluginsFolder(), isFlatpak());
         useWindowsPlugins (*windows, *catalog);
@@ -223,6 +251,9 @@ public:
         if (! getPluginListFolder().getChildFile ("plugin-list.xml").existsAsFile())
             view.getBrowser().startScan();
 
+        core::Logs::info ("start",
+                          "Started in " + juce::String (juce::Time::getMillisecondCounter() - started) + " ms");
+
         // First launch: offer the free plugins (once; later from Options > Get free plugins).
         const auto offered = getPluginListFolder().getChildFile ("plugin-downloads-offered");
         if (! offered.exists() && view.arePluginDownloadsMissing())
@@ -235,6 +266,7 @@ public:
 
     void shutdown() override
     {
+        core::Logs::info ("quit", "Quitting");
         checkDialog = nullptr;
         checkWindow = nullptr;
         ui::PluginDownloadDialog::closeWindow(); // cancels downloads
@@ -249,10 +281,24 @@ public:
         session = nullptr;
         sandboxList = nullptr;
         catalog = nullptr;
+        audioLog = nullptr;
         engineHost = nullptr;
+        core::Logs::info ("quit", "Audio engine closed");
         downloads = nullptr;
         windows = nullptr;
         pluginDialogs = nullptr;
+        core::Logs::stop();
+    }
+
+    /** An exception that reached JUCE's message loop: noted before Spinus goes on (or ends). */
+    void unhandledException (const std::exception* e, const juce::String& sourceFile, int line) override
+    {
+        core::Logs::error ("crash", "Nothing caught " +
+                                        (e != nullptr ? "a C++ exception: " + juce::String (e->what())
+                                                      : juce::String ("an exception that is not a std::exception")) +
+                                        (sourceFile.isNotEmpty() ? " (" + juce::File (sourceFile).getFileName() + ":" +
+                                                                       juce::String (line) + ")"
+                                                                 : juce::String()));
     }
 
     /** The window's close button, Ctrl+Q, or the desktop asking: offer to save first. */
@@ -265,6 +311,19 @@ public:
     }
 
 private:
+    /** Starts this run's session log (core::Logs) in the log folder, with a header describing the run. */
+    static void startLog (const juce::String& commandLine)
+    {
+        core::Logs::Options log;
+        log.folder = getLogFolder();
+        log.header = session::describeRunForLog (log.startTime);
+        if (! core::Logs::start (log))
+            return;
+        core::Logs::installTerminateHandler();
+        core::Logs::info ("start", commandLine.trim().isNotEmpty() ? "Starting with: " + commandLine.trim()
+                                                                   : juce::String ("Starting"));
+    }
+
     /** Windows plugins: use the chosen Wine and yabridge, refresh the bridges, and scan them. */
     static void useWindowsPlugins (const plugins::WindowsPlugins& windows, plugins::PluginCatalog& catalog)
     {
@@ -474,6 +533,7 @@ private:
     std::unique_ptr<plugins::PluginDialogs> pluginDialogs;
     std::unique_ptr<ai::AiService> aiService;
     std::unique_ptr<EngineHost> engineHost;
+    std::unique_ptr<session::AudioDeviceLog> audioLog;
     std::unique_ptr<plugins::PluginCatalog> catalog;
     std::unique_ptr<plugins::SandboxList> sandboxList;
     std::unique_ptr<Session> session;

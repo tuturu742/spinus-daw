@@ -166,7 +166,7 @@ spinus-daw/
 ├── src/
 │   ├── model/                ← Spinus Model schema, serialization, migrations
 │   ├── commands/             ← Command API, undo grouping
-│   ├── core/                 ← small shared utilities (ChildProcess; FileDialog, D-Bus)
+│   ├── core/                 ← small shared utilities (ChildProcess; FileDialog, D-Bus; session logs)
 │   ├── engine/               ← Engine Adapter (Model → Tracktion Edit), export, audio setup
 │   ├── session/              ← the open project: recording, Freeze, autosave, presets, analysis steps
 │   ├── project/              ← project folders and audio import
@@ -401,7 +401,7 @@ features; projects keep working unchanged either way.
 
 ### 12.1 spinus-ai service
 
-- Started by Spinus only when AI is turned on (above), and then lazily, when an AI feature is first used. Listens on 127.0.0.1 on a port of its choosing and answers only Spinus, which proves itself with a token passed in a private file: any program can connect to a local port, and the service holds the user's provider keys. One transport for Linux and Windows. Spinus starts it as `python ai/run_spinus_ai.py --log <file>`, so even import errors reach the log.
+- Started by Spinus only when AI is turned on (above), and then lazily, when an AI feature is first used. Listens on 127.0.0.1 on a port of its choosing and answers only Spinus, which proves itself with a token passed in a private file: any program can connect to a local port, and the service holds the user's provider keys. One transport for Linux and Windows. Spinus starts it as `python ai/run_spinus_ai.py --log <file>`, so even import errors reach the log, and with `--session-log <run>-ai.log` for its part of the session log (§14), redacted the same way; requests' parameters (what the user asked) are never logged.
 - JSON-RPC methods are versioned (`ai.v1.stems.separate`, …). Every long task is a **job** with id, progress events, cancel, and result.
 - Models are downloaded on first use to `~/.local/share/spinus/models/` with checksum verification and a visible size/progress prompt. Nothing is downloaded without the user agreeing.
 - Results are cached in the project `cache/` folder keyed by audio-file hash and model version.
@@ -546,6 +546,27 @@ The panel shows a short notice that analyzing copyrighted songs is for study and
 - Undo history: unlimited by default within memory budget; "History" panel lists steps by description.
 - Autosave as in §7.3. On startup after a crash, Spinus offers to recover the newest autosave.
 - Plugin crash (Windows bridge): the slot goes bypassed with an error; audio continues.
+- **Session logs** (`core::Logs`, `src/core/Log.h`): one log file per run in the settings folder's `logs/`
+  (`~/.config/Spinus DAW/logs`, `%APPDATA%\Spinus DAW\logs`; the Flatpak's own config folder), named by the start time
+  (`spinus-2026-10-24_14-03-12.log`), the newest 10 runs kept and each file capped at 4 MB. A header names the
+  version, package, system, JUCE and Tracktion versions and the CPU; then a line per notable event: start and
+  quit steps, the audio device and dropouts, project open/save/autosave/recovery/export with durations, plugin
+  scans, plugin load failures and sandboxed plugin crashes, Windows plugin setup, the AI service's state, failed
+  commands, and anything shown to the user as a problem. Never per block or per paint. Why: a tester's problem can
+  be told from a file they attach (Help › Open log folder), and Help › Report a problem collects
+  `Logs::recentFiles()`.
+  - Every line is **redacted** before it is written (the home folder becomes `~`, other users' folder names,
+    keys, tokens, email addresses and any key Spinus passed on are masked); the AI service applies the same rules
+    (`ai/spinus_ai/logs.py`).
+  - Each line is one `write` (one `WriteFile`) to a file opened for appending, nothing buffered in Spinus, so the
+    lines before a crash are on disk, and the helper programs (plugin scanner, plugin host; told the file by
+    `SPINUS_LOG_FILE`) append to the same file, labelled. The crash handler adds a fixed line. A clean quit ends
+    the file with "Spinus closed normally."; a run holds a lock on its file (`flock`, `LockFileEx`) until it
+    ends, so the next start tells a run that ended unexpectedly from one still going (two Spinus at once).
+  - **Real time:** nothing on the audio thread logs. Dropouts are read from the driver's counter by a timer on
+    the message thread (`session::AudioDeviceLog`); a sandboxed plugin's hang, noticed on the audio thread, is a
+    flag that the message thread logs.
+  - Tests and the command-line tools (`--self-test`, `--scan-plugins`, `--snapshot`) write no logs.
 
 ---
 

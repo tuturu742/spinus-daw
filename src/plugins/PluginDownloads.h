@@ -103,6 +103,10 @@ public:
     static juce::String sha256Of (const juce::File&);
 
 private:
+    juce::Result installUnlogged (const DownloadPack&, const std::function<void (const Progress&)>& onProgress,
+                                  const std::atomic<bool>* cancel) const;
+    juce::Result removeUnlogged (const DownloadPack&) const;
+
     juce::File folder;
 };
 

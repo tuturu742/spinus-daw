@@ -6,12 +6,15 @@ import asyncio
 import contextlib
 import hmac
 import json
+import logging
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from .service import RpcError, Service
+
+log = logging.getLogger("spinus_ai.server")
 
 # The longest request read (Spinus sends long lists, such as every Surge XT preset and sample it might use).
 MAX_REQUEST = 64 << 20
@@ -61,9 +64,12 @@ async def serve_client(
             if request_id is not None:
                 await send({"jsonrpc": "2.0", "id": request_id, "result": result})
         except RpcError as error:
+            # The method and the error, never the request's parameters (they hold what the user asked).
+            log.warning("%s failed: %s", request.get("method"), error)
             if request_id is not None:
                 await send({"jsonrpc": "2.0", "id": request_id, "error": {"code": error.code, "message": str(error)}})
         except Exception as error:
+            log.exception("%s failed with an unexpected error", request.get("method"))
             if request_id is not None:
                 await send({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32603, "message": str(error)}})
 
@@ -115,8 +121,10 @@ async def serve(service: Service, port_file: Path, token: str, limit: int = MAX_
     partial = port_file.with_suffix(".partial")
     partial.write_text(str(port))
     os.replace(partial, port_file)
+    log.info("Listening on 127.0.0.1:%d", port)
     service.start()
     await service.stopping.wait()
+    log.info("Stopping")
     # Stopping closes the connections too, rather than waiting for Spinus to: Python 3.12's Server waits for
     # every connection to end, and on Windows (the Proactor loop; seen under Wine) the end of one Spinus
     # already closed is not always noticed.

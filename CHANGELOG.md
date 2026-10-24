@@ -3,6 +3,17 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## 0.1.0-alpha.2 (unreleased)
+
+### Finding out what went wrong
+
+- **Log files:** Spinus writes a log of each run (the sound card it opened, projects opened, saved and
+  exported, plugin scans and plugin crashes, the Windows plugins setup, the AI service, and every error it
+  showed you), so a problem can be found from the file you attach to a bug report. **Help › Open log folder**
+  opens them; the last 10 runs are kept. Your home folder is written as `~`, and keys, tokens and email
+  addresses are masked, so the logs hold no keys and no user name. After a crash, the next run's log names
+  the run that ended unexpectedly. See [Troubleshooting](docs/user/troubleshooting.md#log-files).
+
 ## 0.1.0-alpha.1 (unreleased)
 
 The first alpha: an early, quiet release for testers before 0.1.0. Everything below is new.

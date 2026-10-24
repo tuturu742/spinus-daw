@@ -4,7 +4,7 @@
 
 | Area | What it is |
 |---|---|
-| **Menu bar** | **File**: new, open, open recent, save, save as, export, quit. **Edit**: undo, redo, History, automate the last moved control. **View**: every panel (below), the Browser, the Assistant and [layouts](#layouts). **Options**: [audio settings](audio-settings.md), [free plugins](free-plugins.md), [Windows plugins](windows-plugins.md), [AI](assistant.md), [keyboard shortcuts](keyboard-shortcuts.md), metronome, quantize recorded notes, typing keyboard to piano. **Help**: the [manual and About Spinus](help.md). |
+| **Menu bar** | **File**: new, open, open recent, save, save as, export, quit. **Edit**: undo, redo, History, automate the last moved control. **View**: every panel (below), the Browser, the Assistant and [layouts](#layouts). **Options**: [audio settings](audio-settings.md), [free plugins](free-plugins.md), [Windows plugins](windows-plugins.md), [AI](assistant.md), [keyboard shortcuts](keyboard-shortcuts.md), metronome, quantize recorded notes, typing keyboard to piano. **Help**: the [manual, the log folder and About Spinus](help.md). |
 | **Top bar** | Transport, current pattern, tempo, key, position, CPU load, and buttons that open the panels (a lit button means the panel is open). |
 | **Browser** (left) | Your projects and the demo songs, your samples, instruments, effects and installed plugins: double-click or drag to use them. Show or hide it with **F8** or the **Browser** button. See [Browser](browser.md). |
 | **Workspace** (centre) | Spinus's panels float here, like in FL Studio. |

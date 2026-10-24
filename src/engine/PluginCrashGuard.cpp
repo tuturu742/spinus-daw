@@ -1,5 +1,6 @@
 #include "PluginCrashGuard.h"
 
+#include "core/Log.h"
 #include "session/ProgramFolder.h"
 
 #include <csignal>
@@ -117,6 +118,16 @@ void handler (int signal, siginfo_t* info, void* context)
         if (found != nullptr)
             break;
     }
+    // The session log's last line (fixed texts: nothing may be made or formatted here).
+    const char* what = signal == SIGSEGV  ? "Spinus crashed: SIGSEGV (a bad memory access)"
+                       : signal == SIGBUS ? "Spinus crashed: SIGBUS (a bad memory access)"
+                       : signal == SIGILL ? "Spinus crashed: SIGILL (an illegal instruction)"
+                       : signal == SIGFPE ? "Spinus crashed: SIGFPE (an arithmetic error)"
+                                          : "Spinus ended: SIGABRT (abort)";
+    core::Logs::writeFromCrashHandler (what);
+    if (found != nullptr)
+        core::Logs::writeFromCrashHandler ("The crash was inside a plugin: the next start names it.");
+
     if (found != nullptr && recordPath[0] != 0)
     {
         const int fd = open (recordPath, O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -240,6 +251,7 @@ void noteCrash (const void* at)
 
 LONG WINAPI onCrash (EXCEPTION_POINTERS* exception)
 {
+    core::Logs::writeFromCrashHandler ("Spinus crashed: an unhandled exception");
     noteCrash (exception != nullptr && exception->ExceptionRecord != nullptr
                    ? exception->ExceptionRecord->ExceptionAddress
                    : nullptr);
@@ -248,6 +260,7 @@ LONG WINAPI onCrash (EXCEPTION_POINTERS* exception)
 
 void onAbort (int signal)
 {
+    core::Logs::writeFromCrashHandler ("Spinus ended: abort()");
     noteCrash (nullptr);
     std::signal (signal, previousAbort != nullptr && previousAbort != SIG_ERR ? previousAbort : SIG_DFL);
     std::raise (signal);

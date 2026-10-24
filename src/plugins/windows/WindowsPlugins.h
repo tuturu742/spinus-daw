@@ -235,6 +235,12 @@ public:
 private:
     juce::Result run (const juce::StringArray& command, int timeoutMs, const std::atomic<bool>* cancel,
                       juce::String* output = nullptr) const;
+    // What the public functions of the same name do; those note it in the session log.
+    juce::Result createPrefixUnlogged (const Runtime&, const std::atomic<bool>* cancel) const;
+    juce::Result runInstallerUnlogged (const Runtime&, const juce::File& installer, const std::atomic<bool>* cancel,
+                                       const Progress&) const;
+    juce::Result addPluginFileUnlogged (const juce::File&) const;
+    juce::Result removePluginUnlogged (const Found&, juce::Array<juce::File>* removedBridges) const;
     juce::var loadSettings() const;
     void saveSettings (const juce::var&) const;
 

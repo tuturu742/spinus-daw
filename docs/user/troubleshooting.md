@@ -78,7 +78,34 @@ file or a plugin folder, and the desktop's dialog can't offer files and folders 
 
 Start it again: it offers to **Recover** your work from the last autosave (every two minutes). See
 [Projects](projects.md). Please [report the crash](https://github.com/tuturu742/spinus-daw/issues) with
-what you were doing; when started from a terminal, the last lines it printed help a lot.
+what you were doing, and attach the log of that run (below): its last lines usually say what went wrong.
+
+## Log files
+
+Spinus writes a log of each run: when it started, the sound card it opened, projects opened, saved and
+exported, plugin scans and plugins that failed to load or crashed, the Windows plugins setup, the AI
+service, and the errors it showed you. When you report a problem, attach the log of the run where it
+happened.
+
+**Help › Open log folder** opens the folder. It is:
+
+| Spinus | Log folder |
+|---|---|
+| Linux (Arch package, AppImage, built yourself) | `~/.config/Spinus DAW/logs` |
+| Flatpak | `~/.var/app/io.github.tuturu742.spinus/config/Spinus DAW/logs` |
+| Windows | `%APPDATA%\Spinus DAW\logs` (type it into the address bar of File Explorer) |
+
+- There is one file per run, named by the time Spinus started: `spinus-2026-10-24_14-03-12.log`. The AI
+  service, when AI is on, writes its own beside it: `spinus-2026-10-24_14-03-12-ai.log`. Attach both.
+- Spinus keeps the logs of its last 10 runs and deletes older ones. A log stops growing at 4 MB.
+- If Spinus closed unexpectedly, the next run's log says so near its top ("The previous run ended
+  unexpectedly"), and names the file of the run that crashed.
+- **Nothing private is in them:** your home folder is written as `~` (so your user name isn't), API keys
+  and tokens are replaced by `***`, email addresses by `<email>`, and what you ask the assistant or the AI
+  features is never written down. The logs do hold the names of your projects, plugins and sound card,
+  and the folders your projects are in (below your home folder). They are plain text: open one in a text
+  editor to see for yourself before you send it.
+- `spinus --self-test` prints where the log folder is.
 
 ## Still stuck
 

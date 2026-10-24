@@ -377,7 +377,7 @@ TEST_CASE ("Projects opened from the file system are listed in the Browser and o
     CHECK (! rowTexts (browser, Browser::RowKind::project).contains ("Summer"));
 }
 
-TEST_CASE ("Help: the Manual (F1) and About Spinus", "[ui][help]")
+TEST_CASE ("Help: the Manual (F1), the log folder and About Spinus", "[ui][help]")
 {
     Ui ui;
     const auto help = ui.view.getMenuBarNames().indexOf ("Help");
@@ -387,7 +387,7 @@ TEST_CASE ("Help: the Manual (F1) and About Spinus", "[ui][help]")
     for (juce::PopupMenu::MenuItemIterator i (menu); i.next();)
         if (i.getItem().itemID != 0)
             items.add (i.getItem().itemID);
-    CHECK (items == juce::Array<int> { MainView::showManual, MainView::showAbout });
+    CHECK (items == juce::Array<int> { MainView::showManual, MainView::openLogFolder, MainView::showAbout });
 
     // F1 opens the manual (no other command has it).
     auto* mappings = ui.view.getCommandManager().getKeyMappings();

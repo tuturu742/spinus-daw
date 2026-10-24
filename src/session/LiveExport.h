@@ -38,6 +38,7 @@ private:
     void timerCallback() override;
     void run() override;
     void finish (const Result&);
+    double startedMs = 0.0;
     void restorePlayback();
 
     Session& session;

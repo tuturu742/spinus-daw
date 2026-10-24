@@ -1,4 +1,6 @@
 #include "SandboxPluginFormat.h"
+
+#include "core/Log.h"
 #include "SandboxHost.h"
 #include "SandboxProtocol.h"
 
@@ -469,6 +471,18 @@ private:
             killed = true;
             connection->killWorkerProcess();
         }
+
+        // Noted here, on the message thread (the audio thread only sets the flag).
+        if (const auto f = failure.load(); f != Failure::none && ! reportedFailure)
+        {
+            reportedFailure = true;
+            core::Logs::error ("sandbox",
+                               name +
+                                   (f == Failure::hung ? " stopped answering in its own process and was ended"
+                                                       : " crashed in its own process") +
+                                   "; Spinus carries on without it (" + real.pluginFormatName + " " +
+                                   real.fileOrIdentifier + ")");
+        }
     }
 
     std::unique_ptr<Connection> connection;
@@ -476,7 +490,7 @@ private:
     juce::PluginDescription description, real;
     juce::String name;
     int numIn = 0, numOut = 0;
-    bool midiIn = false, midiOut = false, editor = false, killed = false;
+    bool midiIn = false, midiOut = false, editor = false, killed = false, reportedFailure = false;
     int pluginLatency = 0, bufferedLatency = 0;
     double tail = 0.0;
     ProcessWatch watch;
@@ -599,26 +613,33 @@ void SandboxPluginFormat::createPluginInstance (const juce::PluginDescription& d
                                                 PluginCreationCallback callback)
 {
     const auto [format, file] = realFormatAndFile (description);
+    auto fail = [&callback, name = description.name] (const juce::String& why)
+    {
+        core::Logs::warning ("sandbox", "Could not load " + name + " in its own process: " + why);
+        callback (nullptr, why);
+    };
     const auto real = findReal ? findReal (format, file, description.uniqueId) : std::nullopt;
     if (! real)
-        return callback (nullptr, "Spinus does not know the plugin " + description.name);
+        return fail ("Spinus does not know the plugin " + description.name);
     if (! hostExecutable.existsAsFile())
-        return callback (nullptr, "spinus-plugin-host is missing");
+        return fail ("spinus-plugin-host is missing");
 
     auto memory = SharedMemory::create();
     if (memory == nullptr)
-        return callback (nullptr, "Spinus could not share memory with the plugin's process");
+        return fail ("Spinus could not share memory with the plugin's process");
     auto connection = std::make_unique<Connection>();
     if (! connection->launchWorkerProcess (hostExecutable, processId, 5000, 0))
-        return callback (nullptr, "Spinus could not start the plugin's process");
+        return fail ("Spinus could not start the plugin's process");
 
     auto xml = real->createXml();
     const auto info = connection->request (
         "load", object ({ { "description", xml->toString() }, { "memory", memory->getName() } }), 60000);
     memory->unlink(); // both sides have it now
     if (! info.hasProperty ("name"))
-        return callback (nullptr, info.hasProperty ("error") ? info["error"].toString()
-                                                             : juce::String ("the plugin's process did not answer"));
+        return fail (info.hasProperty ("error") ? info["error"].toString()
+                                                : juce::String ("the plugin's process did not answer"));
+    core::Logs::info ("sandbox", "Loaded " + real->name + " in its own process (" +
+                                     juce::String ((juce::int64)info["process"]) + ")");
 
     auto instance =
         std::make_unique<RemoteInstance> (std::move (connection), std::move (memory), description, *real, info);

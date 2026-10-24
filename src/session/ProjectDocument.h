@@ -91,6 +91,8 @@ private:
     void closeCurrent(); // releases the lock and drops an untitled project's autosaves
     void markSaved();
     juce::Result openFolder (const juce::File&);
+    juce::Result saveHere();
+    juce::Result saveIntoNewFolder (juce::File);
     juce::Result collectAudioFiles (const juce::File& projectFolder);
     juce::File getUnsavedRoot() const { return settings.getChildFile ("Unsaved"); }
     juce::File getRecentListFile() const { return settings.getChildFile ("recent-projects.txt"); }

@@ -1,6 +1,7 @@
 # Manual and About
 
-The **Help** menu has this manual and the facts about Spinus. Both work with AI turned off.
+The **Help** menu has this manual, Spinus's log files and the facts about Spinus. They all work with AI turned
+off.
 
 ![The manual inside Spinus, searched for "freeze"](images/manual.png)
 
@@ -20,6 +21,12 @@ manual as on the web, installed with Spinus, so it works without an internet con
 
 The search is plain text: it needs no AI and sends nothing anywhere. For questions in your own words, the
 [assistant](assistant.md) reads the same pages.
+
+## Open log folder
+
+**Help › Open log folder** opens the folder where Spinus keeps a log of each of its last 10 runs, in your file
+manager. When something goes wrong, attach the log of that run to your bug report: see
+[Log files](troubleshooting.md#log-files) for what is in them (no keys, no user name) and where the folder is.
 
 ## About Spinus
 

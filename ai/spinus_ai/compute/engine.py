@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -28,8 +29,13 @@ START_TIMEOUT = 300.0  # importing PyTorch and the first GPU kernels can take a 
 Progress = Callable[[dict[str, Any]], Awaitable[None]]
 
 
+logger = logging.getLogger("spinus_ai.engine")
+
+
 class EngineError(Exception):
-    pass
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        logger.warning("Analysis engine: %s", message)
 
 
 @dataclass(frozen=True)
@@ -153,6 +159,12 @@ class Engine:
                 env=self.worker_env(plan), limit=1 << 24,
             )  # fmt: skip
         self.running = plan
+        logger.info(
+            "Starting the analysis engine: %s on %s%s",
+            plan.build.id,
+            plan.device,
+            f" ({plan.note})" if plan.note else "",
+        )
         ready = await self.read(None, START_TIMEOUT)
         if ready != "ready":
             await self.stop()

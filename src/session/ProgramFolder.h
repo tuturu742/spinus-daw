@@ -55,6 +55,7 @@ inline juce::File getUserDataRoot()
                       native (and AppImage)               Flatpak
    settings           ~/.config/Spinus DAW                the same folder (the home folder is shared)
    plugin list        ~/.config/Spinus DAW                ~/.var/app/<id>/config/Spinus DAW
+   session logs       ~/.config/Spinus DAW/logs           ~/.var/app/<id>/config/Spinus DAW/logs
    data (downloads)   ~/.local/share/Spinus DAW           ~/.var/app/<id>/data/Spinus DAW
    Windows plugins    ~/.local/share/Spinus DAW/windows   the same folder as native
 
@@ -91,6 +92,11 @@ inline juce::File getPluginListFolder()
             return juce::File (xdg).getChildFile ("Spinus DAW");
     return getSettingsFolder();
 }
+
+/** The session logs (core::Logs): <settings>/logs, so ~/.config/Spinus DAW/logs (Windows: %APPDATA%\Spinus DAW\logs);
+    in the Flatpak its own config folder's (~/.var/app/<id>/config/Spinus DAW/logs), so a Flatpak and a native
+    Spinus keep their runs apart. */
+inline juce::File getLogFolder() { return getPluginListFolder().getChildFile ("logs"); }
 
 /** Large files that are not settings (downloaded plugins): $XDG_DATA_HOME/Spinus DAW, normally
     ~/.local/share/Spinus DAW (Windows: %LOCALAPPDATA%\Spinus DAW). */

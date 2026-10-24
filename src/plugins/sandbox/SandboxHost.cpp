@@ -1,6 +1,7 @@
 #include "SandboxHost.h"
 #include "SandboxProtocol.h"
 
+#include "core/Log.h"
 #include "plugins/PluginCatalog.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -307,7 +308,10 @@ int runSandboxHost (const juce::String& commandLine)
 {
     auto host = std::make_unique<Host>();
     if (! host->initialiseFromCommandLine (commandLine, processId, 10000))
+    {
+        core::Logs::error ("sandbox", "Could not connect to Spinus (started with: " + commandLine + ")");
         return 1;
+    }
     juce::MessageManager::getInstance()->runDispatchLoop();
     host = nullptr;
     return 0;

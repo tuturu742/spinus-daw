@@ -1,9 +1,29 @@
 #include "ProjectDocument.h"
 
 #include "commands/CommandRegistry.h"
+#include "core/Log.h"
 
 namespace spinus
 {
+
+namespace
+{
+/** Notes a step with a project in the session log: what, where, how it went and how long it took. */
+juce::Result noted (const juce::String& done, const juce::String& doing, const juce::File& where, double startedMs,
+                    juce::Result result)
+{
+    const auto took =
+        " (" + juce::String (juce::roundToInt (juce::Time::getMillisecondCounterHiRes() - startedMs)) + " ms)";
+    if (result.wasOk())
+        core::Logs::info ("project", done + " " + where.getFullPathName() + took);
+    else
+        core::Logs::warning ("project", "Could not " + doing + " " + where.getFullPathName() + ": " +
+                                            result.getErrorMessage() + took);
+    return result;
+}
+
+double now() { return juce::Time::getMillisecondCounterHiRes(); }
+} // namespace
 
 ProjectDocument::ProjectDocument (Session& s, juce::File settingsFolder)
     : session (s), settings (std::move (settingsFolder))
@@ -59,6 +79,7 @@ void ProjectDocument::closeCurrent()
 //==============================================================================
 void ProjectDocument::newProject()
 {
+    core::Logs::info ("project", "New project");
     closeCurrent();
     folder = juce::File();
     session.setProjectFolder ({});
@@ -66,7 +87,12 @@ void ProjectDocument::newProject()
     markSaved();
 }
 
-juce::Result ProjectDocument::open (const juce::File& file) { return openFolder (project::projectFolderFor (file)); }
+juce::Result ProjectDocument::open (const juce::File& file)
+{
+    const auto started = now();
+    const auto projectFolder = project::projectFolderFor (file);
+    return noted ("Opened", "open", projectFolder, started, openFolder (projectFolder));
+}
 
 juce::Result ProjectDocument::openFolder (const juce::File& projectFolder)
 {
@@ -135,6 +161,14 @@ juce::Result ProjectDocument::collectAudioFiles (const juce::File& projectFolder
 juce::Result ProjectDocument::save()
 {
     if (isUntitled())
+        return saveHere();
+    const auto started = now();
+    return noted ("Saved", "save", folder, started, saveHere());
+}
+
+juce::Result ProjectDocument::saveHere()
+{
+    if (isUntitled())
         return juce::Result::fail ("The project has no folder yet: use Save As");
 
     if (auto r = collectAudioFiles (folder); r.failed())
@@ -158,6 +192,12 @@ juce::Result ProjectDocument::saveAs (juce::File newFolder)
     if (newFolder == folder)
         return save();
 
+    const auto started = now();
+    return noted ("Saved as", "save as", newFolder, started, saveIntoNewFolder (newFolder));
+}
+
+juce::Result ProjectDocument::saveIntoNewFolder (juce::File newFolder)
+{
     if (newFolder.existsAsFile())
         return juce::Result::fail (newFolder.getFullPathName() + " is a file, not a project folder");
 
@@ -204,6 +244,7 @@ juce::Result ProjectDocument::autosave()
     auto data = session.captureProjectData();
     if (stateId == autosavedStateId && data.deviceStates == autosavedStates)
         return juce::Result::ok();
+    const auto started = now();
 
     if (isUntitled() && untitledFolder == juce::File())
     {
@@ -211,17 +252,19 @@ juce::Result ProjectDocument::autosave()
         untitledFolder =
             getUnsavedRoot().getChildFile (now.formatted ("Untitled %Y%m%d-%H%M%S")).getNonexistentSibling (true);
         if (! untitledFolder.createDirectory())
-            return juce::Result::fail ("cannot create " + untitledFolder.getFullPathName());
+            return noted ("Autosaved", "autosave", untitledFolder, started,
+                          juce::Result::fail ("cannot create " + untitledFolder.getFullPathName()));
         lock = std::make_unique<project::SessionLock> (untitledFolder);
     }
 
     auto states = data.deviceStates;
-    if (auto r = project::Autosaves (isUntitled() ? untitledFolder : folder).save (data); r.failed())
-        return r;
+    const auto where = isUntitled() ? untitledFolder : folder;
+    if (auto r = project::Autosaves (where).save (data); r.failed())
+        return noted ("Autosaved", "autosave", where, started, r);
 
     autosavedStateId = stateId;
     autosavedStates = std::move (states);
-    return juce::Result::ok();
+    return noted ("Autosaved", "autosave", where, started, juce::Result::ok());
 }
 
 void ProjectDocument::timerCallback()
@@ -266,6 +309,9 @@ std::vector<ProjectDocument::Recovery> ProjectDocument::findRecoveries() const
         consider (unsaved, true);
 
     std::sort (result.begin(), result.end(), [] (auto& a, auto& b) { return a.time > b.time; });
+    for (const auto& r : result)
+        core::Logs::info ("project", "Crashed with unsaved work: " + r.projectFolder.getFullPathName() +
+                                         " (autosaved " + r.time.formatted ("%Y-%m-%d %H:%M") + ")");
     return result;
 }
 
@@ -273,7 +319,9 @@ juce::Result ProjectDocument::recover (const Recovery& recovery)
 {
     project::ProjectData data;
     if (auto r = project::loadProject (recovery.autosave, data); r.failed())
-        return r;
+        return noted ("Recovered", "recover", recovery.autosave, now(), r);
+    core::Logs::info ("project", "Recovered " + recovery.projectFolder.getFullPathName() + " from " +
+                                     recovery.autosave.getFileName());
 
     closeCurrent();
     project::SessionLock::clearCrashedLock (recovery.projectFolder);
@@ -306,6 +354,7 @@ juce::Result ProjectDocument::recover (const Recovery& recovery)
 
 void ProjectDocument::discard (const Recovery& recovery)
 {
+    core::Logs::info ("project", "Not recovered (the user chose so): " + recovery.projectFolder.getFullPathName());
     if (recovery.untitled)
         recovery.projectFolder.deleteRecursively();
     else

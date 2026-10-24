@@ -1,5 +1,5 @@
 """python -m spinus_ai --port-file FILE --token-file FILE --config FOLDER [--docs FOLDER] [--schema FILE]
-[--models FOLDER] [--parent-pid PID]
+[--models FOLDER] [--parent-pid PID] [--session-log FILE]
 
 Spinus starts it through run_spinus_ai.py, which also takes --log FILE."""
 
@@ -11,6 +11,7 @@ import signal
 import sys
 from pathlib import Path
 
+from . import logs
 from .connections import KeyringUnavailable, KeyStore, MemoryKeyStore, SystemKeyStore
 from .parent import watch_parent
 from .server import serve
@@ -27,9 +28,13 @@ def main() -> None:
     parser.add_argument("--models", type=Path, help="downloaded models (default ~/.local/share/spinus/models)")
     parser.add_argument("--parent-pid", type=int, help="stop when this process (Spinus) has ended")
     parser.add_argument("--memory-keys", action="store_true", help="keep keys in memory only (tests)")
+    parser.add_argument("--session-log", type=Path, help="this run's log, beside Spinus's (redacted)")
     args = parser.parse_args()
     token = args.token_file.read_text().strip()
     args.token_file.unlink(missing_ok=True)
+    logs.add_secret(token)
+    if args.session_log is not None:
+        logs.setup(args.session_log)
 
     note = ""
     keys: KeyStore
@@ -40,10 +45,13 @@ def main() -> None:
             keys = SystemKeyStore()
         except KeyringUnavailable as error:
             keys, note = MemoryKeyStore(), str(error) + " Keys are kept only until Spinus closes."
+            logs.log.warning("%s", note)
+    keys = logs.RedactedKeys(keys)
 
     async def run() -> None:
         service = Service(args.config, keys, args.docs, args.schema, keyring_note=note, models=args.models)
         loop = asyncio.get_running_loop()
+        logs.log_loop_errors(loop)
         if sys.platform != "win32":  # Windows has no signal handlers in asyncio; Spinus sends ai.v1.shutdown
             for sig in (signal.SIGTERM, signal.SIGINT):
                 loop.add_signal_handler(sig, service.stopping.set)
@@ -55,6 +63,7 @@ def main() -> None:
             watcher.cancel()
 
     asyncio.run(run())
+    logs.log.info("The AI service stopped")
 
 
 if __name__ == "__main__":

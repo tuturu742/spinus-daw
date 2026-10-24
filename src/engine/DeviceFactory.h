@@ -5,6 +5,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 
 #include <functional>
+#include <set>
 
 namespace spinus::engine
 {
@@ -36,8 +37,12 @@ public:
     void setRunSeparately (std::function<bool (const juce::PluginDescription&)> f) { runSeparately = std::move (f); }
 
 private:
+    /** Logs that a device could not be made (once per device: the adapter asks again on every change). */
+    void noteFailure (const model::Device&, const juce::String& why);
+
     std::map<juce::String, Creator> stockCreators;
     std::function<bool (const juce::PluginDescription&)> runSeparately;
+    std::set<juce::String> reported; // devices whose failure is in the log already
 };
 
 } // namespace spinus::engine
