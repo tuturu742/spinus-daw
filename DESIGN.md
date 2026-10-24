@@ -656,8 +656,10 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   GPL-3.0-or-later). They are built as CLAP, VST3 and LV2 for Linux and Windows, so they work in any DAW.
   Each comes with a synth-match profile and tagged presets. Spinus offers them under Get free plugins.
   Each is named after a *Spinus* species. The first is **Psaltria**, an additive resynthesis synth that
-  works with the track analyzer (§12.7); its `PLUGINS.md` lists the others (Spinescens, Magellanicus,
-  Pinus, Crassirostris, Cucullatus, Tristis). Spinus's own devices (§11) stay in Spinus as the defaults that are always there, except Spinus Tune
+  works with the track analyzer (§12.7); its `PLUGINS.md` lists the others (Tristis, Magellanicus, Pinus,
+  Cucullatus). Ideas that a good open-source plugin already covers are dropped, and Get free plugins
+  offers that plugin instead: Six Sines rather than an FM synth, TIME-12 and GATE-12 rather than a volume
+  and time shaper. Spinus's own devices (§11) stay in Spinus as the defaults that are always there, except Spinus Tune
   (next item).
 - **Spinus Tune moves to Spinus Plugins in 0.2.0** (§12.6). The pitch engine, the live plugin and its
   window move to the spinus-plugins repository, where Tristis also uses the engine. The engine is
