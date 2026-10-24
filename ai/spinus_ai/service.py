@@ -8,6 +8,7 @@ import functools
 import hashlib
 import importlib.util
 import json
+import logging
 import os
 import uuid
 from collections.abc import Awaitable, Callable
@@ -27,6 +28,8 @@ from .gateway import ProviderError, list_models
 from .manual import Manual
 from .routing import Routing
 from .usage import UsageLog
+
+log = logging.getLogger("spinus_ai.service")
 
 Notify = Callable[[str, dict[str, Any]], Awaitable[None]]
 
@@ -164,6 +167,7 @@ class Service:
             await run_blocking(lambda: self.manual.use_model(model, self.models.cache))
             self.model_state = "ready"
         except Exception as error:
+            log.warning("Could not use the search model %s: %s", model_id, error)
             self.manual.use_model(None, None)
             self.model_state = f"Could not use the model: {error}"
         finally:
@@ -212,7 +216,11 @@ class Service:
         try:
             models = await list_models(self.client, connection, key)
         except ProviderError as error:
+            log.warning(
+                "Connection test of %s (%s) failed: %s: %s", connection.name, connection.provider, error.kind, error
+            )
             return {"ok": False, "message": str(error)}
+        log.info("Connection test of %s (%s): %d models", connection.name, connection.provider, len(models))
         connection.models = sorted(models)
         self.connections.save()
         return {"ok": True, "message": f"Works: {len(models)} models available.", "models": connection.models}

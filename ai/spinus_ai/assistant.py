@@ -4,6 +4,7 @@ commands for the user to apply (AGENTS rule 3: never applied by the AI)."""
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +17,8 @@ from .manual import Manual
 from .project_tools import Snapshot, Tools
 from .routing import Route, Routing
 from .usage import UsageLog
+
+log = logging.getLogger("spinus_ai.assistant")
 
 MAX_TURNS = 12
 
@@ -165,6 +168,14 @@ async def complete_with_fallback(
             ), index
         except ProviderError as error:
             last = error
+            log.warning(
+                "%s (%s, %s) failed: %s: %s",
+                route.connection.name,
+                route.connection.provider,
+                route.model,
+                error.kind,
+                error,
+            )
             if not error.worth_falling_back or index + 1 == len(routes):
                 raise
             await say(
