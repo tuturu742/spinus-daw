@@ -4,6 +4,7 @@
 #include "Theme.h"
 #include "WindowStacking.h"
 #include "session/ProgramFolder.h"
+#include "session/SystemInfo.h"
 
 #include <SpinusArt.h>
 #include <SpinusVersion.h>
@@ -21,28 +22,14 @@ const Theme& themeOf (const juce::Component& c)
 }
 
 constexpr int topHeight = 236;
-
-juce::String packageKind()
-{
-#if JUCE_WINDOWS
-    return "Windows";
-#else
-    if (isFlatpak())
-        return "Flatpak";
-    if (juce::SystemStats::getEnvironmentVariable ("APPIMAGE", {}).isNotEmpty())
-        return "AppImage";
-    return "Linux";
-#endif
-}
 } // namespace
 
 juce::String AboutSpinus::getVersionInfo()
 {
     juce::StringArray lines;
     lines.add (juce::String (productName) + " " + versionString);
-    lines.add ("Package: " + packageKind());
-    lines.add ("System: " + juce::SystemStats::getOperatingSystemName() +
-               (juce::SystemStats::isOperatingSystem64Bit() ? ", 64-bit" : ""));
+    lines.add ("Package: " + session::getPackageKind());
+    lines.add ("System: " + session::getSystemName());
     lines.add ("Built with " + juce::SystemStats::getJUCEVersion() + " and Tracktion Engine");
     return lines.joinIntoString ("\n");
 }

@@ -13,6 +13,8 @@ add_library (spinus_core STATIC
     commands/CommandRegistry.h
     core/ChildProcess.cpp
     core/ChildProcess.h
+    core/Log.cpp
+    core/Log.h
     core/DBus.cpp
     core/DBus.h
     core/FileDialog.cpp
@@ -183,6 +185,8 @@ add_library (spinus_core STATIC
     session/TextLocale.cpp
     session/TextLocale.h
     session/SelfTest.h
+    session/SystemInfo.cpp
+    session/SystemInfo.h
     session/Freezer.cpp
     session/LiveExport.cpp
     session/LiveExport.h

@@ -12,6 +12,7 @@ add_executable (spinus_tests
     ai/AiTests.cpp
     commands/CommandTests.cpp
     core/ChildProcessTests.cpp
+    core/LogTests.cpp
     core/FileDialogTests.cpp
     dsp/DrumMachineTests.cpp
     dsp/SamplerTests.cpp
