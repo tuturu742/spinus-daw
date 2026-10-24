@@ -101,6 +101,9 @@ private:
     std::vector<juce::File> searchFolders;
     const std::vector<plugins::DownloadPack> packs;
     std::vector<std::unique_ptr<PackRow>> packRows;
+    struct RowsArea;
+    std::unique_ptr<RowsArea> rowsArea; // the rows, scrolled in rowsView when the screen is too short for all
+    juce::Viewport rowsView;
     juce::Label intro, status;
     juce::TextButton downloadButton { "Download" }, closeButton { "Close" };
     double progress = 0.0;

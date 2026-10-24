@@ -63,6 +63,7 @@ add_executable (spinus_tests
     session/SilenceTests.cpp
     session/AudioRecorderTests.cpp
     session/DeviceParametersTests.cpp
+    session/DownloadedPluginsTests.cpp
     session/StemSamplesTests.cpp
     session/SynthMatchTests.cpp
     session/SynthProfileTests.cpp

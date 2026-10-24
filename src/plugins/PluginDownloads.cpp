@@ -332,6 +332,48 @@ DownloadPack peakEater (juce::String url, juce::String sha256, juce::int64 size)
              { "peakeater.clap" } };
 }
 
+// Six Sines (Paul Walker, of the Surge Synth Team): its own code is MIT, its builds GPL-3.0 (they include JUCE
+// under its GPL-3.0 option), and its factory patches are inside the plugin.
+DownloadPack sixSines (juce::String url, juce::String sha256, juce::int64 size, const juce::String& folder)
+{
+    std::vector<DownloadPack::Extract> extract { { folder + "/Six Sines.clap", "" } };
+    if (folder == "six-sines_assets") // only the Linux zip has the licence beside the plugins
+        extract.push_back ({ folder + "/LICENSE_GPL3", "" });
+    return { "six-sines",
+             "Six Sines",
+             "1.2.1",
+             "FM synthesizer: six sine operators that modulate each other, with factory patches",
+             "GPL-3.0",
+             "https://github.com/baconpaul/six-sines",
+             { { std::move (url), std::move (sha256), size, std::move (extract) } },
+             { "Six Sines.clap" } };
+}
+
+// tiagolr's TIME-12 and GATE-12 publish VST3 and LV2 builds, no CLAP: Spinus loads their VST3 (a folder).
+DownloadPack time12 (juce::String url, juce::String sha256, juce::int64 size, const juce::String& folder)
+{
+    return { "time12",
+             "TIME-12",
+             "1.2.3",
+             "Delay-time shaper drawn as an envelope, in time with the song: stutters, tape stops, scratches",
+             "GPL-3.0",
+             "https://github.com/tiagolr/time12",
+             { { std::move (url), std::move (sha256), size, { { folder + "/VST3/TIME-12.vst3/", "TIME-12.vst3" } } } },
+             { "TIME-12.vst3" } };
+}
+
+DownloadPack gate12 (juce::String url, juce::String sha256, juce::int64 size, const juce::String& folder)
+{
+    return { "gate12",
+             "GATE-12",
+             "1.3.3",
+             "Trance gate and volume shaper drawn as an envelope, in time with the song",
+             "GPL-3.0",
+             "https://github.com/tiagolr/gate12",
+             { { std::move (url), std::move (sha256), size, { { folder + "/VST3/GATE-12.vst3/", "GATE-12.vst3" } } } },
+             { "GATE-12.vst3" } };
+}
+
 const std::vector<DownloadPack>& linuxPacks()
 {
     static const std::vector<DownloadPack> packs {
@@ -373,6 +415,13 @@ const std::vector<DownloadPack>& linuxPacks()
               "72b60c83cf6426337031df744c34a047104a9d95f1feaf6cd048ecfa39f74c96", 21867343),
         peakEater ("https://github.com/vvvar/PeakEater/releases/download/v0.8.2/peakeater-v0.8.2-Linux-x86_64.zip",
                    "0ddf7d839fa436e62c2e9d5b1f188d695424d5aba2f242ad0a89bb8634f299b9", 4586800),
+        sixSines ("https://github.com/baconpaul/six-sines/releases/download/v1.2.1/"
+                  "six-sines-Linux-2026-07-20-18ecb36.zip",
+                  "9b5353eebfec3e462c80ed8c0f53c965e6262bb38537518159cce71de7eace41", 28862299, "six-sines_assets"),
+        time12 ("https://github.com/tiagolr/time12/releases/download/v1.2.3/time12-linux-v1.2.3.zip",
+                "d1e19e0c2e5332626af3077d4dd98dcaeb4b4c2b33ee74c267a732c29df10613", 5066023, "time12-linux"),
+        gate12 ("https://github.com/tiagolr/gate12/releases/download/v1.3.3/gate12-linux-v1.3.3.zip",
+                "fa19ebf1cacd064c5c2fc687894ffc7400a92e9887f6db3cc3f2f59042d07cad", 5135883, "gate12-linux"),
     };
     return packs;
 }
@@ -394,6 +443,14 @@ const std::vector<DownloadPack>& windowsPacks()
               "149fda0649daf8a3aa0851801f92515f0dbf6203acf33c0edc7d3c445e80b1e7", 9222959),
         peakEater ("https://github.com/vvvar/PeakEater/releases/download/v0.8.2/peakeater-v0.8.2-Windows-x86_64.zip",
                    "6bae14feb7ea19beed6faf4a6984168521d2deb1351db9da5c208d274254e075", 3727973),
+        // Six Sines' Windows zip holds the same files as its installer (.exe, not offered).
+        sixSines ("https://github.com/baconpaul/six-sines/releases/download/v1.2.1/"
+                  "six-sines-Windows-2026-07-20-18ecb36.zip",
+                  "9f7c7fa5cb1c5e11b53c0a9306ee443149cc7bc0a109380dbbe1578f3a7b6e5d", 22398434, "installer_copy"),
+        time12 ("https://github.com/tiagolr/time12/releases/download/v1.2.3/time12-win-v1.2.3.zip",
+                "b5699e49850826a8279e315d51cc8cf92636fc98d5d649bcfadd7ae026982989", 5539406, "time12-win"),
+        gate12 ("https://github.com/tiagolr/gate12/releases/download/v1.3.3/gate12-win-v1.3.3.zip",
+                "93b1056a40a341452804260a165ce9ce0feaad65eedbcf192319910671f54cf5", 6383770, "gate12-win"),
     };
     return packs;
 }
@@ -429,7 +486,7 @@ bool PluginDownloads::isInstalled (const DownloadPack& pack) const
     if (dir.getChildFile (markerName).loadFileAsString().trim() != pack.version)
         return false;
     for (auto& f : pack.files)
-        if (! dir.getChildFile (f).existsAsFile())
+        if (! dir.getChildFile (f).exists()) // a VST3 plugin is a folder
             return false;
     return true;
 }
@@ -509,7 +566,7 @@ juce::Result PluginDownloads::installUnlogged (const DownloadPack& pack,
     }
 
     for (auto& f : pack.files)
-        if (! staging.getChildFile (f).existsAsFile())
+        if (! staging.getChildFile (f).exists())
             return juce::Result::fail (pack.name + "'s download does not contain " + f + ".");
 
     if (! staging.getChildFile (markerName).replaceWithText (pack.version))
@@ -576,13 +633,15 @@ std::vector<juce::File> PluginDownloads::getSearchFolders (const std::vector<juc
     folders.insert (folders.end(), extra.begin(), extra.end());
     for (auto& f : getSystemClapFolders())
         folders.push_back (f);
+    for (auto& f : getSystemVst3Folders())
+        folders.push_back (f);
     return folders;
 }
 
 juce::File PluginDownloads::findFile (const std::vector<juce::File>& folders, const juce::String& file)
 {
     for (auto& f : folders)
-        if (auto candidate = f.getChildFile (file); candidate.existsAsFile())
+        if (auto candidate = f.getChildFile (file); candidate.existsAsFile() || candidate.isDirectory())
             return candidate;
     return {};
 }
@@ -599,6 +658,23 @@ std::vector<juce::File> PluginDownloads::getSystemClapFolders()
     std::vector<juce::File> folders { juce::File ("~/.clap"), juce::File ("/usr/lib/clap"),
                                       juce::File ("/usr/local/lib/clap") };
     for (const auto& host : getHostPluginFolders ("CLAP")) // the computer's own, seen from the Flatpak
+        folders.push_back (host);
+    return folders;
+#endif
+}
+
+std::vector<juce::File> PluginDownloads::getSystemVst3Folders()
+{
+#if JUCE_WINDOWS
+    // The VST3 standard's folders on Windows.
+    return { juce::File::getSpecialLocation (juce::File::windowsLocalAppData).getChildFile ("Programs/Common/VST3"),
+             juce::File (
+                 juce::SystemStats::getEnvironmentVariable ("COMMONPROGRAMFILES", "C:\\Program Files\\Common Files"))
+                 .getChildFile ("VST3") };
+#else
+    std::vector<juce::File> folders { juce::File ("~/.vst3"), juce::File ("/usr/lib/vst3"),
+                                      juce::File ("/usr/local/lib/vst3") };
+    for (const auto& host : getHostPluginFolders ("VST3")) // the computer's own, seen from the Flatpak
         folders.push_back (host);
     return folders;
 #endif

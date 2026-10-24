@@ -37,9 +37,10 @@ connection.
 
 Install them with `sudo pacman -S pipewire-jack lame`.
 
-## The free plugins (Surge XT, LSP, Dragonfly, Odin 2, OB-Xf, PeakEater)
+## The free plugins (Surge XT, LSP, Dragonfly, Odin 2, OB-Xf, PeakEater and more)
 
-The package does not include Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf or PeakEater. The
+The package does not include Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf, PeakEater, Six Sines,
+TIME-12 or GATE-12. The
 first time you start Spinus, it offers to download them from their projects' own websites; see
 [Get free plugins](free-plugins.md).
 
@@ -136,8 +137,8 @@ in Options › Audio (F10).
 (`C:\Program Files\Common Files\VST3`, `...\Common Files\CLAP`, and your VST2 folder). Windows plugins
 load directly; the Wine setup Spinus has on Linux isn't needed.
 
-**The free plugins.** On first start Spinus offers Surge XT, Dragonfly Reverb, OB-Xf and PeakEater,
-downloaded from their projects. LSP Plugins publishes no Windows version, and Odin 2 only an installer
+**The free plugins.** On first start Spinus offers Surge XT, Dragonfly Reverb, OB-Xf, PeakEater, Six Sines,
+TIME-12 and GATE-12, downloaded from their projects. LSP Plugins publishes no Windows version, and Odin 2 only an installer
 program, so they aren't offered on Windows; Spinus's own EQ, Compressor, Limiter and Gate are built in
 instead of LSP's. See [Get free plugins](free-plugins.md) and [Known issues](known-issues.md).
 

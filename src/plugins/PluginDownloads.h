@@ -32,7 +32,7 @@ struct DownloadPack
     juce::String license;
     juce::String homepage;
     std::vector<Archive> archives;
-    juce::StringArray files; // what Spinus loads from the pack, e.g. "Surge XT.clap"
+    juce::StringArray files; // what Spinus loads from the pack, e.g. "Surge XT.clap" or "TIME-12.vst3" (a folder)
 
     juce::int64 getDownloadSize() const;
 };
@@ -89,15 +89,19 @@ public:
     juce::Result remove (const DownloadPack&) const;
 
     /** The folders the bundled plugins are looked for in, best first: each pack's folder, then the
-        given extra folders (e.g. a development build's plugins/), then the system's CLAP folders, so
-        plugins installed with the system's package manager also work. */
+        given extra folders (e.g. a development build's plugins/), then the system's CLAP and VST3 folders,
+        so plugins installed with the system's package manager also work. */
     std::vector<juce::File> getSearchFolders (const std::vector<juce::File>& extra = {}) const;
 
-    /** The first folder holding `file`, or an invalid File. */
+    /** The first folder holding `file`, or an invalid File. A VST3 plugin is a folder (a bundle), so a
+        folder of that name counts too. */
     static juce::File findFile (const std::vector<juce::File>& folders, const juce::String& file);
 
     /** The system's CLAP folders (~/.clap, /usr/lib/clap, /usr/local/lib/clap). */
     static std::vector<juce::File> getSystemClapFolders();
+
+    /** The system's VST3 folders (~/.vst3, /usr/lib/vst3, /usr/local/lib/vst3; on Windows Common Files\VST3). */
+    static std::vector<juce::File> getSystemVst3Folders();
 
     /** Hashes a file (lowercase hex). */
     static juce::String sha256Of (const juce::File&);

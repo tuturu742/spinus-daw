@@ -1,8 +1,8 @@
 # Plugins
 
 Spinus loads VST3, CLAP, LV2 and VST2 plugins made for Linux. It can also download a set of free,
-open-source plugins for you (Surge XT, Surge XT Effects, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf
-and PeakEater; on Windows, those published for Windows): see [Get free plugins](free-plugins.md).
+open-source plugins for you (Surge XT, Surge XT Effects, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf,
+PeakEater, Six Sines, TIME-12 and GATE-12; on Windows, those published for Windows): see [Get free plugins](free-plugins.md).
 
 ## Where Spinus looks
 

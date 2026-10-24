@@ -11,8 +11,12 @@ ones their projects publish for your system:
 | [**Odin 2**](https://thewavewarden.com/pages/odin-2) (TheWaveWarden) | A synthesizer with analog-style, wavetable, FM and chiptune oscillators, with its factory presets | 67 MB | installer only | GPL-3.0 |
 | [**OB-Xf**](https://github.com/surge-synthesizer/OB-Xf) (Surge Synth Team) | An analog-style polyphonic synthesizer in the spirit of the Oberheim OB-X, the successor of OB-Xd | 22 MB | 9 MB | GPL-3.0 |
 | [**PeakEater**](https://github.com/vvvar/PeakEater) | A clipper and waveshaper (hard, soft, cubic and more) with oversampling | 5 MB | 4 MB | GPL-3.0 |
+| [**Six Sines**](https://github.com/baconpaul/six-sines) (Paul Walker, of the Surge Synth Team) | An FM synthesizer: six sine-wave operators that modulate each other, with its factory patches | 29 MB | 22 MB | GPL-3.0 |
+| [**TIME-12**](https://github.com/tiagolr/time12) (tilr) | Draws the delay time as a shape in time with the song: stutters, tape stops, scratches, reverses | 5 MB | 6 MB | GPL-3.0 |
+| [**GATE-12**](https://github.com/tiagolr/gate12) (tilr) | A trance gate and volume shaper: draw the volume as a shape in time with the song | 5 MB | 6 MB | GPL-3.0 |
 
-In the [Browser](browser.md), Odin 2 and OB-Xf are with the instruments, PeakEater with the effects.
+In the [Browser](browser.md), Odin 2, OB-Xf and Six Sines are with the instruments, PeakEater, TIME-12
+and GATE-12 with the effects.
 
 Every plugin here is open source, and so is the exact file Spinus downloads: the project's own build,
 not a version that needs an account or that hides features. Plugins whose projects publish only an
@@ -25,6 +29,21 @@ only looks in its own shared folder, outside the folder Spinus downloads into (t
 `~/.local/share/Spinus DAW/plugins/ob-xf/Patches` on Linux). To browse them in OB-Xf's own window,
 install OB-Xf with its own installer from its
 [releases page](https://github.com/surge-synthesizer/OB-Xf/releases).
+
+**Six Sines' factory patches** are inside the plugin: pick them with the arrows at the top of its own
+window. The Analyzer's Closest preset does not list them (Six Sines does not tell other programs what
+patches it has).
+
+![Six Sines' own window in Spinus](images/free-plugins-six-sines.png)
+
+**TIME-12 and GATE-12** follow the song: their shapes repeat in time with its tempo while it plays (one
+bar by default; change it at the top of their windows). Draw the shape with the mouse, or pick one of the
+12 patterns. GATE-12 starts with a volume swell up and down over each bar; TIME-12 starts with a flat
+line: draw a shape to hear it work. Their projects publish no CLAP version, so Spinus uses
+their VST3 version.
+
+![GATE-12's window: its first pattern raises and lowers the volume over each bar](images/free-plugins-gate12.png)
+![TIME-12's window: draw the delay time's shape on the grid](images/free-plugins-time12.png)
 
 Spinus does not come with them. Instead it downloads each project's own release from its website when
 you ask. Spinus works without them: you still have the [Sampler](sampler.md), the
@@ -67,7 +86,7 @@ If you installed the plugins from the Arch repositories
 (`sudo pacman -S surge-xt-clap lsp-plugins-clap dragonfly-reverb-clap`), the window shows them as
 **Installed on this computer** and Spinus uses those. The same goes for any of these plugins you put in
 a CLAP folder yourself (for example `Odin2.clap` in `/usr/lib/clap`, where Odin 2's own install script
-puts it).
+puts it), and for TIME-12 and GATE-12 in a VST3 folder (for example `~/.vst3/GATE-12.vst3`).
 
 ## Removing a plugin
 

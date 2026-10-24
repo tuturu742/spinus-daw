@@ -15,8 +15,8 @@ A page for every feature of Spinus. The assistant reads these pages too, so you 
 - [Manual and About](help.md): this manual inside Spinus, its search, and the version and licenses
 - [Plugins](plugins.md): which plugins Spinus loads, scanning, problem plugins
 - [Windows plugins](windows-plugins.md): installing and using Windows VST and CLAP plugins
-- [Get free plugins](free-plugins.md): downloading Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf
-  and PeakEater
+- [Get free plugins](free-plugins.md): downloading Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf,
+  PeakEater, Six Sines, TIME-12 and GATE-12
 - [Channel Rack](channel-rack.md): channels and the step sequencer
 - [Audio tracks](audio-tracks.md): vocals, stems and other long audio, apart from the instruments
 - [Audio settings](audio-settings.md): sound card, buffer size, latency
