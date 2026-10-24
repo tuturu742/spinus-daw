@@ -1,5 +1,6 @@
 #include "PluginScanner.h"
 #include "core/ChildProcess.h"
+#include "core/Log.h"
 
 #include "clap/ClapPluginFormat.h"
 #include "plugins/windows/PluginDialogs.h"
@@ -104,7 +105,13 @@ juce::Result PluginScanner::scanFile (const juce::String& formatName, const juce
     // The scanner writes its result only after a clean scan, so a missing file means it crashed.
     const auto xml = juce::parseXML (output.getFile());
     if (xml == nullptr || ! xml->hasTagName ("PLUGINS"))
+    {
+        const auto code = (int)process.getExitCode();
+        core::Logs::warning ("scan", "The plugin scanner ended with exit code " + juce::String (code) +
+                                         (code > 128 ? " (signal " + juce::String (code - 128) + ")" : juce::String()) +
+                                         " while loading " + fileOrIdentifier);
         return juce::Result::fail ("crashed while loading");
+    }
     if (xml->getNumChildElements() == 0 && xml->hasAttribute ("error"))
         return juce::Result::fail (xml->getStringAttribute ("error"));
 
@@ -179,6 +186,8 @@ PluginScanner::Summary PluginScanner::scanAll (juce::AudioPluginFormatManager& f
 
         if (result.failed())
         {
+            core::Logs::warning ("scan", "Problem plugin (" + job.format->getName() + ") " + job.file + ": " +
+                                             result.getErrorMessage());
             problems.add ({ job.format->getName(), job.file, result.getErrorMessage(), juce::Time::getCurrentTime() });
             ++summary.newProblems;
             continue;
@@ -348,11 +357,16 @@ int runScannerProcess (const juce::String& formatName, const juce::String& fileO
         // Write atomically: the coordinator treats a missing file as a crash.
         juce::TemporaryFile temp (output);
         if (! xml.writeTo (temp.getFile()) || ! temp.overwriteTargetFileWithTemporary())
+        {
+            core::Logs::error ("scan", "Could not write the result for " + fileOrIdentifier + " to " +
+                                           output.getFullPathName());
             return 3;
+        }
 
         return 0;
     }
 
+    core::Logs::error ("scan", "Unknown plugin format " + formatName + " (for " + fileOrIdentifier + ")");
     return 2; // unknown format
 }
 

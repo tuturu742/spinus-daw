@@ -120,6 +120,11 @@ public:
     /** Whether AAC export is possible (the `ffmpeg` program is installed). */
     static bool isAacAvailable();
 
+    /** Notes a render's start, or its end (with `result`), in the session log: `what` ("Export", "Live
+        export"), the file, the format, and at the end how it went and how long it took. Message thread. */
+    static void noteStart (const juce::String& what, const juce::File&, const ExportSettings&);
+    static void noteEnd (const juce::String& what, const juce::File&, const Result&, double startedMs);
+
 private:
     struct Stem
     {
@@ -161,6 +166,7 @@ private:
     std::vector<juce::File> plannedFiles;
     size_t current = 0;
     bool running = false, cancelRequested = false;
+    double startedMs = 0.0;
 
     std::unique_ptr<tracktion::Edit> edit;
     std::unique_ptr<class EngineAdapter> adapter;

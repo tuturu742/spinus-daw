@@ -32,6 +32,8 @@ double LiveExport::getProgress() const noexcept
 
 void LiveExport::start()
 {
+    startedMs = juce::Time::getMillisecondCounterHiRes();
+    engine::ExportJob::noteStart ("Live export", file, settings);
     const auto end = engine::ExportJob::getSongEnd (session.getProject());
     if (end <= 0)
         return finish ({ false, false, "The playlist is empty: place a pattern or an audio clip in it first.", {} });
@@ -193,6 +195,7 @@ void LiveExport::restorePlayback()
 
 void LiveExport::finish (const Result& result)
 {
+    engine::ExportJob::noteEnd ("Live export", file, result, startedMs);
     stopTimer();
     const bool wasRunning = running;
     running = false;

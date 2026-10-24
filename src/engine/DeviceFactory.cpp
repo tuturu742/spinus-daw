@@ -1,5 +1,6 @@
 #include "DeviceFactory.h"
 
+#include "core/Log.h"
 #include "plugins/sandbox/SandboxPluginFormat.h"
 #include "session/ProgramFolder.h"
 
@@ -18,7 +19,10 @@ te::Plugin::Ptr DefaultDeviceFactory::create (te::Edit& edit, const model::Devic
     if (device.kind == model::Device::Kind::stock)
     {
         auto it = stockCreators.find (device.stockType);
-        return it != stockCreators.end() ? it->second (edit, device) : nullptr;
+        auto plugin = it != stockCreators.end() ? it->second (edit, device) : nullptr;
+        if (plugin == nullptr)
+            noteFailure (device, it == stockCreators.end() ? "not part of this Spinus" : "could not be made");
+        return plugin;
     }
 
     const auto& ref = device.plugin;
@@ -50,7 +54,10 @@ te::Plugin::Ptr DefaultDeviceFactory::create (te::Edit& edit, const model::Devic
         match = find ([&] (auto& t) { return t.name == ref.name && t.manufacturerName == ref.manufacturer; });
 
     if (match == nullptr)
+    {
+        noteFailure (device, "not installed here (or not scanned): its slot shows it as Missing");
         return nullptr;
+    }
 
     // In its own process: Tracktion finds plugins in its known list, so the sandboxed twin goes there too.
     auto description = *match;
@@ -65,7 +72,23 @@ te::Plugin::Ptr DefaultDeviceFactory::create (te::Edit& edit, const model::Devic
 
     auto plugin = edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, description);
     auto* external = dynamic_cast<te::ExternalPlugin*> (plugin.get());
-    return external != nullptr && external->getAudioPluginInstance() != nullptr ? plugin : nullptr;
+    if (external == nullptr || external->getAudioPluginInstance() == nullptr)
+    {
+        const auto why = external != nullptr ? external->getLoadError() : juce::String();
+        noteFailure (device, "did not load (" + description.fileOrIdentifier + ")" +
+                                 (why.isNotEmpty() ? ": " + why : juce::String()));
+        return nullptr;
+    }
+    return plugin;
+}
+
+void DefaultDeviceFactory::noteFailure (const model::Device& device, const juce::String& why)
+{
+    const auto what = device.kind == model::Device::Kind::stock
+                          ? device.stockType
+                          : device.plugin.name + " (" + device.plugin.format + ")";
+    if (reported.insert (what + why).second)
+        core::Logs::warning ("plugin", what + " " + why);
 }
 
 } // namespace spinus::engine

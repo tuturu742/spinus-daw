@@ -1,5 +1,6 @@
 #include "Exporter.h"
 #include "core/ChildProcess.h"
+#include "core/Log.h"
 #include "Beats.h"
 
 #include "EngineAdapter.h"
@@ -134,6 +135,9 @@ ExportJob::~ExportJob()
 void ExportJob::start()
 {
     jassert (! running);
+    startedMs = juce::Time::getMillisecondCounterHiRes();
+    noteStart (settings.stems ? "Export with stems" : "Export",
+               plannedFiles.empty() ? juce::File() : plannedFiles.front(), settings);
     running = true;
     cancelRequested = false;
     current = 0;
@@ -423,8 +427,35 @@ void ExportJob::finish (const Result& result)
                 stem.file.deleteFile();
         }
 
+    noteEnd ("Export", plannedFiles.empty() ? juce::File() : plannedFiles.front(), result, startedMs);
     if (onFinished)
         onFinished (result);
+}
+
+void ExportJob::noteStart (const juce::String& what, const juce::File& file, const ExportSettings& s)
+{
+    core::Logs::info (
+        "export", what + ": " + file.getFullPathName() + " (" + ExportSettings::extensionFor (s.format).substring (1) +
+                      (s.format == ExportSettings::Format::wav16        ? " 16-bit"
+                       : s.format == ExportSettings::Format::wav24      ? " 24-bit"
+                       : s.format == ExportSettings::Format::wav32Float ? " 32-bit float"
+                       : s.format == ExportSettings::Format::mp3        ? " " + juce::String (s.mp3Kbps) + " kbit/s"
+                                                                        : juce::String()) +
+                      ", " + juce::String (s.sampleRate / 1000.0, 1) + " kHz" + (s.pattern ? ", one pattern" : "") +
+                      ")");
+}
+
+void ExportJob::noteEnd (const juce::String& what, const juce::File& file, const Result& r, double startedMs)
+{
+    const auto took = juce::String ((juce::Time::getMillisecondCounterHiRes() - startedMs) / 1000.0, 1) + " s";
+    if (r.ok)
+        core::Logs::info ("export", what + " done: " + juce::String ((int)r.files.size()) +
+                                        (r.files.size() == 1 ? " file" : " files") + " in " + took);
+    else if (r.cancelled)
+        core::Logs::info ("export", what + " stopped after " + took + ": " + r.error);
+    else
+        core::Logs::warning ("export",
+                             what + " failed after " + took + " (" + file.getFullPathName() + "): " + r.error);
 }
 
 namespace

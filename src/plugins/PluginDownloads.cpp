@@ -1,6 +1,7 @@
 #include "PluginDownloads.h"
 
 #include "ArchiveReader.h"
+#include "core/Log.h"
 #include "session/ProgramFolder.h"
 
 #include <juce_cryptography/juce_cryptography.h>
@@ -437,6 +438,25 @@ juce::Result PluginDownloads::install (const DownloadPack& pack,
                                        const std::function<void (const Progress&)>& onProgress,
                                        const std::atomic<bool>* cancel) const
 {
+    core::Logs::info ("download", "Downloading " + pack.name + " " + pack.version + " (" +
+                                      juce::File::descriptionOfSizeInBytes (pack.getDownloadSize()) + ")");
+    const auto started = juce::Time::getMillisecondCounter();
+    auto result = installUnlogged (pack, onProgress, cancel);
+    const auto took = juce::String ((juce::Time::getMillisecondCounter() - started) / 1000.0, 1) + " s";
+    if (result.wasOk())
+        core::Logs::info ("download", "Installed " + pack.name + " " + pack.version + " in " + took + " (" +
+                                          getPackFolder (pack).getFullPathName() + ")");
+    else if (cancel != nullptr && cancel->load())
+        core::Logs::info ("download", pack.name + ": cancelled after " + took);
+    else
+        core::Logs::warning ("download", pack.name + " was not installed: " + result.getErrorMessage());
+    return result;
+}
+
+juce::Result PluginDownloads::installUnlogged (const DownloadPack& pack,
+                                               const std::function<void (const Progress&)>& onProgress,
+                                               const std::atomic<bool>* cancel) const
+{
     if (! folder.createDirectory())
         return juce::Result::fail ("Could not create " + folder.getFullPathName() + ".");
 
@@ -504,6 +524,16 @@ juce::Result PluginDownloads::install (const DownloadPack& pack,
 }
 
 juce::Result PluginDownloads::remove (const DownloadPack& pack) const
+{
+    auto result = removeUnlogged (pack);
+    if (result.wasOk())
+        core::Logs::info ("download", "Removed " + pack.name);
+    else
+        core::Logs::warning ("download", result.getErrorMessage());
+    return result;
+}
+
+juce::Result PluginDownloads::removeUnlogged (const DownloadPack& pack) const
 {
     const auto dir = getPackFolder (pack);
     if (! dir.exists())

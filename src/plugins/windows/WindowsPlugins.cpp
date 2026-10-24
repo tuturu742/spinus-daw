@@ -1,5 +1,6 @@
 #include "WindowsPlugins.h"
 #include "core/ChildProcess.h"
+#include "core/Log.h"
 
 #include "plugins/PluginScanner.h"
 
@@ -223,6 +224,20 @@ juce::String nameOf (const WindowsPlugins::Found& f) { return f.file.getFileName
 } // namespace
 
 //==============================================================================
+namespace
+{
+juce::Result noted (const juce::String& what, juce::Result result)
+{
+    if (result.wasOk())
+        core::Logs::info ("windows", what + ": done");
+    else if (result.getErrorMessage() == "Cancelled.")
+        core::Logs::info ("windows", what + ": cancelled");
+    else
+        core::Logs::warning ("windows", what + " failed: " + result.getErrorMessage());
+    return result;
+}
+} // namespace
+
 juce::String WindowsPlugins::Runtime::describe() const
 {
     return kind == Kind::spinus ? "Spinus's tested Wine and yabridge" : "the Wine and yabridge on this computer";
@@ -438,6 +453,7 @@ void WindowsPlugins::applyEnvironment (const Runtime& r)
 #if JUCE_WINDOWS
     juce::ignoreUnused (r);
 #else
+    core::Logs::info ("windows", "Windows plugins use " + r.describe() + " (" + r.wine.getFullPathName() + ")");
     // NOLINTBEGIN(concurrency-mt-unsafe): message thread, before plugins and the scanner start.
     const auto& o = original();
     setenv ("PATH", pathFor (r).toRawUTF8(), 1);
@@ -505,6 +521,10 @@ std::optional<WindowsPlugins::Runtime::Kind> WindowsPlugins::getChosenRuntime() 
 
 void WindowsPlugins::setChosenRuntime (std::optional<Runtime::Kind> kind)
 {
+    core::Logs::info ("windows", "Chosen for Windows plugins: " + juce::String (! kind ? "nothing"
+                                                                                : *kind == Runtime::Kind::spinus
+                                                                                    ? "Spinus's Wine"
+                                                                                    : "this computer's Wine"));
     auto settings = loadSettings();
     settings.getDynamicObject()->setProperty (key ("runtime"), ! kind                           ? juce::var()
                                                                : *kind == Runtime::Kind::spinus ? juce::var ("spinus")
@@ -577,7 +597,10 @@ juce::Result WindowsPlugins::run (const juce::StringArray& command, int timeoutM
     core::ChildProcess process;
     if (! process.start (command,
                          output != nullptr ? core::ChildProcess::wantStdOut | core::ChildProcess::wantStdErr : 0))
+    {
+        core::Logs::warning ("windows", "Could not start: " + command.joinIntoString (" "));
         return juce::Result::fail ("Could not start " + command[command.size() > 7 ? 7 : 0]);
+    }
 
     if (output != nullptr)
         *output = process.readAllProcessOutput();
@@ -593,6 +616,8 @@ juce::Result WindowsPlugins::run (const juce::StringArray& command, int timeoutM
         if (timeoutMs > 0 && juce::Time::getMillisecondCounter() - start > (juce::uint32)timeoutMs)
         {
             process.kill();
+            core::Logs::warning ("windows", "Did not finish within " + juce::String (timeoutMs / 1000) +
+                                                " s: " + command.joinIntoString (" "));
             return juce::Result::fail ("Wine did not finish in time.");
         }
         juce::Thread::sleep (100);
@@ -617,6 +642,11 @@ void WindowsPlugins::stopWine() const
 
 juce::Result WindowsPlugins::createPrefix (const Runtime& r, const std::atomic<bool>* cancel) const
 {
+    return noted ("Setting up Spinus's Windows folder with " + r.describe(), createPrefixUnlogged (r, cancel));
+}
+
+juce::Result WindowsPlugins::createPrefixUnlogged (const Runtime& r, const std::atomic<bool>* cancel) const
+{
     // The Wine that last made or updated the prefix. Another Wine updates it on its first start, and asks
     // to install .NET and Internet Explorer support then, with a window that blocks every Windows program
     // (and plugin) until it is answered: Spinus updates it first, without those questions.
@@ -625,6 +655,9 @@ juce::Result WindowsPlugins::createPrefix (const Runtime& r, const std::atomic<b
     const bool ready = isPrefixReady();
     if (! ready || marker.loadFileAsString().trim() != version)
     {
+        core::Logs::info ("windows",
+                          (ready ? "Updating Spinus's Windows folder for " : "Making Spinus's Windows folder with ") +
+                              version + " (" + getPrefix().getFullPathName() + ")");
         getPrefix().getParentDirectory().createDirectory();
         if (auto result = run (wineCommand (r, { "wineboot", ready ? "-u" : "-i" }), 10 * 60 * 1000, cancel);
             result.failed())
@@ -704,6 +737,13 @@ juce::StringArray WindowsPlugins::findInstallerPrograms (const juce::String& tas
 juce::Result WindowsPlugins::runInstaller (const Runtime& r, const juce::File& installer,
                                            const std::atomic<bool>* cancel, const Progress& progress) const
 {
+    core::Logs::info ("windows", "Running the installer " + installer.getFullPathName());
+    return noted ("The installer " + installer.getFileName(), runInstallerUnlogged (r, installer, cancel, progress));
+}
+
+juce::Result WindowsPlugins::runInstallerUnlogged (const Runtime& r, const juce::File& installer,
+                                                   const std::atomic<bool>* cancel, const Progress& progress) const
+{
     if (! installer.existsAsFile())
         return juce::Result::fail ("The installer " + installer.getFullPathName() + " does not exist.");
     if (const auto problem = getInstallerProblem (installer); problem.isNotEmpty())
@@ -756,6 +796,11 @@ juce::Result WindowsPlugins::runInstaller (const Runtime& r, const juce::File& i
 }
 
 juce::Result WindowsPlugins::addPluginFile (const juce::File& file) const
+{
+    return noted ("Adding the Windows plugin " + file.getFullPathName(), addPluginFileUnlogged (file));
+}
+
+juce::Result WindowsPlugins::addPluginFileUnlogged (const juce::File& file) const
 {
     if (! isPrefixReady())
         return juce::Result::fail ("Set up Windows plugins first.");
@@ -927,6 +972,12 @@ juce::Array<juce::File> WindowsPlugins::findBridgedFiles (const Found& plugin) c
 
 juce::Result WindowsPlugins::removePlugin (const Found& plugin, juce::Array<juce::File>* removedBridges) const
 {
+    return noted ("Removing the Windows plugin " + plugin.file.getFullPathName(),
+                  removePluginUnlogged (plugin, removedBridges));
+}
+
+juce::Result WindowsPlugins::removePluginUnlogged (const Found& plugin, juce::Array<juce::File>* removedBridges) const
+{
     // Only what Spinus found in the prefix's plugin folders: never anything outside drive_c.
     const auto driveC = getPrefix().getChildFile ("drive_c");
     if (! plugin.file.isAChildOf (driveC) || ! plugin.file.exists())
@@ -1025,6 +1076,12 @@ WindowsPlugins::TestResult WindowsPlugins::test (const Runtime& r, const juce::F
     {
         result.passed = message.isEmpty();
         result.message = message;
+        if (result.passed)
+            core::Logs::info ("windows", "Windows plugins test passed with " + result.wineVersion);
+        else
+            core::Logs::warning ("windows", "Windows plugins test failed with " +
+                                                (result.wineVersion.isNotEmpty() ? result.wineVersion : r.describe()) +
+                                                ": " + message);
         auto* t = new juce::DynamicObject();
         t->setProperty ("passed", result.passed);
         t->setProperty ("runtime", r.kind == Runtime::Kind::spinus ? "spinus" : "system");
@@ -1038,6 +1095,7 @@ WindowsPlugins::TestResult WindowsPlugins::test (const Runtime& r, const juce::F
     };
     auto say = [&] (const juce::String& stage)
     {
+        core::Logs::info ("windows", "Windows plugins test: " + stage);
         if (progress)
             progress (stage);
     };

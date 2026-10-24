@@ -1,5 +1,6 @@
 #include "CommandHistory.h"
 
+#include "core/Log.h"
 #include "model/Validation.h"
 
 namespace spinus::commands
@@ -51,7 +52,10 @@ CommandHistory::CommandHistory (Project initial) : project (std::move (initial))
 juce::Result CommandHistory::performChecked (Command& command)
 {
     if (auto r = command.perform (project); r.failed())
+    {
+        core::Logs::warning ("command", command.getName() + " failed: " + r.getErrorMessage());
         return r;
+    }
 
     // Safety net: a command must never leave the project invalid. If one does, that is a bug in the
     // command; roll it back rather than keep a broken project.
@@ -59,6 +63,8 @@ juce::Result CommandHistory::performChecked (Command& command)
     {
         jassertfalse;
         command.undo (project);
+        core::Logs::error ("command", command.getName() + " left the project invalid and was undone: " +
+                                          problems.joinIntoString ("; "));
         return juce::Result::fail ("internal error in " + command.getName() + ": " + problems.joinIntoString ("; "));
     }
 

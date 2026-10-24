@@ -1,6 +1,7 @@
 #include "PluginCatalog.h"
 
 #include "clap/ClapPluginFormat.h"
+#include "core/Log.h"
 #include "session/ProgramFolder.h"
 
 namespace spinus::plugins
@@ -80,8 +81,17 @@ PluginScanner::Summary PluginCatalog::scan (const std::function<void (const Plug
     addFormats (formats);
 
     const PluginScanner scanner ({ getHelperProgram (executables, "spinus-plugin-scanner") });
+    core::Logs::info ("scan", "Scanning plugins");
+    const auto started = juce::Time::getMillisecondCounter();
     auto summary = scanner.scanAll (formats, known, problems, getSearchPaths (formats), onProgress, cancel);
     save();
+    core::Logs::info ("scan", juce::String (cancel != nullptr && cancel->load() ? "Scan stopped: " : "Scanned: ") +
+                                  juce::String (summary.scanned) + " files, " + juce::String (summary.pluginsFound) +
+                                  " plugins found, " + juce::String (summary.newProblems) + " new problem plugins, " +
+                                  juce::String (summary.skippedUnchanged) + " unchanged and " +
+                                  juce::String (summary.skippedProblems) + " known problems skipped; " +
+                                  juce::String (known.getNumTypes()) + " plugins known (" +
+                                  juce::String ((juce::Time::getMillisecondCounter() - started) / 1000.0, 1) + " s)");
     return summary;
 }
 

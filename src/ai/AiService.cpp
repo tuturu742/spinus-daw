@@ -1,5 +1,6 @@
 #include "AiService.h"
 
+#include "core/Log.h"
 #include "session/ProgramFolder.h"
 
 #if JUCE_WINDOWS
@@ -182,6 +183,7 @@ void AiService::setEnabled (bool shouldBeOn)
     if (shouldBeOn == enabled)
         return;
     enabled = shouldBeOn;
+    core::Logs::info ("ai", enabled ? "AI turned on" : "AI turned off");
     saveSettings();
     if (! enabled)
         stop();
@@ -209,6 +211,10 @@ void AiService::setState (State s, const juce::String& why)
     problem = s == State::failed ? why : juce::String();
     if (s == state)
         return;
+    if (s == State::running)
+        core::Logs::info ("ai", "AI service running");
+    else if (s == State::failed)
+        core::Logs::warning ("ai", "The AI service is not available: " + why);
     state = s;
     notifyStateListeners();
 }
@@ -236,6 +242,7 @@ void AiService::start()
     if (installation.python == juce::File())
         return setState (State::failed, "The AI service is not installed. Reinstall Spinus (it needs the "
                                         "python-httpx and python-keyring packages).");
+    core::Logs::info ("ai", "Starting the AI service (" + installation.python.getFullPathName() + ")");
 
     stop();
     folder.createDirectory();
@@ -248,6 +255,7 @@ void AiService::start()
     portFile.deleteFile();
     token = juce::String::toHexString (juce::Random::getSystemRandom().nextInt64()) +
             juce::String::toHexString (juce::Random::getSystemRandom().nextInt64());
+    core::Logs::addSecret (token); // the service's password: never in a log
     const auto tokenFile = folder.getChildFile ("service.token");
     if (! writePrivateFile (tokenFile, token))
         return setState (State::failed,
@@ -256,24 +264,27 @@ void AiService::start()
     // run_spinus_ai.py sits beside the package, so Python finds the package from it; the service's errors go
     // to service.log, so a failed start can say why.
     process = std::make_unique<core::ChildProcess>();
-    const juce::StringArray command { installation.python.getFullPathName(),
-                                      installation.package.getSiblingFile ("run_spinus_ai.py").getFullPathName(),
-                                      "--log",
-                                      log.getFullPathName(),
-                                      "--port-file",
-                                      portFile.getFullPathName(),
-                                      "--token-file",
-                                      tokenFile.getFullPathName(),
-                                      "--config",
-                                      folder.getFullPathName(),
-                                      "--docs",
-                                      installation.docs.getFullPathName(),
-                                      "--schema",
-                                      installation.schema.getFullPathName(),
-                                      "--models",
-                                      modelsFolder.getFullPathName(),
-                                      "--parent-pid",
-                                      juce::String (ownProcessId()) };
+    juce::StringArray command { installation.python.getFullPathName(),
+                                installation.package.getSiblingFile ("run_spinus_ai.py").getFullPathName(),
+                                "--log",
+                                log.getFullPathName(),
+                                "--port-file",
+                                portFile.getFullPathName(),
+                                "--token-file",
+                                tokenFile.getFullPathName(),
+                                "--config",
+                                folder.getFullPathName(),
+                                "--docs",
+                                installation.docs.getFullPathName(),
+                                "--schema",
+                                installation.schema.getFullPathName(),
+                                "--models",
+                                modelsFolder.getFullPathName(),
+                                "--parent-pid",
+                                juce::String (ownProcessId()) };
+    // The service's own log for this run, beside Spinus's (the same redaction: ai/spinus_ai/logs.py).
+    if (const auto aiLog = core::Logs::getAiServiceFile(); aiLog != juce::File())
+        command.addArray ({ "--session-log", aiLog.getFullPathName() });
     if (! process->start (command, 0))
     {
         process = nullptr;
@@ -305,12 +316,26 @@ void AiService::stop()
     }
     failPending ("The AI service stopped.");
     if (state == State::starting || state == State::running)
+    {
+        core::Logs::info ("ai", "AI service stopped");
         setState (enabled ? State::stopped : State::off);
+    }
 }
 
 //==============================================================================
 void AiService::call (const juce::String& method, const juce::var& params, Reply reply)
 {
+    // A key the user typed passes through here once: masked wherever it might appear later.
+    if (params.isObject() && params.hasProperty ("key"))
+        core::Logs::addSecret (params["key"].toString());
+    // Failed calls are noted (the method and the error: never what was asked).
+    reply = [method, inner = std::move (reply)] (const juce::var& result, const juce::String& error)
+    {
+        if (error.isNotEmpty())
+            core::Logs::warning ("ai", method + " failed: " + error.substring (0, 300));
+        if (inner)
+            inner (result, error);
+    };
     auto fail = [this, &reply] (const juce::String& error)
     {
         juce::MessageManager::callAsync (
@@ -506,6 +531,11 @@ void AiService::run()
                     return;
                 if (const auto s = connection.exchange (noSocket); s != noSocket)
                     closeSocket (s);
+                core::Logs::warning ("ai", "The AI service stopped unexpectedly" +
+                                               (process != nullptr && ! process->isRunning()
+                                                    ? " (exit code " + juce::String ((int)process->getExitCode()) + ")"
+                                                    : juce::String()) +
+                                               ". Its last words: " + readLogTail());
                 failPending ("The AI service stopped unexpectedly. " + readLogTail());
                 setState (enabled ? State::stopped : State::off);
             });
