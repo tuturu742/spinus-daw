@@ -25,7 +25,7 @@ The search is plain text: it needs no AI and sends nothing anywhere. For questio
 
 **Help › About Spinus** shows:
 
-- Spinus's version, for example **0.1.0-rc1**. **Copy version info** copies the version, the kind of
+- Spinus's version, for example **0.1.0-alpha.1**. **Copy version info** copies the version, the kind of
   package (Flatpak, AppImage, Windows) and your system, ready to paste into a bug report.
 - The license: Spinus is free software under the GNU Affero General Public License, version 3 or later
   (AGPL-3.0-or-later). The demo songs are under CC BY 4.0 (credit "Spinus DAW contributors").

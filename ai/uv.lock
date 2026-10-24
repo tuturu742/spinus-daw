@@ -905,7 +905,7 @@ wheels = [
 
 [[package]]
 name = "spinus-ai"
-version = "0.1.0rc1"
+version = "0.1.0a1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
