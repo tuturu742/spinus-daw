@@ -14,6 +14,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   addresses are masked, so the logs hold no keys and no user name. After a crash, the next run's log names
   the run that ended unexpectedly. See [Troubleshooting](docs/user/troubleshooting.md#log-files).
 
+### Sounds
+
+- Three more free one-click downloads, for Linux and Windows: the **Six Sines** FM synthesizer, with its
+  factory patches, and **TIME-12** and **GATE-12**, which shape the delay time and the volume in time with
+  the song (stutters, tape stops, trance gates), drawn with the mouse. See
+  [Get free plugins](docs/user/free-plugins.md).
+
 ## 0.1.0-alpha.1 (unreleased)
 
 The first alpha: an early, quiet release for testers before 0.1.0. Everything below is new.

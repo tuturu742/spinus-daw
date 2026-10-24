@@ -21,8 +21,8 @@ The bird in the logo is a siskin.
   channel gets its own insert, with sends, buses and sidechains.
 - **Instruments and effects:** Spinus's own Sampler, Drum Machine, 3x Osc and Beat Slicer; EQ,
   Compressor, Limiter, Gate, Filter, Sidechain Ducker, Stereo Utility, Loudness Meter and Spinus Tune
-  (pitch correction); Surge XT, Odin 2 (Linux), OB-Xf, LSP Plugins (Linux), Dragonfly Reverb and PeakEater as free
-  one-click downloads.
+  (pitch correction); Surge XT, Odin 2 (Linux), OB-Xf, Six Sines, LSP Plugins (Linux), Dragonfly Reverb, PeakEater, TIME-12
+  and GATE-12 as free one-click downloads.
 - **Plugins:** VST3, CLAP, LV2 and VST2; on Linux, Windows plugins through Wine and yabridge with no
   manual setup. A plugin that crashes can run in its own process from then on.
 - **Recording:** MIDI from a keyboard or the computer keyboard, audio from a microphone, takes and

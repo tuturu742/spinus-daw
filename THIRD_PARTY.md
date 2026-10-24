@@ -63,7 +63,8 @@ Compiled into Spinus as part of the Tracktion modules. Licenses as stated by eac
 
 Get free plugins downloads each project's own release for the user's system from
 its GitHub release page, pinned by version and SHA-256 in `src/plugins/PluginDownloads.cpp`, into the
-user's data folder. Spinus loads them in-process as CLAP plugins. The licenses below are shown in the
+user's data folder. Spinus loads them in-process as CLAP plugins (TIME-12 and GATE-12, which publish no
+CLAP build, as VST3 plugins). The licenses below are shown in the
 download window. Only projects whose source **and** published build are open source are offered, and
 only builds published as plain archives (no installers).
 
@@ -75,6 +76,9 @@ only builds published as plain archives (no installers).
 | [Odin 2](https://thewavewarden.com/odin2) (Linux only) | 2.4.1 (`Odin2.4.1Linux.zip`, under the project's `NightlyDevel` release) | GPL-3.0 (its Aldrich font: OFL-1.1) | Synth with its factory presets (built into the plugin) |
 | [OB-Xf](https://github.com/surge-synthesizer/OB-Xf) | 1.0.3 (`ob-xf-Linux-v1.0.3.zip`, Windows `ob-xf-Windows-v1.0.3.zip`; on both, `ob-xf-assets-v1.0.3.zip` for the factory patches) | GPL-3.0 (the patches too: they are part of its repository, under its GPL-3.0 licence) | Analog-style polyphonic synth, and its 488 factory patches (Spinus takes only the Patches folder from the assets archive, for closest preset) |
 | [PeakEater](https://github.com/vvvar/PeakEater) | 0.8.2 (`peakeater-v0.8.2-Linux-x86_64.zip`, Windows `peakeater-v0.8.2-Windows-x86_64.zip`) | GPL-3.0 | Clipper and waveshaper |
+| [Six Sines](https://github.com/baconpaul/six-sines) | 1.2.1 (`six-sines-Linux-2026-07-20-18ecb36.zip`, Windows `six-sines-Windows-2026-07-20-18ecb36.zip`; not the Windows `.exe` installer) | GPL-3.0 for the builds (they include JUCE and GPL-3.0 Surge Synth Team libraries; the Linux zip carries the GPL-3.0 text); its own source is MIT | FM synth with its factory patches (built into the plugin) |
+| [TIME-12](https://github.com/tiagolr/time12) | 1.2.3 (`time12-linux-v1.2.3.zip`, Windows `time12-win-v1.2.3.zip`; Spinus takes only the VST3 bundle) | GPL-3.0 (its Ubuntu Medium font: Ubuntu Font Licence 1.0) | Tempo-synced delay-time shaper |
+| [GATE-12](https://github.com/tiagolr/gate12) | 1.3.3 (`gate12-linux-v1.3.3.zip`, Windows `gate12-win-v1.3.3.zip`; Spinus takes only the VST3 bundle) | GPL-3.0 (its Ubuntu Medium font: Ubuntu Font Licence 1.0) | Tempo-synced volume shaper / trance gate |
 
 ## AI service (Python, `ai/`)
 
@@ -163,6 +167,8 @@ from source for pluginval and the plugin tests. Not installed by the package.
 | Dragonfly Reverb | KISS FFT | BSD-3-Clause |
 | Dragonfly Reverb | Bitstream Vera Sans font | Bitstream Vera license (permissive) |
 | Odin 2, OB-Xf, PeakEater | JUCE (GPL-3.0 / AGPL-3.0 for open-source use), clap-juce-extensions (MIT) | As listed |
+| Six Sines | JUCE (GPL-3.0), clap-wrapper and clap-helpers (MIT), sst-basic-blocks and sst-filters (GPL-3.0), sst-jucegui and sst-voicemanager (MIT), MTS-ESP client (0BSD), libsamplerate (BSD-2-Clause), PFFFT (BSD-style), fmt and SIMDe (MIT) | As listed |
+| TIME-12, GATE-12 | JUCE (GPL-3.0), with the VST3 SDK it includes (under its GPL-3.0 option) | As listed |
 | LSP Plugins | lsp-3rd-party: plugin API headers (CLAP MIT, LV2 ISC, LADSPA LGPL, VST3 interfaces rewritten by LSP under GPL-3.0-or-later, clean-room VST2 header under ISC) | As listed |
 
 ## Programs Spinus runs (installed separately)

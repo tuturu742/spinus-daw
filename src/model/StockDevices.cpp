@@ -11,6 +11,7 @@ const std::vector<BundledDevice>& getBundledDevices()
           "Surge XT", "GPL-3.0", "surge-xt" },
         { "bundled.odin2", "Odin 2", "Odin2.clap", "Odin2", true, "Odin 2", "GPL-3.0", "odin2" },
         { "bundled.ob-xf", "OB-Xf", "OB-Xf.clap", "OB-Xf", true, "OB-Xf", "GPL-3.0", "ob-xf" },
+        { "bundled.six-sines", "Six Sines", "Six Sines.clap", "Six Sines", true, "Six Sines", "GPL-3.0", "six-sines" },
         { "bundled.lsp.eq", "Parametric EQ", "lsp-plugins.clap", "Parametric Equalizer x16 Stereo", false,
           "LSP Plugins", "LGPL-3.0", "lsp-plugins" },
         { "bundled.lsp.compressor", "Compressor", "lsp-plugins.clap", "Compressor Stereo", false, "LSP Plugins",
@@ -32,6 +33,8 @@ const std::vector<BundledDevice>& getBundledDevices()
         { "bundled.dragonfly.early", "Early Reflections", "DragonflyEarlyReflections.clap",
           "Dragonfly Early Reflections", false, "Dragonfly Reverb", "GPL-3.0", "dragonfly-reverb" },
         { "bundled.peakeater", "PeakEater", "peakeater.clap", "peakeater", false, "PeakEater", "GPL-3.0", "peakeater" },
+        { "bundled.time12", "TIME-12", "TIME-12.vst3", "TIME-12", false, "TIME-12", "GPL-3.0", "time12" },
+        { "bundled.gate12", "GATE-12", "GATE-12.vst3", "GATE-12", false, "GATE-12", "GPL-3.0", "gate12" },
     };
     return devices;
 }

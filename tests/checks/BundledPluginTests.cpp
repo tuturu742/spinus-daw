@@ -416,9 +416,9 @@ TEST_CASE ("Bundled plugins: 64 channels x 4 bundled effects (target: <= 50% DSP
 }
 
 //==============================================================================
-/*  The free plugins Spinus downloads rather than builds (Odin 2, OB-Xf, PeakEater). Point
-    SPINUS_CHECK_DOWNLOADED at a folder holding their unpacked CLAP files (searched recursively), e.g. the
-    plugins folder after Options › Get free plugins. Skipped without it. */
+/*  The free plugins Spinus downloads rather than builds (Odin 2, OB-Xf, PeakEater, Six Sines, TIME-12,
+    GATE-12). Point SPINUS_CHECK_DOWNLOADED at a folder holding their unpacked CLAP files and VST3 folders
+    (searched recursively), e.g. the plugins folder after Options › Get free plugins. Skipped without it. */
 TEST_CASE ("Downloaded plugins: load, play notes and survive random parameter changes every block",
            "[downloaded][fuzz]")
 {
@@ -431,11 +431,15 @@ TEST_CASE ("Downloaded plugins: load, play notes and survive random parameter ch
         const char* file;
         const char* name;
         bool instrument;
+        bool clap = true; // or VST3, for the projects that publish no CLAP build
     };
     const std::vector<Downloaded> downloaded {
         { "Odin2.clap", "Odin2", true },
         { "OB-Xf.clap", "OB-Xf", true },
         { "peakeater.clap", "peakeater", false },
+        { "Six Sines.clap", "Six Sines", true },
+        { "TIME-12.vst3", "TIME-12", false, false },
+        { "GATE-12.vst3", "GATE-12", false, false },
     };
 
     Host h;
@@ -450,14 +454,14 @@ TEST_CASE ("Downloaded plugins: load, play notes and survive random parameter ch
         }
 
         std::unique_ptr<juce::PluginDescription> desc;
-        for (auto* found : h.scan (files[0].getFullPathName(), true))
+        for (auto* found : h.scan (files[0].getFullPathName(), d.clap))
             if (found->name.equalsIgnoreCase (d.name))
                 desc = std::make_unique<juce::PluginDescription> (*found);
         REQUIRE (desc != nullptr);
 
         for (auto [rate, size] : { std::pair { 48000.0, 128 }, std::pair { 96000.0, 1024 } })
         {
-            auto plugin = h.create (*desc, true, rate, size);
+            auto plugin = h.create (*desc, d.clap, rate, size);
             const auto channels =
                 std::max ({ 2, plugin->getTotalNumInputChannels(), plugin->getTotalNumOutputChannels() });
             plugin->setRateAndBufferSizeDetails (rate, size);
@@ -498,12 +502,31 @@ TEST_CASE ("Downloaded plugins: load, play notes and survive random parameter ch
                 nanBlocks += nan ? 1 : 0;
             }
 
+            // Then playing with its settings left alone, as in a song: the time a block takes.
+            double steadyPeak = 0.0, steadySum = 0.0;
+            constexpr int steadyBlocks = 400;
+            for (int b = 0; b < steadyBlocks; ++b)
+            {
+                juce::MidiBuffer midi;
+                if (d.instrument && b % 20 == 0)
+                    midi.addEvent (juce::MidiMessage::noteOn (1, 60, 0.8f), 0);
+                for (int ch = 0; ch < channels; ++ch)
+                    for (int i = 0; i < size; ++i)
+                        buffer.setSample (ch, i, d.instrument ? 0.0f : 0.3f * (unit (rng) - 0.5f));
+                const auto start = std::chrono::steady_clock::now();
+                plugin->processBlock (buffer, midi);
+                const auto micros =
+                    std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - start).count();
+                steadyPeak = std::max (steadyPeak, micros);
+                steadySum += micros;
+            }
+
             plugin->releaseResources();
 
             // State survives a save and restore.
             juce::MemoryBlock state;
             plugin->getStateInformation (state);
-            auto restored = h.create (*desc, true, rate, size);
+            auto restored = h.create (*desc, d.clap, rate, size);
             restored->setStateInformation (state.getData(), (int)state.getSize());
 
             const auto at = juce::String ((int)rate) + " Hz / " + juce::String (size);
@@ -511,6 +534,11 @@ TEST_CASE ("Downloaded plugins: load, play notes and survive random parameter ch
                     juce::String (nanBlocks) + " of " + juce::String (blocks));
             metric (std::string (d.name) + " " + at.toStdString() + ": slowest block (us)",
                     juce::String (juce::roundToInt (peakMicros)));
+            metric (std::string (d.name) + " " + at.toStdString() +
+                        ": settings left alone, mean / slowest block (us, budget " +
+                        std::to_string (juce::roundToInt (1.0e6 * size / rate)) + ")",
+                    juce::String (juce::roundToInt (steadySum / steadyBlocks)) + " / " +
+                        juce::String (juce::roundToInt (steadyPeak)));
             metric (std::string (d.name) + " " + at.toStdString() + ": state bytes",
                     juce::String ((int)state.getSize()));
         }

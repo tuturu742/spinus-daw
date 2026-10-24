@@ -200,8 +200,8 @@ bool isExtracted (const DownloadPack& pack, const juce::String& file)
         {
             if (e.from.endsWith ("/"))
             {
-                if (e.to.isEmpty())
-                    return true; // a folder's contents, unpacked at the top
+                if (e.to.isEmpty() || e.to == file)
+                    return true; // a folder's contents, unpacked at the top or as `file` (a VST3 bundle)
             }
             else if ((e.to.isNotEmpty() ? e.to : e.from.fromLastOccurrenceOf ("/", false, false)) == file)
             {
@@ -243,8 +243,8 @@ TEST_CASE ("Every free plugin Spinus offers comes from a download pack", "[plugi
             for (auto& file : pack.files)
             {
                 INFO (file);
-                // Spinus loads the free plugins with its CLAP host.
-                CHECK (file.endsWith (".clap"));
+                // Spinus loads the free plugins with its CLAP host, or as VST3 where a project publishes no CLAP.
+                CHECK ((file.endsWith (".clap") || file.endsWith (".vst3")));
                 CHECK (isExtracted (pack, file));
             }
             for (auto& archive : pack.archives)
@@ -265,10 +265,11 @@ TEST_CASE ("Every free plugin Spinus offers comes from a download pack", "[plugi
 TEST_CASE ("Each system is offered only the free plugins published for it", "[plugins][downloads]")
 {
     using System = PluginDownloads::System;
-    CHECK (packIds (System::linuxX64) ==
-           juce::StringArray { "surge-xt", "lsp-plugins", "dragonfly-reverb", "odin2", "ob-xf", "peakeater" });
+    CHECK (packIds (System::linuxX64) == juce::StringArray { "surge-xt", "lsp-plugins", "dragonfly-reverb", "odin2",
+                                                             "ob-xf", "peakeater", "six-sines", "time12", "gate12" });
     // LSP Plugins has no Windows build, and Odin 2 only a Windows installer.
-    CHECK (packIds (System::windowsX64) == juce::StringArray { "surge-xt", "dragonfly-reverb", "ob-xf", "peakeater" });
+    CHECK (packIds (System::windowsX64) ==
+           juce::StringArray { "surge-xt", "dragonfly-reverb", "ob-xf", "peakeater", "six-sines", "time12", "gate12" });
 
 #if JUCE_WINDOWS
     CHECK (PluginDownloads::getThisSystem() == System::windowsX64);
@@ -399,6 +400,141 @@ TEST_CASE ("Odin 2, OB-Xf and PeakEater are offered as pinned open-source releas
     CHECK (findPack (System::windowsX64, "peakeater")->archives[0].sha256 ==
            "6bae14feb7ea19beed6faf4a6984168521d2deb1351db9da5c208d274254e075");
 }
+
+TEST_CASE ("Six Sines, TIME-12 and GATE-12 are offered as pinned open-source releases", "[plugins][downloads]")
+{
+    using System = PluginDownloads::System;
+    struct Expected
+    {
+        const char* stockType;
+        const char* pack;
+        const char* version;
+        bool instrument;
+        const char* linuxSha256;
+        const char* windowsSha256;
+    };
+    // Each for Linux and Windows. TIME-12 and GATE-12 publish no CLAP build: Spinus loads their VST3.
+    const std::vector<Expected> expected {
+        { "bundled.six-sines", "six-sines", "1.2.1", true,
+          "9b5353eebfec3e462c80ed8c0f53c965e6262bb38537518159cce71de7eace41",
+          "9f7c7fa5cb1c5e11b53c0a9306ee443149cc7bc0a109380dbbe1578f3a7b6e5d" },
+        { "bundled.time12", "time12", "1.2.3", false,
+          "d1e19e0c2e5332626af3077d4dd98dcaeb4b4c2b33ee74c267a732c29df10613",
+          "b5699e49850826a8279e315d51cc8cf92636fc98d5d649bcfadd7ae026982989" },
+        { "bundled.gate12", "gate12", "1.3.3", false,
+          "fa19ebf1cacd064c5c2fc687894ffc7400a92e9887f6db3cc3f2f59042d07cad",
+          "93b1056a40a341452804260a165ce9ce0feaad65eedbcf192319910671f54cf5" },
+    };
+
+    for (auto& e : expected)
+    {
+        INFO (e.stockType);
+        const auto* device = model::findBundledDevice (e.stockType);
+        REQUIRE (device != nullptr);
+        CHECK (juce::String (device->pack) == e.pack);
+        CHECK (device->isInstrument == e.instrument);
+        CHECK (juce::String (device->license) == "GPL-3.0");
+        CHECK (juce::String (device->file).endsWith (e.instrument ? ".clap" : ".vst3"));
+
+        for (auto system : allSystems)
+        {
+            const auto* pack = findPack (system, e.pack);
+            REQUIRE (pack != nullptr);
+            CHECK (pack->version == e.version);
+            CHECK (pack->license == device->license);
+            CHECK (pack->files == juce::StringArray { device->file });
+            REQUIRE (pack->archives.size() == 1u);
+            // The project's own release of that version, for that system: exactly the file checked when pinned.
+            const auto& archive = pack->archives[0];
+            CHECK (archive.url.contains ("/v" + juce::String (e.version) + "/"));
+            CHECK (archive.url.containsIgnoreCase (system == System::windowsX64 ? "win" : "linux"));
+            CHECK (archive.url.endsWith (".zip"));
+            CHECK (archive.sha256 == (system == System::windowsX64 ? e.windowsSha256 : e.linuxSha256));
+        }
+    }
+}
+
+TEST_CASE ("A pack whose plugin is a VST3 folder installs, is found and is removed", "[plugins][downloads]")
+{
+    Fixture f;
+    const auto plugin =
+        writeArchive (f.temp.getChildFile ("server/effect.tar.gz"),
+                      { { "effect-linux/VST3/Effect.vst3/Contents/x86_64-linux/Effect.so", "lib", 0755 },
+                        { "effect-linux/VST3/Effect.vst3/Contents/Resources/moduleinfo.json", "{}" },
+                        { "effect-linux/LV2/Effect.lv2/manifest.ttl", "not wanted" } });
+    f.pack.id = "effect";
+    f.pack.archives = { { juce::URL (plugin).toString (false),
+                          PluginDownloads::sha256Of (plugin),
+                          plugin.getSize(),
+                          { { "effect-linux/VST3/Effect.vst3/", "Effect.vst3" } } } };
+    f.pack.files = { "Effect.vst3" };
+
+    const auto result = f.downloads.install (f.pack);
+    INFO (result.getErrorMessage());
+    REQUIRE (result.wasOk());
+    CHECK (f.downloads.isInstalled (f.pack));
+    const auto folder = f.downloads.getPackFolder (f.pack);
+    CHECK (folder.getChildFile ("Effect.vst3/Contents/x86_64-linux/Effect.so").loadFileAsString() == "lib");
+    CHECK (folder.getChildFile ("Effect.vst3/Contents/Resources/moduleinfo.json").existsAsFile());
+    CHECK (! folder.getChildFile ("Effect.lv2").exists());
+    CHECK (PluginDownloads::findFile ({ folder }, "Effect.vst3") == folder.getChildFile ("Effect.vst3"));
+
+    // The bundle gone: not installed any more.
+    folder.getChildFile ("Effect.vst3").deleteRecursively();
+    CHECK (! f.downloads.isInstalled (f.pack));
+    REQUIRE (f.downloads.install (f.pack).wasOk());
+    REQUIRE (f.downloads.remove (f.pack).wasOk());
+    CHECK (! folder.exists());
+}
+
+#if defined(SPINUS_PLUGINS_DIR)
+TEST_CASE ("Get free plugins: a pack with a device open is not removed, whatever its plugin's format",
+           "[plugins][downloads][ui]")
+{
+    // A downloaded VST3 plugin may stay mapped after its last copy closes (JUCE's host and the plugin decide), so
+    // Spinus counts the devices made from a pack instead. Here Dragonfly Room Reverb, made into a device.
+    const auto built = juce::File (SPINUS_PLUGINS_DIR).getChildFile ("DragonflyRoomReverb.clap");
+    if (! built.existsAsFile())
+        SKIP ("bundled plugins not built");
+    Fixture f;
+    f.pack.files = { "DragonflyRoomReverb.clap" };
+    const auto folder = f.downloads.getPackFolder (f.pack);
+    REQUIRE (folder.createDirectory());
+    REQUIRE (built.copyFileTo (folder.getChildFile ("DragonflyRoomReverb.clap")));
+    REQUIRE (folder.getChildFile (".spinus-pack").replaceWithText (f.pack.version));
+
+    EngineHost host { { .openAudioDevice = false } };
+    engine::DefaultDeviceFactory devices;
+    engine::registerBundledDevices (devices, host.getEngine(), { folder });
+    auto edit = tracktion::Edit::createSingleTrackEdit (host.getEngine());
+    CHECK (! engine::isBundledDeviceOpenFrom (folder));
+    model::Device device;
+    device.kind = model::Device::Kind::stock;
+    device.stockType = "bundled.dragonfly.room";
+    auto plugin = devices.create (*edit, device);
+    REQUIRE (plugin != nullptr);
+    CHECK (engine::isBundledDeviceOpenFrom (folder));
+    CHECK (! engine::isBundledDeviceOpenFrom (f.temp.getChildFile ("elsewhere")));
+
+    ui::PluginDownloadDialog dialog (f.downloads, f.downloads.getSearchFolders(), {}, { f.pack });
+    dialog.askToRemove ("fake-synth");
+    CHECK (! dialog.isAskingToRemove ("fake-synth"));
+    CHECK (dialog.getRowMessage ("fake-synth").contains ("still running"));
+    dialog.keepPack ("fake-synth");
+
+    // The device gone with its edit: it can be removed.
+    plugin = nullptr;
+    edit = nullptr;
+    CHECK (! engine::isBundledDeviceOpenFrom (folder));
+    for (int i = 0; i < 40 && ui::PluginDownloadDialog::isLoadedFrom (folder); ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50); // Tracktion lets go of the plugin later
+    CHECK (! ui::PluginDownloadDialog::isLoadedFrom (folder));
+    dialog.askToRemove ("fake-synth");
+    REQUIRE (dialog.isAskingToRemove ("fake-synth"));
+    dialog.confirmRemove ("fake-synth");
+    CHECK (! folder.exists());
+}
+#endif
 
 TEST_CASE ("The Browser offers free plugins that are not downloaded yet", "[plugins][downloads][ui]")
 {
@@ -810,6 +946,24 @@ TEST_CASE ("Get free plugins window screenshot for the manual", "[.screenshot][d
     REQUIRE (dialog.isAskingToRemove ("dragonfly-reverb"));
     save ("free-plugins-remove.png");
     dialog.setLookAndFeel (nullptr);
+}
+
+TEST_CASE ("Get free plugins fits the screen however many packs it lists", "[plugins][downloads][ui]")
+{
+    Fixture f;
+    std::vector<DownloadPack> many;
+    for (int i = 0; i < 30; ++i)
+    {
+        auto pack = f.pack;
+        pack.id = "pack-" + juce::String (i);
+        many.push_back (pack);
+    }
+    ui::PluginDownloadDialog few (f.downloads, f.downloads.getSearchFolders(), {}, { f.pack });
+    ui::PluginDownloadDialog lots (f.downloads, f.downloads.getSearchFolders(), {}, many);
+    CHECK (lots.getHeight() > few.getHeight());
+    if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+        CHECK (lots.getHeight() <= (int)display->userBounds.getHeight()); // the rows scroll instead
+    CHECK (lots.getHeight() < 30 * 70);
 }
 
 TEST_CASE ("Get free plugins, opened for a project, ticks just the packs it needs", "[plugins][downloads][ui]")

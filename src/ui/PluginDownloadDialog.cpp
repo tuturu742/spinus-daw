@@ -3,6 +3,7 @@
 #include "Theme.h"
 #include "WindowStacking.h"
 
+#include "engine/BundledDevices.h"
 #include "model/StockDevices.h"
 #include "plugins/clap/ClapPluginFormat.h"
 
@@ -126,11 +127,33 @@ struct PluginDownloadDialog::PackRow
     Removing removing = Removing::no;
 };
 
+/** The packs' rows, with a line between each two. */
+struct PluginDownloadDialog::RowsArea final : public juce::Component
+{
+    explicit RowsArea (PluginDownloadDialog& d) : dialog (d) {}
+
+    void paint (juce::Graphics& g) override
+    {
+        auto* lf = dynamic_cast<SpinusLookAndFeel*> (&getLookAndFeel());
+        g.setColour ((lf != nullptr ? lf->getTheme() : Theme::dark()).get ("border"));
+        for (size_t i = 1; i < dialog.packRows.size(); ++i)
+            g.fillRect (0, dialog.packRows[i]->tick.getY() - 6, getWidth(), 1);
+    }
+
+    PluginDownloadDialog& dialog;
+};
+
 //==============================================================================
 PluginDownloadDialog::PluginDownloadDialog (const PluginDownloads& d, std::vector<juce::File> folders,
                                             const juce::String& onlyPack, std::vector<DownloadPack> p)
-    : downloads (d), searchFolders (std::move (folders)), packs (std::move (p))
+    : downloads (d), searchFolders (std::move (folders)), packs (std::move (p)),
+      rowsArea (std::make_unique<RowsArea> (*this))
 {
+    rowsView.setViewedComponent (rowsArea.get(), false);
+    rowsView.setScrollBarsShown (true, false);
+    rowsView.setScrollBarThickness (10);
+    addAndMakeVisible (rowsView);
+
     intro.setText ("Spinus works with these free, open-source plugins. They are made by other projects and "
                    "downloaded from those projects' own websites. You can get them now or later, from "
                    "Options > Get free plugins.",
@@ -154,9 +177,9 @@ PluginDownloadDialog::PluginDownloadDialog (const PluginDownloads& d, std::vecto
         row->keepButton.onClick = [this, id] { keepPack (id); };
         for (juce::Component* c : std::initializer_list<juce::Component*> { &row->tick, &row->description,
                                                                             &row->details, &row->website, &row->state })
-            addAndMakeVisible (c);
-        addChildComponent (row->removeButton);
-        addChildComponent (row->keepButton);
+            rowsArea->addAndMakeVisible (c);
+        rowsArea->addChildComponent (row->removeButton);
+        rowsArea->addChildComponent (row->keepButton);
         packRows.push_back (std::move (row));
     }
 
@@ -188,10 +211,18 @@ PluginDownloadDialog::PluginDownloadDialog (const PluginDownloads& d, std::vecto
     addAndMakeVisible (downloadButton);
     addAndMakeVisible (closeButton);
 
-    setSize (560, 110 + (int)packRows.size() * rowHeight + 70);
+    // Every row shown, unless the screen is too short for them all: then they scroll.
+    auto height = 110 + (int)packRows.size() * rowHeight + 70;
+    if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+        height = juce::jmin (height, juce::jmax (110 + 3 * rowHeight + 70, (int)display->userBounds.getHeight() - 80));
+    setSize (560, height);
 }
 
-PluginDownloadDialog::~PluginDownloadDialog() { thread = nullptr; } // cancels and waits
+PluginDownloadDialog::~PluginDownloadDialog()
+{
+    thread = nullptr; // cancels and waits
+    rowsView.setViewedComponent (nullptr, false);
+}
 
 namespace
 {
@@ -384,8 +415,11 @@ juce::String PluginDownloadDialog::describeUseInProject (const model::Project& p
 
 bool PluginDownloadDialog::isLoadedFrom (const juce::File& folder)
 {
+    // The CLAP plugins Spinus's own host has open, and the devices made from the pack (its VST3 plugins too).
     const auto files = plugins::ClapPluginFormat::getLoadedFiles();
-    return std::any_of (files.begin(), files.end(), [&] (auto& path) { return juce::File (path).isAChildOf (folder); });
+    return std::any_of (files.begin(), files.end(),
+                        [&] (auto& path) { return juce::File (path).isAChildOf (folder); }) ||
+           engine::isBundledDeviceOpenFrom (folder);
 }
 
 juce::String PluginDownloadDialog::whyNotRemovable (const DownloadPack& pack) const
@@ -589,9 +623,6 @@ void PluginDownloadDialog::paint (juce::Graphics& g)
     auto* lf = dynamic_cast<SpinusLookAndFeel*> (&getLookAndFeel());
     const auto theme = lf != nullptr ? lf->getTheme() : Theme::dark();
     g.fillAll (theme.get ("panel"));
-    g.setColour (theme.get ("border"));
-    for (size_t i = 1; i < packRows.size(); ++i)
-        g.fillRect (margin, packRows[i]->tick.getY() - 6, getWidth() - 2 * margin, 1);
 }
 
 void PluginDownloadDialog::layOutRow (PackRow& row, juce::Rectangle<int> r)
@@ -629,8 +660,14 @@ void PluginDownloadDialog::resized()
     intro.setBounds (area.removeFromTop (60));
     area.removeFromTop (10);
 
+    area.removeFromBottom (28 + 12); // the buttons
+    rowsView.setBounds (area);
+    const auto rowsHeight = (int)packRows.size() * rowHeight;
+    const auto width = area.getWidth() - (rowsHeight > area.getHeight() ? rowsView.getScrollBarThickness() + 4 : 0);
+    rowsArea->setSize (width, rowsHeight);
+    auto rows = rowsArea->getLocalBounds();
     for (auto& row : packRows)
-        layOutRow (*row, area.removeFromTop (rowHeight));
+        layOutRow (*row, rows.removeFromTop (rowHeight));
 
     auto buttons = getLocalBounds().reduced (margin).removeFromBottom (28);
     closeButton.setBounds (buttons.removeFromRight (90));

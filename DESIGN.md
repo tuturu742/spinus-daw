@@ -69,7 +69,7 @@ Spinus is a free, open-source, Linux-first digital audio workstation with an FL 
 | Surge XT | GPLv3 | Flagship synth, downloaded on request; keep its name, credits and license visible |
 | LSP Plugins | LGPL-3.0-or-later | Optional effects downloaded on request (EQ, dynamics, multiband, analyzer), §11.2 |
 | Dragonfly Reverb | GPL-3.0-or-later | Reverbs downloaded on request, §11.2 |
-| Odin 2, OB-Xf, PeakEater | GPL-3.0 | Synths and a clipper downloaded on request, §11 |
+| Odin 2, OB-Xf, PeakEater, Six Sines, TIME-12, GATE-12 | GPL-3.0 | Synths, a clipper and two shapers downloaded on request, §11 |
 
 **Result:** Spinus source is licensed **AGPL-3.0-or-later**. All dependencies must be AGPLv3-compatible. Agents must check the license of every new dependency and every AI model's weights and record it in `THIRD_PARTY.md`. Models with non-commercial licenses (e.g. CC BY-NC) are **not allowed** as defaults. CC BY / CC BY-SA weights are allowed with credits; only code and weights licenses count, not training data.
 
@@ -140,7 +140,7 @@ Spinus is a free, open-source, Linux-first digital audio workstation with an FL 
 | Audio backends | ALSA and JACK via JUCE; PipeWire through its JACK interface (`pipewire-jack`), the default |
 | Time-stretch | Rubber Band through Tracktion Engine |
 | Flagship synth | Surge XT (pinned git submodule, built from source as a separate sub-build) |
-| Free plugins | Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf, PeakEater: the projects' own releases, downloaded on request (pinned, SHA-256 checked; libcurl and libarchive on Linux, JUCE's `URL` and `plugins/ArchiveReader` on Windows) and loaded as CLAP plugins. Development builds also compile Surge XT, LSP Plugins and Dragonfly Reverb from source for tests |
+| Free plugins | Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf, PeakEater, Six Sines, TIME-12, GATE-12: the projects' own releases, downloaded on request (pinned, SHA-256 checked; libcurl and libarchive on Linux, JUCE's `URL` and `plugins/ArchiveReader` on Windows) and loaded as CLAP plugins, or as VST3 where a project publishes no CLAP build (TIME-12, GATE-12). Development builds also compile Surge XT, LSP Plugins and Dragonfly Reverb from source for tests |
 | Tests (C++) | Catch2 v3; `pluginval` for stock and bundled plugins |
 | Language (AI) | Python 3.12, managed with `uv` |
 | ML runtime | PyTorch: ROCm build for gfx1151 (TheRock packages), CPU fallback (§12.1) |
@@ -330,7 +330,7 @@ Goal: the user never sees Wine, prefixes or yabridgectl.
 
 Stock devices come from two sources:
 
-- **Free open-source plugins** (Surge XT, Surge XT Effects, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf, PeakEater): not shipped with Spinus. On first launch (and from Options > Get free plugins, or the Browser) Spinus downloads the projects' own pinned releases for the user's system into the user's data folder, or uses copies installed by the system's package manager. Only projects whose source and published build are both open source, published as plain archives, are offered, and each system lists only the packs published for it (LSP Plugins and Odin 2 are Linux-only). Spinus distributes no third-party plugin binaries or sound content this way, and the package stays small and quick to build. Not offered for those rules: Vital (account-gated), OB-Xd and the CHOW plugins (installers only), Vitalium and Airwindows Consolidated (no pinnable release). Pinned URLs can disappear upstream: the hidden `[.network]` and `[unpack]` tests must run when a pin changes. They load in-process like stock devices, under their own names with credits. Projects name them by stock type (`bundled.*`), so a project opens with them missing until they are downloaded. The same window removes a pack Spinus downloaded (after asking; not packs the system installed), and refuses while the open project uses it or any copy of it is loaded, on every system (a loaded plugin's file cannot be deleted on Windows, and pulling it from under a running plugin is unsafe anywhere).
+- **Free open-source plugins** (Surge XT, Surge XT Effects, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf, PeakEater, Six Sines, TIME-12, GATE-12): not shipped with Spinus. On first launch (and from Options > Get free plugins, or the Browser) Spinus downloads the projects' own pinned releases for the user's system into the user's data folder, or uses copies installed by the system's package manager. Only projects whose source and published build are both open source, published as plain archives, are offered, and each system lists only the packs published for it (LSP Plugins and Odin 2 are Linux-only). Spinus distributes no third-party plugin binaries or sound content this way, and the package stays small and quick to build. Not offered for those rules: Vital (account-gated), OB-Xd and the CHOW plugins (installers only), Vitalium and Airwindows Consolidated (no pinnable release). Not offered after testing: RipplerX 1.5.19 (NaNs and a crash under pluginval's automation test and Spinus's random-parameter test), Resonarium 0.1.1 (a beta; its Windows zip names its files with backslashes, and one held note takes over 40 % of a 128-sample block). Pinned URLs can disappear upstream: the hidden `[.network]` and `[unpack]` tests must run when a pin changes. They load in-process like stock devices, under their own names with credits: as CLAP where the project publishes a CLAP build, otherwise as VST3 (a pack's file is then a `.vst3` bundle folder). Because JUCE's VST3 host and the plugin decide when its library is unloaded, Remove counts the devices made from a pack (`engine::isBundledDeviceOpenFrom`) rather than loaded libraries. Projects name them by stock type (`bundled.*`), so a project opens with them missing until they are downloaded. The same window removes a pack Spinus downloaded (after asking; not packs the system installed), and refuses while the open project uses it or any copy of it is loaded, on every system (a loaded plugin's file cannot be deleted on Windows, and pulling it from under a running plugin is unsafe anywhere).
 - **Spinus-built devices**, for what no bundled plugin provides in the form Spinus needs, and for the basic mixing effects (EQ, compressor, limiter, gate), which must work on every platform without a download. Each is built as an internal processor **and** as a standalone VST3/LV2 plugin (useful for testing with `pluginval`, and for users of other DAWs). Spinus hosts them through an internal plugin format ("Spinus", identifiers like `spinus:sampler`, code in `src/dsp/`), so state, windows and automation work as for any plugin. The Sampler keeps its samples inside its state (FLAC, 24 bits), so they travel with the project, its autosaves and undo with no extra code, at the cost of larger states. The standalone builds are VST3 and LV2 (CLAP builds would need clap-juce-extensions, MIT; §17).
 
 ### 11.1 Instruments
@@ -340,6 +340,7 @@ Stock devices come from two sources:
 | **Surge XT** (free download) | The one serious synth | Downloaded on request from the Surge project's pinned release, with its factory sounds, and loaded in-process like a stock device. Appears first in the browser's Instruments list, under its own name with credits. Comes with Surge XT's full factory library. Opens on Surge XT's own editor, as its makers designed it: presets are picked in its own patch browser and its macros are in its window. |
 | **Odin 2** (free download, Linux) | Second synth with character | TheWaveWarden's GPL-3.0 synth: analog-style, wavetable, FM and chiptune oscillators, factory presets built in |
 | **OB-Xf** (free download) | Analog-style polysynth | The Surge Synth Team's GPL-3.0 successor of OB-Xd; its factory patches are not downloaded (they live outside the pack's folder) |
+| **Six Sines** (free download) | FM synth | Paul Walker's six-operator phase/FM synth (code MIT, builds GPL-3.0); factory patches built in, picked in its own window (it has no CLAP preset discovery, so closest preset does not list them) |
 | **3x Osc** | Quick, simple synth (FL 3xOsc equivalent) | 3 oscillators (sine/tri/saw/square/noise; saw and square band-limited with PolyBLEP), coarse/fine tune, level, pan, phase; amp envelope; filter with envelope amount; 16 voices; 23 factory presets built in |
 | **Sampler** | Play any sample | One-shot and multi-sample, root note, ADSR, filter, loop points, round-robin |
 | **Drum Machine** | Drum kits | 16 pads, choke groups, per-pad tuning/ADSR/filter, kit presets. Pads play from C5 up (the Channel Rack's step note). New instances start with the synthesized "Spinus Synth Kit"; kits save as `.spinuskit` files. Factory sample kits are planned with the starter sample pack (§11.4, §17) |
@@ -369,6 +370,8 @@ The basic mixing effects are Spinus-built so they work on Linux, Windows and any
 | Core | Delay (sync, ping-pong) | Surge XT Effects: Delay (tempo sync; ping-pong via crossfeed) |
 | Character | Saturation/Distortion | Surge XT Effects: Distortion, Waveshaper, Tape, CHOW, Bonsai; PeakEater (clipper) |
 | Character | Chorus, Phaser, Flanger | Surge XT Effects (plus Ensemble, Rotary) |
+| Character | Volume shaper / trance gate (tempo-synced, drawn) | GATE-12 (VST3) |
+| Character | Delay-time shaper: stutter, tape stop, scratch (tempo-synced, drawn) | TIME-12 (VST3) |
 | Character | Filter (with LFO and envelope follower) | **Spinus-built** |
 | Mix & master | Multiband Compressor | LSP Multiband Compressor |
 | Mix & master | Sidechain ducker (one-knob) | **Spinus-built** |
@@ -607,8 +610,8 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   automation clips, and a dynamic mixer whose inserts can be added, reordered and removed while playing
   (§7, §8). Sampler, Drum Machine, 3x Osc (with factory presets) and Beat Slicer; Spinus's own EQ,
   Compressor, Limiter, Gate, Filter, Sidechain Ducker, Stereo Utility, Loudness Meter and Spinus Tune;
-  Surge XT, LSP Plugins (Linux), Dragonfly Reverb, Odin 2 (Linux), OB-Xf and PeakEater downloaded on
-  request (§11). MIDI and audio recording, takes and comping, multi-track recording (§9). Undo and redo
+  Surge XT, LSP Plugins (Linux), Dragonfly Reverb, Odin 2 (Linux), OB-Xf, PeakEater, Six Sines, TIME-12
+  and GATE-12 downloaded on request (§11). MIDI and audio recording, takes and comping, multi-track recording (§9). Undo and redo
   for everything, autosave and recovery, project folders (§7.3, §14). **Freeze**. Export to
   WAV, FLAC, Opus, MP3 and AAC: full mix, a pattern, or stems from the same render.
 - **Plugins:** VST3, CLAP, LV2 and VST2, scanned out of process; Windows plugins through a managed Wine

@@ -3,7 +3,7 @@
 ## Is Spinus free?
 
 Yes, and open source (AGPL-3.0-or-later). The free plugins it offers (Surge XT, LSP Plugins, Dragonfly
-Reverb, Odin 2, OB-Xf, PeakEater) are open source too, and so are the exact builds it downloads. Only the AI connections you choose to add (Anthropic, OpenRouter) may cost
+Reverb, Odin 2, OB-Xf, PeakEater, Six Sines, TIME-12, GATE-12) are open source too, and so are the exact builds it downloads. Only the AI connections you choose to add (Anthropic, OpenRouter) may cost
 money, paid to that provider; a [local model](assistant.md#a-local-model-with-ollama) costs nothing.
 
 ## Do I need AI? What does it send?

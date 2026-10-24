@@ -145,8 +145,8 @@ TEST_CASE ("The browser groups, folds and searches", "[ui][browser]")
     // Spinus's own devices between installed and bundled: four instruments; the Filter, the Ducker, the Stereo
     // Utility, Spinus Tune and the Loudness Meter.
     CHECK (texts (browser, Browser::RowKind::group) ==
-           juce::StringArray { "Installed plugins  (2)", "Spinus  (4)", "Free open source  (3)",
-                               "Installed plugins  (2)", "Spinus  (9)", "Free open source  (12)" });
+           juce::StringArray { "Installed plugins  (2)", "Spinus  (4)", "Free open source  (4)",
+                               "Installed plugins  (2)", "Spinus  (9)", "Free open source  (14)" });
     CHECK (texts (browser, Browser::RowKind::device).contains ("Serum [WIN]"));
     CHECK (texts (browser, Browser::RowKind::problem).isEmpty()); // problems start folded
 

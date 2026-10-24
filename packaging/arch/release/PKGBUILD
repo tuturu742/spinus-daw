@@ -5,7 +5,7 @@
 # and Spinus's own Sampler, Drum Machine and 3x Osc (also as VST3/LV2 plugins for other programs).
 #
 # The free open-source plugins Spinus works with (Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2,
-# OB-Xf, PeakEater) are not part of this package: Spinus offers to download them from their projects
+# OB-Xf, PeakEater, Six Sines, TIME-12, GATE-12) are not part of this package: Spinus offers to download them from their projects
 # on first launch. If they are installed from the Arch repositories (see optdepends),
 # Spinus uses those instead.
 #

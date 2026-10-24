@@ -10,9 +10,9 @@ button. It lists your projects, your samples and everything you can play or put 
 | **Projects** | The demo songs that come with Spinus, the projects you have opened, and folders of projects you add yourself (see [Projects](#projects) below). |
 | **Samples** | Folders of samples on your computer that you add yourself (see [Samples](#samples) below). Spinus does not come with samples. |
 | **Instruments** › **Installed plugins** | Instrument plugins found on your computer. |
-| **Instruments** › **Free open source** | Free, open-source instruments made by others, which Spinus downloads for you: Surge XT and OB-Xf, by the Surge Synth Team, and Odin 2 (Linux), by TheWaveWarden. |
+| **Instruments** › **Free open source** | Free, open-source instruments made by others, which Spinus downloads for you: Surge XT and OB-Xf, by the Surge Synth Team, Odin 2 (Linux), by TheWaveWarden, and the Six Sines FM synthesizer. |
 | **Effects** › **Installed plugins** | Effect plugins found on your computer. |
-| **Effects** › **Free open source** | Free, open-source effects made by others, which Spinus downloads for you: another EQ, compressor, limiter and gate, a multiband compressor and a spectrum analyzer from LSP Plugins, reverbs from Dragonfly Reverb, Surge XT Effects, and the PeakEater clipper. The project each one comes from is shown next to its name; hover over it for its license. |
+| **Effects** › **Free open source** | Free, open-source effects made by others, which Spinus downloads for you: another EQ, compressor, limiter and gate, a multiband compressor and a spectrum analyzer from LSP Plugins, reverbs from Dragonfly Reverb, Surge XT Effects, the PeakEater clipper, and the TIME-12 and GATE-12 shapers. The project each one comes from is shown next to its name; hover over it for its license. |
 | **Problem plugins** | Plugin files that crashed or hung while Spinus checked them. |
 
 Free open-source plugins that are not downloaded yet are greyed out with "get it" after the name.

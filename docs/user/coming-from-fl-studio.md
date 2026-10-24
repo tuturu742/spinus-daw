@@ -84,7 +84,8 @@ Every key in the first tables of [Keyboard shortcuts](keyboard-shortcuts.md) can
   which Spinus sets up for you ([Windows plugins](windows-plugins.md)). A plugin that crashed once can run
   in its own process ([When a plugin crashes](plugins.md#when-a-plugin-crashes)).
 - **Free instruments to download.** Instead of FL's stock plugins, Spinus offers Surge XT, Odin 2,
-  OB-Xf, LSP Plugins, Dragonfly Reverb and PeakEater as one-click downloads ([Get free plugins](free-plugins.md)).
+  OB-Xf, Six Sines, LSP Plugins, Dragonfly Reverb, PeakEater, and TIME-12 and GATE-12 (Gross Beat-style
+  time and volume shapers) as one-click downloads ([Get free plugins](free-plugins.md)).
   Its own Sampler, Drum Machine, 3x Osc, Beat Slicer and mixing effects are built in.
 - **AI help, off by default.** An [assistant](assistant.md) that knows this manual and proposes changes
   you approve, a [pattern generator](piano-roll.md#generate), and the experimental [Analyzer](analyzer.md)
