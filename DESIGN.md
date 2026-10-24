@@ -630,9 +630,10 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
 - **Spinus Plugins** (after 0.1.0): new open-source instruments and effects for sounds that open source
   doesn't cover well yet, in their own repository ([spinus-plugins](https://github.com/tuturu742/spinus-plugins),
   GPL-3.0-or-later). They are built as CLAP, VST3 and LV2 for Linux and Windows, so they work in any DAW.
-  Each comes with a synth-match profile and tagged presets. Spinus offers them under Get free plugins. The
-  first is an additive resynthesis synth that works with the track analyzer (§12.7); its `PLUGINS.md`
-  lists the others. Spinus's own devices (§11) stay in Spinus as the defaults that are always there.
+  Each comes with a synth-match profile and tagged presets. Spinus offers them under Get free plugins.
+  Each is named after a *Spinus* species. The first is **Psaltria**, an additive resynthesis synth that
+  works with the track analyzer (§12.7); its `PLUGINS.md` lists the others (Spinescens, Magellanicus,
+  Pinus, Crassirostris, Cucullatus, Tristis). Spinus's own devices (§11) stay in Spinus as the defaults that are always there.
 - **Automation editor with finer control.**
 - An MPE switch for VST3/LV2 synths; recording MPE controllers' per-note bends and pressure.
 - Presets in the Browser (§8.1).
