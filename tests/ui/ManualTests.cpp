@@ -257,7 +257,7 @@ TEST_CASE ("About Spinus: version, licenses, the project's page and the credits"
     const auto text = about.getText();
     CHECK (text.contains ("Spinus DAW"));
     CHECK (text.contains (versionString));
-    CHECK (juce::String (versionString).contains ("-rc")); // this release candidate says so
+    CHECK (juce::String (versionString).contains ("-alpha")); // this alpha says so
     CHECK (text.contains ("AGPL-3.0-or-later"));
     CHECK (text.contains ("CC BY 4.0"));
     CHECK (text.contains ("https://github.com/tuturu742/spinus-daw"));

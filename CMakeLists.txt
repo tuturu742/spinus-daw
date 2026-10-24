@@ -6,8 +6,8 @@ project (spinus
          HOMEPAGE_URL "https://github.com/tuturu742/spinus-daw"
          LANGUAGES C CXX)
 
-# The version people see: PROJECT_VERSION plus a pre-release suffix ("-rc1"), empty for a final release.
-set (SPINUS_VERSION_SUFFIX "-rc1" CACHE STRING "Pre-release suffix of the version, e.g. -rc1")
+# The version people see: PROJECT_VERSION plus a pre-release suffix ("-alpha.1"), empty for a final release.
+set (SPINUS_VERSION_SUFFIX "-alpha.1" CACHE STRING "Pre-release suffix of the version, e.g. -alpha.1")
 set (SPINUS_VERSION "${PROJECT_VERSION}${SPINUS_VERSION_SUFFIX}")
 
 set (CMAKE_CXX_STANDARD 20)

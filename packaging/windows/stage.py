@@ -98,7 +98,7 @@ def main() -> None:
     version = re.search(r'versionString = "([^"]+)"', header)
     if version is None:
         raise SystemExit("No version in SpinusVersion.h")
-    # Windows wants four numbers in a file's version ("0.1.0-rc1" -> 0.1.0.0).
+    # Windows wants four numbers in a file's version ("0.1.0-alpha.1" -> 0.1.0.0).
     numbers = (re.findall(r"\d+", version[1].split("-")[0]) + ["0"] * 4)[:4]
     (out / "version.nsh").write_text(f'!define VERSION "{version[1]}"\n!define NUMERIC_VERSION "{".".join(numbers)}"\n')
 

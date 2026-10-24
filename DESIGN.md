@@ -664,7 +664,7 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
 | Surge XT UI feels foreign next to Spinus | Low | Accepted: it is shown as its makers made it, credited by name, and its own manual applies |
 | Bundled effects have upstream bugs or look foreign | Medium | Curated modules only; pluginval and fuzz tests in CI; invalid-audio guard (§10.2); pinned versions; shown as their makers made them |
 | LLM cost or provider changes | Low | Multiple connections, fallback chain, local option, usage tracking |
-| Scope creep | High | Release candidates: the owner tests each release candidate, and RCs continue until the release is polished |
+| Scope creep | High | Test releases: the owner tests each alpha and release candidate, and they continue until the release is polished |
 
 ---
 

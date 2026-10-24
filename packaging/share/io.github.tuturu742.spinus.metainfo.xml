@@ -64,9 +64,9 @@
     <display_length compare="ge">1024</display_length>
   </requires>
   <releases>
-    <release version="0.1.0~rc1" date="2026-10-21" type="development">
+    <release version="0.1.0~alpha.1" date="2026-10-24" type="development">
       <description>
-        <p>The first release candidate, for testers.</p>
+        <p>The first alpha, an early release for testers.</p>
       </description>
     </release>
   </releases>

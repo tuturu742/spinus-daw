@@ -1,6 +1,6 @@
 [project]
 name = "spinus-ai"
-version = "0.1.0rc1"
+version = "0.1.0a1"
 description = "Spinus DAW's AI service: LLM connections, the assistant and its proposals"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"

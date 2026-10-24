@@ -3,9 +3,9 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
-## 0.1.0-rc1 (unreleased)
+## 0.1.0-alpha.1 (unreleased)
 
-The first release candidate: a quiet release for testers before 0.1.0. Everything below is new.
+The first alpha: an early, quiet release for testers before 0.1.0. Everything below is new.
 
 ### Making music
 

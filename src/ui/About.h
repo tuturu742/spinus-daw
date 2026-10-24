@@ -21,7 +21,7 @@ public:
 
     static constexpr const char* projectUrl = "https://github.com/tuturu742/spinus-daw";
 
-    /** "Spinus DAW 0.1.0-rc1", the package kind, the system and JUCE's version, a line each. */
+    /** "Spinus DAW 0.1.0-alpha.1", the package kind, the system and JUCE's version, a line each. */
     static juce::String getVersionInfo();
     /** THIRD_PARTY.md as built into Spinus. */
     static juce::String getThirdPartyText();

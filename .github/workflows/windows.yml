@@ -92,7 +92,7 @@ jobs:
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             $create = @($tag, "--title", "Spinus $($tag.TrimStart('v'))", "--notes", "See CHANGELOG.md.")
-            if ($tag -match "-rc") { $create += "--prerelease" }
+            if ($tag -match "-(alpha|beta|rc)") { $create += "--prerelease" }
             gh release create @create
           }
           gh release upload $tag $setup --clobber
