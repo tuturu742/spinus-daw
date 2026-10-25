@@ -14,7 +14,7 @@
 
 pkgname=spinus-git
 _name=spinus-daw
-pkgver=0.1.0alpha1
+pkgver=0.1.0alpha2
 pkgrel=1
 pkgdesc="A Linux-first, FL Studio-style digital audio workstation"
 arch=('x86_64')
@@ -46,7 +46,7 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "${_name}"
-  # From the newest release tag: v0.1.0-alpha.1 plus 5 commits -> 0.1.0alpha1.r5.g1234abc
+  # From the newest release tag: v0.1.0-alpha.2 plus 5 commits -> 0.1.0alpha2.r5.g1234abc
   # (before the first tag: 0.1.0alpha1.r<commits>.g<hash>)
   local described
   if described=$(git describe --long --tags --abbrev=7 --match 'v*' 2>/dev/null); then
