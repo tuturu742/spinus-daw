@@ -94,13 +94,19 @@ Inside the Flatpak, Spinus sees:
   `/usr/lib/vst` and `/usr/local/lib/...`), read-only;
 - the Windows plugins you set up in the other Spinus ([Windows plugins](windows-plugins.md#in-the-flatpak)).
 
-**Plugins from your system's package manager often can't run inside the Flatpak.** They were built for
-your system's own libraries, and the Flatpak brings its own, older ones; a plugin that needs a newer
-library, or one the Flatpak doesn't have, doesn't load. Spinus lists such a plugin under **Problem
-plugins** in the Browser with the reason ("... was installed by your system and cannot run inside the
-Flatpak version of Spinus"), and a project that uses it shows it as **Missing**. For those plugins use
-Spinus installed from a package or the AppImage; or install the plugin's Flatpak extension from Flathub,
-or its own Linux download into `~/.vst3`, `~/.clap` or `~/.lv2`.
+**Plugins from your system's package manager run with your system's libraries.** They were built for
+your system's own libraries, and the Flatpak brings its own, older ones. When a scan finds a plugin that
+doesn't load with the Flatpak's libraries, Spinus tries it again with your system's, and if it loads, it
+always runs in a separate process started with them. You don't need to do anything; the log says
+"loads with the computer's own libraries" for each one. A plugin in a separate process can't use sidechain
+inputs, send MIDI out or have more than eight channels (see [Plugins](plugins.md)).
+
+A plugin that doesn't load even so (it needs a library your system doesn't have either), or a system older
+than the Flatpak, still shows under **Problem plugins** in the Browser with the reason ("... was installed by
+your system and cannot run inside the Flatpak version of Spinus"), and a project that uses it shows it as
+**Missing**. For those plugins use Spinus installed from a package or the AppImage; or install the plugin's
+Flatpak extension from Flathub, or its own Linux download into `~/.vst3`, `~/.clap` or `~/.lv2`. Plugins
+that were problem plugins before this are tried again by the next **Scan plugins**.
 
 **32-bit Windows installers** (many plugin installers are 32-bit programs) need Flatpak's 32-bit
 support, `org.freedesktop.Platform.Compat.i386`. Installing Spinus from Flathub brings it along; with the

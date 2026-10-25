@@ -621,14 +621,16 @@ void SandboxPluginFormat::createPluginInstance (const juce::PluginDescription& d
     const auto real = findReal ? findReal (format, file, description.uniqueId) : std::nullopt;
     if (! real)
         return fail ("Spinus does not know the plugin " + description.name);
-    if (! hostExecutable.existsAsFile())
-        return fail ("spinus-plugin-host is missing");
+    const auto withHostLibraries = needsHostLibraries && needsHostLibraries (*real);
+    const auto& host = withHostLibraries ? hostLibrariesLauncher : hostExecutable;
+    if (! host.existsAsFile())
+        return fail (host.getFileName() + " is missing");
 
     auto memory = SharedMemory::create();
     if (memory == nullptr)
         return fail ("Spinus could not share memory with the plugin's process");
     auto connection = std::make_unique<Connection>();
-    if (! connection->launchWorkerProcess (hostExecutable, processId, 5000, 0))
+    if (! connection->launchWorkerProcess (host, processId, 5000, 0))
         return fail ("Spinus could not start the plugin's process");
 
     auto xml = real->createXml();
@@ -639,7 +641,8 @@ void SandboxPluginFormat::createPluginInstance (const juce::PluginDescription& d
         return fail (info.hasProperty ("error") ? info["error"].toString()
                                                 : juce::String ("the plugin's process did not answer"));
     core::Logs::info ("sandbox", "Loaded " + real->name + " in its own process (" +
-                                     juce::String ((juce::int64)info["process"]) + ")");
+                                     juce::String ((juce::int64)info["process"]) +
+                                     (withHostLibraries ? ", with the computer's libraries)" : ")"));
 
     auto instance =
         std::make_unique<RemoteInstance> (std::move (connection), std::move (memory), description, *real, info);

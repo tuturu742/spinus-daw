@@ -60,9 +60,10 @@ what happened, and attach the project if you can.
 - Some Windows plugins that draw with the graphics card (for example Ample Bass P Lite) may not redraw
   their window with some graphics drivers. Turn on **Draw plugin windows without the graphics card** in
   Options › Windows plugins. See [Windows plugins](windows-plugins.md#when-a-plugins-window-doesnt-update).
-- In the Flatpak version, many plugins installed by your system's package manager can't load (they need
-  newer libraries than the Flatpak has); they're listed under Problem plugins with the reason. The
-  Flatpak can use only Spinus's tested Wine for Windows plugins. See [Install](install.md#as-a-flatpak).
+- In the Flatpak version, plugins installed by your system's package manager that need newer libraries than
+  the Flatpak has run in a separate process with your system's libraries, so they have that process's limits
+  (below). A plugin that needs a library your system doesn't have either is listed under Problem plugins
+  with the reason. The Flatpak can use only Spinus's tested Wine for Windows plugins. See [Install](install.md#as-a-flatpak).
 - A plugin running in a separate process can't use sidechain inputs, send MIDI out, or have more than
   eight channels. See [Plugins](plugins.md).
 - Some **LV2 plugins open with Spinus's sliders instead of their own window**: those whose window is

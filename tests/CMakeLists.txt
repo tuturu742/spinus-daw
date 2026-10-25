@@ -43,6 +43,7 @@ add_executable (spinus_tests
     plugins/ClapPluginFormatTests.cpp
     plugins/ClapSidechainTests.cpp
     plugins/SandboxTests.cpp
+    plugins/HostLibrariesTests.cpp
     plugins/CrashGuardTests.cpp
     plugins/ArchiveReaderTests.cpp
     plugins/PluginDownloadsTests.cpp
@@ -266,6 +267,11 @@ if (UNIX AND NOT APPLE)
 endif()
 
 add_dependencies (spinus_tests spinus-plugin-scanner spinus-plugin-host)
+if (TARGET spinus-plugin-host-system)
+    add_dependencies (spinus_tests spinus-plugin-host-system)
+    target_compile_definitions (spinus_tests PRIVATE
+        SPINUS_PLUGIN_HOST_SYSTEM="${SPINUS_BUILT_IN_PATH_PREFIX}$<TARGET_FILE:spinus-plugin-host-system>")
+endif()
 target_compile_definitions (spinus_tests PRIVATE
     SPINUS_PLUGIN_HOST="${SPINUS_BUILT_IN_PATH_PREFIX}$<TARGET_FILE:spinus-plugin-host>"
     SPINUS_BROKEN_PLUGINS_DIR="${SPINUS_BUILT_IN_PATH_PREFIX}${SPINUS_BROKEN_PLUGINS_DIR}"

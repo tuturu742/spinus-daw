@@ -23,6 +23,15 @@ public:
                                                                                const juce::String& file, int uniqueId)>
                              real);
 
+    /** In the Flatpak: `launcher` (spinus-plugin-host-system) starts spinus-plugin-host with the computer's own
+        libraries, for the plugins `withHostLibraries` says need them (plugins::HostLibraries). */
+    void setHostLibrariesLauncher (juce::File launcher,
+                                   std::function<bool (const juce::PluginDescription&)> withHostLibraries)
+    {
+        hostLibrariesLauncher = std::move (launcher);
+        needsHostLibraries = std::move (withHostLibraries);
+    }
+
     /** The sandboxed twin of a plugin's description. */
     static juce::PluginDescription describe (const juce::PluginDescription& real);
     /** The real plugin's format and file, from a sandboxed description. */
@@ -43,7 +52,8 @@ public:
 private:
     void createPluginInstance (const juce::PluginDescription&, double rate, int block, PluginCreationCallback) override;
 
-    juce::File hostExecutable;
+    juce::File hostExecutable, hostLibrariesLauncher;
+    std::function<bool (const juce::PluginDescription&)> needsHostLibraries;
     std::function<std::optional<juce::PluginDescription> (const juce::String&, const juce::String&, int)> findReal;
 };
 

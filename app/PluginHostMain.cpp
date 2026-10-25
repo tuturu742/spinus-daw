@@ -5,12 +5,14 @@
 
 #include "core/ChildProcess.h"
 #include "core/Log.h"
+#include "plugins/HostLibraries.h"
 #include "plugins/sandbox/SandboxHost.h"
 
 int main (int argc, char* argv[])
 {
-    spinus::core::endAtOnceOnCrash();           // Spinus notices at once, and carries on
-    const juce::ScopedJuceInitialiser_GUI juce; // plugins need a message manager, and windows
+    spinus::plugins::addPluginFoldersToLv2Path(); // the computer's LV2 plugins, in the Flatpak
+    spinus::core::endAtOnceOnCrash();             // Spinus notices at once, and carries on
+    const juce::ScopedJuceInitialiser_GUI juce;   // plugins need a message manager, and windows
     // Notable errors go into the log of the Spinus that started this (labelled "plugin host").
     spinus::core::Logs::joinParentLog ("plugin host");
     spinus::core::Logs::installTerminateHandler();

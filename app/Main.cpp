@@ -22,6 +22,7 @@
 #include "session/SystemInfo.h"
 #include "session/TextLocale.h"
 #include "plugins/SandboxList.h"
+#include "plugins/sandbox/SandboxPluginFormat.h"
 #include "plugins/PluginCatalog.h"
 #include "plugins/PluginDownloads.h"
 #include "plugins/windows/PluginDialogs.h"
@@ -179,9 +180,13 @@ public:
         // Plugins the user runs in a separate process.
         sandboxList =
             std::make_unique<plugins::SandboxList> (getPluginListFolder().getChildFile ("plugins-run-separately.json"));
+        // In the Flatpak, a plugin of the computer's that needs its newer libraries runs separately, with them.
         devices->setRunSeparately (
-            [list = sandboxList.get()] (const juce::PluginDescription& d)
-            { return list->contains (plugins::SandboxList::keyOf (d.pluginFormatName, d.fileOrIdentifier)); });
+            [this, list = sandboxList.get()] (const juce::PluginDescription& d)
+            {
+                return list->contains (plugins::SandboxList::keyOf (d.pluginFormatName, d.fileOrIdentifier)) ||
+                       (catalog != nullptr && catalog->needsHostLibraries (d.fileOrIdentifier));
+            });
         session = std::make_unique<Session> (engineHost->getEngine(), std::move (devices));
         session->setSandboxList (sandboxList.get());
         session->getDeviceList().setBundledFolders (bundledFolders);
@@ -197,6 +202,11 @@ public:
         // snapshots, which look the same on every machine.)
         catalog = std::make_unique<plugins::PluginCatalog> (getPluginListFolder(), getProgramFolder());
         catalog->load();
+        for (auto* format : engineHost->getEngine().getPluginManager().pluginFormatManager.getFormats())
+            if (auto* sandbox = dynamic_cast<plugins::sandbox::SandboxPluginFormat*> (format))
+                sandbox->setHostLibrariesLauncher (getHelperProgram ("spinus-plugin-host-system"),
+                                                   [c = catalog.get()] (const juce::PluginDescription& d)
+                                                   { return c->needsHostLibraries (d.fileOrIdentifier); });
         core::Logs::info ("plugins", "Plugin list: " + juce::String (catalog->getKnownPlugins().getNumTypes()) +
                                          " plugins, " + juce::String ((int)catalog->getProblems().getAll().size()) +
                                          " problem plugins (" + getPluginListFolder().getFullPathName() + ")");

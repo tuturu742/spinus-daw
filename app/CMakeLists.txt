@@ -26,3 +26,10 @@ set_target_properties (spinus-plugin-scanner PROPERTIES RUNTIME_OUTPUT_DIRECTORY
 add_executable (spinus-plugin-host PluginHostMain.cpp)
 target_link_libraries (spinus-plugin-host PRIVATE spinus_core spinus_warnings)
 set_target_properties (spinus-plugin-host PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# In the Flatpak, starts spinus-plugin-host with the computer's own libraries (plugins/HostLibraries.h).
+if (UNIX AND NOT APPLE)
+    add_executable (spinus-plugin-host-system PluginHostSystemMain.cpp)
+    target_link_libraries (spinus-plugin-host-system PRIVATE spinus_core spinus_warnings)
+    set_target_properties (spinus-plugin-host-system PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+endif()

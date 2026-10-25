@@ -166,6 +166,8 @@ add_library (spinus_core STATIC
     plugins/ArchiveReader.h
     plugins/PluginDownloads.cpp
     plugins/PluginDownloads.h
+    plugins/HostLibraries.cpp
+    plugins/HostLibraries.h
     plugins/PluginScanner.cpp
     plugins/PluginScanner.h
     plugins/SandboxList.cpp
