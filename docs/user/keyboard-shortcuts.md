@@ -4,6 +4,11 @@ Spinus's keys, in one place. The ones in the first tables are commands: change t
 Keyboard shortcuts...** (see [The main window](main-window.md#keyboard-shortcuts)). Keys inside a panel
 are fixed.
 
+The commands work in every Spinus window: the main window, a panel in its own window, a plugin's window
+and Spinus Tune. In a text field (the Browser's search, a name), keys with **Ctrl** and a number or a sign
+(**Ctrl+Alt+1**, **Ctrl+=**) are commands too; with a letter (**Ctrl+A**, **Ctrl+C**) they stay with the
+text. A plugin's own window, drawn by the plugin, keeps the keys it is given.
+
 ## Panels
 
 | Key | Opens or closes |
@@ -19,6 +24,7 @@ are fixed.
 | **Ctrl+H** | History |
 | **Ctrl+Shift+A** | [Assistant](assistant.md) |
 | **Ctrl+Alt+1**, **2**, **3** | The Compose, Arrange and Mix [layouts](main-window.md#layouts) |
+| **Ctrl+Alt+4** to **9** | Your own saved layouts, in the order saved |
 
 The Launcher, Routing, Automation editor, Analyzer and Automixer open from the **View** menu. The
 Analyzer is experimental: it is in the menu (and in **Options › Keyboard shortcuts...**) only while

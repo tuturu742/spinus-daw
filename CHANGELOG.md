@@ -23,6 +23,17 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Follow:** the Playlist, Piano Roll and Automation editor turn the page while the song or pattern plays,
   so the play position stays in sight. The **Follow** button switches it off; Spinus remembers your choice.
 
+### Windows and shortcuts
+
+- **Shortcuts work everywhere:** Spinus's keys now work from a panel in its own window, a plugin's window
+  and Spinus Tune too, and Ctrl+Alt+1 (or Ctrl+=) in the Browser's search box no longer types "1" instead
+  of switching the layout.
+- **Your own layouts get shortcuts:** Ctrl+Alt+4 to 9 open your saved layouts, in the order saved.
+- **Layouts are kept while Spinus runs:** the windows come back as they were even when Spinus was ended
+  without closing, and two Spinus windows open at once no longer lose each other's saved layouts.
+- **Closing with a menu open:** the window's close button now closes Spinus even while one of the top menus
+  is open (it did nothing before).
+
 ### Sounds
 
 - Three more free one-click downloads, for Linux and Windows: the **Six Sines** FM synthesizer, with its

@@ -74,7 +74,17 @@ public:
         showManual,    // Help › Manual (F1)
         showAbout,     // Help › About Spinus
         openLogFolder, // Help › Open log folder: the session logs (core::Logs)
+        layout4,       // the user's own layouts, in the order saved (Ctrl+Alt+4 to 9)
+        layout5,
+        layout6,
+        layout7,
+        layout8,
+        layout9,
     };
+
+    /** Which layout a layout command opens: 0 for Compose (layout1) to 8 (layout9); -1 for other commands. */
+    static int layoutIndexOf (juce::CommandID);
+    static juce::CommandID layoutCommand (int index);
 
     explicit MainView (Session&, ProjectDocument* document = nullptr);
     ~MainView() override;
@@ -264,6 +274,10 @@ private:
 
     MessageBoxHandler messageBox;
     std::unique_ptr<juce::TimedCallback> pluginWatch; // plugins in their own process that stopped working
+    /** Keeps the windows' layout for the next start while Spinus runs, not only when it closes: a Spinus that
+        is ended (or hangs) still comes back with the windows as they were. */
+    std::unique_ptr<juce::TimedCallback> layoutKeeper;
+    juce::ValueTree keptLayout;
     FileChooserHandler chooseFile;
     std::unique_ptr<core::FileDialog> activeChooser;
 

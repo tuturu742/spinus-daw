@@ -285,6 +285,8 @@ add_library (spinus_core STATIC
     ui/PluginWindow.h
     ui/RecordIdea.cpp
     ui/RecordIdea.h
+    ui/Shortcuts.cpp
+    ui/Shortcuts.h
     ui/SpinusTune.cpp
     ui/SpinusTune.h
     ui/TempoControl.cpp

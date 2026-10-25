@@ -25,8 +25,12 @@ juce::ValueTree panel (const juce::String& id, float x, float y, float w, float 
 }
 } // namespace
 
-WindowLayouts::WindowLayouts (juce::File f) : file (std::move (f))
+WindowLayouts::WindowLayouts (juce::File f) : file (std::move (f)) { reload(); }
+
+void WindowLayouts::reload()
 {
+    if (file == juce::File())
+        return;
     if (auto xml = juce::XmlDocument::parse (file))
         if (auto tree = juce::ValueTree::fromXml (*xml); tree.hasType ("LAYOUTS"))
             saved = tree;
@@ -94,6 +98,7 @@ juce::ValueTree WindowLayouts::get (const juce::String& name) const
 
 void WindowLayouts::save (const juce::String& name, const juce::ValueTree& layout)
 {
+    reload(); // another Spinus may have saved layouts since
     auto copy = layout.createCopy();
     copy.setProperty ("name", name, nullptr);
     for (int i = 0; i < saved.getNumChildren(); ++i)
@@ -110,6 +115,7 @@ void WindowLayouts::save (const juce::String& name, const juce::ValueTree& layou
 
 void WindowLayouts::remove (const juce::String& name)
 {
+    reload();
     for (int i = saved.getNumChildren(); --i >= 0;)
         if (saved.getChild (i).hasType ("LAYOUT") && saved.getChild (i)["name"].toString() == name)
             saved.removeChild (i, nullptr);
@@ -120,6 +126,7 @@ juce::ValueTree WindowLayouts::getLast() const { return saved.getChildWithName (
 
 void WindowLayouts::setLast (const juce::ValueTree& layout)
 {
+    reload(); // keeps the layouts another Spinus saved meanwhile
     saved.removeChild (saved.getChildWithName ("LAST"), nullptr);
     juce::ValueTree last ("LAST");
     last.appendChild (layout.createCopy(), nullptr);

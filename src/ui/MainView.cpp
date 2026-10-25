@@ -23,6 +23,7 @@
 #include "PatternGenerator.h"
 #include "RecordIdea.h"
 #include "model/Scales.h"
+#include "Shortcuts.h"
 #include "SpinusTune.h"
 #include "Playlist.h"
 #include "PluginDownloadDialog.h"
@@ -649,6 +650,7 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     commandManager.registerAllCommandsForTarget (this);
     commandManager.setFirstCommandTarget (this);
     addKeyListener (commandManager.getKeyMappings());
+    shortcuts::setCommandManager (commandManager);
     setWantsKeyboardFocus (true);
 
     hintBar.showMessage ("Welcome to Spinus. F5 Playlist, F6 Channel Rack, F7 Piano Roll, F9 Mixer, F8 Browser.");
@@ -678,6 +680,8 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
 
 MainView::~MainView()
 {
+    shortcuts::forget (commandManager);
+    layoutKeeper = nullptr;
     if (keepLastLayout)
         layouts->setLast (getCurrentLayout());
     menuBar.setModel (nullptr);
@@ -750,6 +754,18 @@ void MainView::setLayoutsFile (const juce::File& file)
 {
     layouts = std::make_unique<WindowLayouts> (file);
     keepLastLayout = true;
+    keptLayout = layouts->getLast();
+    layoutKeeper = std::make_unique<juce::TimedCallback> (
+        [this]
+        {
+            // Written only when the windows changed (a few seconds after).
+            if (auto now = getCurrentLayout(); ! now.isEquivalentTo (keptLayout))
+            {
+                layouts->setLast (now);
+                keptLayout = now;
+            }
+        });
+    layoutKeeper->startTimer (3000);
     // Once the workspace has its size.
     juce::MessageManager::callAsync (
         [safe = juce::Component::SafePointer<MainView> (this)]
@@ -777,6 +793,17 @@ void MainView::applyLayout (const juce::ValueTree& layout)
     commandManager.commandStatusChanged();
 }
 
+int MainView::layoutIndexOf (juce::CommandID id)
+{
+    if (id >= layout1 && id <= layout3)
+        return id - layout1;
+    if (id >= layout4 && id <= layout9)
+        return 3 + id - layout4;
+    return -1;
+}
+
+juce::CommandID MainView::layoutCommand (int index) { return index < 3 ? layout1 + index : layout4 + index - 3; }
+
 bool MainView::useLayout (const juce::String& name)
 {
     const auto layout = layouts->get (name);
@@ -793,8 +820,8 @@ void MainView::addLayoutsMenu (juce::PopupMenu& menu)
     const auto names = layouts->getNames();
     for (int i = 0; i < names.size(); ++i)
     {
-        if (i < 3)
-            sub.addCommandItem (&commandManager, layout1 + i);
+        if (i < 9)
+            sub.addCommandItem (&commandManager, layoutCommand (i));
         else
             sub.addItem (names[i], [this, name = names[i]] { useLayout (name); });
     }
@@ -815,7 +842,11 @@ void MainView::addLayoutsMenu (juce::PopupMenu& menu)
     juce::PopupMenu remove;
     for (auto& name : layouts->getSavedNames())
         remove.addItem (layouts->isBuiltIn (name) ? "Reset " + name + " to Spinus's" : "Delete " + name,
-                        [this, name] { layouts->remove (name); });
+                        [this, name]
+                        {
+                            layouts->remove (name);
+                            commandManager.commandStatusChanged();
+                        });
     sub.addSubMenu ("Delete layout", remove, remove.getNumItems() > 0);
     menu.addSubMenu ("Layouts", sub);
 }
@@ -1777,7 +1808,13 @@ void MainView::getAllCommands (juce::Array<juce::CommandID>& ids)
                     toolSelect,
                     showManual,
                     showAbout,
-                    openLogFolder });
+                    openLogFolder,
+                    layout4,
+                    layout5,
+                    layout6,
+                    layout7,
+                    layout8,
+                    layout9 });
 }
 
 void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -1914,10 +1951,23 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
     case layout1:
     case layout2:
     case layout3:
+    case layout4:
+    case layout5:
+    case layout6:
+    case layout7:
+    case layout8:
+    case layout9:
     {
-        const auto name = layouts->getNames()[id - layout1];
-        info.setInfo (name, "Open the windows of the " + name + " layout", "View", 0);
-        info.addDefaultKeypress ('1' + (id - layout1), ctrl | juce::ModifierKeys::altModifier);
+        // The user's own layouts take the keys after Spinus's three, in the order they were saved.
+        const auto index = layoutIndexOf (id);
+        const auto name = layouts->getNames()[index];
+        if (name.isEmpty())
+            info.setInfo ("Layout " + juce::String (index + 1),
+                          "No saved layout here yet (View › Layouts › Save layout)", "View",
+                          juce::ApplicationCommandInfo::isDisabled);
+        else
+            info.setInfo (name, "Open the windows of the " + name + " layout", "View", 0);
+        info.addDefaultKeypress ('1' + index, ctrl | juce::ModifierKeys::altModifier);
         break;
     }
     case showAudioSettings:
@@ -2147,7 +2197,13 @@ bool MainView::perform (const InvocationInfo& info)
     case layout1:
     case layout2:
     case layout3:
-        return useLayout (layouts->getNames()[info.commandID - layout1]);
+    case layout4:
+    case layout5:
+    case layout6:
+    case layout7:
+    case layout8:
+    case layout9:
+        return useLayout (layouts->getNames()[layoutIndexOf (info.commandID)]);
 
     case editShortcuts:
     {

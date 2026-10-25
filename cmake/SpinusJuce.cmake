@@ -223,6 +223,59 @@ endforeach()
 set_target_properties (juce_audio_processors PROPERTIES INTERFACE_SOURCES
                        "${processorsSources};${processorsGenerated}/juce_audio_processors.cpp")
 
+# JUCE 9 on Linux ignores the window manager's close request (the title bar's close button) while a menu is
+# open: the open menu is modal and blocks the window. The user clicks the cross and nothing happens. Linux
+# builds compile a copy of juce_XWindowSystem_linux.cpp that closes the open menus first and then the window,
+# as asked (a real dialog still blocks it). The submodule stays untouched. Remove once JUCE does this itself.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set (guiModule "${PROJECT_SOURCE_DIR}/external/JUCE/modules/juce_gui_basics")
+    set (guiGenerated "${CMAKE_BINARY_DIR}/generated/juce_gui_basics")
+    file (READ "${guiModule}/native/juce_XWindowSystem_linux.cpp" xWindowSystem)
+    set (closeRequest [=[
+        else if (atom == atoms.protocolList [XWindowSystemUtilities::Atoms::DELETE_WINDOW])
+        {
+            if (! peer->getComponent().isCurrentlyBlockedByAnotherModalComponent())
+                peer->handleUserClosingWindow();
+        }]=])
+    set (closeRequestPatched [=[
+        else if (atom == atoms.protocolList [XWindowSystemUtilities::Atoms::DELETE_WINDOW])
+        {
+            // Spinus: an open menu closes first, then the window as asked (see SpinusJuce.cmake).
+            if (PopupMenu::dismissAllActiveMenus())
+            {
+                MessageManager::callAsync ([window = Component::SafePointer<Component> (&peer->getComponent())]
+                {
+                    if (window != nullptr && ! window->isCurrentlyBlockedByAnotherModalComponent())
+                        window->userTriedToCloseWindow();
+                });
+            }
+            else if (! peer->getComponent().isCurrentlyBlockedByAnotherModalComponent())
+                peer->handleUserClosingWindow();
+        }]=])
+    string (REPLACE "${closeRequest}" "${closeRequestPatched}" xWindowSystemPatched "${xWindowSystem}")
+    file (READ "${guiModule}/juce_gui_basics.cpp" guiUnity)
+    # The copy includes every other file from the module itself, and the patched X11 file from here.
+    string (REPLACE "#include \"" "#include \"${guiModule}/" guiUnityPatched "${guiUnity}")
+    string (REPLACE "#include \"${guiModule}/native/juce_XWindowSystem_linux.cpp\""
+                    "#include \"${guiGenerated}/juce_XWindowSystem_linux.cpp\"" guiUnityPatched "${guiUnityPatched}")
+    if (xWindowSystemPatched STREQUAL xWindowSystem OR NOT guiUnityPatched MATCHES "generated/juce_gui_basics/juce_XWindow")
+        message (FATAL_ERROR "external/JUCE changed: re-check the window close fix in cmake/SpinusJuce.cmake")
+    endif()
+    get_target_property (guiSources juce_gui_basics INTERFACE_SOURCES)
+    list (FILTER guiSources EXCLUDE REGEX "/juce_gui_basics\\.cpp$")
+    foreach (name juce_XWindowSystem_linux juce_gui_basics)
+        set (text "${xWindowSystemPatched}")
+        if (name STREQUAL "juce_gui_basics")
+            set (text "${guiUnityPatched}")
+        endif()
+        # Written as is, and only touched when the text changes, so nothing rebuilds needlessly.
+        file (WRITE "${guiGenerated}/${name}.cpp.new" "${text}")
+        configure_file ("${guiGenerated}/${name}.cpp.new" "${guiGenerated}/${name}.cpp" COPYONLY)
+    endforeach()
+    set_target_properties (juce_gui_basics PROPERTIES INTERFACE_SOURCES
+                           "${guiSources};${guiGenerated}/juce_gui_basics.cpp")
+endif()
+
 include ("${CMAKE_CURRENT_LIST_DIR}/SpinusRubberBand.cmake")
 target_link_libraries (spinus_juce PRIVATE spinus_rubberband)
 

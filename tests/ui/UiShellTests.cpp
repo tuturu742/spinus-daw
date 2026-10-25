@@ -8,7 +8,9 @@
 #include "ui/AudioSettings.h"
 #include "ui/ColourMenu.h"
 #include "ui/PianoRoll.h"
+#include "ui/Shortcuts.h"
 #include "ui/TempoControl.h"
+#include "ui/WindowLayouts.h"
 
 using namespace spinus;
 using namespace spinus::ui;
@@ -452,4 +454,87 @@ TEST_CASE ("Window layouts: Spinus's three, saved ones, and the last one at the 
     CHECK (! workspace.isPanelVisible ("pianoRoll"));
     CHECK (workspace.getFrontPanelId() == "playlist");
     file.deleteFile();
+}
+
+TEST_CASE ("Saved layouts get Ctrl+Alt+4 to 9; the windows are kept while Spinus runs", "[ui][layouts]")
+{
+    const auto file = juce::File::createTempFile (".xml");
+    Ui ui;
+    ui.view.setSize (1280, 800);
+    ui.view.setLayoutsFile (file);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    auto& workspace = ui.view.getWorkspace();
+    auto& commands = ui.view.getCommandManager();
+    const auto ctrlAlt = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
+
+    // No saved layout yet: Ctrl+Alt+4 is there, but does nothing.
+    CHECK (commands.getKeyMappings()->findCommandForKeyPress (juce::KeyPress ('4', ctrlAlt, 0)) == MainView::layout4);
+    juce::ApplicationCommandInfo info (MainView::layout4);
+    ui.view.getCommandInfo (MainView::layout4, info);
+    CHECK (((unsigned)info.flags & (unsigned)juce::ApplicationCommandInfo::isDisabled) != 0);
+
+    // The first saved layout is Ctrl+Alt+4, the second Ctrl+Alt+5.
+    workspace.hidePanel ("playlist");
+    workspace.showPanel ("history");
+    ui.view.getWindowLayouts().save ("Sketch", ui.view.getCurrentLayout());
+    workspace.showPanel ("mixer");
+    ui.view.getWindowLayouts().save ("Mixing desk", ui.view.getCurrentLayout());
+    ui.view.getCommandInfo (MainView::layout4, info);
+    CHECK (info.shortName == "Sketch");
+    CHECK (((unsigned)info.flags & (unsigned)juce::ApplicationCommandInfo::isDisabled) == 0);
+    REQUIRE (ui.view.useLayout ("Mix"));
+    REQUIRE (invoke (ui.view, MainView::layout4));
+    CHECK (workspace.isPanelVisible ("history"));
+    CHECK (! workspace.isPanelVisible ("mixer"));
+    REQUIRE (invoke (ui.view, MainView::layout5));
+    CHECK (workspace.isPanelVisible ("mixer"));
+    CHECK (MainView::layoutIndexOf (MainView::layout9) == 8);
+    CHECK (MainView::layoutCommand (3) == MainView::layout4);
+
+    // The windows as they are now reach the file within a few seconds, without Spinus closing.
+    REQUIRE (ui.view.useLayout ("Mix"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (3500);
+    WindowLayouts reread (file);
+    CHECK (reread.getLast().getChildWithProperty ("id", "mixer")["visible"]);
+    CHECK (! reread.getLast().getChildWithProperty ("id", "history")["visible"]);
+    file.deleteFile();
+}
+
+TEST_CASE ("Two Spinus windows open at once keep each other's saved layouts", "[ui][layouts]")
+{
+    const auto file = juce::File::createTempFile (".xml");
+    WindowLayouts first (file), second (file);
+    first.save ("Mine", WindowLayouts::builtIn ("Mix"));
+    second.setLast (WindowLayouts::builtIn ("Arrange")); // the second one closes, knowing nothing of "Mine"
+    second.save ("Also mine", WindowLayouts::builtIn ("Compose"));
+    WindowLayouts reread (file);
+    CHECK (reread.getSavedNames() == juce::StringArray { "Mine", "Also mine" });
+    CHECK (reread.getLast().isValid());
+    file.deleteFile();
+}
+
+TEST_CASE ("Shortcuts reach the main window from other windows and from text fields", "[ui][shortcuts]")
+{
+    Ui ui;
+    ui.view.setSize (1280, 800);
+    auto& workspace = ui.view.getWorkspace();
+    workspace.hidePanel ("mixer");
+
+    // A window of its own (a plugin's, a detached panel): F9 opens the Mixer.
+    juce::Component window;
+    CHECK (shortcuts::getWindowKeys().keyPressed (juce::KeyPress (juce::KeyPress::F9Key), &window));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    CHECK (workspace.isPanelVisible ("mixer"));
+
+    // In a text field, Ctrl+Alt+3 is the Mix layout, not a typed "3"; Ctrl+A stays with the field.
+    juce::TextEditor field;
+    const auto ctrlAlt = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
+    REQUIRE (ui.view.useLayout ("Compose"));
+    CHECK (shortcuts::getTextFieldKeys().keyPressed (juce::KeyPress ('3', ctrlAlt, '3'), &field));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    CHECK (workspace.isPanelVisible ("mixer"));
+    CHECK (! workspace.isPanelVisible ("pianoRoll"));
+    CHECK_FALSE (
+        shortcuts::getTextFieldKeys().keyPressed (juce::KeyPress ('a', juce::ModifierKeys::ctrlModifier, 'a'), &field));
+    CHECK_FALSE (shortcuts::getTextFieldKeys().keyPressed (juce::KeyPress ('3', 0, '3'), &field)); // typing
 }
