@@ -77,15 +77,17 @@ file or a plugin folder, and the desktop's dialog can't offer files and folders 
 ## Spinus closed unexpectedly
 
 Start it again: it offers to **Recover** your work from the last autosave (every two minutes). See
-[Projects](projects.md). Please [report the crash](https://github.com/tuturu742/spinus-daw/issues) with
-what you were doing, and attach the log of that run (below): its last lines usually say what went wrong.
+[Projects](projects.md). Please report the crash with what you were doing: **Help › Report a problem...**
+makes a file with the logs of the last runs and opens the bug report page (see
+[Report a problem](help.md#report-a-problem)). The last lines of the crashed run's log usually say what went
+wrong.
 
 ## Log files
 
 Spinus writes a log of each run: when it started, the sound card it opened, projects opened, saved and
 exported, plugin scans and plugins that failed to load or crashed, the Windows plugins setup, the AI
-service, and the errors it showed you. When you report a problem, attach the log of the run where it
-happened.
+service, and the errors it showed you. **Help › Report a problem...** puts the logs of the last three runs in
+one file to attach to a bug report; or attach the log of the run where it happened yourself.
 
 **Help › Open log folder** opens the folder. It is:
 

@@ -1,0 +1,11 @@
+name: An idea
+description: Something Spinus should do, or do differently.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Spinus to do?
+      description: What you are trying to make, and what gets in the way. How another program does it helps too.
+    validations:
+      required: true

@@ -13,6 +13,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   opens them; the last 10 runs are kept. Your home folder is written as `~`, and keys, tokens and email
   addresses are masked, so the logs hold no keys and no user name. After a crash, the next run's log names
   the run that ended unexpectedly. See [Troubleshooting](docs/user/troubleshooting.md#log-files).
+- **Help › Report a problem...:** makes a file with the logs of the last three runs, the version and the system,
+  and opens GitHub's bug report page with the version and system filled in, to drag the file into. Spinus
+  sends nothing itself. The bug report and idea pages on GitHub are now forms. See
+  [Manual and About](docs/user/help.md#report-a-problem).
 
 ### Making music
 

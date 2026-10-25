@@ -80,6 +80,7 @@ public:
         layout7,
         layout8,
         layout9,
+        reportProblem, // Help › Report a problem: a report file and GitHub's new issue page
     };
 
     /** Which layout a layout command opens: 0 for Compose (layout1) to 8 (layout9); -1 for other commands. */
@@ -182,6 +183,14 @@ public:
     void setMessageBoxHandler (MessageBoxHandler h) { messageBox = std::move (h); }
     void setFileChooserHandler (FileChooserHandler h) { chooseFile = std::move (h); }
     std::function<void()> onQuit; // called when the user confirmed quitting
+
+    /** Help › Report a problem: makes the report file (session/ProblemReport.h), says what is in it, and on OK
+        opens the new issue page and shows the file, to drag into the page. */
+    void makeProblemReport();
+    /** Where reports go, how a page and a file are shown (tests replace them). */
+    juce::File reportFolder;
+    std::function<void (const juce::URL&)> openUrl = [] (const juce::URL& url) { url.launchInDefaultBrowser(); };
+    std::function<void (const juce::File&)> showFile = [] (const juce::File& file) { file.revealToUser(); };
 
     void paint (juce::Graphics&) override;
     void resized() override;

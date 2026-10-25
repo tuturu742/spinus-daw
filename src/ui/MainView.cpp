@@ -38,6 +38,8 @@
 #include "core/Log.h"
 #include "model/StockDevices.h"
 #include "session/DemoSong.h"
+#include "session/ProblemReport.h"
+#include "session/SystemInfo.h"
 #include "session/ProgramFolder.h"
 
 #include <SpinusVersion.h>
@@ -959,6 +961,44 @@ void MainView::changeListenerCallback (juce::ChangeBroadcaster*)
     menuItemsChanged();
 }
 
+void MainView::makeProblemReport()
+{
+    auto logs = core::Logs::getFolder();
+    if (logs == juce::File())
+        logs = getLogFolder();
+    juce::File zip;
+    if (auto made = session::problemReport::make (
+            reportFolder != juce::File() ? reportFolder : session::problemReport::getFolder(), logs,
+            juce::StringArray::fromLines (AboutSpinus::getVersionInfo()), zip);
+        made.failed())
+    {
+        showProblem ("Could not make the report file", made.getErrorMessage());
+        return;
+    }
+    core::Logs::info ("report", "Made " + zip.getFileName());
+
+    const auto url = session::problemReport::getIssueUrl (juce::String (productName) + " " + versionString,
+                                                          session::getSystemName() + ", " + session::getPackageKind());
+    messageBox (juce::MessageBoxOptions()
+                    .withIconType (juce::MessageBoxIconType::InfoIcon)
+                    .withTitle ("Report a problem")
+                    .withMessage ("Spinus made a report file with its logs of its last runs, the version and your "
+                                  "system (no keys, passwords, email addresses or user names):\n\n" +
+                                  zip.getFullPathName() +
+                                  "\n\nNext, GitHub's page for a new bug report opens (you need a GitHub account), "
+                                  "and the file is shown: describe what happened and drag the file into the page. "
+                                  "Spinus sends nothing itself.")
+                    .withButton ("Open the page")
+                    .withButton ("Cancel"),
+                [safe = juce::Component::SafePointer<MainView> (this), url, zip] (int button)
+                {
+                    if (safe == nullptr || button != 0)
+                        return;
+                    safe->openUrl (url);
+                    safe->showFile (zip);
+                });
+}
+
 void MainView::showProblem (const juce::String& title, const juce::String& message)
 {
     core::Logs::warning ("shown", title + ": " + message);
@@ -1642,6 +1682,7 @@ juce::PopupMenu MainView::getMenuForIndex (int index, const juce::String&)
     case 4:
         menu.addCommandItem (cm, showManual);
         menu.addSeparator();
+        menu.addCommandItem (cm, reportProblem);
         menu.addCommandItem (cm, openLogFolder);
         menu.addCommandItem (cm, showAbout);
         break;
@@ -1814,7 +1855,8 @@ void MainView::getAllCommands (juce::Array<juce::CommandID>& ids)
                     layout6,
                     layout7,
                     layout8,
-                    layout9 });
+                    layout9,
+                    reportProblem });
 }
 
 void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -1980,6 +2022,12 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
         break;
     case showAbout:
         info.setInfo ("About Spinus", "Spinus's version, license and the projects it is built with", "Help", 0);
+        break;
+    case reportProblem:
+        info.setInfo ("Report a problem...",
+                      "Make a report file with Spinus's logs and open GitHub's page for a new bug report, with the "
+                      "version and system filled in",
+                      "Help", 0);
         break;
     case openLogFolder:
         info.setInfo ("Open log folder",
@@ -2247,6 +2295,10 @@ bool MainView::perform (const InvocationInfo& info)
 
     case showAbout:
         AboutSpinus::show (this);
+        return true;
+
+    case reportProblem:
+        makeProblemReport();
         return true;
 
     case openLogFolder:

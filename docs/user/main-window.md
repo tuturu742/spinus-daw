@@ -77,8 +77,9 @@ saved layouts.
 
 ## Keyboard shortcuts
 
-**Help › Manual** (**F1**) opens this manual inside Spinus, with a search; **Help › About Spinus** shows the
-version and the licenses (see [Manual and About](help.md)). The demo songs are in the
+**Help › Manual** (**F1**) opens this manual inside Spinus, with a search; **Help › Report a problem...** makes a
+report file and opens the bug report page; **Help › About Spinus** shows the version and the licenses (see
+[Manual and About](help.md)). The demo songs are in the
 [Browser](browser.md#projects), under **Projects**.
 
 **Options › Keyboard shortcuts...** lists every command with its keys. Click a key to change or remove
