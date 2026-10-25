@@ -295,6 +295,8 @@ add_library (spinus_core STATIC
     ui/TempoControl.h
     ui/Theme.cpp
     ui/Theme.h
+    ui/TimelineControls.cpp
+    ui/TimelineControls.h
     ui/WindowStacking.cpp
     ui/WindowStacking.h
     ui/WindowsPluginsDialog.cpp

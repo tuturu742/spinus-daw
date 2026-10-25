@@ -74,7 +74,9 @@ They pick the tool in the Piano Roll when it is in front, otherwise in the Playl
 | **Ctrl+C**, **Ctrl+X**, **Ctrl+V** | Copy, cut and paste notes (Piano Roll) |
 | **Ctrl+B** | Duplicate the selection right after itself (Piano Roll) |
 | **Alt** while dragging | Off the grid; in the Playlist, Alt+dragging an audio clip's end stretches it |
-| **Ctrl**+wheel, **Ctrl+Shift**+wheel | Zoom time, zoom key height (Piano Roll) |
+| **Ctrl+=**, **Ctrl+-**, **Ctrl+0** | Zoom in, zoom out, fit everything in view (also in Spinus Tune) |
+| **Ctrl**+wheel | Zoom around the mouse (also in Spinus Tune and the Beat Slicer) |
+| **Ctrl+Shift**+wheel | Key height (Piano Roll, Spinus Tune), track height (Playlist) |
 
 ## Launcher
 

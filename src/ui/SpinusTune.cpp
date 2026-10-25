@@ -54,6 +54,9 @@ SpinusTuneEditor::SpinusTuneEditor (Session& s, model::ClipId c, ai::AiService* 
     };
     snapButton.onClick = [this] { snapToKey (selectedOrAll()); };
     resetButton.onClick = [this] { reset (selectedOrAll()); };
+    zoomControls.onZoom = [this] (double factor) { zoom (factor); };
+    zoomControls.onFit = [this] { fit(); };
+    addAndMakeVisible (zoomControls);
 
     for (auto [slider, label, text, top] : { std::tuple { &driftSlider, &driftLabel, "Drift", 1.0 },
                                              std::tuple { &vibratoSlider, &vibratoLabel, "Vibrato", 2.0 } })
@@ -379,6 +382,7 @@ void SpinusTuneEditor::resized()
     vibratoLabel.setBounds (toolbar.removeFromRight (56));
     driftSlider.setBounds (toolbar.removeFromRight (150));
     driftLabel.setBounds (toolbar.removeFromRight (42));
+    zoomControls.setBounds (toolbar.removeFromLeft (zoomControls.getPreferredWidth()));
     status.setBounds (area.removeFromBottom (24).reduced (6, 2));
     keyboard = area.removeFromLeft (keyboardWidth);
     grid = area;
@@ -521,8 +525,13 @@ void SpinusTuneEditor::mouseDoubleClick (const juce::MouseEvent& e)
 
 void SpinusTuneEditor::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)
 {
+    if (e.mods.isCtrlDown() && ! e.mods.isShiftDown())
+    {
+        zoom (timeline::wheelZoomFactor (wheel), e.position.x - (float)grid.getX());
+        return;
+    }
     if (e.mods.isCtrlDown())
-        pixelsPerSecond = juce::jlimit (20.0, 2000.0, pixelsPerSecond * (wheel.deltaY > 0 ? 1.15 : 1.0 / 1.15));
+        rowHeight = juce::jlimit (6.0f, 40.0f, rowHeight * (float)timeline::wheelZoomFactor (wheel));
     else if (e.mods.isShiftDown())
         viewStart =
             juce::jlimit (0.0, juce::jmax (0.0, duration - 0.5), viewStart - wheel.deltaY * 200.0 / pixelsPerSecond);
@@ -531,8 +540,45 @@ void SpinusTuneEditor::mouseWheelMove (const juce::MouseEvent& e, const juce::Mo
     repaint();
 }
 
+void SpinusTuneEditor::mouseMagnify (const juce::MouseEvent& e, float scale)
+{
+    zoom (scale, e.position.x - (float)grid.getX());
+}
+
+void SpinusTuneEditor::zoom (double factor, std::optional<float> x)
+{
+    // Not smaller than the whole clip across the grid.
+    const auto fitting = juce::jmax (20.0, (double)grid.getWidth() / juce::jmax (0.01, duration));
+    const auto at = (double)x.value_or ((float)grid.getWidth() * 0.5f);
+    const auto time = viewStart + at / pixelsPerSecond;
+    pixelsPerSecond = juce::jlimit (juce::jmin (fitting, 2000.0), 2000.0, pixelsPerSecond * factor);
+    viewStart = juce::jlimit (0.0, juce::jmax (0.0, duration - 0.5), time - at / pixelsPerSecond);
+    repaint();
+}
+
+void SpinusTuneEditor::fit()
+{
+    pixelsPerSecond = juce::jlimit (20.0, 2000.0, (double)grid.getWidth() / juce::jmax (0.01, duration));
+    viewStart = 0.0;
+    repaint();
+}
+
 bool SpinusTuneEditor::keyPressed (const juce::KeyPress& key)
 {
+    switch (timeline::zoomKeyOf (key))
+    {
+    case timeline::ZoomKey::in:
+        zoom (timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::out:
+        zoom (1.0 / timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::fit:
+        fit();
+        return true;
+    case timeline::ZoomKey::none:
+        break;
+    }
     if (key.getTextCharacter() == 'j' || key.getTextCharacter() == 'J')
     {
         const auto chosen = getSelection();

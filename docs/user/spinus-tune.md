@@ -59,6 +59,7 @@ your computer; turn AI on in Options › AI...), which takes a few seconds per m
 | Change vibrato | **Vibrato**: 1 as sung, 0 removes it, 2 makes it twice as wide. |
 | Put every note in the key | **Snap to key**: each note moves to the nearest note of the song's key (the **Key** button in the top bar), or the nearest semitone without a key. |
 | Start over | **Reset** undoes every correction of the selected notes. |
+| Zoom | The **−**, **+** and **Fit** buttons at the top left (Fit shows the whole clip), **Ctrl+=**, **Ctrl+-** and **Ctrl+0**, or **Ctrl**+wheel around the mouse. **Ctrl+Shift**+wheel makes the rows taller or shorter. **Shift**+wheel scrolls in time, the wheel up and down. |
 
 Every change is one undo step (**Ctrl+Z**). Spinus then renders the tuned vocal in the background (the
 bar at the bottom shows how far) with natural-sounding shifting that keeps the voice's character; until
