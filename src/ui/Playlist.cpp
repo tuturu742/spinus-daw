@@ -1198,11 +1198,13 @@ private:
 };
 
 //==============================================================================
-Playlist::Playlist (Session& s) : Panel ("playlist", "Playlist"), session (s)
+Playlist::Playlist (Session& s)
+    : Panel ("playlist", "Playlist"), session (s),
+      timelineControls (&s.getEdit().engine.getPropertyStorage().getPropertiesFile(), "playlistFollows")
 {
     setHelpText ("Playlist (F5): click to place the current pattern, click a pattern clip to make it current, drag "
                  "to move, drag the right edge to resize, right-click to delete, double-click to open a clip (audio "
-                 "or automation). Wheel: scroll, Ctrl+wheel: zoom");
+                 "or automation). Wheel: scroll, Ctrl+wheel: zoom, Ctrl+Shift+wheel: track height");
 
     lanes = std::make_unique<Lanes> (*this);
     headers = std::make_unique<Headers> (*this);
@@ -1251,6 +1253,10 @@ Playlist::Playlist (Session& s) : Panel ("playlist", "Playlist"), session (s)
             setSnap (snapChoices[i].second < 0 ? barTicks (session.getProject()) : snapChoices[i].second);
     };
     addAndMakeVisible (snapChoice);
+
+    timelineControls.onZoom = [this] (double factor) { zoom (factor); };
+    timelineControls.onFit = [this] { fitSong(); };
+    addAndMakeVisible (timelineControls);
 
     session.addChangeListener (this);
     historyListener = session.getHistory().addListener ([this] (const commands::ChangeSet&) { triggerAsyncUpdate(); });
@@ -1926,6 +1932,8 @@ void Playlist::resized()
         b.setBounds (toolbar.removeFromLeft (58));
     toolbar.removeFromLeft (8);
     snapChoice.setBounds (toolbar.removeFromLeft (150));
+    toolbar.removeFromLeft (8);
+    timelineControls.setBounds (toolbar.removeFromLeft (timelineControls.getPreferredWidth()));
 
     const int bar = 12;
     vertical.setBounds (area.removeFromRight (bar).withTrimmedTop (rulerHeight).withTrimmedBottom (bar));
@@ -1958,8 +1966,15 @@ void Playlist::scrollBarMoved (juce::ScrollBar* bar, double start)
 void Playlist::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)
 {
     if (e.mods.isCtrlDown())
-        pixelsPerBeat = juce::jlimit (2.0, 400.0, pixelsPerBeat * (wheel.deltaY > 0 ? 1.15 : 1.0 / 1.15));
-    else if (e.mods.isShiftDown() || std::abs (wheel.deltaX) > std::abs (wheel.deltaY))
+    {
+        const auto factor = timeline::wheelZoomFactor (wheel);
+        if (e.mods.isShiftDown())
+            zoomRows (factor);
+        else
+            zoom (factor, e.getEventRelativeTo (lanes.get()).position.x);
+        return;
+    }
+    if (e.mods.isShiftDown() || std::abs (wheel.deltaX) > std::abs (wheel.deltaY))
         scrollTicks =
             juce::jmax (0.0, scrollTicks - (double)(wheel.deltaX + (e.mods.isShiftDown() ? wheel.deltaY : 0.0f)) *
                                                16.0 * model::ticksPerQuarterNote);
@@ -1968,6 +1983,80 @@ void Playlist::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheel
 
     updateScrollBars();
     repaint();
+}
+
+void Playlist::mouseMagnify (const juce::MouseEvent& e, float scale)
+{
+    zoom (scale, e.getEventRelativeTo (lanes.get()).position.x);
+}
+
+bool Playlist::keyPressed (const juce::KeyPress& key)
+{
+    switch (timeline::zoomKeyOf (key))
+    {
+    case timeline::ZoomKey::in:
+        zoom (timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::out:
+        zoom (1.0 / timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::fit:
+        fitSong();
+        return true;
+    case timeline::ZoomKey::none:
+        break;
+    }
+    return false;
+}
+
+void Playlist::zoom (double factor, std::optional<float> aroundX)
+{
+    const auto x = aroundX.value_or ((float)lanes->getWidth() * 0.5f);
+    scrollTicks = timeline::zoomAround (pixelsPerBeat, scrollTicks, (double)x, factor, { 2.0, 400.0 },
+                                        model::ticksPerQuarterNote);
+    updateScrollBars();
+    repaint();
+}
+
+void Playlist::zoomRows (double factor)
+{
+    // The track under the middle of the view stays there.
+    const auto middle = (scrollY + lanes->getHeight() * 0.5) / rowHeight;
+    rowHeight = juce::jlimit (22, 160, juce::roundToInt (rowHeight * factor));
+    scrollY = juce::jmax (0.0, middle * rowHeight - lanes->getHeight() * 0.5);
+    updateScrollBars();
+    repaint();
+}
+
+void Playlist::fitSong()
+{
+    model::Ticks end = 0;
+    for (const auto& clip : session.getProject().playlist.clips)
+        end = juce::jmax (end, clip.start + clip.length);
+    if (end <= 0)
+        end = barTicks (session.getProject()) * 16;
+    pixelsPerBeat = juce::jlimit (
+        2.0, 400.0, juce::jmax (1, lanes->getWidth()) * 0.97 / ((double)end / model::ticksPerQuarterNote));
+    scrollTicks = 0.0;
+    updateScrollBars();
+    repaint();
+}
+
+double Playlist::getVisibleTicks() const { return lanes->getWidth() / pixelsPerBeat * model::ticksPerQuarterNote; }
+
+void Playlist::follow (double ticks)
+{
+    if (! isFollowing())
+        return;
+    // Not while the mouse is busy in the Playlist (a drag would jump away under it).
+    if (juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown() && isMouseOverOrDragging (true))
+        return;
+    if (const auto start = timeline::followPlayhead (ticks, scrollTicks, getVisibleTicks()))
+    {
+        scrollTicks = *start;
+        updateScrollBars();
+        repaint();
+    }
 }
 
 void Playlist::timerCallback()
@@ -1983,6 +2072,8 @@ void Playlist::timerCallback()
     if (std::abs (ticks - playheadTicks) > 1.0)
     {
         playheadTicks = ticks;
+        if (session.isPlaying())
+            follow (ticks);
         lanes->repaint();
         ruler->repaint();
     }

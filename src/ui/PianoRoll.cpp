@@ -1059,10 +1059,12 @@ private:
 };
 
 //==============================================================================
-PianoRoll::PianoRoll (Session& s) : Panel ("pianoRoll", "Piano Roll"), session (s)
+PianoRoll::PianoRoll (Session& s)
+    : Panel ("pianoRoll", "Piano Roll"), session (s),
+      timelineControls (&s.getEdit().engine.getPropertyStorage().getPropertiesFile(), "pianoRollFollows")
 {
     setHelpText ("Piano Roll (F7): click to add a note, drag to move, drag the right edge to resize, right-click to "
-                 "delete. Alt: no snap. Wheel: scroll, Ctrl+wheel: zoom");
+                 "delete. Alt: no snap. Wheel: scroll, Ctrl+wheel: zoom, Ctrl+Shift+wheel: key height");
 
     grid = std::make_unique<Grid> (*this);
     keyboard = std::make_unique<Keyboard> (*this);
@@ -1179,6 +1181,10 @@ PianoRoll::PianoRoll (Session& s) : Panel ("pianoRoll", "Piano Roll"), session (
     session.addChangeListener (this);
     session.getSuggestions().addChangeListener (this);
     historyListener = session.getHistory().addListener ([this] (const commands::ChangeSet&) { triggerAsyncUpdate(); });
+    timelineControls.onZoom = [this] (double factor) { zoom (factor); };
+    timelineControls.onFit = [this] { fitPattern(); };
+    addAndMakeVisible (timelineControls);
+
     reloadNotes();
     scrollToPitch (66);
     startTimerHz (30);
@@ -2033,6 +2039,8 @@ void PianoRoll::resized()
     chordBox.setBounds (top.removeFromRight (150).reduced (2, 1));
     toolsButton.setBounds (top.removeFromRight (64).reduced (2, 1));
     top.removeFromRight (4);
+    timelineControls.setBounds (top.removeFromRight (timelineControls.getPreferredWidth()).reduced (0, 1));
+    top.removeFromRight (4);
     if (recordIdeaButton.isVisible())
         recordIdeaButton.setBounds (top.removeFromRight (92).reduced (2, 1));
     if (generateButton.isVisible())
@@ -2058,14 +2066,55 @@ void PianoRoll::updateScrollBars()
     vertical.setCurrentRange (scrollY, grid->getHeight(), juce::dontSendNotification);
 }
 
-void PianoRoll::zoom (float factor, bool verticalZoom)
+void PianoRoll::zoom (double factor, std::optional<float> aroundX)
 {
-    if (verticalZoom)
-        keyHeight = juce::jlimit (6, 32, juce::roundToInt ((float)keyHeight * factor));
-    else
-        pixelsPerBeat = juce::jlimit (12.0, 800.0, pixelsPerBeat * factor);
+    const auto x = aroundX.value_or ((float)grid->getWidth() * 0.5f);
+    scrollTicks = timeline::zoomAround (pixelsPerBeat, scrollTicks, (double)x, factor, { 12.0, 800.0 },
+                                        model::ticksPerQuarterNote);
     updateScrollBars();
     repaint();
+}
+
+void PianoRoll::zoomKeys (double factor)
+{
+    const auto middle = (scrollY + grid->getHeight() * 0.5) / keyHeight;
+    auto next = juce::roundToInt (keyHeight * factor);
+    if (next == keyHeight && std::abs (factor - 1.0) > 1.0e-6)
+        next += factor > 1.0 ? 1 : -1; // small keys change by at least a pixel
+    keyHeight = juce::jlimit (6, 40, next);
+    scrollY = juce::jlimit (0.0, juce::jmax (0.0, 128.0 * keyHeight - grid->getHeight()),
+                            middle * keyHeight - grid->getHeight() * 0.5);
+    updateScrollBars();
+    repaint();
+}
+
+void PianoRoll::fitPattern()
+{
+    model::Ticks end = getPatternLength();
+    for (const auto& n : notes)
+        end = juce::jmax (end, n.start + n.length);
+    pixelsPerBeat = juce::jlimit (12.0, 800.0,
+                                  juce::jmax (1, grid->getWidth()) * 0.97 /
+                                      ((double)juce::jmax<model::Ticks> (1, end) / model::ticksPerQuarterNote));
+    scrollTicks = 0.0;
+    updateScrollBars();
+    repaint();
+}
+
+double PianoRoll::getVisibleTicks() const { return grid->getWidth() / pixelsPerBeat * model::ticksPerQuarterNote; }
+
+void PianoRoll::follow (double ticks)
+{
+    if (! isFollowing())
+        return;
+    if (juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown() && isMouseOverOrDragging (true))
+        return;
+    if (const auto start = timeline::followPlayhead (ticks, scrollTicks, getVisibleTicks()))
+    {
+        scrollTicks = *start;
+        updateScrollBars();
+        repaint();
+    }
 }
 
 void PianoRoll::scrollBarMoved (juce::ScrollBar* bar, double start)
@@ -2078,7 +2127,11 @@ void PianoRoll::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWhee
 {
     if (e.mods.isCtrlDown())
     {
-        zoom (wheel.deltaY > 0 ? 1.15f : 1.0f / 1.15f, e.mods.isShiftDown());
+        const auto factor = timeline::wheelZoomFactor (wheel);
+        if (e.mods.isShiftDown())
+            zoomKeys (factor);
+        else
+            zoom (factor, e.getEventRelativeTo (grid.get()).position.x);
         return;
     }
 
@@ -2094,6 +2147,30 @@ void PianoRoll::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWhee
     repaint();
 }
 
+void PianoRoll::mouseMagnify (const juce::MouseEvent& e, float scale)
+{
+    zoom (scale, e.getEventRelativeTo (grid.get()).position.x);
+}
+
+bool PianoRoll::keyPressed (const juce::KeyPress& key)
+{
+    switch (timeline::zoomKeyOf (key))
+    {
+    case timeline::ZoomKey::in:
+        zoom (timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::out:
+        zoom (1.0 / timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::fit:
+        fitPattern();
+        return true;
+    case timeline::ZoomKey::none:
+        break;
+    }
+    return false;
+}
+
 void PianoRoll::timerCallback()
 {
     double ticks = -1.0;
@@ -2107,6 +2184,7 @@ void PianoRoll::timerCallback()
     if (std::abs (ticks - playheadTicks) > 1.0)
     {
         playheadTicks = ticks;
+        follow (ticks);
         grid->repaint();
     }
 }

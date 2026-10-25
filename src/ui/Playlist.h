@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TimelineControls.h"
 #include "Workspace.h"
 #include "session/Session.h"
 
@@ -17,7 +18,9 @@ namespace spinus::ui
     selects, Shift+click adds to the selection; double-click makes the clip's pattern the current one (or
     opens an audio clip in Spinus Tune, an automation clip in the Automation editor). Tools: Draw, Paint
     (the current pattern again and again as far as you drag), Slice (cut clips along a line), Select.
-    Delete, Ctrl+A, Escape. Click the ruler to move the song position. Clips snap to the grid chosen
+    Delete, Ctrl+A, Escape. Click the ruler to move the song position. Zoom: the toolbar's buttons, Ctrl+= and
+    Ctrl+- (Ctrl+0 fits the song), Ctrl+wheel around the mouse; Ctrl+Shift+wheel makes the tracks taller or
+    shorter. Follow (on by default, remembered) turns the page while the song plays. Clips snap to the grid chosen
     next to the tools (Alt: free). Drop audio files from the file manager to add audio clips. Every
     gesture is one undo step.
 */
@@ -163,10 +166,29 @@ public:
     int rowAtY (float y) const;
     void handleUpdateNowIfNeeded() { juce::AsyncUpdater::handleUpdateNowIfNeeded(); }
 
+    //==============================================================================
+    // The view: zoom (`aroundX`: pixels from the lanes' left, where the time stays put; none: the middle),
+    // track height, and following the song position while it plays.
+    void zoom (double factor, std::optional<float> aroundX = {});
+    void zoomRows (double factor);
+    /** Shows the whole song (every clip) across the view. */
+    void fitSong();
+    double getPixelsPerBeat() const noexcept { return pixelsPerBeat; }
+    int getRowHeight() const noexcept { return rowHeight; }
+    double getScrollTicks() const noexcept { return scrollTicks; }
+    bool isFollowing() const { return timelineControls.isFollowing(); }
+    void setFollowing (bool follow) { timelineControls.setFollowing (follow); }
+    /** Where the view starts and how much it shows, in ticks. */
+    double getVisibleTicks() const;
+    /** Turns the page when `ticks` (the song position while it plays) has left the view and Follow is on. */
+    void follow (double ticks);
+
     juce::Rectangle<int> getDefaultBounds() const override { return { 80, 60, 820, 400 }; }
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseMagnify (const juce::MouseEvent&, float scale) override;
+    bool keyPressed (const juce::KeyPress&) override;
 
 private:
     class Lanes;
@@ -215,6 +237,7 @@ private:
     juce::ScrollBar horizontal { false }, vertical { true };
     juce::TextButton toolButtons[4];
     juce::ComboBox snapChoice;
+    TimelineControls timelineControls;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Playlist)
 };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TimelineControls.h"
 #include "ai/AiService.h"
 #include "session/Session.h"
 
@@ -46,7 +47,13 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseMagnify (const juce::MouseEvent&, float scale) override;
     bool keyPressed (const juce::KeyPress&) override;
+
+    /** Zooms the time around `x` (none: the grid's middle); fit shows the whole clip. */
+    void zoom (double factor, std::optional<float> x = {});
+    void fit();
+    double getPixelsPerSecond() const noexcept { return pixelsPerSecond; }
 
 private:
     void load();
@@ -88,6 +95,7 @@ private:
     } drag;
 
     juce::TextButton joinButton { "Join" }, snapButton { "Snap to key" }, resetButton { "Reset" };
+    TimelineControls zoomControls { nullptr, {} };
     juce::Slider driftSlider, vibratoSlider;
     juce::Label driftLabel, vibratoLabel, status;
 
