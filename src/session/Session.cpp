@@ -241,7 +241,7 @@ void Session::play()
     if (transport.isPlaying())
         return;
 
-    applyLoop();
+    applyLoop (true);
     if (mode == Mode::pattern)
     {
         // Pattern mode always plays the pattern (or its loop region) from its start, looping.
@@ -272,6 +272,7 @@ void Session::stop()
         lastLauncherRecorded = launcherRecorder->finish(); // before the launched clips stop
     adapter->stopLauncher (true);
     transport.stop (false, false);
+    applyLoop(); // stopped: no loop (see applyLoop)
     transport.setPosition (playStart);
     sendChangeMessage();
 }
@@ -354,22 +355,55 @@ void Session::setMode (Mode newMode)
     sendChangeMessage();
 }
 
-void Session::applyLoop()
+void Session::applyLoop (bool startingPlayback)
 {
+    // Tracktion's play head switches looping on before it takes the new loop range (PlayHead::setLoopRange),
+    // so for a moment the audio thread can loop over the play head's old range. When that range is empty
+    // (0..0: a play head that never looped, or one whose looping was switched off) the audio thread divides by
+    // its length: SIGFPE, Spinus gone (seen adding a Windows plugin to a new project, whose empty pattern mode
+    // looped while stopped). Tracktion's timer makes that switch whenever the transport says "loop" and the
+    // play head does not loop yet. So:
+    //  - the transport loops only while it plays: starting playback (PlayHead::play) sets the range before
+    //    looping, and stopping switches looping off before clearing the range;
+    //  - during playback looping is never switched off (that would leave the play head an empty range to loop
+    //    the next time): a song loop region cleared while playing becomes a loop over the rest of the song
+    //    until playback stops;
+    //  - looping is never asked for over an empty range: without a pattern, pattern mode loops one bar.
     auto& transport = edit->getTransport();
+    const bool playing = startingPlayback || transport.isPlaying();
+    std::optional<te::TimeRange> loop;
     if (mode == Mode::pattern)
     {
-        const auto whole = adapter->getPatternLoopRange();
-        auto range = patternLoop ? toTimeRange (*patternLoop).getIntersectionWith (whole) : whole;
-        transport.setLoopRange (range.isEmpty() ? whole : range);
-        transport.looping = true;
+        auto whole = adapter->getPatternLoopRange();
+        if (whole.isEmpty())
+        {
+            const auto& signature = getProject().settings.timeSignature;
+            whole = toTimeRange (LoopRegion { 0, model::ticksPerQuarterNote * 4 * juce::jmax (1, signature.numerator) /
+                                                     juce::jmax (1, signature.denominator) });
+        }
+        const auto range = patternLoop ? toTimeRange (*patternLoop).getIntersectionWith (whole) : whole;
+        loop = range.isEmpty() ? whole : range;
     }
-    else
+    else if (songLoop)
     {
-        if (songLoop)
-            transport.setLoopRange (toTimeRange (*songLoop));
-        transport.looping = songLoop.has_value();
+        loop = toTimeRange (*songLoop);
     }
+
+    if (! playing)
+    {
+        if (loop)
+            transport.setLoopRange (*loop);
+        transport.looping = false;
+        return;
+    }
+    if (loop)
+    {
+        transport.setLoopRange (*loop);
+        transport.looping = true;
+        return;
+    }
+    if (transport.looping.get())
+        transport.setLoopRange ({ transport.getPosition(), te::Edit::getMaximumEditEnd() });
 }
 
 te::TimeRange Session::toTimeRange (LoopRegion region) const
