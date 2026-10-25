@@ -34,6 +34,9 @@ public:
     static juce::ValueTree builtIn (const juce::String& name);
 
 private:
+    /** Reads the file again before a change is written, so two Spinus windows open at once don't lose each
+        other's layouts. */
+    void reload();
     void write() const;
 
     juce::File file;

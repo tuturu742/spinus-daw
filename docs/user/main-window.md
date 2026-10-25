@@ -48,11 +48,15 @@ A layout is a set of open panels in their places, for one kind of work. **View �
 
 Panels a layout doesn't list are closed. To keep your own, arrange the panels (and the Browser and
 Assistant) the way you like, then **View › Layouts › Save layout...** and give it a name: it appears in
-the list. Saving under the name Compose, Arrange or Mix changes that one; **Delete layout › Reset ... to
-Spinus's** brings Spinus's back. Panels in their own windows are saved where they are on the screen.
+the list. Your own layouts get the next shortcuts, in the order you saved them: **Ctrl+Alt+4** for the first,
+up to **Ctrl+Alt+9**. Saving under the name Compose, Arrange or Mix changes that one; **Delete layout ›
+Reset ... to Spinus's** brings Spinus's back. Panels in their own windows are saved where they are on the
+screen.
 
-Spinus also opens with the panels where they were when you last closed it. Layouts are kept for you, not
-in projects (in `~/.config/Spinus DAW/layouts.xml`).
+Spinus also opens with the panels where they were when you last used it: it keeps them a few seconds
+after each change, so they come back even if Spinus was ended without closing. Layouts are kept for you,
+not in projects (in `~/.config/Spinus DAW/layouts.xml`). Two Spinus windows open at once keep each other's
+saved layouts.
 
 ## Transport
 

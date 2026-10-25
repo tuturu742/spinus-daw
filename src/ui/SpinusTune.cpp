@@ -1,5 +1,6 @@
 #include "SpinusTune.h"
 
+#include "Shortcuts.h"
 #include "Theme.h"
 #include "commands/CommandRegistry.h"
 #include "engine/TuneRender.h"
@@ -553,6 +554,7 @@ SpinusTuneWindow::SpinusTuneWindow (Session& session, model::ClipId clip, ai::Ai
     setUsingNativeTitleBar (true);
     setResizable (true, false);
     centreWithSize (getWidth(), getHeight());
+    shortcuts::addTo (*this);
 }
 
 void SpinusTuneWindow::closeButtonPressed()

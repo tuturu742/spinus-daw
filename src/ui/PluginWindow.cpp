@@ -1,4 +1,5 @@
 #include "PluginWindow.h"
+#include "Shortcuts.h"
 
 #include "WindowStacking.h"
 #include "engine/EngineHost.h"
@@ -87,6 +88,7 @@ PluginWindow::PluginWindow (te::Plugin& p, const juce::String& title, juce::Comp
         setConstrainer (editor->getBoundsConstrainer());
 
     setTopLeftPosition (plugin.windowState->choosePositionForPluginWindow());
+    shortcuts::addTo (*this);
     addToDesktop();
     if (owner != nullptr)
         keepAboveOwner (*this, *owner);
@@ -95,6 +97,7 @@ PluginWindow::PluginWindow (te::Plugin& p, const juce::String& title, juce::Comp
 
 PluginWindow::~PluginWindow()
 {
+    shortcuts::removeFrom (*this);
     trackBounds = false;
     plugin.edit.flushPluginStateIfNeeded (plugin);
     clearContentComponent();

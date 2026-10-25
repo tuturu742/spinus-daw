@@ -1,5 +1,6 @@
 #include "Workspace.h"
 
+#include "Shortcuts.h"
 #include "Theme.h"
 
 #include <set>
@@ -177,9 +178,14 @@ public:
         setContentNonOwned (&panel, false);
         setContentComponentSize (juce::jmax (300, size.getWidth()), juce::jmax (200, size.getHeight()));
         setTopLeftPosition (w.getScreenPosition() + juce::Point<int> (60, 60));
+        shortcuts::addTo (*this);
     }
 
-    ~DetachedWindow() override { setLookAndFeel (nullptr); }
+    ~DetachedWindow() override
+    {
+        shortcuts::removeFrom (*this);
+        setLookAndFeel (nullptr);
+    }
 
     void closeButtonPressed() override { workspace.attachPanel (panel.getPanelId()); }
 
