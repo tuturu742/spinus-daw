@@ -685,6 +685,56 @@ TEST_CASE ("Copy, cut, paste and duplicate notes, also into another channel", "[
     CHECK (PianoRoll::getCopiedNotes().size() == 3);
 }
 
+TEST_CASE ("Piano Roll keys: Shift+arrows, Ctrl+Up/Down an octave, the note tools", "[ui][pianoroll]")
+{
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Lead"));
+    REQUIRE (r.roll.addNote (60, 0, 480, 0.8f));
+    REQUIRE (r.roll.addNote (64, 480, 480, 0.8f));
+    auto* grid = r.roll.getChildComponent (0);
+    REQUIRE (grid != nullptr);
+    using KP = juce::KeyPress;
+    constexpr auto ctrl = juce::ModifierKeys::ctrlModifier, shift = juce::ModifierKeys::shiftModifier;
+    const auto pitches = [&r]
+    {
+        std::vector<int> p;
+        for (auto& n : r.roll.getNotes())
+            p.push_back (n.pitch);
+        return p;
+    };
+
+    // Nothing selected: the keys move every note, one undo step each.
+    const auto before = r.session.getHistory().getUndoDescriptions().size();
+    CHECK (grid->keyPressed (KP (KP::upKey, ctrl, 0)));
+    CHECK (pitches() == std::vector<int> { 72, 76 });
+    CHECK (grid->keyPressed (KP (KP::downKey, shift, 0)));
+    CHECK (pitches() == std::vector<int> { 71, 75 });
+    CHECK (r.session.getHistory().getUndoDescriptions().size() == before + 2);
+
+    // A selection: only it moves. Shift+Right moves it a snap step.
+    r.roll.setSelection ({ 1 });
+    CHECK (grid->keyPressed (KP (KP::downKey, ctrl, 0)));
+    CHECK (pitches() == std::vector<int> { 71, 63 });
+    const auto was = r.roll.getNotes()[1].start;
+    CHECK (grid->keyPressed (KP (KP::rightKey, shift, 0)));
+    CHECK (r.roll.getNotes()[1].start > was);
+    CHECK (r.roll.getNotes()[0].start == 0);
+
+    // Nothing moves past the keyboard's ends or before the start.
+    r.roll.setSelection ({ 0 });
+    CHECK (grid->keyPressed (KP (KP::leftKey, shift, 0)));
+    CHECK (r.roll.getNotes()[0].start == 0);
+    CHECK (! r.roll.transposeSelection (60));
+    CHECK (pitches()[0] == 71);
+
+    // Ctrl+D selects nothing; Ctrl+L is legato on all the notes.
+    CHECK (grid->keyPressed (KP ('d', ctrl, 0)));
+    CHECK (r.roll.getSelection().empty());
+    CHECK (grid->keyPressed (PianoRoll::getNoteToolKey (PianoRoll::NoteTool::legato)));
+    CHECK (r.session.getHistory().getUndoDescriptions().strings.getLast() == "Legato");
+    CHECK (r.roll.getNotes()[0].start + r.roll.getNotes()[0].length == r.roll.getNotes()[1].start);
+}
+
 TEST_CASE ("Chords: named, built from the key, and stamped with one click", "[ui][pianoroll]")
 {
     using model::nameChord;

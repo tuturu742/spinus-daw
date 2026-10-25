@@ -236,6 +236,69 @@ TEST_CASE ("Playlist selection: box, Shift+click, Ctrl+A, Escape; it follows und
     CHECK (s.model().clips.size() == 3);
 }
 
+TEST_CASE ("Playlist keys: copy, cut, paste, duplicate, and Shift+arrows move the selection", "[ui][playlist]")
+{
+    ThreeClips s;
+    LaneMouse mouse (s.playlist);
+    using KP = juce::KeyPress;
+    constexpr auto ctrl = juce::ModifierKeys::ctrlModifier, shift = juce::ModifierKeys::shiftModifier;
+    const auto bar = (model::Ticks)3840;
+
+    // Ctrl+B: the first track's two clips (bars 1 and 3) again right after themselves (three bars on).
+    s.playlist.setSelection ({ s.ids[0], s.ids[1] });
+    const auto before = s.steps();
+    CHECK (mouse.lanes->keyPressed (KP ('b', ctrl, 0)));
+    REQUIRE (s.model().clips.size() == 5);
+    CHECK (s.steps() == before + 1);
+    CHECK (s.session.getHistory().getUndoDescriptions().strings.getLast() == "Duplicate clips");
+    std::set<model::Ticks> copies;
+    for (auto id : s.playlist.getSelection())
+    {
+        const auto* copy = s.session.getProject().findClip (id);
+        REQUIRE (copy != nullptr);
+        CHECK (copy->lane == s.clip (0).lane);
+        CHECK (copy->content == s.clip (0).content);
+        copies.insert (copy->start);
+    }
+    CHECK (copies == std::set<model::Ticks> { bar * 3, bar * 5 });
+
+    // Shift+arrows: a grid step later, then a track down; the selection moves, one step each.
+    s.playlist.setSnap (bar);
+    CHECK (mouse.lanes->keyPressed (KP (KP::rightKey, shift, 0)));
+    CHECK (mouse.lanes->keyPressed (KP (KP::downKey, shift, 0)));
+    for (auto id : s.playlist.getSelection())
+    {
+        const auto* moved = s.session.getProject().findClip (id);
+        CHECK ((moved->start == bar * 4 || moved->start == bar * 6));
+        CHECK (moved->lane == s.clip (2).lane);
+    }
+    CHECK (mouse.lanes->keyPressed (KP (KP::upKey, shift, 0)));
+    CHECK (mouse.lanes->keyPressed (KP (KP::upKey, shift, 0))); // above the first track: stays
+    for (auto id : s.playlist.getSelection())
+        CHECK (s.session.getProject().findClip (id)->lane == s.clip (0).lane);
+
+    // Ctrl+C then Ctrl+V on the same clips: right after them. Ctrl+X then Ctrl+V: back where they were.
+    s.playlist.setSelection ({ s.ids[2] });
+    CHECK (mouse.lanes->keyPressed (KP ('c', ctrl, 0)));
+    CHECK (Playlist::getCopiedClips().size() == 1);
+    CHECK (mouse.lanes->keyPressed (KP ('v', ctrl, 0)));
+    REQUIRE (s.playlist.getSelection().size() == 1);
+    CHECK (s.session.getProject().findClip (*s.playlist.getSelection().begin())->start == bar * 2);
+
+    s.playlist.setSelection ({ s.ids[2] });
+    CHECK (mouse.lanes->keyPressed (KP ('x', ctrl, 0)));
+    CHECK (s.session.getProject().findClip (s.ids[2]) == nullptr);
+    CHECK (s.session.getHistory().getUndoDescriptions().strings.getLast() == "Cut clip");
+    CHECK (mouse.lanes->keyPressed (KP ('v', ctrl, 0)));
+    const auto* back = s.session.getProject().findClip (*s.playlist.getSelection().begin());
+    CHECK (back->start == bar);
+    CHECK (back->lane == s.model().lanes[1].id);
+
+    // Ctrl+D selects nothing.
+    CHECK (mouse.lanes->keyPressed (KP ('d', ctrl, 0)));
+    CHECK (s.playlist.getSelection().empty());
+}
+
 TEST_CASE ("Playlist: dragging a selected clip moves and resizes the selection, one step each", "[ui][playlist]")
 {
     ThreeClips s;

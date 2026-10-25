@@ -12,16 +12,17 @@ automatically.
 | Move a note | Drag it. |
 | Change a note's length | Drag its right edge. |
 | Delete notes | Right-click a note, or hold the right button and drag over several: every note it touches goes. |
-| Select notes | **Ctrl**+drag a box around them (add **Shift** to keep what is already selected), or **Shift**+click notes one by one. **Ctrl+A** selects all, **Escape** none. Selected notes have a bright outline. |
+| Select notes | **Ctrl**+drag a box around them (add **Shift** to keep what is already selected), or **Shift**+click notes one by one. **Ctrl+A** selects all, **Escape** or **Ctrl+D** none. Selected notes have a bright outline. |
 | Move or resize several | Drag one of the selected notes: they all move together. Drag the right edge of a selected note: they all get longer or shorter by the same amount. A note that is not selected moves on its own. |
 | Delete the selection | **Delete** (or **Backspace**). |
 | Copy, cut, paste | **Ctrl+C** copies the selected notes (all of them when none is selected), **Ctrl+X** cuts them. **Ctrl+V** pastes them at the same times into the channel shown now: choose another channel in the Channel Rack (or another pattern) to copy a part to another instrument. Pasting where they came from puts them right after instead. The pasted notes are selected, ready to move. |
 | Duplicate | **Ctrl+B** puts the selection (or all notes) again right after itself. |
+| Move with the keys | **Shift+Up** / **Shift+Down** move the selected notes (or all notes) a semitone, **Ctrl+Up** / **Ctrl+Down** an octave, **Shift+Left** / **Shift+Right** a snap step (a sixteenth with no snap). Each press is one undo step. |
 | Place freely (no grid) | Hold **Alt** while dragging. |
 | Velocity, pan and more | Drag a bar in the lane at the bottom up or down (see below). Right-click a bar to reset it. |
 | Loop part of the pattern | Hold the right mouse button and drag across the timeline above the notes: pattern mode then plays only that part, over and over. The part is shaded across the notes too. Right-click the timeline to loop the whole pattern again (choosing another pattern does too). |
 | Scroll | Mouse wheel (up/down), **Shift**+wheel (left/right), or the scroll bars. |
-| Zoom | The **−**, **+** and **Fit** buttons at the top (Fit shows the whole pattern), **Ctrl+=** and **Ctrl+-** (**Ctrl+0**: fit), or **Ctrl**+wheel, which zooms around the mouse. **Ctrl+Shift**+wheel makes the keys taller or shorter. |
+| Zoom | The **−**, **+** and **Fit** buttons at the top (Fit shows the whole pattern), **Ctrl+=** and **Ctrl+-** or **Page Up** and **Page Down** (**Ctrl+0**: fit), or **Ctrl**+wheel, which zooms around the mouse. **Ctrl+Shift**+wheel makes the keys taller or shorter. |
 | Follow the playing | **Follow** at the top: while the pattern plays, the view turns the page when the play position reaches its edge. On by default; Spinus remembers your choice. |
 
 - Notes snap to the grid chosen beside the tools: **Step** (the default) follows the pattern's Channel
@@ -70,17 +71,17 @@ Each paint stroke, cut or deletion is one undo step.
 
 ## Note tools
 
-**Tools** (beside the chord list) changes the selected notes, or all of them when none is selected, as one
-undo step:
+**Tools** (at the top, beside the chord list) changes the selected notes, or all of them when none is
+selected, as one undo step. Each tool has a key, shown in the menu (FL Studio's, where it has one):
 
 | Tool | What it does |
 |---|---|
-| **Quantize** | Moves each note's start to the nearest snap line. |
-| **Strum up** / **Strum down** | Notes that start together (a chord) start one after another, a moment apart, from the lowest or the highest, like a strummed guitar. They still end together. |
-| **Arpeggiate** | A chord becomes its notes one after another, one per snap step, going up and starting again, for as long as the chord lasted. |
-| **Chop** | Cuts each note into repeats one snap step long (FL's note repeat): for rolls and stutters. |
-| **Legato** | Each note lasts until the next one starts. |
-| **Humanize velocities** | Makes each note a little louder or softer at random, so repeated notes sound less mechanical. |
+| **Quantize** (**Alt+Q**) | Moves each note's start to the nearest snap line. |
+| **Strum up** / **Strum down** (**Alt+S** / **Alt+Shift+S**) | Notes that start together (a chord) start one after another, a moment apart, from the lowest or the highest, like a strummed guitar. They still end together. |
+| **Arpeggiate** (**Alt+A**) | A chord becomes its notes one after another, one per snap step, going up and starting again, for as long as the chord lasted. |
+| **Chop** (**Ctrl+U**) | Cuts each note into repeats one snap step long (FL's note repeat): for rolls and stutters. |
+| **Legato** (**Ctrl+L**) | Each note lasts until the next one starts. |
+| **Humanize velocities** (**Alt+R**) | Makes each note a little louder or softer at random, so repeated notes sound less mechanical. |
 
 **Slides:** with [3x Osc](3x-osc.md#slides-mono) set to **Mono (slides)**, a note that overlaps the next
 one slides to it. Drag a note's end a little past the next note's start to make a slide.

@@ -41,7 +41,7 @@ class PianoRoll final : public Panel,
                         private juce::ScrollBar::Listener
 {
 public:
-    static constexpr int keyboardWidth = 56, rulerHeight = 22, velocityHeight = 64;
+    static constexpr int keyboardWidth = 56, toolbarHeight = 30, rulerHeight = 22, velocityHeight = 64;
 
     /** What the lane at the bottom edits. */
     enum class LaneMode
@@ -97,6 +97,11 @@ public:
 
     /** Moves every selected note (one undo step). */
     bool moveSelection (model::Ticks deltaTicks, int deltaPitch);
+    /** The keys' moves (Shift+Up/Down a semitone, Ctrl+Up/Down an octave, Shift+Left/Right a snap step,
+        a 16th without snap): the selected notes, or all of them when none is. Nothing moves when a note would go
+        past the lowest or highest key or before the pattern's start. */
+    bool transposeSelection (int semitones);
+    bool nudgeSelection (int steps);
     /** Lengthens (or shortens) every selected note by the same amount, each at least `minimum` long. */
     bool resizeSelection (model::Ticks deltaTicks, model::Ticks minimum = 1);
     bool deleteSelection();
@@ -235,6 +240,9 @@ public:
         humanize
     };
     bool applyNoteTool (NoteTool);
+    /** Each tool's key, FL Studio's where it has one: Alt+Q quantize, Alt+S strum up, Alt+Shift+S strum down,
+        Alt+A arpeggiate, Ctrl+U chop, Ctrl+L legato, Alt+R humanize. */
+    static juce::KeyPress getNoteToolKey (NoteTool);
     static constexpr model::Ticks strumSpacing = 40; // a 24th of a beat between the notes of a strum
     Snap getSnapChoice() const noexcept { return snapChoice; }
     /** The current pattern's time signature (its own, or the song's), and its bar in ticks. */

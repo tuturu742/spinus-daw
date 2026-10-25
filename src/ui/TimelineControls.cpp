@@ -26,6 +26,11 @@ std::optional<double> followPlayhead (double playhead, double scroll, double vis
 ZoomKey zoomKeyOf (const juce::KeyPress& key)
 {
     const auto mods = key.getModifiers();
+    // Page Up and Page Down on their own, as in FL Studio.
+    if (! mods.isAnyModifierKeyDown() && key.getKeyCode() == juce::KeyPress::pageUpKey)
+        return ZoomKey::in;
+    if (! mods.isAnyModifierKeyDown() && key.getKeyCode() == juce::KeyPress::pageDownKey)
+        return ZoomKey::out;
     if (! mods.isCommandDown() || mods.isAltDown())
         return ZoomKey::none;
     const auto code = key.getKeyCode();

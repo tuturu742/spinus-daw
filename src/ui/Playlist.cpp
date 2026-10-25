@@ -662,7 +662,27 @@ public:
             playlist.selectAll();
             return true;
         }
-        if (key == juce::KeyPress::escapeKey && ! playlist.selection.empty())
+        using KP = juce::KeyPress;
+        constexpr auto ctrl = juce::ModifierKeys::ctrlModifier, shift = juce::ModifierKeys::shiftModifier;
+        const auto step = playlist.getGridStep();
+        // The clipboard, and Shift+arrows moving the selected clips a grid step or a track (FL Studio's keys).
+        const std::pair<KP, std::function<void()>> edits[] = {
+            { KP ('c', ctrl, 0), [this] { playlist.copySelection(); } },
+            { KP ('x', ctrl, 0), [this] { playlist.cutSelection(); } },
+            { KP ('v', ctrl, 0), [this] { playlist.paste(); } },
+            { KP ('b', ctrl, 0), [this] { playlist.duplicateSelection(); } },
+            { KP (KP::leftKey, shift, 0), [this, step] { playlist.moveClips (playlist.selection, -step, 0); } },
+            { KP (KP::rightKey, shift, 0), [this, step] { playlist.moveClips (playlist.selection, step, 0); } },
+            { KP (KP::upKey, shift, 0), [this] { playlist.moveClips (playlist.selection, 0, -1); } },
+            { KP (KP::downKey, shift, 0), [this] { playlist.moveClips (playlist.selection, 0, 1); } },
+        };
+        for (auto& [edit, action] : edits)
+            if (key == edit)
+            {
+                action();
+                return true;
+            }
+        if ((key == KP::escapeKey || key == KP ('d', ctrl, 0)) && ! playlist.selection.empty())
         {
             playlist.clearSelection();
             return true;
@@ -1658,6 +1678,125 @@ bool Playlist::deleteClips (const std::set<model::ClipId>& ids)
         if (ids.contains (clip.id))
             steps.add (step ("clip.remove", object ({ { "clip", (int)clip.id.value } })));
     return performAll (steps.size() == 1 ? "Delete clip" : "Delete clips", steps);
+}
+
+namespace
+{
+std::vector<model::Clip>& copiedClips()
+{
+    static std::vector<model::Clip> clips;
+    return clips;
+}
+
+/** How far to move clips so that they come right after themselves: their span, rounded up to whole bars. */
+model::Ticks spanAfter (const std::vector<model::Clip>& clips, model::Ticks bar)
+{
+    model::Ticks from = std::numeric_limits<model::Ticks>::max(), to = 0;
+    for (const auto& c : clips)
+    {
+        from = std::min (from, c.start);
+        to = std::max (to, c.start + c.length);
+    }
+    const auto unit = juce::jmax<model::Ticks> (1, bar);
+    return (juce::jmax<model::Ticks> (1, to - from) + unit - 1) / unit * unit;
+}
+} // namespace
+
+const std::vector<model::Clip>& Playlist::getCopiedClips() { return copiedClips(); }
+
+std::vector<model::Clip> Playlist::getSelectedClips() const
+{
+    std::vector<model::Clip> chosen;
+    for (auto& clip : session.getProject().playlist.clips)
+        if (selection.contains (clip.id))
+            chosen.push_back (clip);
+    return chosen;
+}
+
+bool Playlist::copySelection()
+{
+    auto chosen = getSelectedClips();
+    if (chosen.empty())
+        return false;
+    copiedClips() = std::move (chosen);
+    return true;
+}
+
+bool Playlist::cutSelection()
+{
+    if (! copySelection())
+        return false;
+    const auto count = selection.size();
+    juce::Array<juce::var> steps;
+    for (auto& clip : copiedClips())
+        steps.add (step ("clip.remove", object ({ { "clip", (int)clip.id.value } })));
+    return performAll (count > 1 ? "Cut clips" : "Cut clip", steps);
+}
+
+bool Playlist::placeCopies (std::vector<model::Clip> clips, const juce::String& description)
+{
+    if (clips.empty())
+        return false;
+    const auto& project = session.getProject();
+    std::set<model::ClipId> before;
+    for (auto& clip : project.playlist.clips)
+        before.insert (clip.id);
+
+    juce::Array<juce::var> steps;
+    for (auto& clip : clips)
+    {
+        // A track removed since copying: the copy goes on the first track.
+        if (project.findLane (clip.lane) == nullptr && ! project.playlist.lanes.empty())
+            clip.lane = project.playlist.lanes.front().id;
+        auto json = model::clipToJson (clip);
+        json.getDynamicObject()->removeProperty ("id");
+        steps.add (step ("clip.add", object ({ { "clip", json } })));
+    }
+    if (! performAll (description, steps))
+        return false;
+
+    std::set<model::ClipId> made;
+    for (auto& clip : session.getProject().playlist.clips)
+        if (! before.contains (clip.id))
+            made.insert (clip.id);
+    setSelection (std::move (made));
+    return true;
+}
+
+bool Playlist::paste()
+{
+    auto pasted = copiedClips();
+    if (pasted.empty())
+        return false;
+    // Pasting onto the very same clips (not cut, not moved since): right after them instead.
+    const auto& project = session.getProject();
+    const bool samePlace =
+        std::all_of (pasted.begin(), pasted.end(),
+                     [&project] (const model::Clip& c)
+                     {
+                         return std::find (project.playlist.clips.begin(), project.playlist.clips.end(), c) !=
+                                project.playlist.clips.end();
+                     });
+    if (samePlace)
+    {
+        const auto shift = spanAfter (pasted, barTicks (project));
+        for (auto& c : pasted)
+            c.start += shift;
+    }
+    const auto description = pasted.size() > 1 ? "Paste clips" : "Paste clip";
+    return placeCopies (std::move (pasted), description);
+}
+
+bool Playlist::duplicateSelection()
+{
+    auto copies = getSelectedClips();
+    if (copies.empty())
+        return false;
+    const auto shift = spanAfter (copies, barTicks (session.getProject()));
+    for (auto& c : copies)
+        c.start += shift;
+    const auto description = copies.size() > 1 ? "Duplicate clips" : "Duplicate clip";
+    return placeCopies (std::move (copies), description);
 }
 
 bool Playlist::slice (model::Ticks at, int firstRow, int lastRow)

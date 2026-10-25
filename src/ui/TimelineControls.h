@@ -25,7 +25,7 @@ double zoomAround (double& pixelsPerBeat, double scrollTicks, double x, double f
     is in view. */
 std::optional<double> followPlayhead (double playhead, double scroll, double visible);
 
-/** The zoom keys: Ctrl+= (or Ctrl++) zooms in, Ctrl+- out, Ctrl+0 fits. */
+/** The zoom keys: Ctrl+= (or Ctrl++) or Page Up zooms in, Ctrl+- or Page Down out, Ctrl+0 fits. */
 enum class ZoomKey
 {
     none,

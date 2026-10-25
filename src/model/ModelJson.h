@@ -24,6 +24,8 @@ juce::String deviceFromJson (const juce::var&, Device& result);
 juce::var targetToJson (const ParameterTarget&);
 juce::String targetFromJson (const juce::var&, ParameterTarget& result);
 juce::var pointToJson (const AutomationPoint&);
+juce::var clipToJson (const Clip&);
+juce::String clipFromJson (const juce::var&, Clip& result);
 juce::var tuneNoteToJson (const TuneNote&);
 juce::String tuneNoteFromJson (const juce::var&, TuneNote& result);
 juce::String pointFromJson (const juce::var&, AutomationPoint& result);

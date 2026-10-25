@@ -711,6 +711,15 @@ juce::String deviceFromJson (const juce::var& json, Device& result)
 
 juce::var targetToJson (const ParameterTarget& t) { return write (t); }
 
+juce::var clipToJson (const Clip& c) { return write (c); }
+
+juce::String clipFromJson (const juce::var& json, Clip& result)
+{
+    Reader r;
+    result = r.clip (json);
+    return r.errors.joinIntoString ("; ");
+}
+
 juce::String targetFromJson (const juce::var& json, ParameterTarget& result)
 {
     Reader r;

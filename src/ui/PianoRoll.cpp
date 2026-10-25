@@ -537,12 +537,54 @@ public:
             roll.duplicateSelection();
             return true;
         }
-        if (key == juce::KeyPress::escapeKey && ! roll.getSelection().empty())
+        if ((key == juce::KeyPress::escapeKey || key == juce::KeyPress ('d', juce::ModifierKeys::ctrlModifier, 0)) &&
+            ! roll.getSelection().empty())
         {
             roll.clearSelection();
             return true;
         }
+        if (const auto move = moveKeyOf (key))
+        {
+            if (move->semitones != 0)
+                roll.transposeSelection (move->semitones);
+            else
+                roll.nudgeSelection (move->steps);
+            return true;
+        }
+        using NoteTool = PianoRoll::NoteTool;
+        for (auto tool : { NoteTool::quantize, NoteTool::strumUp, NoteTool::strumDown, NoteTool::arpeggiate,
+                           NoteTool::chop, NoteTool::legato, NoteTool::humanize })
+            if (key == PianoRoll::getNoteToolKey (tool))
+            {
+                roll.applyNoteTool (tool);
+                return true;
+            }
         return false;
+    }
+
+    struct Move
+    {
+        int semitones = 0, steps = 0;
+    };
+
+    /** Shift+Up/Down a semitone, Ctrl+Up/Down an octave, Shift+Left/Right a step (FL Studio's keys). */
+    static std::optional<Move> moveKeyOf (const juce::KeyPress& key)
+    {
+        using KP = juce::KeyPress;
+        constexpr auto shift = juce::ModifierKeys::shiftModifier, ctrl = juce::ModifierKeys::ctrlModifier;
+        if (key == KP (KP::upKey, shift, 0))
+            return Move { 1, 0 };
+        if (key == KP (KP::downKey, shift, 0))
+            return Move { -1, 0 };
+        if (key == KP (KP::upKey, ctrl, 0))
+            return Move { 12, 0 };
+        if (key == KP (KP::downKey, ctrl, 0))
+            return Move { -12, 0 };
+        if (key == KP (KP::leftKey, shift, 0))
+            return Move { 0, -1 };
+        if (key == KP (KP::rightKey, shift, 0))
+            return Move { 0, 1 };
+        return std::nullopt;
     }
 
 private:
@@ -1156,14 +1198,20 @@ PianoRoll::PianoRoll (Session& s)
         juce::PopupMenu menu;
         menu.addSectionHeader (selection.empty() ? "All notes"
                                                  : juce::String ((int)selection.size()) + " selected notes");
-        menu.addItem ("Quantize (to the snap)", [this] { applyNoteTool (NoteTool::quantize); });
-        menu.addItem ("Strum up", [this] { applyNoteTool (NoteTool::strumUp); });
-        menu.addItem ("Strum down", [this] { applyNoteTool (NoteTool::strumDown); });
-        menu.addItem ("Arpeggiate (chords into notes, one per snap step)",
-                      [this] { applyNoteTool (NoteTool::arpeggiate); });
-        menu.addItem ("Chop (repeat each note every snap step)", [this] { applyNoteTool (NoteTool::chop); });
-        menu.addItem ("Legato (each note lasts until the next)", [this] { applyNoteTool (NoteTool::legato); });
-        menu.addItem ("Humanize velocities", [this] { applyNoteTool (NoteTool::humanize); });
+        const auto add = [this, &menu] (const juce::String& name, NoteTool which)
+        {
+            juce::PopupMenu::Item item (name);
+            item.shortcutKeyDescription = getNoteToolKey (which).getTextDescriptionWithIcons();
+            item.action = [this, which] { applyNoteTool (which); };
+            menu.addItem (std::move (item));
+        };
+        add ("Quantize (to the snap)", NoteTool::quantize);
+        add ("Strum up", NoteTool::strumUp);
+        add ("Strum down", NoteTool::strumDown);
+        add ("Arpeggiate (chords into notes, one per snap step)", NoteTool::arpeggiate);
+        add ("Chop (repeat each note every snap step)", NoteTool::chop);
+        add ("Legato (each note lasts until the next)", NoteTool::legato);
+        add ("Humanize velocities", NoteTool::humanize);
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&toolsButton));
     };
     addAndMakeVisible (toolsButton);
@@ -1215,6 +1263,29 @@ float PianoRoll::pitchToY (int pitch) const { return (float)((127 - pitch) * key
 int PianoRoll::yToPitch (float y) const
 {
     return juce::jlimit (0, 127, 127 - (int)std::floor (((double)y + scrollY) / keyHeight));
+}
+
+juce::KeyPress PianoRoll::getNoteToolKey (NoteTool tool)
+{
+    constexpr auto alt = juce::ModifierKeys::altModifier, ctrl = juce::ModifierKeys::ctrlModifier;
+    switch (tool)
+    {
+    case NoteTool::quantize:
+        return { 'q', alt, 0 };
+    case NoteTool::strumUp:
+        return { 's', alt, 0 };
+    case NoteTool::strumDown:
+        return { 's', alt | juce::ModifierKeys::shiftModifier, 0 };
+    case NoteTool::arpeggiate:
+        return { 'a', alt, 0 };
+    case NoteTool::chop:
+        return { 'u', ctrl, 0 };
+    case NoteTool::legato:
+        return { 'l', ctrl, 0 };
+    case NoteTool::humanize:
+        return { 'r', alt, 0 };
+    }
+    return {};
 }
 
 bool PianoRoll::applyNoteTool (NoteTool which)
@@ -1500,6 +1571,27 @@ bool PianoRoll::moveSelection (model::Ticks deltaTicks, int deltaPitch)
         moved.push_back (n);
     }
     return commitKeepingSelection (changed, moved, selection.size() > 1 ? "Move notes" : "Move note");
+}
+
+bool PianoRoll::transposeSelection (int semitones)
+{
+    if (selection.empty())
+        selectAll();
+    for (auto i : selection)
+        if (const auto pitch = notes[(size_t)i].pitch + semitones; pitch < 0 || pitch > 127)
+            return false;
+    return moveSelection (0, semitones);
+}
+
+bool PianoRoll::nudgeSelection (int steps)
+{
+    if (selection.empty())
+        selectAll();
+    const auto delta = (model::Ticks)steps * (snap > 0 ? snap : model::ticksPerQuarterNote / 4);
+    for (auto i : selection)
+        if (notes[(size_t)i].start + delta < 0)
+            return false;
+    return moveSelection (delta, 0);
 }
 
 bool PianoRoll::resizeSelection (model::Ticks deltaTicks, model::Ticks minimum)
@@ -2022,6 +2114,25 @@ void PianoRoll::resized()
 {
     auto area = getLocalBounds();
     const int bar = 12;
+
+    // The buttons have a row of their own, so the ruler's bar numbers show across the whole width.
+    auto toolbar = area.removeFromTop (toolbarHeight).reduced (2, 3);
+    if (generateButton.isVisible())
+        generateButton.setBounds (toolbar.removeFromLeft (80).reduced (2, 0));
+    if (recordIdeaButton.isVisible())
+        recordIdeaButton.setBounds (toolbar.removeFromLeft (92).reduced (2, 0));
+    scaleButton.setButtonText (getScaleButtonText());
+    scaleButton.setBounds (
+        toolbar.removeFromRight (juce::jmax (90, scaleButton.getBestWidthForHeight (toolbar.getHeight())))
+            .reduced (2, 0));
+    for (int i = 3; i >= 0; --i)
+        toolButtons[i].setBounds (toolbar.removeFromRight (i == 3 ? 50 : 44).reduced (1, 0));
+    snapBox.setBounds (toolbar.removeFromRight (104).reduced (2, 0));
+    chordBox.setBounds (toolbar.removeFromRight (150).reduced (2, 0));
+    toolsButton.setBounds (toolbar.removeFromRight (64).reduced (2, 0));
+    toolbar.removeFromRight (4);
+    timelineControls.setBounds (toolbar.removeFromRight (timelineControls.getPreferredWidth()));
+
     vertical.setBounds (
         area.removeFromRight (bar).withTrimmedTop (rulerHeight).withTrimmedBottom (velocityHeight + bar));
     horizontal.setBounds (area.removeFromBottom (bar).withTrimmedLeft (keyboardWidth));
@@ -2030,21 +2141,6 @@ void PianoRoll::resized()
     lane->setBounds (laneArea);
     auto top = area.removeFromTop (rulerHeight);
     ghostChoice->setBounds (top.removeFromLeft (keyboardWidth));
-    scaleButton.setButtonText (getScaleButtonText());
-    scaleButton.setBounds (
-        top.removeFromRight (juce::jmax (90, scaleButton.getBestWidthForHeight (top.getHeight()))).reduced (2, 1));
-    for (int i = 3; i >= 0; --i)
-        toolButtons[i].setBounds (top.removeFromRight (i == 3 ? 50 : 44).reduced (1, 1));
-    snapBox.setBounds (top.removeFromRight (104).reduced (2, 1));
-    chordBox.setBounds (top.removeFromRight (150).reduced (2, 1));
-    toolsButton.setBounds (top.removeFromRight (64).reduced (2, 1));
-    top.removeFromRight (4);
-    timelineControls.setBounds (top.removeFromRight (timelineControls.getPreferredWidth()).reduced (0, 1));
-    top.removeFromRight (4);
-    if (recordIdeaButton.isVisible())
-        recordIdeaButton.setBounds (top.removeFromRight (92).reduced (2, 1));
-    if (generateButton.isVisible())
-        generateButton.setBounds (top.removeFromRight (80).reduced (2, 1));
     ruler->setBounds (top);
     keyboard->setBounds (area.removeFromLeft (keyboardWidth));
     grid->setBounds (area);

@@ -1731,6 +1731,49 @@
         "additionalProperties": false
       }
     },
+    "clip.add": {
+      "description": "Place a playlist clip given whole, in the project file's format (without id): a pattern, audio or automation clip with all its settings. The new clip's ID is in the result.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": [
+                  "pattern",
+                  "audio",
+                  "automation"
+                ]
+              },
+              "lane": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "length": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "type",
+              "lane",
+              "start",
+              "length"
+            ],
+            "description": "The clip, as project.json writes it"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "additionalProperties": false
+      }
+    },
     "launcher.addTrack": {
       "description": "Add a clip launcher track (a column of slots).",
       "parameters": {

@@ -85,6 +85,8 @@ const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
         { "clip.remove", R"({"clip": 15})" },
         { "clip.split", R"({"clip": 16, "at": 1000})" },
         { "clip.makeUnique", R"({"clip": 15})" },
+        { "clip.add", R"({"clip": {"type": "pattern", "pattern": 11, "lane": 13, "start": 7680, "length": 3840,
+              "offset": 960, "muted": true}})" },
         { "marker.add", R"({"at": 7680, "name": "Bridge"})" },
         { "marker.set", R"({"marker": 23, "name": "Drop", "at": 1920})" },
         { "marker.remove", R"({"marker": 23})" },
@@ -818,6 +820,48 @@ TEST_CASE ("A pattern is cloned, and a clip made unique gets a copy of its own",
 
     CHECK (history.perform (make ("pattern.clone", R"({"pattern": 99})")).failed());
     CHECK (history.perform (make ("clip.makeUnique", R"({"clip": 99})")).failed());
+}
+
+TEST_CASE ("clip.add places a whole clip as the project file writes it", "[commands]")
+{
+    CommandHistory history (makeExample());
+    for (const auto& source : makeExample().playlist.clips)
+    {
+        auto json = spinus::model::clipToJson (source);
+        json.getDynamicObject()->setProperty ("start", 96000);
+        auto add = make ("clip.add", "{\"clip\": " + juce::JSON::toString (json, true) + "}");
+        auto* rawAdd = add.get();
+        REQUIRE (history.perform (std::move (add)).wasOk());
+        const ClipId made { (uint32_t)(int)rawAdd->getResult()["clip"] };
+        REQUIRE (made != source.id);
+
+        const auto* placed = history.getProject().findClip (made);
+        REQUIRE (placed != nullptr);
+        CHECK (placed->lane == source.lane);
+        CHECK (placed->start == 96000);
+        CHECK (placed->length == source.length);
+        CHECK (placed->muted == source.muted);
+        CHECK (placed->content == source.content);
+        CHECK (*history.getProject().findClip (source.id) == source); // the original stays
+        CHECK (history.getUndoDescriptions().strings.getLast() == "Add clip");
+    }
+    while (history.canUndo())
+        history.undo();
+    CHECK (history.getProject().playlist == makeExample().playlist);
+
+    CHECK (history
+               .perform (make ("clip.add", R"({"clip": {"type": "pattern", "pattern": 11, "lane": 999,
+        "start": 0, "length": 960}})"))
+               .failed());
+    CHECK (history
+               .perform (make ("clip.add", R"({"clip": {"type": "pattern", "pattern": 999, "lane": 13,
+        "start": 0, "length": 960}})"))
+               .failed());
+    juce::String error;
+    CHECK (CommandRegistry::get().create ("clip.add",
+                                          json (R"({"clip": {"type": "song", "lane": 13, "start": 0, "length": 960}})"),
+                                          error) == nullptr);
+    CHECK (error.contains ("unknown type"));
 }
 
 TEST_CASE ("Patterns and playlist tracks get names and colours", "[commands]")

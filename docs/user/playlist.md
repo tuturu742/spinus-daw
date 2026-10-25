@@ -13,9 +13,12 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 | Change a clip's length | Drag its right edge. A shorter clip plays only the start of the pattern. |
 | Delete clips | Right-click a clip, or hold the right button and drag over several: every clip it touches goes. |
 | Make a clip unique | **Shift**+right-click a pattern clip › **Make unique**: the clip gets a copy of its pattern of its own ("Verse 2"), so you can change it without changing the pattern's other clips. The copy becomes the current pattern. |
-| Select clips | **Ctrl**+drag a box around them (add **Shift** to keep what is already selected), or **Shift**+click clips one by one. **Ctrl+A** selects all, **Escape** none. Selected clips have a white outline. |
+| Select clips | **Ctrl**+drag a box around them (add **Shift** to keep what is already selected), or **Shift**+click clips one by one. **Ctrl+A** selects all, **Escape** or **Ctrl+D** none. Selected clips have a white outline. |
 | Move or resize several | Drag one of the selected clips: they all move together, also across tracks. Drag the right edge of a selected clip: they all get longer or shorter by the same amount. A clip that is not selected moves on its own. |
 | Delete the selection | **Delete** (or **Backspace**). |
+| Copy, cut, paste | **Ctrl+C** copies the selected clips (pattern, audio and automation clips, with their settings), **Ctrl+X** cuts them. **Ctrl+V** puts them back where they were copied from, or right after them when they are still there. The pasted clips are selected, ready to move. |
+| Duplicate | **Ctrl+B** puts the selection again right after itself (rounded up to whole bars). A pattern clip's copy plays the same pattern. |
+| Move with the keys | **Shift+Left** / **Shift+Right** move the selected clips a grid step, **Shift+Up** / **Shift+Down** a track up or down. Each press is one undo step. |
 | Open a clip | Double-click it: an audio clip opens in [Spinus Tune](spinus-tune.md); an automation clip opens in the [Automation editor](#the-automation-editor). |
 | Mute a track | Click the light next to its name. |
 | Rename, colour or delete a track | Right-click its name. The track's name is drawn on its colour, and the track itself is faintly tinted with it. Deleting a track also removes its clips. |
@@ -26,7 +29,7 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 | Loop part of the song | Hold the right mouse button and drag across the ruler: song mode then plays that part over and over (it starts there if the position is outside it). The part is shaded across the tracks too. Right-click the ruler to stop looping. |
 | Grid | The list next to the tools: bar, beat (the default), 1/2 or 1/4 beat, triplets, or no grid. Hold **Alt** while dragging to place freely. |
 | Scroll | Mouse wheel, **Shift**+wheel sideways, or the scroll bars. |
-| Zoom | The **−**, **+** and **Fit** buttons next to the grid list (Fit shows the whole song), **Ctrl+=** and **Ctrl+-** (**Ctrl+0**: fit), or **Ctrl**+wheel, which zooms around the mouse. **Ctrl+Shift**+wheel makes the tracks taller or shorter. |
+| Zoom | The **−**, **+** and **Fit** buttons next to the grid list (Fit shows the whole song), **Ctrl+=** and **Ctrl+-** or **Page Up** and **Page Down** (**Ctrl+0**: fit), or **Ctrl**+wheel, which zooms around the mouse. **Ctrl+Shift**+wheel makes the tracks taller or shorter. |
 | Follow the song | **Follow** next to the zoom buttons: while the song plays, the view turns the page when the song position reaches its edge. On by default; Spinus remembers your choice. |
 
 **Tools** (the buttons at the top, as in the Piano Roll; the keys in brackets pick one when the Playlist is in front):

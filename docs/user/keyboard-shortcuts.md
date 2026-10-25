@@ -69,14 +69,35 @@ They pick the tool in the Piano Roll when it is in front, otherwise in the Playl
 | Key | Does |
 |---|---|
 | **Ctrl+A** | Select all |
-| **Escape** | Select none |
+| **Escape**, **Ctrl+D** | Select none |
 | **Delete** | Delete the selection |
-| **Ctrl+C**, **Ctrl+X**, **Ctrl+V** | Copy, cut and paste notes (Piano Roll) |
-| **Ctrl+B** | Duplicate the selection right after itself (Piano Roll) |
+| **Ctrl+C**, **Ctrl+X**, **Ctrl+V** | Copy, cut and paste notes (Piano Roll) or clips (Playlist) |
+| **Ctrl+B** | Duplicate the selection right after itself (Piano Roll and Playlist) |
+| **Shift+Left**, **Shift+Right** | Move the selection a grid step earlier or later (Piano Roll and Playlist) |
+| **Shift+Up**, **Shift+Down** | Piano Roll: move the notes a semitone up or down. Playlist: move the clips a track up or down |
+| **Ctrl+Up**, **Ctrl+Down** | Move the notes an octave up or down (Piano Roll) |
 | **Alt** while dragging | Off the grid; in the Playlist, Alt+dragging an audio clip's end stretches it |
 | **Ctrl+=**, **Ctrl+-**, **Ctrl+0** | Zoom in, zoom out, fit everything in view (also in Spinus Tune) |
+| **Page Up**, **Page Down** | Zoom in, zoom out |
 | **Ctrl**+wheel | Zoom around the mouse (also in Spinus Tune and the Beat Slicer) |
 | **Ctrl+Shift**+wheel | Key height (Piano Roll, Spinus Tune), track height (Playlist) |
+
+In the Piano Roll, the arrow keys and the note tools below work on the selected notes, or on all of them
+when none is selected. A note never moves past the lowest or highest key or before the pattern's start.
+The keys are FL Studio's.
+
+## Piano Roll's note tools
+
+Also in the Piano Roll's **Tools** menu.
+
+| Key | Tool |
+|---|---|
+| **Alt+Q** | Quantize to the snap |
+| **Alt+S**, **Alt+Shift+S** | Strum up, strum down |
+| **Alt+A** | Arpeggiate |
+| **Ctrl+U** | Chop |
+| **Ctrl+L** | Legato |
+| **Alt+R** | Humanize velocities |
 
 ## Launcher
 

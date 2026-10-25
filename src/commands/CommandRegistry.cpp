@@ -2970,6 +2970,42 @@ private:
     Clip old;
 };
 
+/** Places a clip given whole, as the project file writes it (its pattern, audio or automation, length,
+    offset, fades and mute): the Playlist's paste and duplicate. */
+class AddClip final : public JsonCommand
+{
+public:
+    AddClip (juce::var p, Clip c) : JsonCommand ("clip.add", std::move (p)), clip (std::move (c)) {}
+
+    juce::String getDescription() const override { return "Add clip"; }
+    juce::var getResult() const override { return resultWith ({ { "clip", made.value } }); }
+
+    juce::Result perform (Project& p) override
+    {
+        if (p.findLane (clip.lane) == nullptr)
+            return juce::Result::fail ("lane " + juce::String (clip.lane.value) + " does not exist");
+        if (clip.start < 0 || clip.length <= 0)
+            return juce::Result::fail ("start must be >= 0 and length > 0");
+
+        if (! made.isValid())
+            made = p.allocateId<ClipId>();
+        auto placed = clip;
+        placed.id = made;
+        p.playlist.clips.push_back (std::move (placed));
+        changes.clips = { made };
+        return juce::Result::ok();
+    }
+
+    void undo (Project& p) override
+    {
+        std::erase_if (p.playlist.clips, [this] (const Clip& c) { return c.id == made; });
+    }
+
+private:
+    Clip clip;
+    ClipId made;
+};
+
 //==============================================================================
 // launcher.* (the clip launcher)
 
@@ -3844,6 +3880,25 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
             const auto at = p.number ("at", 1, std::numeric_limits<int>::max(), true);
             return std::make_unique<SplitClip> (p.json, p.id<ClipId> ("clip"), (Ticks)at.value_or (1));
         }));
+
+    const auto clipSchema = juce::JSON::parse (R"({"type": "object", "properties": {
+        "type": {"enum": ["pattern", "audio", "automation"]},
+        "lane": {"type": "integer", "minimum": 1}, "start": {"type": "integer", "minimum": 0},
+        "length": {"type": "integer", "minimum": 1}}, "required": ["type", "lane", "start", "length"]})");
+    list.push_back (info ("clip.add",
+                          "Place a playlist clip given whole, in the project file's format (without id): a pattern, "
+                          "audio or automation clip with all its settings. The new clip's ID is in the result.",
+                          ParameterSchema().custom ("clip", "The clip, as project.json writes it", true, clipSchema),
+                          [] (Params& p) -> std::unique_ptr<Command>
+                          {
+                              p.allowOnly ({ "clip" });
+                              Clip clip;
+                              if (auto json = p.get ("clip", true); ! json.isObject())
+                                  p.errors.add ("'clip' must be an object");
+                              else if (auto e = model::clipFromJson (json, clip); e.isNotEmpty())
+                                  p.errors.add ("clip: " + e);
+                              return std::make_unique<AddClip> (p.json, std::move (clip));
+                          }));
 }
 
 void addLauncherCommands (std::vector<CommandInfo>& list)
