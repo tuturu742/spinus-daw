@@ -1,5 +1,7 @@
 #pragma once
 
+#include "HostLibraries.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <atomic>
@@ -44,6 +46,9 @@ public:
         juce::File scannerExecutable;  // spinus-plugin-scanner
         int timeoutMs = 60000;         // per plugin file
         juce::StringArray environment; // for the scanner process, as env(1) takes it ("NAME=value", "-u", "NAME")
+        /** In the Flatpak, the computer's libraries: a plugin of the computer's that does not load with the
+            Flatpak's is scanned again with them (getHostLibraries). */
+        std::optional<HostLibraries> hostLibraries;
     };
 
     explicit PluginScanner (Options);
@@ -51,7 +56,7 @@ public:
     /** Scans one file in a fresh scanner process. Fails with a readable reason ("crashed while
         scanning", "did not finish within 60 s", …). */
     juce::Result scanFile (const juce::String& formatName, const juce::String& fileOrIdentifier,
-                           juce::OwnedArray<juce::PluginDescription>& found) const;
+                           juce::OwnedArray<juce::PluginDescription>& found, bool withHostLibraries = false) const;
 
     struct Progress
     {
@@ -66,11 +71,13 @@ public:
 
     /** Scans every plugin file of the given formats: new and changed files are scanned, unchanged ones
         (already in `known` with the same modification time) and known problems are skipped. Paths not
-        given use each format's default locations. Runs on the calling thread; `cancel` stops it early. */
+        given use each format's default locations. Runs on the calling thread; `cancel` stops it early.
+        With Options::hostLibraries, a plugin of the computer's that loads only with them is noted in
+        `hostLibraryPlugins` (and one that loads without them taken out). */
     Summary scanAll (juce::AudioPluginFormatManager&, juce::KnownPluginList& known, ProblemPlugins& problems,
                      const std::map<juce::String, juce::FileSearchPath>& searchPaths = {},
                      const std::function<void (const Progress&)>& onProgress = {},
-                     const std::atomic<bool>* cancel = nullptr) const;
+                     const std::atomic<bool>* cancel = nullptr, HostLibraryPlugins* hostLibraryPlugins = nullptr) const;
 
 private:
     Options options;
@@ -90,5 +97,10 @@ int forgetVanishedPlugins (juce::KnownPluginList&, ProblemPlugins* = nullptr);
     In the Flatpak, a plugin of the computer's own system (under /run/host) says so and points to the
     native version. */
 juce::String whyPluginDoesNotLoad (const juce::String& formatName, const juce::String& fileOrIdentifier);
+
+/** The program file of the LV2 plugin `uri` among the system's plugins seen from the Flatpak (read from
+    the bundles' manifest.ttl: `<uri> a lv2:Plugin ; lv2:binary <file.so>`), or none. LV2 plugins are
+    listed from their description files alone, so their program is only loaded when used. */
+juce::File findHostLv2Binary (const juce::String& uri);
 
 } // namespace spinus::plugins

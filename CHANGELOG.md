@@ -21,6 +21,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   the song (stutters, tape stops, trance gates), drawn with the mouse. See
   [Get free plugins](docs/user/free-plugins.md).
 
+### Plugins
+
+- **The Flatpak runs your system's plugins** that need newer libraries than it has (most plugins from Arch's
+  packages, for example): they run in a separate process with your system's own libraries instead of being
+  listed as problem plugins. The next **Scan plugins** tries the ones listed before. See
+  [Install](docs/user/install.md#as-a-flatpak).
+
 ## 0.1.0-alpha.1 (unreleased)
 
 The first alpha: an early, quiet release for testers before 0.1.0. Everything below is new.

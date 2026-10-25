@@ -5,9 +5,9 @@
 namespace spinus::plugins
 {
 
-/** The plugins Spinus knows about: the scan results and the problem list, saved in the user's
-    settings folder, plus where to look. Bundled plugins (Surge XT, LSP, Dragonfly) are found in the
-    `plugins/` folder next to the Spinus executable. */
+/** The plugins Spinus knows about: the scan results, the problem list and (in the Flatpak) the plugins
+    that need the computer's own libraries, saved in the user's settings folder, plus where to look. Bundled plugins
+   (Surge XT, LSP, Dragonfly) are found in the `plugins/` folder next to the Spinus executable. */
 class PluginCatalog
 {
 public:
@@ -46,11 +46,19 @@ public:
     static void refreshFormats (juce::AudioPluginFormatManager&);
     ProblemPlugins& getProblems() noexcept { return problems; }
 
+    /** In the Flatpak, whether a plugin of the computer's loads only with the computer's own libraries (found
+        so by a scan): it runs in a process of its own started with them. Any thread. */
+    bool needsHostLibraries (const juce::String& fileOrIdentifier) const
+    {
+        return hostLibraryPlugins.contains (fileOrIdentifier);
+    }
+
 private:
     juce::File settings, executables;
     std::map<juce::String, std::vector<juce::File>> extraFolders;
     juce::KnownPluginList known;
     ProblemPlugins problems;
+    HostLibraryPlugins hostLibraryPlugins;
 };
 
 } // namespace spinus::plugins

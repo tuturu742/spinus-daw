@@ -8,7 +8,8 @@ namespace spinus::plugins
 {
 
 PluginCatalog::PluginCatalog (juce::File settingsFolder, juce::File executableFolder)
-    : settings (std::move (settingsFolder)), executables (std::move (executableFolder))
+    : settings (std::move (settingsFolder)), executables (std::move (executableFolder)),
+      hostLibraryPlugins (settings.getChildFile ("plugins-with-system-libraries.json"))
 {
 }
 
@@ -19,6 +20,8 @@ void PluginCatalog::load()
 
     if (auto xml = juce::parseXML (settings.getChildFile ("problem-plugins.xml")))
         problems.loadFromXml (*xml);
+
+    hostLibraryPlugins.load();
 }
 
 void PluginCatalog::save() const
@@ -29,6 +32,7 @@ void PluginCatalog::save() const
         xml->writeTo (settings.getChildFile ("plugin-list.xml"));
 
     problems.toXml()->writeTo (settings.getChildFile ("problem-plugins.xml"));
+    hostLibraryPlugins.save();
 }
 
 void PluginCatalog::addSearchFolder (const juce::String& formatName, const juce::File& folder)
@@ -80,10 +84,14 @@ PluginScanner::Summary PluginCatalog::scan (const std::function<void (const Plug
     juce::AudioPluginFormatManager formats;
     addFormats (formats);
 
-    const PluginScanner scanner ({ getHelperProgram (executables, "spinus-plugin-scanner") });
+    PluginScanner::Options options;
+    options.scannerExecutable = getHelperProgram (executables, "spinus-plugin-scanner");
+    options.hostLibraries = getHostLibraries();
+    const PluginScanner scanner (std::move (options));
     core::Logs::info ("scan", "Scanning plugins");
     const auto started = juce::Time::getMillisecondCounter();
-    auto summary = scanner.scanAll (formats, known, problems, getSearchPaths (formats), onProgress, cancel);
+    auto summary =
+        scanner.scanAll (formats, known, problems, getSearchPaths (formats), onProgress, cancel, &hostLibraryPlugins);
     save();
     core::Logs::info ("scan", juce::String (cancel != nullptr && cancel->load() ? "Scan stopped: " : "Scanned: ") +
                                   juce::String (summary.scanned) + " files, " + juce::String (summary.pluginsFound) +

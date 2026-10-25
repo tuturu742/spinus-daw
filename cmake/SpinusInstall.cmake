@@ -1,7 +1,7 @@
 # `cmake --install` layout, used by packaging/arch/PKGBUILD:
 #
 #   <prefix>/bin/spinus                       -> ../lib/spinus/spinus
-#   <prefix>/lib/spinus/spinus, spinus-plugin-scanner, spinus-plugin-host
+#   <prefix>/lib/spinus/spinus, spinus-plugin-scanner, spinus-plugin-host, spinus-plugin-host-system
 #   <prefix>/lib/spinus/ai/                   the AI service (Python) with the manual it searches;
 #                                             Help › Manual reads the same copy (ui/Manual), also with AI off
 #   <prefix>/lib/vst3, <prefix>/lib/lv2       Spinus's own devices as plugins, for other programs
@@ -18,6 +18,9 @@ include (GNUInstallDirs)
 set (spinusLibDir "${CMAKE_INSTALL_LIBDIR}/spinus")
 
 install (TARGETS spinus spinus-plugin-scanner spinus-plugin-host RUNTIME DESTINATION "${spinusLibDir}")
+if (TARGET spinus-plugin-host-system)
+    install (TARGETS spinus-plugin-host-system RUNTIME DESTINATION "${spinusLibDir}")
+endif()
 install (CODE "
     file (MAKE_DIRECTORY \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
     file (CREATE_LINK \"../${spinusLibDir}/spinus\" \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/spinus\" SYMBOLIC)

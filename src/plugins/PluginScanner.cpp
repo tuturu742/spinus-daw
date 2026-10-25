@@ -1,4 +1,5 @@
 #include "PluginScanner.h"
+#include "HostLibraries.h"
 #include "core/ChildProcess.h"
 #include "core/Log.h"
 
@@ -57,6 +58,13 @@ void ProblemPlugins::loadFromXml (const juce::XmlElement& xml)
 //==============================================================================
 namespace
 {
+/** The problem of a plugin of the computer's that the Flatpak's libraries could not load (whyPluginDoesNotLoad). */
+bool isFlatpakLibraryProblem (const ProblemPlugins& problems, const juce::String& file)
+{
+    return std::any_of (problems.getAll().begin(), problems.getAll().end(), [&] (const ProblemPlugins::Problem& p)
+                        { return p.file == file && p.reason.contains ("cannot run inside the Flatpak"); });
+}
+
 juce::Array<juce::PluginDescription> typesForFile (const juce::KnownPluginList& known, const juce::String& file)
 {
     juce::Array<juce::PluginDescription> result;
@@ -70,7 +78,7 @@ juce::Array<juce::PluginDescription> typesForFile (const juce::KnownPluginList& 
 PluginScanner::PluginScanner (Options o) : options (std::move (o)) {}
 
 juce::Result PluginScanner::scanFile (const juce::String& formatName, const juce::String& fileOrIdentifier,
-                                      juce::OwnedArray<juce::PluginDescription>& found) const
+                                      juce::OwnedArray<juce::PluginDescription>& found, bool withHostLibraries) const
 {
     if (! options.scannerExecutable.existsAsFile())
         return juce::Result::fail ("the plugin scanner program is missing: " +
@@ -80,12 +88,19 @@ juce::Result PluginScanner::scanFile (const juce::String& formatName, const juce
     core::ChildProcess process;
 
     // A different environment (e.g. testing another Wine for Windows plugins) goes through env(1).
+    const juce::StringArray args { "--format",       formatName, "--file",
+                                   fileOrIdentifier, "--output", output.getFile().getFullPathName() };
     juce::StringArray command;
     if (! options.environment.isEmpty())
         command.add ("env");
     command.addArray (options.environment);
-    command.addArray ({ options.scannerExecutable.getFullPathName(), "--format", formatName, "--file", fileOrIdentifier,
-                        "--output", output.getFile().getFullPathName() });
+    if (withHostLibraries && options.hostLibraries)
+        command.addArray (options.hostLibraries->command (options.scannerExecutable, args));
+    else
+    {
+        command.add (options.scannerExecutable.getFullPathName());
+        command.addArray (args);
+    }
 
     if (! process.start (command, 0))
         return juce::Result::fail ("could not start the plugin scanner");
@@ -129,8 +144,12 @@ PluginScanner::Summary PluginScanner::scanAll (juce::AudioPluginFormatManager& f
                                                ProblemPlugins& problems,
                                                const std::map<juce::String, juce::FileSearchPath>& searchPaths,
                                                const std::function<void (const Progress&)>& onProgress,
-                                               const std::atomic<bool>* cancel) const
+                                               const std::atomic<bool>* cancel,
+                                               HostLibraryPlugins* hostLibraryPlugins) const
 {
+    auto canRetryWithHostLibraries = [this] (const juce::String& format, const juce::String& file)
+    { return options.hostLibraries.has_value() && isHostPlugin (format, file); };
+
     struct Job
     {
         juce::AudioPluginFormat* format;
@@ -148,6 +167,10 @@ PluginScanner::Summary PluginScanner::scanAll (juce::AudioPluginFormatManager& f
 
         for (auto& file : format->searchPathsForPlugins (path, true, false))
         {
+            // One of the computer's plugins listed as a problem only because the Flatpak's libraries are too old
+            // for it: scanned again, now with the computer's own.
+            if (canRetryWithHostLibraries (format->getName(), file) && isFlatpakLibraryProblem (problems, file))
+                problems.remove (format->getName(), file);
             if (problems.contains (format->getName(), file))
             {
                 ++summary.skippedProblems;
@@ -177,7 +200,30 @@ PluginScanner::Summary PluginScanner::scanAll (juce::AudioPluginFormatManager& f
             onProgress ({ (int)i, (int)jobs.size(), job.file });
 
         juce::OwnedArray<juce::PluginDescription> found;
-        const auto result = scanFile (job.format->getName(), job.file, found);
+        auto result = scanFile (job.format->getName(), job.file, found);
+        // In the Flatpak, one of the computer's plugins that needs its newer libraries: those then run it.
+        bool withHostLibraries = false;
+        if ((result.failed() || found.isEmpty()) && canRetryWithHostLibraries (job.format->getName(), job.file))
+        {
+            juce::OwnedArray<juce::PluginDescription> again;
+            if (const auto retry = scanFile (job.format->getName(), job.file, again, true);
+                retry.wasOk() && ! again.isEmpty())
+            {
+                core::Logs::info ("scan", job.file + " loads with the computer's own libraries (" +
+                                              (result.failed() ? result.getErrorMessage() : "not found") +
+                                              " with the Flatpak's)");
+                result = retry;
+                found.swapWith (again);
+                withHostLibraries = true;
+            }
+        }
+        // Kept by the file and by what the plugin list calls each plugin in it (an LV2 plugin's URI).
+        if (hostLibraryPlugins != nullptr)
+        {
+            hostLibraryPlugins->set (job.file, withHostLibraries);
+            for (auto* desc : found)
+                hostLibraryPlugins->set (desc->fileOrIdentifier, withHostLibraries);
+        }
         ++summary.scanned;
 
         // Replace whatever was known about this file.
@@ -230,11 +276,6 @@ int forgetVanishedPlugins (juce::KnownPluginList& known, ProblemPlugins* problem
     return removed;
 }
 
-namespace
-{
-/** The program file of the LV2 plugin `uri` among the system's plugins seen from the Flatpak (read from
-    the bundles' manifest.ttl: `<uri> a lv2:Plugin ; lv2:binary <file.so>`), or none. LV2 plugins are
-    listed from their description files alone, so their program is only loaded when used. */
 juce::File findHostLv2Binary (const juce::String& uri)
 {
     for (const auto& folder : getHostPluginFolders ("LV2"))
@@ -272,7 +313,6 @@ juce::File findHostLv2Binary (const juce::String& uri)
         }
     return {};
 }
-} // namespace
 
 juce::String whyPluginDoesNotLoad (const juce::String& formatName, const juce::String& fileOrIdentifier)
 {
