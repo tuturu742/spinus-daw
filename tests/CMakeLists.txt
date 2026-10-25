@@ -48,6 +48,7 @@ add_executable (spinus_tests
     plugins/ArchiveReaderTests.cpp
     plugins/PluginDownloadsTests.cpp
     plugins/WindowsPluginsTests.cpp
+    plugins/WindowsReproTests.cpp
     plugins/PluginDialogsTests.cpp
     plugins/SurgePresetsTests.cpp
     plugins/PluginScannerTests.cpp
@@ -108,7 +109,7 @@ if (WIN32)
     # pgrep, environment changes, and shell-script fakes of Python and PyTorch) are left out. The rest is the same suite.
     get_target_property (testSources spinus_tests SOURCES)
     list (REMOVE_ITEM testSources
-          plugins/WindowsPluginsTests.cpp ui/WindowsPluginsDialogTests.cpp plugins/ArchiveReaderTests.cpp
+          plugins/WindowsPluginsTests.cpp plugins/WindowsReproTests.cpp ui/WindowsPluginsDialogTests.cpp plugins/ArchiveReaderTests.cpp
           plugins/PluginDownloadsTests.cpp ai/AiTests.cpp plugins/PluginScannerTests.cpp session/SynthMatchTests.cpp
           ui/AnalysisEngineTests.cpp ui/BrowserTests.cpp acceptance/AnalysisAcceptanceTests.cpp ui/AnalyzerTests.cpp
           ui/OwnerSongsTests.cpp ui/ManyInstrumentsTests.cpp)

@@ -8,6 +8,8 @@
 #include "session/Session.h"
 #include "RealtimeRunner.h"
 
+#include <tracktion_graph/tracktion_graph.h>
+
 using namespace spinus;
 namespace te = tracktion;
 
@@ -177,9 +179,10 @@ TEST_CASE ("Loop regions: part of the pattern, part of the song, cleared with an
     f.session.setMode (Session::Mode::song);
     CHECK (! transport.looping.get());
     f.session.setLoopRegion (Session::Mode::song, Session::LoopRegion { 3840, 7680 });
-    CHECK (transport.looping.get());
+    CHECK (! transport.looping.get()); // the transport loops only while it plays
     transport.setPosition (te::TimePosition());
     f.session.play();
+    CHECK (transport.looping.get());
     CHECK (transport.getLoopRange() == te::TimeRange (seconds (3840), seconds (7680)));
     CHECK (transport.getPosition() >= seconds (3840));
     f.session.stop();
@@ -260,4 +263,74 @@ TEST_CASE ("The metronome's first beat of each bar sounds different", "[session]
     CHECK (difference (first, second) > 0.3);                 // another one on beat 1
     CHECK (crossings (first) > crossings (second) * 13 / 10); // and higher
     CHECK (difference (first, nextBar) < 0.05);
+}
+
+TEST_CASE ("The play head never loops over an empty range: a new project, channels added, play, stop, loop regions",
+           "[session][audio]")
+{
+    // Tracktion's play head switches looping on before it takes the loop range, and its audio thread divides by
+    // that range's length: looping switched on while the play head still had its empty range crashed Spinus
+    // (SIGFPE on the audio thread, adding an instrument to a new project). The transport loops only while it
+    // plays, so that switch is made by starting playback, which sets the range first.
+    EngineHost host ({ .openAudioDevice = false });
+    Session session (host.getEngine());
+    REQUIRE (session.getProject().patterns.empty()); // a new project: "No pattern"
+    REQUIRE (session.getMode() == Session::Mode::pattern);
+    auto& transport = session.getEdit().getTransport();
+
+    test::RealtimeRunner runner (host.getEngine(), { .outputChannels = 2, .maxSeconds = 20.0, .paceInRealTime = true });
+    runner.start();
+    auto playHead = [&]() -> tracktion::graph::PlayHead&
+    {
+        auto* context = transport.getCurrentPlaybackContext();
+        REQUIRE (context != nullptr);
+        REQUIRE (context->getNodePlayHead() != nullptr);
+        return *context->getNodePlayHead();
+    };
+    // Tracktion updates the play head's loop from the transport on a timer: give it time.
+    auto settle = [&] { runner.runUntil (runner.getSecondsProcessed() + 0.8); };
+    auto loopsSafely = [&]
+    {
+        auto& ph = playHead();
+        return ! ph.isLooping() || ph.getLoopRange().getLength() > 0;
+    };
+
+    REQUIRE (session.getHistory().perform (make ("channel.add", R"({"name": "A"})")).wasOk());
+    settle();
+    CHECK (! transport.looping.get()); // stopped: nothing loops
+    CHECK (! playHead().isLooping());
+
+    // Playing pattern mode without a pattern loops one bar (120 BPM, 4/4: two seconds).
+    session.play();
+    CHECK (transport.looping.get());
+    CHECK (transport.getLoopRange() == te::TimeRange (te::TimePosition(), te::TimePosition::fromSeconds (2.0)));
+    settle();
+    CHECK (playHead().isLooping());
+    CHECK (playHead().getLoopRange().getLength() > 0);
+    session.stop();
+    settle();
+    CHECK (! transport.looping.get());
+    CHECK (! playHead().isLooping());
+
+    // Song mode: a loop region set and cleared while playing keeps the play head looping until playback stops.
+    session.setMode (Session::Mode::song);
+    session.play();
+    CHECK (! transport.looping.get());
+    session.setLoopRegion (Session::Mode::song, Session::LoopRegion { 0, 3840 });
+    CHECK (transport.looping.get());
+    settle();
+    CHECK (loopsSafely());
+    session.setLoopRegion (Session::Mode::song, std::nullopt);
+    CHECK (transport.looping.get()); // over the rest of the song
+    CHECK (transport.getLoopRange().getLength() > te::TimeDuration::fromSeconds (3600.0));
+    settle();
+    CHECK (loopsSafely());
+    session.setLoopRegion (Session::Mode::song, Session::LoopRegion { 0, 3840 });
+    settle();
+    CHECK (loopsSafely());
+    session.stop();
+    settle();
+    CHECK (! transport.looping.get());
+    CHECK (loopsSafely());
+    runner.stop();
 }

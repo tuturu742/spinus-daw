@@ -205,8 +205,9 @@ public:
 private:
     void projectChanged (const commands::ChangeSet&);
     void applyMode();
-    /** Sets the transport's loop for the mode (the pattern, or a loop region). */
-    void applyLoop();
+    /** Sets the transport's loop for the mode (the pattern, or a loop region). The transport loops only while
+        it plays (or is about to: `startingPlayback`), never over an empty range. */
+    void applyLoop (bool startingPlayback = false);
     tracktion::TimeRange toTimeRange (LoopRegion) const;
     void syncAdapter();
 

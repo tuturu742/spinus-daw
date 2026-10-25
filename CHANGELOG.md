@@ -28,6 +28,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   listed as problem plugins. The next **Scan plugins** tries the ones listed before. See
   [Install](docs/user/install.md#as-a-flatpak).
 
+### Fixes
+
+- **Adding an instrument to a new project no longer crashes Spinus.** With no pattern yet, pattern mode asked
+  the audio engine to loop over nothing, and the engine could then divide by zero on its audio thread (most
+  often seen adding a Windows plugin, since those take a moment to load). Playback now loops only while it
+  plays; with no pattern, pattern mode loops one bar.
+
 ## 0.1.0-alpha.1 (unreleased)
 
 The first alpha: an early, quiet release for testers before 0.1.0. Everything below is new.
