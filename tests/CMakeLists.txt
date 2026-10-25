@@ -56,6 +56,7 @@ add_executable (spinus_tests
     session/FreezeTests.cpp
     session/IdeaTests.cpp
     session/DemoSongTests.cpp
+    session/ProblemReportTests.cpp
     session/ProjectDocumentTests.cpp
     session/ProjectListTests.cpp
     session/MidiRecorderTests.cpp

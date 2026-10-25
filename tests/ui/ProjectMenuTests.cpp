@@ -387,7 +387,8 @@ TEST_CASE ("Help: the Manual (F1), the log folder and About Spinus", "[ui][help]
     for (juce::PopupMenu::MenuItemIterator i (menu); i.next();)
         if (i.getItem().itemID != 0)
             items.add (i.getItem().itemID);
-    CHECK (items == juce::Array<int> { MainView::showManual, MainView::openLogFolder, MainView::showAbout });
+    CHECK (items == juce::Array<int> { MainView::showManual, MainView::reportProblem, MainView::openLogFolder,
+                                       MainView::showAbout });
 
     // F1 opens the manual (no other command has it).
     auto* mappings = ui.view.getCommandManager().getKeyMappings();
@@ -406,4 +407,32 @@ TEST_CASE ("Help: the Manual (F1), the log folder and About Spinus", "[ui][help]
     ManualWindow::closeWindow();
     AboutSpinus::closeWindow();
     CHECK (ManualWindow::getOpen() == nullptr);
+}
+
+TEST_CASE ("Help > Report a problem makes the report file, then opens the bug page and shows the file on OK",
+           "[ui][help][report]")
+{
+    Ui ui;
+    ui.view.reportFolder = ui.root.getChildFile ("reports");
+    juce::StringArray opened;
+    juce::Array<juce::File> shown;
+    ui.view.openUrl = [&] (const juce::URL& url) { opened.add (url.toString (true)); };
+    ui.view.showFile = [&] (const juce::File& file) { shown.add (file); };
+
+    // Cancel: the file is made (it says where), nothing opens.
+    ui.answers = { 1 };
+    REQUIRE (invoke (ui.view, MainView::reportProblem));
+    CHECK (ui.questions.strings.getLast() == "Report a problem");
+    CHECK (ui.view.reportFolder.findChildFiles (juce::File::findFiles, false, "spinus-report-*.zip").size() == 1);
+    CHECK (opened.isEmpty());
+
+    // Open the page: GitHub's bug form with the version, and the newest report file.
+    ui.answers = { 0 };
+    REQUIRE (invoke (ui.view, MainView::reportProblem));
+    REQUIRE (opened.size() == 1);
+    CHECK (opened[0].contains ("template=bug.yml"));
+    CHECK (opened[0].contains (juce::URL::addEscapeChars (versionString, true)));
+    REQUIRE (shown.size() == 1);
+    CHECK (shown[0].existsAsFile());
+    CHECK (shown[0].getParentDirectory() == ui.view.reportFolder);
 }

@@ -1,0 +1,48 @@
+name: Something doesn't work
+description: A crash, a hang, a wrong sound, or anything that doesn't do what it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for telling us. **Help › Report a problem** in Spinus fills in the version and system below and
+        makes a report file with Spinus's logs; please attach it. The logs hold no keys, passwords, email
+        addresses or user names.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: The steps, if you know them. "It happens sometimes" is fine too.
+      placeholder: |
+        1. Open a new project
+        2. Add Ample Bass P to the Channel Rack
+        3. Spinus closes
+  - type: textarea
+    id: report
+    attributes:
+      label: Report file
+      description: Drag the spinus-report-....zip that Spinus made into this box (or the project, a screenshot, a recording).
+  - type: input
+    id: version
+    attributes:
+      label: Spinus version
+      placeholder: Spinus DAW 0.1.0-alpha.2
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System and package
+      placeholder: Arch Linux, kernel 7.2.9 (x86_64), Flatpak
+  - type: input
+    id: plugins
+    attributes:
+      label: Plugins involved, if any
+      placeholder: Ample Bass P (Windows VST3, through Wine)

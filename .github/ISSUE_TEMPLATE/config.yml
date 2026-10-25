@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: The manual
+    url: https://github.com/tuturu742/spinus-daw/blob/main/docs/user/README.md
+    about: How each part of Spinus works, and Troubleshooting for the common problems.

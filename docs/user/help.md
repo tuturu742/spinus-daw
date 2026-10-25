@@ -1,6 +1,6 @@
 # Manual and About
 
-The **Help** menu has this manual, Spinus's log files and the facts about Spinus. They all work with AI turned
+The **Help** menu has this manual, a way to report a problem, Spinus's log files and the facts about Spinus. They all work with AI turned
 off.
 
 ![The manual inside Spinus, searched for "freeze"](images/manual.png)
@@ -21,6 +21,21 @@ manual as on the web, installed with Spinus, so it works without an internet con
 
 The search is plain text: it needs no AI and sends nothing anywhere. For questions in your own words, the
 [assistant](assistant.md) reads the same pages.
+
+## Report a problem
+
+**Help › Report a problem...** helps you tell us about a crash, a hang or anything that doesn't work:
+
+1. Spinus makes a **report file** (`spinus-report-<date>.zip`) with its logs of its last three runs (this
+   one and the two before, so a crash is in it), its version and your system. The logs hold no keys,
+   passwords, email addresses or user names (see [Log files](troubleshooting.md#log-files)).
+2. It says where the file is. Click **Open the page**: GitHub's page for a new bug report opens in your
+   web browser, with the version and system already filled in, and the file is shown in your file manager.
+3. Describe what happened, drag the file into the **Report file** box, and click **Create**. You need a
+   (free) GitHub account.
+
+Spinus sends nothing itself: you see the file and the page, and decide. The files are kept in `reports`
+beside the log folder (the newest five).
 
 ## Open log folder
 
