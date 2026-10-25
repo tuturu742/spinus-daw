@@ -40,33 +40,35 @@ TEST_CASE ("The computer's libraries are found under the Flatpak's /run/host", "
         FakeRoot arch ("usr/lib", "2.44");
         arch.root.getChildFile ("usr/lib/dri").createDirectory();
         arch.root.getChildFile ("usr/share/glvnd/egl_vendor.d").createDirectory();
-        const auto libraries = findHostLibraries (arch.root, "2.42");
-        REQUIRE (libraries.has_value());
-        CHECK (libraries->loader == arch.root.getChildFile ("usr/lib/ld-linux-x86-64.so.2"));
-        CHECK (libraries->folders == juce::StringArray (arch.root.getChildFile ("usr/lib").getFullPathName()));
-        CHECK (libraries->environment.contains ("LIBGL_DRIVERS_PATH=" +
-                                                arch.root.getChildFile ("usr/lib/dri").getFullPathName()));
-        CHECK (libraries->environment.contains (
+        const auto found = findHostLibraries (arch.root, "2.42");
+        REQUIRE (found.has_value());
+        const auto libraries = found.value_or (HostLibraries {});
+        CHECK (libraries.loader == arch.root.getChildFile ("usr/lib/ld-linux-x86-64.so.2"));
+        CHECK (libraries.folders == juce::StringArray (arch.root.getChildFile ("usr/lib").getFullPathName()));
+        CHECK (libraries.environment.contains ("LIBGL_DRIVERS_PATH=" +
+                                               arch.root.getChildFile ("usr/lib/dri").getFullPathName()));
+        CHECK (libraries.environment.contains (
             "__EGL_VENDOR_LIBRARY_DIRS=" + arch.root.getChildFile ("usr/share/glvnd/egl_vendor.d").getFullPathName()));
 
-        const auto command =
-            libraries->command (juce::File ("/app/lib/spinus/spinus-plugin-scanner"), { "--format", "CLAP" });
+        const juce::File scanner ("/app/lib/spinus/spinus-plugin-scanner");
+        const auto command = libraries.command (scanner, { "--format", "CLAP" });
         CHECK (command[0] == "env");
-        const auto loaderAt = command.indexOf (libraries->loader.getFullPathName());
+        const auto loaderAt = command.indexOf (libraries.loader.getFullPathName());
         REQUIRE (loaderAt > 0);
         CHECK (command[loaderAt + 1] == "--library-path");
         CHECK (command[loaderAt + 2] == arch.root.getChildFile ("usr/lib").getFullPathName());
-        CHECK (command[loaderAt + 3] == "/app/lib/spinus/spinus-plugin-scanner");
+        CHECK (command[loaderAt + 3] == scanner.getFullPathName());
         CHECK (command[loaderAt + 4] == "--format");
     }
 
     SECTION ("Debian and Ubuntu: the multiarch folder")
     {
         FakeRoot debian ("usr/lib/x86_64-linux-gnu", "2.41");
-        const auto libraries = findHostLibraries (debian.root, "2.41");
-        REQUIRE (libraries.has_value());
-        CHECK (libraries->loader == debian.root.getChildFile ("usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"));
-        CHECK (libraries->environment.isEmpty());
+        const auto found = findHostLibraries (debian.root, "2.41");
+        REQUIRE (found.has_value());
+        const auto libraries = found.value_or (HostLibraries {});
+        CHECK (libraries.loader == debian.root.getChildFile ("usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"));
+        CHECK (libraries.environment.isEmpty());
     }
 
     SECTION ("Not when the computer's C library is older than the Flatpak's: its plugins load there anyway")

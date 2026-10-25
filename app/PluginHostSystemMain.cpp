@@ -29,9 +29,11 @@ int main (int argc, char* argv[])
         command.add (juce::String::fromUTF8 (argv[i]));
 
     std::vector<std::string> strings;
+    strings.reserve (static_cast<size_t> (command.size()));
     for (const auto& part : command)
         strings.push_back (part.toStdString());
     std::vector<char*> args;
+    args.reserve (strings.size() + 1);
     for (auto& s : strings)
         args.push_back (s.data());
     args.push_back (nullptr);
