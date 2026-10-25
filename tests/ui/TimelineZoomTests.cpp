@@ -43,6 +43,9 @@ TEST_CASE ("The zoom keys", "[ui][zoom]")
     CHECK (timeline::zoomKeyOf (juce::KeyPress ('=', ctrl, '=')) == timeline::ZoomKey::in);
     CHECK (timeline::zoomKeyOf (juce::KeyPress ('+', ctrl, '+')) == timeline::ZoomKey::in);
     CHECK (timeline::zoomKeyOf (juce::KeyPress ('-', ctrl, '-')) == timeline::ZoomKey::out);
+    CHECK (timeline::zoomKeyOf (juce::KeyPress (juce::KeyPress::pageUpKey)) == timeline::ZoomKey::in);
+    CHECK (timeline::zoomKeyOf (juce::KeyPress (juce::KeyPress::pageDownKey)) == timeline::ZoomKey::out);
+    CHECK (timeline::zoomKeyOf (juce::KeyPress (juce::KeyPress::pageUpKey, ctrl, 0)) == timeline::ZoomKey::none);
     CHECK (timeline::zoomKeyOf (juce::KeyPress ('0', ctrl, '0')) == timeline::ZoomKey::fit);
     // Without Ctrl, - and = belong to the typing keyboard (octave down and up).
     CHECK (timeline::zoomKeyOf (juce::KeyPress ('-', 0, '-')) == timeline::ZoomKey::none);

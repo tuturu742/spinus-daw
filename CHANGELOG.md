@@ -22,6 +22,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   tracks taller or shorter.
 - **Follow:** the Playlist, Piano Roll and Automation editor turn the page while the song or pattern plays,
   so the play position stays in sight. The **Follow** button switches it off; Spinus remembers your choice.
+- **FL Studio's editing keys:** in the Piano Roll, **Shift+Up/Down** moves notes a semitone, **Ctrl+Up/Down** an
+  octave and **Shift+Left/Right** a snap step, and the note tools have keys (**Alt+Q** quantize, **Ctrl+L**
+  legato, **Ctrl+U** chop, **Alt+A** arpeggiate, **Alt+S** strum, **Alt+R** humanize). The Playlist gets
+  **Ctrl+C**, **Ctrl+X**, **Ctrl+V** and **Ctrl+B** (duplicate) for clips, and **Shift**+arrows to move them
+  a grid step or a track. **Ctrl+D** selects nothing and **Page Up/Down** zoom, in both.
+- **The Piano Roll's bar numbers** show across the whole width again: its buttons have a row of their own
+  above the timeline (they hid the bars after the first).
 
 ### Windows and shortcuts
 

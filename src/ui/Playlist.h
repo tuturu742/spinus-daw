@@ -70,6 +70,16 @@ public:
     /** Selects the clips overlapping a time range on rows `firstRow` to `lastRow`. */
     void selectArea (model::Ticks from, model::Ticks to, int firstRow, int lastRow, bool add);
 
+    /** The clipboard (Ctrl+C, Ctrl+X, Ctrl+V) and Ctrl+B: clips are copied whole (pattern, audio or automation,
+        with their settings). Paste puts the clips back where they were copied from, or right after them when
+        they are still there; duplicate puts a copy of the selection right after it (rounded up to whole bars).
+        The copies become the selection. Each call is one undo step. */
+    bool copySelection();
+    bool cutSelection();
+    bool paste();
+    bool duplicateSelection();
+    static const std::vector<model::Clip>& getCopiedClips();
+
     enum class Tool
     {
         draw,
@@ -200,6 +210,8 @@ private:
     bool performAll (const juce::String& description, const juce::Array<juce::var>& steps);
     bool setPoints (model::ClipId, const std::vector<model::AutomationPoint>&);
     model::LaneId ensureLane (int row);
+    std::vector<model::Clip> getSelectedClips() const;
+    bool placeCopies (std::vector<model::Clip>, const juce::String& description);
     /** Brings the file into the project (audio/ folder, FLAC when needed): its path there and its length. */
     bool importAudio (const juce::File&, juce::String& path, model::Ticks& ticks);
     void updateScrollBars();
