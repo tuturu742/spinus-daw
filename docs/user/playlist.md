@@ -25,7 +25,9 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 | Markers | **Double-click** the ruler to put a marker there ("Marker 1"): a named point to see the song's parts. **Click** a marker to jump to it, **drag** it to move it, **right-click** it to rename or remove it. Its line shows faintly across the tracks. |
 | Loop part of the song | Hold the right mouse button and drag across the ruler: song mode then plays that part over and over (it starts there if the position is outside it). The part is shaded across the tracks too. Right-click the ruler to stop looping. |
 | Grid | The list next to the tools: bar, beat (the default), 1/2 or 1/4 beat, triplets, or no grid. Hold **Alt** while dragging to place freely. |
-| Scroll / zoom | Mouse wheel, **Shift**+wheel sideways, **Ctrl**+wheel zoom. |
+| Scroll | Mouse wheel, **Shift**+wheel sideways, or the scroll bars. |
+| Zoom | The **−**, **+** and **Fit** buttons next to the grid list (Fit shows the whole song), **Ctrl+=** and **Ctrl+-** (**Ctrl+0**: fit), or **Ctrl**+wheel, which zooms around the mouse. **Ctrl+Shift**+wheel makes the tracks taller or shorter. |
+| Follow the song | **Follow** next to the zoom buttons: while the song plays, the view turns the page when the song position reaches its edge. On by default; Spinus remembers your choice. |
 
 **Tools** (the buttons at the top, as in the Piano Roll; the keys in brackets pick one when the Playlist is in front):
 
@@ -138,7 +140,8 @@ the time and value there.
 | Select points | **Ctrl**+drag a box around them (add **Shift** to keep the ones already selected), or **Shift**+click. **Ctrl+A** selects all, **Escape** none, **Delete** removes them. |
 | Nudge the selection | **Up**/**Down**: 1% (with **Shift**: 0.1%). **Left**/**Right**: one grid step (with **Alt**: the smallest step). |
 | Grid | The list next to the tools: bar, beat, down to 1/8 beat, triplets, or no grid. Hold **Alt** to place a point off the grid. |
-| Scroll and zoom | Mouse wheel scrolls; **Ctrl**+wheel zooms around the mouse. |
+| Scroll and zoom | Mouse wheel scrolls; **Ctrl**+wheel zooms around the mouse. The **−**, **+** and **Fit** buttons (Fit shows the whole clip), **Ctrl+=**, **Ctrl+-** and **Ctrl+0** zoom too. |
+| Follow the song | **Follow**: while the song plays through the clip, the view turns the page to keep the position in sight. |
 
 **Tools:**
 

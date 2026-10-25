@@ -54,19 +54,6 @@ juce::Image snapshotPanel (MainView& view, const juce::String& id)
     return view.createComponentSnapshot (view.getLocalArea (frame, frame->getLocalBounds()), true, 1.0f);
 }
 
-/** Ctrl+mouse wheel over the component, as a user zooms: `steps` clicks out (negative) or in. */
-void ctrlWheel (juce::Component& c, int steps)
-{
-    const auto centre = c.getLocalBounds().getCentre().toFloat();
-    const auto now = juce::Time::getCurrentTime();
-    const juce::MouseEvent e (juce::Desktop::getInstance().getMainMouseSource(), centre,
-                              juce::ModifierKeys::ctrlModifier, juce::MouseInputSource::defaultPressure, 0.0f, 0.0f,
-                              0.0f, 0.0f, &c, &c, now, centre, now, 0, false);
-    const juce::MouseWheelDetails wheel { 0.0f, steps > 0 ? 0.5f : -0.5f, false, false, false };
-    for (int i = 0; i < std::abs (steps); ++i)
-        c.mouseWheelMove (e, wheel);
-}
-
 /** Scrolls the component's horizontal scroll bar to `start` (in the bar's own units). */
 void scrollTo (juce::Component& c, double start)
 {
@@ -137,7 +124,7 @@ TEST_CASE ("Main window and panel screenshots for the manual", "[.screenshot][ma
         write (snapshotPanel (view, "pianoRoll"), "piano-roll.png");
         REQUIRE (view.useLayout ("Arrange")); // the Playlist over the whole workspace
         juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
-        ctrlWheel (*playlist, -9); // the song's first half: intro, verse, build and drop
+        playlist->zoom (1.0 / 3.5, 0.0f); // the song's first half: intro, verse, build and drop
         scrollTo (*playlist, 0.0);
         write (snapshotPanel (view, "playlist"), "playlist.png");
     }

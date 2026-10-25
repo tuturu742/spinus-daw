@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TimelineControls.h"
 #include "Workspace.h"
 #include "session/Session.h"
 
@@ -18,7 +19,9 @@ namespace spinus::ui
     and duplicate. Notes snap to the grid
     (the pattern's step by default, or the snap chosen beside the tools; hold Alt to place freely). The lane at the
    bottom edits one value of each note, chosen in its corner as in FL: velocity, release velocity, pan, fine pitch or
-   volume; right-click a bar to reset it. The wheel scrolls (Shift: sideways), Ctrl+wheel zooms.
+   volume; right-click a bar to reset it. The wheel scrolls (Shift: sideways), Ctrl+wheel zooms around the mouse
+   (Ctrl+Shift+wheel: the keys' height); the toolbar's zoom buttons, Ctrl+= and Ctrl+- zoom too, Ctrl+0 fits the
+   pattern. Follow (on by default, remembered) turns the page while the pattern plays.
 
     Edits work on a copy while the mouse is down and are committed as one Command when it is released,
     so every gesture is one undo step.
@@ -248,6 +251,18 @@ public:
     float pitchToY (int pitch) const;
     int yToPitch (float y) const;
     void scrollToPitch (int pitch);
+    /** Zooms the time (`aroundX`: pixels from the grid's left, where the time stays put; none: the middle). */
+    void zoom (double factor, std::optional<float> aroundX = {});
+    /** Makes the keys taller or shorter, keeping the middle pitch in place. */
+    void zoomKeys (double factor);
+    /** Shows the whole pattern across the grid. */
+    void fitPattern();
+    double getScrollTicks() const noexcept { return scrollTicks; }
+    double getVisibleTicks() const;
+    bool isFollowing() const { return timelineControls.isFollowing(); }
+    void setFollowing (bool follow) { timelineControls.setFollowing (follow); }
+    /** Turns the page when `ticks` (the pattern position while it plays) has left the view and Follow is on. */
+    void follow (double ticks);
 
     /** Applies pending updates now (tests). */
     using juce::AsyncUpdater::handleUpdateNowIfNeeded;
@@ -256,6 +271,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseMagnify (const juce::MouseEvent&, float scale) override;
+    bool keyPressed (const juce::KeyPress&) override;
 
 private:
     class Grid;
@@ -271,7 +288,6 @@ private:
     bool ensurePattern();
     model::Ticks getPatternLength() const;
 
-    void zoom (float factor, bool vertical);
     void updateScrollBars();
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override { triggerAsyncUpdate(); }
@@ -303,6 +319,7 @@ private:
     Snap snapChoice = Snap::step;
     juce::ComboBox snapBox, chordBox;
     juce::TextButton toolsButton { "Tools" };
+    TimelineControls timelineControls;
     int chordStamp = 1;
     void updateSnap();
     double pixelsPerBeat = 96.0;

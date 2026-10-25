@@ -38,6 +38,7 @@ In the waveform:
 | Move a slice's start | Drag its marker. |
 | Add a slice | Double-click where it should start. |
 | Remove a slice | Right-click its marker. |
+| Zoom in on the loop | **Ctrl**+wheel zooms around the mouse (up to 64 times); the wheel then scrolls along the loop. Zooming in helps to place a marker exactly. |
 | Choose a slice's key | Right-click inside the slice: **Play from key** lists every key by octave, **Next free key up** moves it to the next key no slice uses. The key is shown at the bottom of each slice. |
 
 Slicing again (changing the method, the slider, the grid or the loop length with grid slicing) replaces

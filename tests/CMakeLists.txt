@@ -91,6 +91,7 @@ add_executable (spinus_tests
     ui/PatternGeneratorTests.cpp
     ui/PianoRollTests.cpp
     ui/PlaylistTests.cpp
+    ui/TimelineZoomTests.cpp
     ui/RecordIdeaTests.cpp
     ui/PluginWindowTests.cpp
     ui/SpinusTuneTests.cpp

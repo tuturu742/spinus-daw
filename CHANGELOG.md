@@ -14,6 +14,15 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   addresses are masked, so the logs hold no keys and no user name. After a crash, the next run's log names
   the run that ended unexpectedly. See [Troubleshooting](docs/user/troubleshooting.md#log-files).
 
+### Making music
+
+- **Zoom buttons and keys:** the Playlist, Piano Roll, Automation editor and Spinus Tune have **−**, **+**
+  and **Fit** buttons, and **Ctrl+=**, **Ctrl+-** and **Ctrl+0** (fit) zoom them. **Ctrl**+wheel now zooms
+  around the mouse everywhere, the Beat Slicer's loop too, and **Ctrl+Shift**+wheel makes the Playlist's
+  tracks taller or shorter.
+- **Follow:** the Playlist, Piano Roll and Automation editor turn the page while the song or pattern plays,
+  so the play position stays in sight. The **Follow** button switches it off; Spinus remembers your choice.
+
 ### Sounds
 
 - Three more free one-click downloads, for Linux and Windows: the **Six Sines** FM synthesizer, with its

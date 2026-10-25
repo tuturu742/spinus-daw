@@ -18,14 +18,15 @@ public:
         // Peaks per pixel column, so painting does not walk the whole loop.
         peaks.clear();
         const auto& loop = slicer.getLoop();
+        clampView();
         if (loop.audio != nullptr && getWidth() > 0)
         {
             const auto& audio = *loop.audio;
             const auto length = audio.getNumSamples();
             for (int x = 0; x < getWidth(); ++x)
             {
-                const auto from = (int)((juce::int64)length * x / getWidth());
-                const auto to = juce::jmax (from + 1, (int)((juce::int64)length * (x + 1) / getWidth()));
+                const auto from = juce::jlimit (0, juce::jmax (0, length - 1), (int)toSample ((float)x));
+                const auto to = juce::jlimit (from + 1, juce::jmax (from + 1, length), (int)toSample ((float)(x + 1)));
                 float peak = 0.0f;
                 for (int c = 0; c < audio.getNumChannels(); ++c)
                     peak = juce::jmax (peak, audio.getMagnitude (c, from, juce::jmin (to, length) - from));
@@ -62,7 +63,7 @@ public:
         {
             const auto x = toX (points[i]);
             g.setColour ((int)i == playing ? look::loop.withAlpha (0.25f) : juce::Colours::transparentBlack);
-            const auto next = i + 1 < points.size() ? toX (points[i + 1]) : (float)getWidth();
+            const auto next = i + 1 < points.size() ? toX (points[i + 1]) : toX (slicer.getLoop().getLength());
             g.fillRect (x, 0.0f, next - x, (float)getHeight());
             g.setColour (look::text);
             g.drawVerticalLine ((int)x, 0.0f, (float)getHeight());
@@ -77,18 +78,47 @@ public:
         }
     }
 
+    // The part of the loop shown: all of it, or (zoomed in with Ctrl+wheel) a part, as fractions of its length.
     float toX (juce::int64 sample) const
     {
         const auto length = std::max<juce::int64> (1, slicer.getLoop().getLength());
-        return (float)getWidth() * (float)sample / (float)length;
+        return (float)((double)getWidth() * ((double)sample / (double)length - viewStart) / viewSize);
     }
 
     juce::int64 toSample (float x) const
     {
         const auto length = slicer.getLoop().getLength();
-        return std::clamp<juce::int64> ((juce::int64)((double)x / juce::jmax (1, getWidth()) * (double)length), 0,
+        const auto fraction = viewStart + (double)x / juce::jmax (1, getWidth()) * viewSize;
+        return std::clamp<juce::int64> ((juce::int64)(fraction * (double)length), 0,
                                         std::max<juce::int64> (0, length - 1));
     }
+
+    /** Ctrl+wheel zooms around the mouse (up to 64 times); the wheel then scrolls. */
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override
+    {
+        const auto delta = std::abs (wheel.deltaY) > std::abs (wheel.deltaX) ? wheel.deltaY : wheel.deltaX;
+        if (e.mods.isCtrlDown())
+            zoom (delta > 0.0f ? 1.25 : 1.0 / 1.25, e.position.x);
+        else if (viewSize < 1.0)
+        {
+            viewStart -= (double)delta * viewSize * 0.25;
+            refresh();
+        }
+        else
+            juce::Component::mouseWheelMove (e, wheel);
+    }
+
+    void mouseMagnify (const juce::MouseEvent& e, float scale) override { zoom (scale, e.position.x); }
+
+    void zoom (double factor, float aroundX)
+    {
+        const auto at = viewStart + (double)aroundX / juce::jmax (1, getWidth()) * viewSize;
+        viewSize = juce::jlimit (1.0 / 64.0, 1.0, viewSize / factor);
+        viewStart = at - (double)aroundX / juce::jmax (1, getWidth()) * viewSize;
+        refresh();
+    }
+
+    void clampView() { viewStart = juce::jlimit (0.0, 1.0 - viewSize, viewStart); }
 
     /** The marker under x (within a few pixels), or -1. The first marker cannot be moved. */
     int markerAt (float x) const
@@ -204,6 +234,7 @@ private:
     BeatSlicerProcessor& slicer;
     std::vector<float> peaks;
     int dragging = -1, playing = -1;
+    double viewStart = 0.0, viewSize = 1.0;
 };
 
 //==============================================================================
@@ -292,11 +323,12 @@ void BeatSlicerEditor::refresh()
         length.setText (BeatSlicerProcessor::describeBeats (slicer.getLoopBeats()), juce::dontSendNotification);
 
     const auto& loop = slicer.getLoop();
-    message.setText (slicer.hasLoop() ? loop.name + ": " + juce::String ((int)slicer.getSlicePoints().size()) +
-                                            " slices, each on the key shown at its bottom. Click a slice to hear "
-                                            "it; right-click it to choose its key. Drag a marker to move it, "
-                                            "double-click to add one, right-click a marker to remove it."
-                                      : "No loop yet.",
+    message.setText (slicer.hasLoop()
+                         ? loop.name + ": " + juce::String ((int)slicer.getSlicePoints().size()) +
+                               " slices, each on the key shown at its bottom. Click a slice to hear "
+                               "it; right-click it to choose its key. Drag a marker to move it, "
+                               "double-click to add one, right-click a marker to remove it. Ctrl+wheel zooms."
+                         : "No loop yet.",
                      juce::dontSendNotification);
     waveform->refresh();
 }

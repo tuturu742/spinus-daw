@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TimelineControls.h"
 #include "Workspace.h"
 #include "model/Automation.h"
 #include "session/Session.h"
@@ -19,7 +20,9 @@ namespace spinus::ui
     curve (double-click it to straighten it); double-click a point to type its value and position.
     Tools: Draw, Line (drag a straight ramp), Paint (draw freehand), Select. Keys: Delete, Ctrl+A,
     Escape, the arrows nudge the selection (Up/Down: 1%, with Shift 0.1%; Left/Right: one grid step,
-    with Alt one tick). Points snap to the grid (Alt: free). The wheel scrolls, Ctrl+wheel zooms.
+    with Alt one tick). Points snap to the grid (Alt: free). The wheel scrolls, Ctrl+wheel zooms around the
+    mouse; the toolbar's zoom buttons, Ctrl+= and Ctrl+- zoom too, Ctrl+0 fits the clip. Follow (on by default,
+    remembered) turns the page while the song plays through the clip.
 
     Edits work on a copy while the mouse is down and are written as one clip.setPoints command when it
     is released, so every gesture is one undo step.
@@ -98,10 +101,20 @@ public:
     float valueToY (float) const;
     float yToValue (float) const;
 
+    /** Zooms the time (`aroundX`: pixels from the canvas' left, where the time stays put; none: the middle). */
+    void zoom (double factor, std::optional<float> aroundX = {});
+    /** Shows the whole clip. */
+    void fitToClip();
+    double getPixelsPerBeat() const noexcept { return pixelsPerBeat; }
+    double getScrollTicks() const noexcept { return scrollTicks; }
+    bool isFollowing() const { return timelineControls.isFollowing(); }
+    void setFollowing (bool follow) { timelineControls.setFollowing (follow); }
+
     juce::Rectangle<int> getDefaultBounds() const override { return { 120, 110, 780, 360 }; }
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseMagnify (const juce::MouseEvent&, float scale) override;
 
 private:
     class Canvas;
@@ -115,7 +128,6 @@ private:
     void sortPoints (std::vector<model::AutomationPoint>&, std::set<int>&) const;
     bool commit (std::vector<model::AutomationPoint>, std::set<int> newSelection, const juce::String& what);
     void reload();
-    void fitToClip();
     void updateScrollBars();
     void updateStatus();
     void showShapesMenu();
@@ -147,6 +159,7 @@ private:
     juce::Label title, status, emptyMessage;
     juce::TextButton toolButtons[4], shapesButton { "Shapes" };
     juce::ComboBox snapChoice;
+    TimelineControls timelineControls;
     juce::ScrollBar horizontal { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AutomationEditor)

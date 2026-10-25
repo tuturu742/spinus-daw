@@ -670,7 +670,9 @@ private:
 };
 
 //==============================================================================
-AutomationEditor::AutomationEditor (Session& s) : Panel ("automation", "Automation"), session (s)
+AutomationEditor::AutomationEditor (Session& s)
+    : Panel ("automation", "Automation"), session (s),
+      timelineControls (&s.getEdit().engine.getPropertyStorage().getPropertiesFile(), "automationFollows")
 {
     setHelpText ("Automation editor: click to add points, drag to move (Shift: fine), right-click to delete, drag a "
                  "diamond to bend. Double-click a point to type its value. Wheel: scroll, Ctrl+wheel: zoom");
@@ -734,6 +736,10 @@ AutomationEditor::AutomationEditor (Session& s) : Panel ("automation", "Automati
 
     horizontal.setAutoHide (false);
     horizontal.addListener (this);
+
+    timelineControls.onZoom = [this] (double factor) { zoom (factor); };
+    timelineControls.onFit = [this] { fitToClip(); };
+    addAndMakeVisible (timelineControls);
 
     session.addChangeListener (this);
     historyListener = session.getHistory().addListener ([this] (const commands::ChangeSet&) { triggerAsyncUpdate(); });
@@ -1084,6 +1090,21 @@ void AutomationEditor::nudge (float deltaValue, model::Ticks deltaTicks)
 
 bool AutomationEditor::keyPressed (const juce::KeyPress& key)
 {
+    switch (timeline::zoomKeyOf (key))
+    {
+    case timeline::ZoomKey::in:
+        zoom (timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::out:
+        zoom (1.0 / timeline::zoomStep);
+        return true;
+    case timeline::ZoomKey::fit:
+        fitToClip();
+        return true;
+    case timeline::ZoomKey::none:
+        break;
+    }
+
     const auto mods = key.getModifiers();
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
         return deleteSelection() || ! selection.empty();
@@ -1196,6 +1217,8 @@ void AutomationEditor::resized()
     snapChoice.setBounds (bar.removeFromLeft (140));
     bar.removeFromLeft (6);
     shapesButton.setBounds (bar.removeFromLeft (70));
+    bar.removeFromLeft (8);
+    timelineControls.setBounds (bar.removeFromLeft (timelineControls.getPreferredWidth()));
     bar.removeFromLeft (10);
     title.setBounds (bar.removeFromLeft (juce::jmin (260, bar.getWidth() / 2)));
     status.setBounds (bar);
@@ -1229,16 +1252,27 @@ void AutomationEditor::mouseWheelMove (const juce::MouseEvent& e, const juce::Mo
 {
     if (e.mods.isCtrlDown())
     {
-        // Zoom around the mouse.
-        const auto at = canvas->getLocalPoint (this, e.position).x;
-        const auto tick = (double)at / pixelsPerBeat * (double)beat + scrollTicks;
-        pixelsPerBeat = juce::jlimit (2.0, 800.0, pixelsPerBeat * (wheel.deltaY > 0 ? 1.15 : 1.0 / 1.15));
-        scrollTicks = tick - (double)at / pixelsPerBeat * (double)beat;
+        zoom (timeline::wheelZoomFactor (wheel), canvas->getLocalPoint (this, e.position).x);
+        return;
     }
-    else
-        scrollTicks -= (double)(std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? wheel.deltaX : wheel.deltaY) *
-                       (double)canvas->getWidth() / pixelsPerBeat * (double)beat * 0.5;
+    scrollTicks -= (double)(std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? wheel.deltaX : wheel.deltaY) *
+                   (double)canvas->getWidth() / pixelsPerBeat * (double)beat * 0.5;
 
+    updateScrollBars();
+    repaint();
+}
+
+void AutomationEditor::mouseMagnify (const juce::MouseEvent& e, float scale)
+{
+    zoom (scale, canvas->getLocalPoint (this, e.position).x);
+}
+
+void AutomationEditor::zoom (double factor, std::optional<float> aroundX)
+{
+    const auto x = aroundX.value_or ((float)canvas->getWidth() * 0.5f);
+    // The view may start a little before the clip (fitToClip leaves a margin there).
+    scrollTicks = timeline::zoomAround (pixelsPerBeat, scrollTicks, (double)x, factor, { 2.0, 800.0 }, (double)beat,
+                                        -(double)juce::jmax<model::Ticks> (beat, getClipLength()));
     updateScrollBars();
     repaint();
 }
@@ -1257,6 +1291,13 @@ void AutomationEditor::timerCallback()
     if (std::abs (ticks - playheadTicks) > 1.0)
     {
         playheadTicks = ticks;
+        if (session.isPlaying() && timelineControls.isFollowing() && ! editing)
+            if (const auto start = timeline::followPlayhead (ticks, scrollTicks,
+                                                             (double)canvas->getWidth() / pixelsPerBeat * (double)beat))
+            {
+                scrollTicks = *start;
+                updateScrollBars();
+            }
         canvas->repaint();
     }
 }

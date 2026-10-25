@@ -21,7 +21,8 @@ automatically.
 | Velocity, pan and more | Drag a bar in the lane at the bottom up or down (see below). Right-click a bar to reset it. |
 | Loop part of the pattern | Hold the right mouse button and drag across the timeline above the notes: pattern mode then plays only that part, over and over. The part is shaded across the notes too. Right-click the timeline to loop the whole pattern again (choosing another pattern does too). |
 | Scroll | Mouse wheel (up/down), **Shift**+wheel (left/right), or the scroll bars. |
-| Zoom | **Ctrl**+wheel (time), **Ctrl+Shift**+wheel (key height). |
+| Zoom | The **−**, **+** and **Fit** buttons at the top (Fit shows the whole pattern), **Ctrl+=** and **Ctrl+-** (**Ctrl+0**: fit), or **Ctrl**+wheel, which zooms around the mouse. **Ctrl+Shift**+wheel makes the keys taller or shorter. |
+| Follow the playing | **Follow** at the top: while the pattern plays, the view turns the page when the play position reaches its edge. On by default; Spinus remembers your choice. |
 
 - Notes snap to the grid chosen beside the tools: **Step** (the default) follows the pattern's Channel
   Rack steps, sixteenths or, with **Triplet steps** on, sixteenth-note triplets. Or choose **Bar**,
