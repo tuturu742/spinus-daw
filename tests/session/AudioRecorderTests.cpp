@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "../engine/TestDevices.h"
+#include "FakeSoundCard.h"
 #include "RealtimeRunner.h"
 #include "engine/EngineHost.h"
 #include "commands/CommandRegistry.h"
@@ -210,4 +211,64 @@ TEST_CASE ("Multi-track recording: each armed track records its own input", "[au
         take.file.deleteFile();
     single[0].file.deleteFile();
     session.getAudioRecorder().setMetering (false);
+}
+
+// A microphone opened through PipeWire joins the system's sound (a webcam's can become its clock, with small
+// buffers for every program), so the inputs are on only while something records or meters them. Through
+// JUCE's real device handling, on a software sound card with a two-input mic.
+TEST_CASE ("The sound card's inputs are on only while something records or meters them", "[audiorecord][audio]")
+{
+    EngineHost host ({ .openAudioDevice = false });
+    auto& engine = host.getEngine();
+    test::FakeSoundCard card;
+    auto& devices = engine.getDeviceManager();
+    devices.deviceManager.addAudioDeviceType (card.createType());
+    // A saved setup recording from the mic (as an older Spinus left it).
+    juce::XmlElement saved ("DEVICESETUP");
+    saved.setAttribute ("deviceType", test::FakeSoundCard::typeName);
+    saved.setAttribute ("audioOutputDeviceName", "Fake output A");
+    saved.setAttribute ("audioInputDeviceName", "Fake mic");
+    saved.setAttribute ("audioDeviceInChans", "11");
+    saved.setAttribute ("audioDeviceRate", 48000.0);
+    saved.setAttribute ("audioDeviceBufferSize", 256);
+    engine.getPropertyStorage().setXmlProperty (tracktion::SettingID::audio_device_setup, saved);
+    devices.initialise (2, 2);
+    REQUIRE (devices.deviceManager.getCurrentAudioDevice() != nullptr);
+    using Inputs = std::vector<int>;
+    REQUIRE (recording::activeInputChannels (engine) == Inputs { 0, 1 });
+
+    // Nothing records yet: off, the mic still chosen.
+    Session session (engine, std::make_unique<test::TestDevices> (engine));
+    CHECK (recording::activeInputChannels (engine).empty());
+    CHECK (devices.deviceManager.getAudioDeviceSetup().inputDeviceName == "Fake mic");
+    CHECK (recording::inputChannelNames (engine) == juce::StringArray { "Mic 1", "Mic 2" });
+
+    // An armed track's input, while it is metered.
+    const auto track = (int)perform (session, "channel.add", R"({"name": "Vocal", "audioTrack": true})")["channel"];
+    perform (session, "channel.set",
+             R"({"channel": )" + juce::String (track) + R"(, "recordInput": 2, "recordArmed": true})");
+    auto& recorder = session.getAudioRecorder();
+    REQUIRE (recorder.setMetering (true).wasOk());
+    CHECK (recording::activeInputChannels (engine) == Inputs { 1 });
+    recorder.setMetering (false);
+    CHECK (recording::activeInputChannels (engine).empty());
+
+    // Recording: on while it records, off after (what is recorded: the tests above).
+    REQUIRE (recorder.start().wasOk());
+    CHECK (recording::activeInputChannels (engine) == Inputs { 1 });
+    recorder.cancel();
+    CHECK (! recorder.isRecording());
+    CHECK (recording::activeInputChannels (engine).empty());
+
+    // Another user (Options › Audio open) keeps them on when metering ends.
+    {
+        recording::InputUse settingsOpen (engine);
+        REQUIRE (recording::useInputs (engine, { 0 }).wasOk());
+        REQUIRE (recorder.setMetering (true).wasOk());
+        recorder.setMetering (false);
+        CHECK (recording::activeInputChannels (engine) == Inputs { 0, 1 });
+    }
+    CHECK (recording::activeInputChannels (engine).empty());
+    perform (session, "channel.set", R"({"channel": )" + juce::String (track) + R"(, "recordArmed": false})");
+    devices.deviceManager.closeAudioDevice();
 }

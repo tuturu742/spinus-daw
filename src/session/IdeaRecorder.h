@@ -1,6 +1,10 @@
 #pragma once
 
+#include "RecordingTime.h"
+
 #include <tracktion_engine/tracktion_engine.h>
+
+#include <optional>
 
 namespace spinus
 {
@@ -84,6 +88,7 @@ private:
     int inputChannel = 0; // the chosen input's channel in the recording input
 
     tracktion::InputDeviceInstance* input = nullptr;
+    std::optional<recording::InputUse> inputUse; // while recording
     juce::TimeSliceThread writerThread { "Spinus idea writer" };
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> writer;
     juce::AudioBuffer<float> mono;

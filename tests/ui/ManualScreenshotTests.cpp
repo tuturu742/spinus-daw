@@ -140,23 +140,16 @@ TEST_CASE ("Browser projects and Manual screenshots for the manual", "[.screensh
         Session session (host.getEngine(), makeDevices (host.getEngine()));
         SpinusLookAndFeel lf { Theme::dark() };
 
-        // Projects: the demo songs, three opened ones (one gone since), and a folder of projects.
+        // Projects: the demo songs and a folder of projects.
         Browser browser (session);
         browser.setLookAndFeel (&lf);
         browser.setSize (300, 560);
         browser.setDemos (demo::listDemos (juce::File (SPINUS_TEST_FILES_DIR).getSiblingFile ("demo")));
         browser.setProjectsFile (root.getChildFile ("settings/projects.json"));
-        for (auto name : { "Old Remix", "Rainy Loop", "Late Night Beat" })
-        {
-            REQUIRE (project::saveProject (root.getChildFile ("Music/" + juce::String (name)), {}).wasOk());
-            browser.getProjects().addOpened (root.getChildFile ("Music/" + juce::String (name)));
-        }
         const auto library = root.getChildFile ("Beats");
         for (auto name : { "2025/Summer Groove", "2025/Club Edit", "2026/Lo-fi Sketch", "Synthwave Demo" })
             REQUIRE (project::saveProject (library.getChildFile (name), {}).wasOk());
         REQUIRE (browser.addProjectFolder (library));
-        root.getChildFile ("Music/Old Remix").deleteRecursively();
-        browser.getProjects().rescan();
         browser.getProjects().waitForScan();
         browser.toggleOpen ("samples");
         juce::MessageManager::getInstance()->runDispatchLoopUntil (100);

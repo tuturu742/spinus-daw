@@ -199,6 +199,29 @@ EngineHost::EngineHost (const Options& options)
                                                          &engine->getPropertyStorage().getPropertiesFile());
         if (auto* behaviour = dynamic_cast<SpinusUIBehaviour*> (&engine->getUIBehaviour()))
             behaviour->pipeWireInput = pipeWireInput.get();
+
+        // First start through JACK: record from a microphone, not from whatever program plays (JUCE's choice).
+        auto& manager = engine->getDeviceManager().deviceManager;
+        if (firstStartAudioChoice.isNotEmpty() && manager.getCurrentAudioDeviceType() == "JACK")
+            if (auto* type = manager.getCurrentDeviceTypeObject())
+            {
+                juce::StringArray microphones;
+                for (const auto& source : pipeWireInput->listSources())
+                {
+                    microphones.add (source.description);
+                    microphones.add (source.name);
+                }
+                auto setup = manager.getAudioDeviceSetup();
+                const auto input = engine::AudioSetup::pickJackInput (type->getDeviceNames (true), microphones);
+                if (input != setup.inputDeviceName)
+                {
+                    setup.inputDeviceName = input;
+                    setup.useDefaultInputChannels = false;
+                    setup.inputChannels.clear(); // switched on when something records (recording::InputUse)
+                    manager.setAudioDeviceSetup (setup, true);
+                    engine->getDeviceManager().saveSettings();
+                }
+            }
     }
 }
 

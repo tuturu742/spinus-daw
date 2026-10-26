@@ -300,9 +300,10 @@ TEST_CASE ("The Browser lists the demo songs; opening one opens a copy in the Mu
     REQUIRE (ui.view.openTheDemoSong());
     CHECK (ui.document.getFolder() == music.getChildFile ("Siskin"));
 
-    // The copies opened are listed as projects of the user's own.
-    ui.document.dispatchPendingMessages();
-    CHECK (ui.view.getBrowser().getProjects().getOpened().size() == 2);
+    // The copies are the user's own projects, in Music: listed there once Music is a folder of projects.
+    REQUIRE (ui.view.getBrowser().addProjectFolder (music));
+    ui.view.getBrowser().getProjects().waitForScan();
+    CHECK (ui.view.getBrowser().getProjects().getAllProjects().size() == 2);
 
     // No demo songs: none listed, and the problem is shown.
     ui.document.newProject();
@@ -313,27 +314,31 @@ TEST_CASE ("The Browser lists the demo songs; opening one opens a copy in the Mu
     CHECK (ui.questions[ui.questions.size() - 1] == "Could not open the demo song");
 }
 
-TEST_CASE ("Projects opened from the file system are listed in the Browser and open from there",
-           "[ui][document][projects]")
+TEST_CASE ("Projects in the Browser's folders open from there", "[ui][document][projects]")
 {
     Ui ui;
     ui.view.setDemoFolders (ui.root.getChildFile ("no demos"), ui.root.getChildFile ("Music"));
     auto& browser = ui.view.getBrowser();
     browser.setProjectsFile (ui.root.getChildFile ("settings/projects.json"));
+    const auto songs = ui.root.getChildFile ("Songs");
+    REQUIRE (songs.createDirectory());
+    REQUIRE (browser.addProjectFolder (songs));
     browser.getProjects().waitForScan();
 
-    // Saved (Save As) and opened (File › Open, Open recent, the command line): listed, newest first.
+    // Saved into a folder of projects: listed there at once. Elsewhere: not listed (Open recent has it).
     ui.edit();
-    REQUIRE (ui.view.saveProjectTo (ui.root.getChildFile ("Songs/Beat")));
+    REQUIRE (ui.view.saveProjectTo (songs.getChildFile ("Beat")));
     ui.document.dispatchPendingMessages();
     ui.document.newProject();
     ui.edit();
-    REQUIRE (ui.view.saveProjectTo (ui.root.getChildFile ("Songs/Ballad")));
+    REQUIRE (ui.view.saveProjectTo (songs.getChildFile ("Ballad")));
     ui.document.dispatchPendingMessages();
-    REQUIRE (ui.view.openProjectFile (ui.root.getChildFile ("Songs/Beat/Beat.spn")));
+    ui.document.newProject();
+    ui.edit();
+    REQUIRE (ui.view.saveProjectTo (ui.root.getChildFile ("Elsewhere/Sketch")));
     ui.document.dispatchPendingMessages();
-    CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Beat", "Ballad" });
-    CHECK (rowTexts (browser, Browser::RowKind::group).contains ("Opened  (2)"));
+    CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Ballad", "Beat" });
+    CHECK (rowTexts (browser, Browser::RowKind::group).contains ("Songs  (2)"));
 
     // Double-click opens it, after asking about unsaved changes.
     ui.edit();
@@ -347,30 +352,26 @@ TEST_CASE ("Projects opened from the file system are listed in the Browser and o
     CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Ballad" });
     browser.setSearchText ({});
 
-    // One that is gone shows as missing and does not open; it can be removed from the list.
+    // One that is gone drops out; one removed from the list stays hidden.
     ui.document.newProject();
-    ui.root.getChildFile ("Songs/Beat").deleteRecursively();
+    songs.getChildFile ("Beat").deleteRecursively();
     browser.getProjects().rescan();
     browser.getProjects().waitForScan();
-    const auto beat = rowOf (browser, "Beat");
-    CHECK (! browser.getRows()[(size_t)beat].available);
-    CHECK (browser.getRows()[(size_t)beat].note == "missing");
-    ui.questions.clear();
-    browser.useRow (beat);
-    CHECK (ui.questions.isEmpty());
-    CHECK (ui.document.isUntitled());
-    CHECK (browser.getStatusText().contains ("not there any more"));
-    browser.getProjects().remove (ui.root.getChildFile ("Songs/Beat"));
     CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Ballad" });
+    browser.getProjects().remove (songs.getChildFile ("Ballad"));
+    browser.getProjects().rescan();
+    browser.getProjects().waitForScan();
+    CHECK (rowTexts (browser, Browser::RowKind::project).isEmpty());
+    CHECK (songs.getChildFile ("Ballad").isDirectory());
 
-    // A folder of projects: its projects, with the subfolder each is in.
+    // Another folder of projects: its projects, with the subfolder each is in.
     const auto library = ui.root.getChildFile ("Library");
     REQUIRE (project::saveProject (library.getChildFile ("2024/Summer"), {}).wasOk());
     REQUIRE (project::saveProject (library.getChildFile ("Winter"), {}).wasOk());
     REQUIRE (browser.addProjectFolder (library));
     browser.getProjects().waitForScan();
     CHECK (rowTexts (browser, Browser::RowKind::group).contains ("Library  (2)"));
-    CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Ballad", "Summer", "Winter" });
+    CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Summer", "Winter" });
     CHECK (browser.getRows()[(size_t)rowOf (browser, "Summer")].note == "2024");
     CHECK (rowTexts (browser, Browser::RowKind::action).contains ("+ Add a folder of projects..."));
     browser.toggleOpen ("projects.folder:" + library.getFullPathName());

@@ -35,6 +35,11 @@ Spinus draws its text with a font from your system. Install one, for example Dej
   Find the heavy one and [freeze](freeze.md) its channel or insert.
 - Windows plugins play best with real-time privileges: see the line at the bottom of **Options ›
   Windows plugins...**.
+- Every program crackles, not only Spinus: something may be setting your system's sound clock, often a
+  **webcam microphone** that is the system's default input while a program (or an echo canceller, a
+  "Noise Suppressed Microphone") listens to it. Run `pw-top` in a terminal: the line at the top of the
+  list that has no **+** before its name is the clock. If it is a webcam (or other USB microphone), choose
+  the laptop's own microphone as the default input in your desktop's sound settings, and try again.
 
 ## The microphone isn't heard
 
