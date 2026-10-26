@@ -9,6 +9,7 @@
 #include "commands/CommandRegistry.h"
 #include "project/ProjectFiles.h"
 #include "engine/BundledDevices.h"
+#include "dsp/drums/StarterPack.h"
 
 namespace spinus
 {
@@ -162,7 +163,20 @@ bool runSelfTest (tracktion::Engine& engine, const juce::File& folder,
                    (demoRead.wasOk() ? juce::String() : ": " + demoRead.getErrorMessage()));
     }
 
-    // 7. A font to draw the window's text with (on Linux, from the system: without one, no text shows).
+    // 7. The starter sample pack is there and reads, with its factory drum kits.
+    const auto pack = dsp::starter::findPack();
+    if (check (pack.isDirectory(), "the starter sample pack (" +
+                                       (pack.isDirectory() ? pack.getFullPathName() : juce::String ("not found")) +
+                                       ")"))
+    {
+        const auto found = dsp::starter::checkPack (pack);
+        check (found.problems.isEmpty(),
+               "its " + juce::String (found.sounds) + " sounds and " + juce::String (found.kits) +
+                   " factory drum kits" +
+                   (found.problems.isEmpty() ? juce::String() : ": " + found.problems.joinIntoString ("; ")));
+    }
+
+    // 8. A font to draw the window's text with (on Linux, from the system: without one, no text shows).
     const juce::Font font { juce::FontOptions (14.0f) };
     const auto typeface = font.getTypefacePtr();
     check (juce::GlyphArrangement::getStringWidth (font, "Spinus") > 0.0f && typeface != nullptr,

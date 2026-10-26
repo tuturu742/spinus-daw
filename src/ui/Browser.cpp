@@ -233,6 +233,9 @@ void Browser::rebuildRows()
 //==============================================================================
 namespace
 {
+/** The line in the sample folders' file that hides the starter pack (not a path: older versions skip it). */
+constexpr const char* starterHiddenLine = "# hide the Spinus Starter Pack";
+
 bool isSampleFile (const juce::File& f)
 {
     return f.hasFileExtension (project::ownAudioFormats) || f.hasFileExtension (project::ffmpegAudioFormats);
@@ -270,6 +273,8 @@ void Browser::addSampleRows (const juce::String& query)
 {
     if (query.isEmpty())
     {
+        if (starterPack.isDirectory() && ! starterHidden)
+            addFolderRows (starterPack, 0, "starter");
         for (auto& folder : sampleFolders)
             addFolderRows (folder, 0);
     }
@@ -290,7 +295,7 @@ void Browser::addSampleRows (const juce::String& query)
                 row.note = file.getParentDirectory().getFileName();
                 rows.push_back (std::move (row));
             }
-        if (found == 0 && ! sampleFolders.isEmpty())
+        if (found == 0 && ! getAllSampleFolders().isEmpty())
             rows.push_back ({ RowKind::message, "No samples with that name", {}, {} });
     }
 
@@ -398,13 +403,15 @@ void Browser::chooseProjectFolder()
                                 });
 }
 
-void Browser::addFolderRows (const juce::File& folder, int depth)
+void Browser::addFolderRows (const juce::File& folder, int depth, const juce::String& key)
 {
-    Row row { RowKind::folder, folder.getFileName() };
+    Row row { RowKind::folder, folder.getFileName(), {}, key };
     row.path = folder.getFullPathName();
     row.depth = depth;
     if (depth == 0)
-        row.note = folder.isDirectory() ? juce::String() : juce::String ("missing");
+        row.note = ! folder.isDirectory() ? juce::String ("missing")
+                   : key == "starter"     ? juce::String ("included")
+                                          : juce::String();
     rows.push_back (std::move (row));
     if (! openFolders.contains (folder.getFullPathName()) || ! folder.isDirectory())
         return;
@@ -433,7 +440,7 @@ const std::vector<juce::File>& Browser::getSampleIndex()
     if (! sampleIndexValid)
     {
         sampleIndex.clear();
-        for (auto& folder : sampleFolders)
+        for (auto& folder : getAllSampleFolders())
             for (const auto& entry : juce::RangedDirectoryIterator (
                      folder, true, "*", juce::File::findFiles | juce::File::ignoreHiddenFiles))
             {
@@ -456,8 +463,11 @@ void Browser::setSampleFoldersFile (const juce::File& f)
     sampleFolders.clear();
     juce::StringArray lines;
     f.readLines (lines);
+    starterHidden = false;
     for (auto& line : lines)
-        if (line.trim().isNotEmpty() && juce::File::isAbsolutePath (line.trim()))
+        if (line.trim() == starterHiddenLine)
+            starterHidden = true;
+        else if (line.trim().isNotEmpty() && juce::File::isAbsolutePath (line.trim()))
             sampleFolders.addIfNotAlreadyThere (juce::File (line.trim()));
     sampleIndexValid = false;
     rebuildRows();
@@ -470,12 +480,46 @@ void Browser::saveSampleFolders() const
     juce::StringArray lines;
     for (auto& folder : sampleFolders)
         lines.add (folder.getFullPathName());
+    if (starterHidden)
+        lines.add (starterHiddenLine);
     sampleFoldersFile.getParentDirectory().createDirectory();
     sampleFoldersFile.replaceWithText (lines.joinIntoString ("\n") + "\n");
 }
 
+void Browser::setStarterPack (const juce::File& folder)
+{
+    starterPack = folder;
+    sampleIndexValid = false;
+    rebuildRows();
+}
+
+void Browser::setStarterPackHidden (bool hidden)
+{
+    starterHidden = hidden;
+    sampleIndexValid = false;
+    saveSampleFolders();
+    rebuildRows();
+}
+
+juce::Array<juce::File> Browser::getAllSampleFolders() const
+{
+    juce::Array<juce::File> all;
+    if (starterPack.isDirectory() && ! starterHidden)
+        all.add (starterPack);
+    for (auto& folder : sampleFolders)
+        all.addIfNotAlreadyThere (folder);
+    return all;
+}
+
 bool Browser::addSampleFolder (const juce::File& folder)
 {
+    // The starter pack is listed already (shown again if it was hidden); a folder inside it is too.
+    if (starterPack != juce::File() && (folder == starterPack || folder.isAChildOf (starterPack)))
+    {
+        if (starterHidden)
+            setStarterPackHidden (false);
+        return false;
+    }
     if (! folder.isDirectory() || sampleFolders.contains (folder))
         return false;
     sampleFolders.add (folder);
@@ -672,9 +716,12 @@ void Browser::paintListBoxItem (int row, juce::Graphics& g, int width, int heigh
                     area.removeFromLeft (14), juce::Justification::centredLeft);
         if (r.note.isNotEmpty())
         {
-            g.setColour (theme.get ("danger"));
+            g.setColour (theme.get (r.note == "missing" ? "danger" : "textDim"));
             g.setFont (juce::FontOptions (10.5f));
-            g.drawText (r.note, area.removeFromRight (52).withTrimmedRight (4), juce::Justification::centredRight);
+            const auto noteWidth = juce::jmin (
+                area.getWidth() / 2, juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), r.note) + 8);
+            g.drawText (r.note, area.removeFromRight (noteWidth).withTrimmedRight (4),
+                        juce::Justification::centredRight);
         }
         g.setColour (theme.get ("text"));
         g.setFont (juce::FontOptions (12.5f, r.depth == 0 ? juce::Font::bold : juce::Font::plain));
@@ -833,7 +880,10 @@ void Browser::showRowMenu (int row)
     {
         const juce::File folder (r.path);
         menu.addSectionHeader (folder.getFileName());
-        if (r.depth == 0)
+        if (r.key == "starter")
+            menu.addItem ("Hide the starter pack (Samples' right-click menu shows it again)",
+                          [this] { setStarterPackHidden (true); });
+        else if (r.depth == 0)
             menu.addItem ("Remove from the Browser (the files stay)", [this, folder] { removeSampleFolder (folder); });
         menu.addItem ("Look again for new files",
                       [this]
@@ -846,6 +896,8 @@ void Browser::showRowMenu (int row)
     else if (r.kind == RowKind::section && r.key == "samples")
     {
         menu.addItem ("Add a folder of samples...", [this] { chooseSampleFolder(); });
+        if (starterPack.isDirectory() && starterHidden)
+            menu.addItem ("Show the Spinus Starter Pack", [this] { setStarterPackHidden (false); });
     }
     else if (r.kind == RowKind::project && r.key == "demo")
     {
@@ -904,6 +956,9 @@ void Browser::mouseMove (const juce::MouseEvent& e)
         else if (r.kind == RowKind::sample)
             hint = r.path + ": click to hear it, double-click to add it to the Channel Rack, or drag it to the Channel "
                             "Rack, the Playlist or Audio tracks";
+        else if (r.kind == RowKind::folder && r.key == "starter")
+            hint = "Free samples that come with Spinus (read-only; Help > Manual, Browser): click to open; "
+                   "right-click to hide it";
         else if (r.kind == RowKind::folder)
             hint = r.path + (r.depth == 0 ? ": click to open; right-click to remove it from the Browser" : "");
         else if (r.kind == RowKind::project && r.key == "demo")

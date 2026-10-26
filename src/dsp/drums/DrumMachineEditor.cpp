@@ -186,6 +186,8 @@ void DrumMachineEditor::refresh()
     note.setValue (pad.note, juce::dontSendNotification);
     note.updateText();
     clearButton.setEnabled (pad.audio != nullptr);
+    kitButton.setButtonText (drums.getKitDisplayName());
+    kitButton.setTooltip ("The kit: choose a factory kit, or load or save a .spinuskit file (* once a pad is changed)");
     for (auto& b : padButtons)
         b->repaint();
 }
@@ -211,7 +213,17 @@ void DrumMachineEditor::choosePadFile()
 void DrumMachineEditor::showKitMenu()
 {
     juce::PopupMenu menu;
-    menu.addItem ("Spinus Synth Kit", [this] { drums.loadSynthKit(); });
+    // The factory kits: the Synth Kit, then the starter pack's (when the pack is installed).
+    const auto current = drums.isKitModified() ? juce::String() : drums.getKitName();
+    menu.addItem ("Spinus Synth Kit", true, current == "Spinus Synth Kit", [this] { drums.loadSynthKit(); });
+    if (const auto pack = starter::findPack(); pack != juce::File())
+        for (const auto& kit : starter::readKits (pack))
+            menu.addItem (kit.name, true, current == kit.name,
+                          [this, kit, pack]
+                          {
+                              const auto r = drums.loadFactoryKit (kit, pack);
+                              message.setText (r.getErrorMessage(), juce::dontSendNotification);
+                          });
     menu.addSeparator();
     menu.addItem ("Load kit...",
                   [this]
@@ -252,12 +264,7 @@ void DrumMachineEditor::showKitMenu()
                           });
                   });
     menu.addSeparator();
-    menu.addItem ("Clear all pads",
-                  [this]
-                  {
-                      for (int i = 0; i < DrumMachineProcessor::numPads; ++i)
-                          drums.clearPad (i);
-                  });
+    menu.addItem ("Clear all pads", [this] { drums.clearAllPads(); });
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&kitButton));
 }
 
@@ -274,7 +281,7 @@ void DrumMachineEditor::resized()
     auto area = getLocalBounds().reduced (10);
     auto top = area.removeFromTop (28);
     top.removeFromLeft (140);
-    kitButton.setBounds (top.removeFromLeft (70));
+    kitButton.setBounds (top.removeFromLeft (juce::jmin (220, top.getWidth())));
     area.removeFromTop (8);
 
     // Pads on the left, square-ish; the bottom row is pads 1-4.

@@ -1,0 +1,1268 @@
+{
+ "pack": "Spinus Starter Pack",
+ "sources": {
+  "Trap 808 SignatureSounds.Org": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "vhs-drumkit CC0 2": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0 (in the pack's name)",
+   "licenceFile": null
+  },
+  "Cymbal Crashes - SignatureSounds.org": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Lego Percussion Signaturesounds.org": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "SS_Cutlery_Percussion_Foley_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "LICENSE_Cutlery_Percussion_PRO.txt"
+  },
+  "SS_Pots_Pans_Drum_Kit_Add_On_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "CC0_License_Agreement_Pot_And_Pan_Perc.txt"
+  },
+  "SS_Bone_Crunch_Break_Texture_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "LICENSE_Bone_Crunch.txt"
+  },
+  "SS_Beach-Rocks_Textures_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "LICENSE_Beach_Rocks_PRO.txt"
+  },
+  "SS_Tongue_Drum_SFX_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "CC0_License_Agreement_Steel_Tongue_Drum_SFX.txt"
+  },
+  "SS_Wartime_Drums_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "LICENSE_Wartime_Drums_Fast.txt"
+  },
+  "SS_Zither_Loops_Key_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "LICENSE_Zither_PRO.txt"
+  },
+  "SS_Plucked_Loops_Energetic_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "CC0_License_Agreement_Plucked_Strings.txt"
+  },
+  "SS_Rain_Hitting_Window_SFX_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "CC0_License_Agreement_Rain_Hitting_Window.txt"
+  },
+  "SS_SciFi_Whistles_CC0_PRO": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0",
+   "licenceFile": "LICENSE.txt"
+  },
+  "SS_Bongo_8bit_Loops_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0 (in the pack's name)",
+   "licenceFile": null
+  },
+  "SS_Vintage_Kick_4x4_Loops_CC0": {
+   "site": "signaturesounds.org",
+   "licence": "CC0 1.0 (in the pack's name)",
+   "licenceFile": null
+  },
+  "Trap Vault Drum Loop Signaturesounds.org": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Childrens Toys": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Kick Drums - Multiple Genres": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Multi kick vol.2": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Industrial Percussion Kit_Foley": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Glass Smash One Shots": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Smash Kit 3": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Grand Pianos": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Loops Of Ambience": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Horror Sound FX 2": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Angellic Vocal Kit": {
+   "site": "signaturesounds.org",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Forest Kit": {
+   "site": "signaturesamples.co.uk (Signature Sounds' earlier site)",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  },
+  "Home Made Drum Kit #1 2 (1)": {
+   "site": "signaturesamples.co.uk (Signature Sounds' earlier site)",
+   "licence": "free for any use (licence on the old site: Licence Info And More (Read).pdf)",
+   "licenceFile": "Licence Info And More (Read).pdf"
+  },
+  "Coca Cola Drum Kit #1 (SignatureSamples.Co.Uk)": {
+   "site": "signaturesamples.co.uk (Signature Sounds' earlier site)",
+   "licence": "free for any use (licence on the old site: License Info And Website Link.pdf)",
+   "licenceFile": "License Info And Website Link.pdf"
+  },
+  "Future House WWW.SignatureSamples.Co.Uk": {
+   "site": "signaturesamples.co.uk (Signature Sounds' earlier site)",
+   "licence": "free for any use (no licence file)",
+   "licenceFile": null
+  }
+ },
+ "files": [
+  {
+   "out": "Drums/Kicks/Kick Deep.flac",
+   "pack": "Kick Drums - Multiple Genres",
+   "file": "Kick Drum 15.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick Long.flac",
+   "pack": "Kick Drums - Multiple Genres",
+   "file": "Kick Drum 3.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick Punchy.flac",
+   "pack": "Kick Drums - Multiple Genres",
+   "file": "Kick Drum 12.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick Tight.flac",
+   "pack": "Multi kick vol.2",
+   "file": "Kick Drum - Multi-05.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick VHS 1.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "bdr-01.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick VHS 2.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "bdr-204.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick Industrial 1.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion03.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick Industrial 2.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion26.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick Stone Stomp.flac",
+   "pack": "Forest Kit",
+   "file": "Walking On Stoney Pathway - One Shots/Walking On Stoney Pathway - One Shots/Walking On Stoney Pathway - One Shot-16-2.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Kicks/Kick Beach Rock.flac",
+   "pack": "SS_Beach-Rocks_Textures_CC0",
+   "file": "Beach_Rocks_Percussion_One_Shots_Textures_17.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/808s/808 Long.flac",
+   "pack": "Trap 808 SignatureSounds.Org",
+   "file": "808-03.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0
+  },
+  {
+   "out": "Drums/808s/808 Medium.flac",
+   "pack": "Trap 808 SignatureSounds.Org",
+   "file": "808-10.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/808s/808 Short.flac",
+   "pack": "Trap 808 SignatureSounds.Org",
+   "file": "808-15.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/808s/808 Punch.flac",
+   "pack": "Trap 808 SignatureSounds.Org",
+   "file": "808-11.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/808s/808 Dirty.flac",
+   "pack": "Trap 808 SignatureSounds.Org",
+   "file": "808-16.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Snares/Snare VHS 1.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "sdr-03.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Snares/Snare VHS 2.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "sdr-101.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Snares/Snare VHS Bright.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "sdr-08.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Snares/Snare VHS Fat.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "sdr-204.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Snares/Snare Industrial 1.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion09.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Snares/Snare Industrial 2.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion23.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Snares/Snare Pan.flac",
+   "pack": "SS_Pots_Pans_Drum_Kit_Add_On_CC0",
+   "file": "Pot_And_Pan_Perc_01.wav",
+   "type": "one-shot",
+   "maxSeconds": 1.0
+  },
+  {
+   "out": "Drums/Snares/Snare Plastic.flac",
+   "pack": "Home Made Drum Kit #1 2 (1)",
+   "file": "Tapping Plastic/Tapping Plastic-22.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Claps/Clap Bone Crunch 1.flac",
+   "pack": "SS_Bone_Crunch_Break_Texture_CC0",
+   "file": "SS_Bone_Crunch_Break_Texture-03.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Claps/Clap Bone Crunch 2.flac",
+   "pack": "SS_Bone_Crunch_Break_Texture_CC0",
+   "file": "SS_Bone_Crunch_Break_Texture-12.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Claps/Clap Brush.flac",
+   "pack": "Home Made Drum Kit #1 2 (1)",
+   "file": "Hair Brush Bristles/Hair Brush Bristles-16.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Claps/Clap Industrial.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion02.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Hats/Closed Hat VHS 1.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "hcr-01.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Hats/Closed Hat VHS 2.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "hcr-02.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Hats/Open Hat VHS.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "hor-01.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Hats/Closed Hat Coins.flac",
+   "pack": "Home Made Drum Kit #1 2 (1)",
+   "file": "Coins In Glass/Coins In Glass-24.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Hats/Open Hat Cutlery.flac",
+   "pack": "SS_Cutlery_Percussion_Foley_CC0",
+   "file": "Cutlery_Percussion_01.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Hats/Closed Hat Metal.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion32.wav",
+   "type": "one-shot",
+   "maxSeconds": 0.6
+  },
+  {
+   "out": "Drums/Hats/Open Hat Metal.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion22.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Cymbals/Crash Bright.flac",
+   "pack": "Cymbal Crashes - SignatureSounds.org",
+   "file": "Cymbal Crash 2.wav",
+   "type": "one-shot",
+   "maxSeconds": 3.0
+  },
+  {
+   "out": "Drums/Cymbals/Crash Dark.flac",
+   "pack": "Cymbal Crashes - SignatureSounds.org",
+   "file": "Cymbal Crash 10.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Cymbals/Crash Short.flac",
+   "pack": "Cymbal Crashes - SignatureSounds.org",
+   "file": "Cymbal Crash 15.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Cymbals/Crash Wide.flac",
+   "pack": "Cymbal Crashes - SignatureSounds.org",
+   "file": "Cymbal Crash 14.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Cymbals/Crash Glass.flac",
+   "pack": "Glass Smash One Shots",
+   "file": "Glass Smash One Shots -10.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Cymbals/Crash Industrial.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion14.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Cymbals/Ride Industrial.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion15.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Cymbals/Ride Pan.flac",
+   "pack": "SS_Pots_Pans_Drum_Kit_Add_On_CC0",
+   "file": "Pot_And_Pan_Perc_12.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom VHS Low.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "tom-03.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom VHS High.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "tom-02.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom Industrial Low.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion05.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom Industrial Mid.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion07.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom Industrial High.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion04.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom Pot Low.flac",
+   "pack": "SS_Pots_Pans_Drum_Kit_Add_On_CC0",
+   "file": "Pot_And_Pan_Perc_15.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom Pot Mid.flac",
+   "pack": "SS_Pots_Pans_Drum_Kit_Add_On_CC0",
+   "file": "Pot_And_Pan_Perc_26.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Toms/Tom Pot High.flac",
+   "pack": "SS_Pots_Pans_Drum_Kit_Add_On_CC0",
+   "file": "Pot_And_Pan_Perc_20.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Rim VHS.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "sdr-200.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Perc VHS 1.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "pcr-209.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Perc VHS 2.flac",
+   "pack": "vhs-drumkit CC0 2",
+   "file": "pcr-210.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Shaker Toy 1.flac",
+   "pack": "Childrens Toys",
+   "file": "Toy Shaker Signaturesounds.org/Audio 1.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Shaker Toy 2.flac",
+   "pack": "Childrens Toys",
+   "file": "Toy Shaker Signaturesounds.org/Audio 6.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Rattle Toy.flac",
+   "pack": "Childrens Toys",
+   "file": "Toy Rattle Signaturesounds.org/Audio 6.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Toy Brick Rim.flac",
+   "pack": "Lego Percussion Signaturesounds.org",
+   "file": "Lego Perc Signaturesamples.org 8.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Toy Brick Click.flac",
+   "pack": "Lego Percussion Signaturesounds.org",
+   "file": "Lego Perc Signaturesamples.org 125.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Can Tap.flac",
+   "pack": "Coca Cola Drum Kit #1 (SignatureSamples.Co.Uk)",
+   "file": "Tapping Coca Cola Can With Finger/Tapping Coca Cola Can With Finger-7.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Clank Industrial.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion12.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Anvil Industrial.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion25.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Ping Industrial.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion08.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Scrape Industrial.flac",
+   "pack": "Industrial Percussion Kit_Foley",
+   "file": "Industrial Percussion21.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Cutlery Hit.flac",
+   "pack": "SS_Cutlery_Percussion_Foley_CC0",
+   "file": "Cutlery_Percussion_14.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Stick Snap.flac",
+   "pack": "Forest Kit",
+   "file": "Stick And Twig Snaps/SignatureSamples.Co.uk Stick Snap 02.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Plate Smash.flac",
+   "pack": "Smash Kit 3",
+   "file": "Plate Smashes - Percussion One Shots/Plate Smashes - One shot-8.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Drums/Percussion/Beach Rock Hit.flac",
+   "pack": "SS_Beach-Rocks_Textures_CC0",
+   "file": "Beach_Rocks_Percussion_One_Shots_Textures_21.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum G4.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_01-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum G#4.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_02-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum A#4.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_03-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum C5.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_04-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum D5.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_05-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum F4.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_07-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum C4.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_09-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum D4.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_10-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Instruments/Tongue Drum/Tongue Drum D#4.flac",
+   "pack": "SS_Tongue_Drum_SFX_CC0",
+   "file": "Steel_Tongue_Drum_SFX_11-2.wav",
+   "type": "one-shot",
+   "maxSeconds": 4.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Vocals/Vocal Stab G major.flac",
+   "pack": "Angellic Vocal Kit",
+   "file": "Angellic Vocal Stabs 02 Key G.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Vocals/Vocal Stab G minor.flac",
+   "pack": "Angellic Vocal Kit",
+   "file": "Angellic Vocal Stabs 04 Key Gm.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Vocals/Vocal Stab G# major.flac",
+   "pack": "Angellic Vocal Kit",
+   "file": "Angellic Vocal Stabs 08 Key G#.wav",
+   "type": "one-shot"
+  },
+  {
+   "out": "Loops/Drums/Trap Beat 115 BPM.flac",
+   "pack": "Trap Vault Drum Loop Signaturesounds.org",
+   "file": "Trap Drum Loop-01.wav",
+   "type": "loop",
+   "bpm": 115,
+   "bars": 2
+  },
+  {
+   "out": "Loops/Drums/Trap Beat 130 BPM.flac",
+   "pack": "Trap Vault Drum Loop Signaturesounds.org",
+   "file": "Trap Drum Loop-13.wav",
+   "type": "loop",
+   "bpm": 130,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Drums/Kick 4x4 120 BPM.flac",
+   "pack": "SS_Vintage_Kick_4x4_Loops_CC0",
+   "file": "Vintage_Kick_Loop_1.wav",
+   "type": "loop",
+   "bpm": 120,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Drums/Bongo 8-bit 100 BPM.flac",
+   "pack": "SS_Bongo_8bit_Loops_CC0",
+   "file": "Bongo_8bit_Drum_Loop_04.wav",
+   "type": "loop",
+   "bpm": 100,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Drums/Forest Percussion 120 BPM.flac",
+   "pack": "Forest Kit",
+   "file": "Forest Organics - Percusion Loops/Forest Organics - Perc Loop 12 - 120-BPM.wav",
+   "type": "loop",
+   "bpm": 120,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Melodic/Plucked 122 BPM D# minor.flac",
+   "pack": "SS_Plucked_Loops_Energetic_CC0",
+   "file": "Plucked 02 122 BPM D#min.wav",
+   "type": "loop",
+   "bpm": 122,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Melodic/Plucked 122 BPM E major.flac",
+   "pack": "SS_Plucked_Loops_Energetic_CC0",
+   "file": "Plucked 15 122BPM  Emaj .wav",
+   "type": "loop",
+   "bpm": 122,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Melodic/Plucked 122 BPM C major.flac",
+   "pack": "SS_Plucked_Loops_Energetic_CC0",
+   "file": "Plucked 21 122BPM  Cmaj .wav",
+   "type": "loop",
+   "bpm": 122,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Melodic/Zither C minor.flac",
+   "pack": "SS_Zither_Loops_Key_CC0",
+   "file": "Zithe_Cm_9.aif",
+   "type": "loop"
+  },
+  {
+   "out": "Loops/Melodic/Zither D minor.flac",
+   "pack": "SS_Zither_Loops_Key_CC0",
+   "file": "Zither_Dm_5.aif",
+   "type": "loop"
+  },
+  {
+   "out": "Loops/Melodic/Grand Piano 80 BPM.flac",
+   "pack": "Grand Pianos",
+   "file": "Grand Pianos 06 80 BPM.wav",
+   "type": "loop",
+   "bpm": 80,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Melodic/Future House Pluck 126 BPM.flac",
+   "pack": "Future House WWW.SignatureSamples.Co.Uk",
+   "file": "Future House Loops/Plucky 2 126BPM.wav",
+   "type": "loop",
+   "bpm": 126,
+   "bars": 4
+  },
+  {
+   "out": "Loops/Melodic/Ambient Guitar 90 BPM.flac",
+   "pack": "Loops Of Ambience",
+   "file": "Guitars/Ambient Guitars Loop 6 90BPM.wav",
+   "type": "loop",
+   "bpm": 90,
+   "bars": 4
+  },
+  {
+   "out": "Textures/Rain On Window.flac",
+   "pack": "SS_Rain_Hitting_Window_SFX_CC0",
+   "file": "Rain_Hitting_Window_1.wav",
+   "type": "texture",
+   "start": 2.0,
+   "maxSeconds": 10.0,
+   "fadeIn": 0.5,
+   "fadeOut": 1.0
+  },
+  {
+   "out": "Textures/Horror Atmosphere.flac",
+   "pack": "Horror Sound FX 2",
+   "file": "Horror Atmosphere FX 1.wav",
+   "type": "texture",
+   "maxSeconds": 10.0,
+   "fadeOut": 1.5
+  },
+  {
+   "out": "Textures/Sci-Fi Whistle 1.flac",
+   "pack": "SS_SciFi_Whistles_CC0_PRO",
+   "file": "SS_SciFi_Whistle_03.wav",
+   "type": "texture"
+  },
+  {
+   "out": "Textures/Sci-Fi Whistle 2.flac",
+   "pack": "SS_SciFi_Whistles_CC0_PRO",
+   "file": "SS_SciFi_Whistle_05.wav",
+   "type": "texture"
+  },
+  {
+   "out": "Textures/Wartime Drum Roll.flac",
+   "pack": "SS_Wartime_Drums_CC0",
+   "file": "Wartime_Drums_Fast04.wav",
+   "type": "texture"
+  }
+ ],
+ "kits": [
+  {
+   "name": "Shrike",
+   "description": "Hard and deep: a deep kick, crisp snares and hats, long 808 bass (pads 13 and 16 cut each other off) and 808 toms",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick Deep.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare VHS 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Bone Crunch 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat VHS 1.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat VHS.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "808 Tom Low",
+     "file": "Drums/808s/808 Punch.flac",
+     "choke": 0,
+     "tune": 12,
+     "volume": -3
+    },
+    {
+     "name": "808 Tom Mid",
+     "file": "Drums/808s/808 Punch.flac",
+     "choke": 0,
+     "tune": 17,
+     "volume": -3
+    },
+    {
+     "name": "808 Tom High",
+     "file": "Drums/808s/808 Punch.flac",
+     "choke": 0,
+     "tune": 21,
+     "volume": -3
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Rim VHS.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Perc VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Bright.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Shaker Toy 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "808",
+     "file": "Drums/808s/808 Long.flac",
+     "choke": 2,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare VHS Bright.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Crash 2",
+     "file": "Drums/Cymbals/Crash Short.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "808 Short",
+     "file": "Drums/808s/808 Short.flac",
+     "choke": 2,
+     "tune": 0,
+     "volume": 0
+    }
+   ]
+  },
+  {
+   "name": "Starling",
+   "description": "Dusty and warm: hits from an old drum machine taped to VHS, dark crashes and a toy rattle",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick VHS 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Brush.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat VHS 2.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat VHS.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Low Tom",
+     "file": "Drums/Toms/Tom VHS Low.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Mid Tom",
+     "file": "Drums/Toms/Tom VHS High.flac",
+     "choke": 0,
+     "tune": -3,
+     "volume": -2
+    },
+    {
+     "name": "High Tom",
+     "file": "Drums/Toms/Tom VHS High.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Rim VHS.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Perc VHS 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Dark.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Rattle Toy.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Kick 2",
+     "file": "Drums/Kicks/Kick VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare VHS Fat.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Ride",
+     "file": "Drums/Cymbals/Crash Wide.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Perc 2",
+     "file": "Drums/Percussion/Perc VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4
+    }
+   ]
+  },
+  {
+   "name": "Magpie",
+   "description": "Collected sounds: a stomp on stones, pans and pots, coins, cutlery, toy bricks, a toy shaker and glass",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick Stone Stomp.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare Pan.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Bone Crunch 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat Coins.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat Cutlery.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Low Tom",
+     "file": "Drums/Toms/Tom Pot Low.flac",
+     "choke": 0,
+     "tune": -7,
+     "volume": -2
+    },
+    {
+     "name": "Mid Tom",
+     "file": "Drums/Toms/Tom Pot Mid.flac",
+     "choke": 0,
+     "tune": -2,
+     "volume": -2
+    },
+    {
+     "name": "High Tom",
+     "file": "Drums/Toms/Tom Pot High.flac",
+     "choke": 0,
+     "tune": 3,
+     "volume": -2
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Toy Brick Rim.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Can Tap.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Glass.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Shaker Toy 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Kick 2",
+     "file": "Drums/Kicks/Kick Beach Rock.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare Plastic.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Ride",
+     "file": "Drums/Cymbals/Ride Pan.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Perc 2",
+     "file": "Drums/Percussion/Toy Brick Click.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    }
+   ]
+  },
+  {
+   "name": "Raven",
+   "description": "Dark and heavy: metal struck and scraped, machines and big rooms",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick Industrial 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare Industrial 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat Metal.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat Metal.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Low Tom",
+     "file": "Drums/Toms/Tom Industrial Low.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Mid Tom",
+     "file": "Drums/Toms/Tom Industrial Mid.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "High Tom",
+     "file": "Drums/Toms/Tom Industrial High.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Clank Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Anvil Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Scrape Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Kick 2",
+     "file": "Drums/Kicks/Kick Industrial 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare Industrial 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Ride",
+     "file": "Drums/Cymbals/Ride Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Perc 2",
+     "file": "Drums/Percussion/Ping Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    }
+   ]
+  }
+ ]
+}

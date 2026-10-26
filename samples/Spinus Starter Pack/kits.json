@@ -1,0 +1,477 @@
+{
+ "version": 1,
+ "kits": [
+  {
+   "name": "Shrike",
+   "description": "Hard and deep: a deep kick, crisp snares and hats, long 808 bass (pads 13 and 16 cut each other off) and 808 toms",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick Deep.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare VHS 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Bone Crunch 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat VHS 1.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat VHS.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "808 Tom Low",
+     "file": "Drums/808s/808 Punch.flac",
+     "choke": 0,
+     "tune": 12,
+     "volume": -3
+    },
+    {
+     "name": "808 Tom Mid",
+     "file": "Drums/808s/808 Punch.flac",
+     "choke": 0,
+     "tune": 17,
+     "volume": -3
+    },
+    {
+     "name": "808 Tom High",
+     "file": "Drums/808s/808 Punch.flac",
+     "choke": 0,
+     "tune": 21,
+     "volume": -3
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Rim VHS.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Perc VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Bright.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Shaker Toy 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "808",
+     "file": "Drums/808s/808 Long.flac",
+     "choke": 2,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare VHS Bright.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Crash 2",
+     "file": "Drums/Cymbals/Crash Short.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "808 Short",
+     "file": "Drums/808s/808 Short.flac",
+     "choke": 2,
+     "tune": 0,
+     "volume": 0
+    }
+   ]
+  },
+  {
+   "name": "Starling",
+   "description": "Dusty and warm: hits from an old drum machine taped to VHS, dark crashes and a toy rattle",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick VHS 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Brush.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat VHS 2.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat VHS.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Low Tom",
+     "file": "Drums/Toms/Tom VHS Low.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Mid Tom",
+     "file": "Drums/Toms/Tom VHS High.flac",
+     "choke": 0,
+     "tune": -3,
+     "volume": -2
+    },
+    {
+     "name": "High Tom",
+     "file": "Drums/Toms/Tom VHS High.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Rim VHS.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Perc VHS 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Dark.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Rattle Toy.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Kick 2",
+     "file": "Drums/Kicks/Kick VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare VHS Fat.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Ride",
+     "file": "Drums/Cymbals/Crash Wide.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Perc 2",
+     "file": "Drums/Percussion/Perc VHS 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4
+    }
+   ]
+  },
+  {
+   "name": "Magpie",
+   "description": "Collected sounds: a stomp on stones, pans and pots, coins, cutlery, toy bricks, a toy shaker and glass",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick Stone Stomp.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare Pan.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Bone Crunch 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat Coins.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat Cutlery.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Low Tom",
+     "file": "Drums/Toms/Tom Pot Low.flac",
+     "choke": 0,
+     "tune": -7,
+     "volume": -2
+    },
+    {
+     "name": "Mid Tom",
+     "file": "Drums/Toms/Tom Pot Mid.flac",
+     "choke": 0,
+     "tune": -2,
+     "volume": -2
+    },
+    {
+     "name": "High Tom",
+     "file": "Drums/Toms/Tom Pot High.flac",
+     "choke": 0,
+     "tune": 3,
+     "volume": -2
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Toy Brick Rim.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Can Tap.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Glass.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Shaker Toy 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Kick 2",
+     "file": "Drums/Kicks/Kick Beach Rock.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare Plastic.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Ride",
+     "file": "Drums/Cymbals/Ride Pan.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Perc 2",
+     "file": "Drums/Percussion/Toy Brick Click.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    }
+   ]
+  },
+  {
+   "name": "Raven",
+   "description": "Dark and heavy: metal struck and scraped, machines and big rooms",
+   "pads": [
+    {
+     "name": "Kick",
+     "file": "Drums/Kicks/Kick Industrial 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare",
+     "file": "Drums/Snares/Snare Industrial 1.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Clap",
+     "file": "Drums/Claps/Clap Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Closed Hat",
+     "file": "Drums/Hats/Closed Hat Metal.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Open Hat",
+     "file": "Drums/Hats/Open Hat Metal.flac",
+     "choke": 1,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Low Tom",
+     "file": "Drums/Toms/Tom Industrial Low.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Mid Tom",
+     "file": "Drums/Toms/Tom Industrial Mid.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "High Tom",
+     "file": "Drums/Toms/Tom Industrial High.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -2
+    },
+    {
+     "name": "Rim",
+     "file": "Drums/Percussion/Clank Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Perc",
+     "file": "Drums/Percussion/Anvil Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    },
+    {
+     "name": "Crash",
+     "file": "Drums/Cymbals/Crash Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Shaker",
+     "file": "Drums/Percussion/Scrape Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -6.0
+    },
+    {
+     "name": "Kick 2",
+     "file": "Drums/Kicks/Kick Industrial 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Snare 2",
+     "file": "Drums/Snares/Snare Industrial 2.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": 0
+    },
+    {
+     "name": "Ride",
+     "file": "Drums/Cymbals/Ride Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -4.0
+    },
+    {
+     "name": "Perc 2",
+     "file": "Drums/Percussion/Ping Industrial.flac",
+     "choke": 0,
+     "tune": 0,
+     "volume": -3
+    }
+   ]
+  }
+ ]
+}

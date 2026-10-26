@@ -80,7 +80,8 @@ spinus_add_own_plugin (spinus_sampler_plugin "Spinus Sampler" Smpl "Instrument;S
 
 spinus_add_own_plugin (spinus_drum_machine_plugin "Spinus Drum Machine" Drum "Instrument;Drum" drum-machine
     SOURCES drums/DrumMachineEditor.cpp drums/DrumMachinePluginEntry.cpp drums/DrumMachineProcessor.cpp
-            drums/DrumSynth.cpp sampler/SampleSet.cpp sampler/SampleStorage.cpp sampler/SamplerEngine.cpp)
+            drums/DrumSynth.cpp drums/StarterPack.cpp sampler/SampleSet.cpp sampler/SampleStorage.cpp
+            sampler/SamplerEngine.cpp)
 
 spinus_add_own_plugin (spinus_three_osc_plugin "Spinus 3x Osc" Tosc "Instrument;Synth" 3x-osc
     SOURCES threeosc/ThreeOscEditor.cpp threeosc/ThreeOscEngine.cpp threeosc/ThreeOscPluginEntry.cpp

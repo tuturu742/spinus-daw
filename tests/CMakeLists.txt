@@ -15,6 +15,7 @@ add_executable (spinus_tests
     core/LogTests.cpp
     core/FileDialogTests.cpp
     dsp/DrumMachineTests.cpp
+    dsp/StarterPackTests.cpp
     dsp/SamplerTests.cpp
     dsp/BeatSlicerTests.cpp
     dsp/DuckerTests.cpp

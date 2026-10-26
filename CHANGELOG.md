@@ -5,6 +5,22 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Starter pack
+
+- **Spinus now comes with free samples:** the **Spinus Starter Pack**, 97 sounds from Signature Sounds
+  (free for any use): drum one-shots, drum and melodic loops with their tempo and key in the name, a
+  steel tongue drum, vocal stabs and textures. It is the first folder under **Samples** in the Browser;
+  it cannot be removed (it comes with Spinus) but can be hidden.
+- **Four more factory kits for the Drum Machine:** **Shrike** (hard and deep, with 808 bass),
+  **Starling** (dusty and warm), **Magpie** (pans, coins, cutlery and other collected sounds) and
+  **Raven** (dark and heavy metal hits), listed with the Spinus Synth Kit under **Kit**. They use the
+  Synth Kit's layout (kick on pad 1, snare on pad 2, hi-hats on pads 4 and 5...), so your patterns keep
+  working when you change kits.
+- **The Drum Machine's Kit button shows the kit's name** (a factory kit or your `.spinuskit` file), with a
+  `*` once you change a pad; it is saved with the project.
+- Projects that use these sounds keep them, so they open the same on any computer.
+- `spinus --self-test` checks the pack is installed and reads.
+
 ### Fixes
 
 - **Spinus froze, and every program crackled, when a webcam microphone was chosen to record from:** Spinus
