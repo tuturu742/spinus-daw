@@ -308,8 +308,7 @@ void Browser::addProjectRows (const juce::String& query)
     {
         Row row { RowKind::project, p.name };
         row.path = p.folder.getFullPathName();
-        row.available = ! p.missing;
-        row.note = p.missing ? juce::String ("missing") : note;
+        row.note = note;
         row.depth = 1;
         return row;
     };
@@ -325,22 +324,8 @@ void Browser::addProjectRows (const juce::String& query)
             ++shown;
         }
 
-    // Opened in Spinus, newest first; each with the folder it is in.
-    std::vector<Row> items;
-    for (auto& p : projects.getOpened())
-        if (matches (p.name))
-            items.push_back (projectRow (p, p.folder.getParentDirectory().getFileName()));
-    if (! items.empty())
-    {
-        rows.push_back (
-            { RowKind::group, "Opened  (" + juce::String ((int)items.size()) + ")", {}, "projects.opened" });
-        if (isOpen ("projects.opened"))
-            for (auto& r : items)
-                rows.push_back (r);
-        shown += (int)items.size();
-    }
-
     // The folders added, each with the projects found in it (and the subfolder each is in).
+    std::vector<Row> items;
     for (auto& folder : projects.getFolders())
     {
         items.clear();
@@ -885,7 +870,7 @@ void Browser::showRowMenu (int row)
                       [this, folder] { projects.removeFolder (folder); });
         menu.addItem ("Show in the file manager", [folder] { folder.revealToUser(); });
     }
-    else if ((r.kind == RowKind::section && r.key == "projects") || r.key == "projects.opened")
+    else if (r.kind == RowKind::section && r.key == "projects")
     {
         menu.addItem ("Add a folder of projects...", [this] { chooseProjectFolder(); });
         menu.addItem ("Look again (find new projects, check which are still there)", [this] { projects.rescan(); });

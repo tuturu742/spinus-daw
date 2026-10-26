@@ -7,7 +7,7 @@ button. It lists your projects, your samples and everything you can play or put 
 
 | Section | What is in it |
 |---|---|
-| **Projects** | The demo songs that come with Spinus, the projects you have opened, and folders of projects you add yourself (see [Projects](#projects) below). |
+| **Projects** | The demo songs that come with Spinus and folders of projects you add yourself (see [Projects](#projects) below). |
 | **Samples** | Folders of samples on your computer that you add yourself (see [Samples](#samples) below). Spinus does not come with samples. |
 | **Instruments** › **Installed plugins** | Instrument plugins found on your computer. |
 | **Instruments** › **Free open source** | Free, open-source instruments made by others, which Spinus downloads for you: Surge XT and OB-Xf, by the Surge Synth Team, Odin 2 (Linux), by TheWaveWarden, and the Six Sines FM synthesizer. |
@@ -68,15 +68,13 @@ The **Projects** section at the top is the quick way back to your songs.
   **Siskin (demo)**. Double-click one to open it: Spinus puts your own copy in your **Music**
   folder and opens that, so you can change and save it freely (see
   [Your first beat](getting-started.md#listen-to-the-demo-songs-first)).
-- **Opened:** every project you open or save in Spinus is added by itself, newest first: from
-  **File › Open...**, **Open recent**, a double-click on a `.spn` file, the terminal or **Save as...**.
 - **Your folders of projects:** click **+ Add a folder of projects...** (or right-click **Projects**) and
   choose a folder, for example the one you keep all your songs in. Spinus looks through it and its
   subfolders (up to six folders deep) and lists every project it finds, with the subfolder it is in after
   the name. It skips hidden folders (and, on Windows too, folders whose name starts with a dot, such as
   `.git`) and doesn't look inside projects. Looking happens in the background,
   so Spinus stays quick even with a big folder; the list from last time shows at once on the next start.
-  A project inside one of your folders is listed only there, not again under **Opened**.
+  A project you save into one of your folders shows up there at once.
 
 Double-click a project to open it. If the open project has unsaved changes, Spinus asks whether to save them
 first, as **File › Open** does. Type in the **Search** box to find a project by name.
@@ -85,9 +83,9 @@ Right-click a project for **Open**, **Show in the file manager** and **Remove fr
 stay where they are). Right-click a folder for **Look again for projects** (after you add or move songs),
 **Remove from the Browser** and **Show in the file manager**.
 
-A project you moved or deleted stays in the list greyed out and marked **missing** (it might be on a drive
-that isn't plugged in); remove it with a right-click. In your folders, a project that is gone simply
-drops out the next time Spinus looks. The list is kept for you, not in projects (in
+A project that is gone from one of your folders drops out the next time Spinus looks; a folder that is gone
+(on a drive that isn't plugged in, say) stays, marked **missing**. The projects you opened last are under
+**File › Open recent** (see [Projects](projects.md)). The list is kept for you, not in projects (in
 `~/.config/Spinus DAW/projects.json`).
 
 ## Samples

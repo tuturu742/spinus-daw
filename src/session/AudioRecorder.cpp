@@ -12,6 +12,8 @@ AudioRecorder::AudioRecorder (Session& s) : session (s)
 {
     session.getEdit().engine.getDeviceManager().deviceManager.addChangeListener (this);
     recording::refreshInputLayout (session.getEdit().engine);
+    // Nothing records yet: no input open (a saved setup or an older Spinus may have opened some).
+    recording::releaseInputs (session.getEdit().engine);
 }
 
 AudioRecorder::~AudioRecorder()
@@ -19,6 +21,8 @@ AudioRecorder::~AudioRecorder()
     session.getEdit().engine.getDeviceManager().deviceManager.removeChangeListener (this);
     onFinished = nullptr;
     onStopped = nullptr;
+    if (inputUse)
+        inputUse->leaveInputsOn();
     cancel();
     detach();
 }
@@ -113,8 +117,11 @@ juce::Result AudioRecorder::setMetering (bool on)
     if (! on)
     {
         detach();
+        inputUse.reset(); // the inputs go off unless something else uses them
         return juce::Result::ok();
     }
+    if (! inputUse)
+        inputUse.emplace (session.getEdit().engine);
     if (auto used = recording::useInputs (session.getEdit().engine, armedInputs()); used.failed())
         return used;
     detach();
@@ -156,8 +163,14 @@ juce::Result AudioRecorder::start()
 
     if (recording::findAudioInput (edit) == nullptr)
         return juce::Result::fail ("Spinus has no audio input to record from: choose one in Options › Audio.");
+    if (! inputUse)
+        inputUse.emplace (engine);
     if (auto used = recording::useInputs (engine, needed); used.failed())
+    {
+        if (! metering)
+            inputUse.reset();
         return used;
+    }
     detach();
     if (auto attached = attach(); attached.failed())
         return attached;
@@ -335,6 +348,8 @@ void AudioRecorder::finish (bool keep, const juce::String& why)
         session.stop();
     if (metering)
         attach();
+    else
+        inputUse.reset();
 
     if (! usable)
     {

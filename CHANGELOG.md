@@ -5,6 +5,20 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Fixes
+
+- **Spinus froze, and every program crackled, when a webcam microphone was chosen to record from:** Spinus
+  kept the microphone open all the time, and through PipeWire a webcam's microphone can become the clock
+  of the whole system's sound, with small buffers for every program. Spinus now opens the microphone only
+  while a track is armed, something records, or **Options › Audio** is open.
+- **First start with music playing:** Spinus could choose the program playing (a browser, say) as what to
+  record from. It now chooses a microphone, or nothing.
+
+### The Browser
+
+- **Projects** no longer lists **Opened**: the projects you opened are under **File › Open recent**. Add
+  the folder you keep your songs in to see them all; a song you save there shows up at once.
+
 ### Windows and shortcuts
 
 - **Spinus opens as you left it:** maximised or full screen if it was, otherwise at its size and place, with

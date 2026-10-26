@@ -75,12 +75,11 @@ TEST_CASE ("Folders are searched for projects: into subfolders, not into project
     CHECK (ProjectList::findProjects (t.root.getChildFile ("nowhere")).isEmpty());
 }
 
-TEST_CASE ("The project list: opened projects, folders, missing ones, kept in the settings", "[session][projects]")
+TEST_CASE ("The project list: folders, projects opened in them, kept in the settings", "[session][projects]")
 {
     Temp t;
     const auto settings = t.root.getChildFile ("settings/projects.json");
     const auto a = makeProject (t.root.getChildFile ("Elsewhere/Alpha"));
-    const auto b = makeProject (t.root.getChildFile ("Elsewhere/Bravo"));
     const auto library = t.root.getChildFile ("Library");
     const auto c = makeProject (library.getChildFile ("Charlie"));
     const auto d = makeProject (library.getChildFile ("Sets/Delta"));
@@ -88,19 +87,14 @@ TEST_CASE ("The project list: opened projects, folders, missing ones, kept in th
     ProjectList list;
     list.setFile (settings);
     list.waitForScan();
-    CHECK (list.getOpened().empty());
+    CHECK (list.getAllProjects().isEmpty());
 
-    // Opened: newest first, once each; a .spn file means its folder.
-    list.addOpened (a);
-    list.addOpened (b.getChildFile ("Bravo.spn"));
-    list.addOpened (a);
-    REQUIRE (list.getOpened().size() == 2);
-    CHECK (list.getOpened()[0].folder == a);
-    CHECK (list.getOpened()[0].name == "Alpha");
-    CHECK (list.getOpened()[1].folder == b);
+    // A project opened outside the folders is not listed (File › Open recent has it).
+    list.noteUsed (a.getChildFile ("Alpha.spn"));
+    CHECK (list.getAllProjects().isEmpty());
 
-    // A folder: searched in the background; its projects are listed once (Charlie also opened: under the folder).
-    list.addOpened (c);
+    // A folder: searched in the background; its projects are listed once.
+    list.noteUsed (c);
     REQUIRE (list.addFolder (library));
     CHECK (! list.addFolder (library));                         // already there
     CHECK (! list.addFolder (library.getChildFile ("Sets")));   // inside it
@@ -109,32 +103,25 @@ TEST_CASE ("The project list: opened projects, folders, missing ones, kept in th
     REQUIRE (list.getFolders().size() == 1);
     REQUIRE (list.getFolders()[0].projects.size() == 2);
     CHECK (list.getFolders()[0].projects[0].folder == c);
+    CHECK (list.getFolders()[0].projects[0].name == "Charlie");
     CHECK (list.getFolders()[0].projects[1].folder == d);
-    CHECK (list.getOpened().size() == 2); // Alpha and Bravo; Charlie is in the folder
-    CHECK (list.getAllProjects().size() == 4);
+    CHECK (list.getAllProjects().size() == 2);
 
-    // A project saved into the folder is there at once.
+    // A project saved into the folder is there at once (a .spn file means its folder).
     const auto e = makeProject (library.getChildFile ("Echo"));
-    list.addOpened (e);
+    list.noteUsed (e.getChildFile ("Echo.spn"));
     CHECK (list.getFolders()[0].projects.size() == 3);
 
-    // Gone from the disk: an opened one stays, missing; one in a folder drops out at the next search.
-    b.deleteRecursively();
+    // Gone from the disk: it drops out at the next search.
     d.deleteRecursively();
     list.rescan();
     list.waitForScan();
-    REQUIRE (list.getOpened().size() == 2);
-    CHECK (list.getOpened()[1].folder == b);
-    CHECK (list.getOpened()[1].missing);
-    CHECK (! list.getOpened()[0].missing);
     CHECK (list.getFolders()[0].projects.size() == 2);
 
-    // Removed from the list: an opened one goes; one in a folder stays hidden at the next search, until opened.
-    list.remove (b);
+    // Removed from the list: hidden at the next search, until opened again.
     list.remove (e);
     list.rescan();
     list.waitForScan();
-    CHECK (list.getOpened().size() == 1);
     CHECK (list.getFolders()[0].projects.size() == 1);
     CHECK (e.isDirectory()); // the files stay
 
@@ -142,12 +129,10 @@ TEST_CASE ("The project list: opened projects, folders, missing ones, kept in th
     {
         ProjectList again;
         again.setFile (settings);
-        CHECK (again.getOpened().size() == 1);
-        CHECK (again.getOpened()[0].folder == a);
         REQUIRE (again.getFolders().size() == 1);
         CHECK (again.getFolders()[0].projects.size() == 1);
         again.waitForScan();
-        again.addOpened (e); // opened again: back in its folder
+        again.noteUsed (e); // opened again: back in its folder
         again.waitForScan();
         CHECK (again.getFolders()[0].projects.size() == 2);
     }
@@ -162,10 +147,9 @@ TEST_CASE ("The project list: opened projects, folders, missing ones, kept in th
     REQUIRE (third.getFolders().size() == 1);
     CHECK (third.getFolders()[0].folder == t.root);
     CHECK (third.getFolders()[0].projects.size() == 3); // Alpha, Charlie, Echo
-    CHECK (third.getOpened().empty());
     third.removeFolder (t.root);
     CHECK (third.getFolders().empty());
-    CHECK (third.getOpened().size() == 3); // Echo, Charlie and Alpha were opened
+    CHECK (third.getAllProjects().isEmpty());
 
     // A folder that went away is shown as missing.
     const auto gone = t.root.getChildFile ("Gone");
@@ -175,6 +159,23 @@ TEST_CASE ("The project list: opened projects, folders, missing ones, kept in th
     third.rescan();
     third.waitForScan();
     CHECK (third.getFolders()[0].missing);
+}
+
+TEST_CASE ("A list saved with opened projects (before 0.1.0-alpha.3) still loads", "[session][projects]")
+{
+    Temp t;
+    const auto settings = t.root.getChildFile ("projects.json");
+    const auto library = t.root.getChildFile ("Library");
+    const auto a = makeProject (library.getChildFile ("Alpha"));
+    settings.replaceWithText (R"({"opened": [")" + a.getFullPathName().replace ("\\", "\\\\") +
+                              R"("], "folders": [{"path": ")" + library.getFullPathName().replace ("\\", "\\\\") +
+                              R"(", "projects": []}], "hidden": []})");
+    ProjectList list;
+    list.setFile (settings);
+    list.waitForScan();
+    REQUIRE (list.getFolders().size() == 1);
+    CHECK (list.getAllProjects() == juce::Array<juce::File> { a });
+    CHECK (! settings.loadFileAsString().contains ("opened")); // dropped when the list is kept again
 }
 
 TEST_CASE ("Searching many projects stays quick", "[session][projects]")
@@ -190,8 +191,8 @@ TEST_CASE ("Searching many projects stays quick", "[session][projects]")
     ProjectList list;
     REQUIRE (list.addFolder (t.root));
     for (int i = 0; i < 400; ++i)
-        list.addOpened (t.root.getChildFile ("Year " + juce::String (i % 8) + "/Song " + juce::String (i)));
+        list.noteUsed (t.root.getChildFile ("Year " + juce::String (i % 8) + "/Song " + juce::String (i)));
     list.waitForScan();
     CHECK (list.getFolders()[0].projects.size() == 400);
-    CHECK (list.getOpened().empty()); // each is listed once, in its folder
+    CHECK (list.getAllProjects().size() == 400); // each is listed once
 }

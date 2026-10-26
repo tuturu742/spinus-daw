@@ -32,12 +32,12 @@ juce::String keyOf (const juce::File& f) { return f.getFullPathName(); }
 } // namespace
 
 //==============================================================================
-/** Searches the folders and checks the opened projects, then tells the list (on the message thread). */
+/** Searches the folders, then tells the list (on the message thread). */
 class ProjectList::ScanThread final : public juce::Thread
 {
 public:
-    ScanThread (ProjectList& o, juce::Array<juce::File> f, juce::Array<juce::File> p)
-        : juce::Thread ("Spinus project search"), owner (o), folders (std::move (f)), opened (std::move (p))
+    ScanThread (ProjectList& o, juce::Array<juce::File> f)
+        : juce::Thread ("Spinus project search"), owner (o), folders (std::move (f))
     {
     }
 
@@ -59,12 +59,6 @@ public:
             r.projects = findProjects (folder, maxDepth, maxFoldersPerScan, &cancel, &r.truncated);
             results.push_back (std::move (r));
         }
-        for (auto& project : opened)
-        {
-            if (cancel)
-                return;
-            openedMissing.push_back (! project::isProjectFolder (project));
-        }
         done = true;
         owner.triggerAsyncUpdate();
     }
@@ -77,9 +71,8 @@ public:
     };
 
     ProjectList& owner;
-    const juce::Array<juce::File> folders, opened;
+    const juce::Array<juce::File> folders;
     std::vector<Result> results;
-    std::vector<bool> openedMissing;
     std::atomic<bool> cancel { false }, done { false };
 };
 
@@ -158,7 +151,6 @@ void ProjectList::setFile (const juce::File& f)
 
 void ProjectList::load()
 {
-    opened.clear();
     folders.clear();
     hidden.clear();
     if (! file.existsAsFile())
@@ -174,8 +166,6 @@ void ProjectList::load()
                     result.addIfNotAlreadyThere (juce::File (v.toString()));
         return result;
     };
-    for (auto& f : paths (json.getProperty ("opened", {})))
-        opened.push_back ({ f });
     for (auto& f : paths (json.getProperty ("hidden", {})))
         hidden.insert (keyOf (f));
     if (auto* list = json.getProperty ("folders", {}).getArray())
@@ -204,7 +194,6 @@ void ProjectList::save() const
         return juce::var (a);
     };
     auto* o = new juce::DynamicObject();
-    o->setProperty ("opened", list (opened, [] (const Opened& p) { return keyOf (p.folder); }));
     juce::Array<juce::var> folderList;
     for (auto& folder : folders)
     {
@@ -228,40 +217,20 @@ void ProjectList::changed()
 }
 
 //==============================================================================
-std::vector<ProjectList::Project> ProjectList::getOpened() const
-{
-    std::set<juce::String> inFolders;
-    for (auto& folder : folders)
-        for (auto& p : folder.projects)
-            inFolders.insert (keyOf (p.folder));
-
-    std::vector<Project> result;
-    for (auto& p : opened)
-        if (! inFolders.contains (keyOf (p.folder)))
-            result.push_back ({ p.folder, project::projectName (p.folder), p.missing });
-    return result;
-}
-
 juce::Array<juce::File> ProjectList::getAllProjects() const
 {
     juce::Array<juce::File> all;
     for (auto& folder : folders)
         for (auto& p : folder.projects)
             all.add (p.folder);
-    for (auto& p : getOpened())
-        all.add (p.folder);
     return all;
 }
 
-void ProjectList::addOpened (const juce::File& projectFolderOrFile)
+void ProjectList::noteUsed (const juce::File& projectFolderOrFile)
 {
     const auto folder = project::projectFolderFor (projectFolderOrFile);
     if (folder == juce::File())
         return;
-    std::erase_if (opened, [&] (const Opened& p) { return p.folder == folder; });
-    opened.insert (opened.begin(), { folder });
-    if ((int)opened.size() > maxOpened)
-        opened.resize ((size_t)maxOpened);
 
     // Inside an added folder (saved there, or hidden there before and used again): listed there at once.
     hidden.erase (keyOf (folder));
@@ -282,7 +251,6 @@ void ProjectList::addOpened (const juce::File& projectFolderOrFile)
 
 void ProjectList::remove (const juce::File& projectFolder)
 {
-    std::erase_if (opened, [&] (const Opened& p) { return p.folder == projectFolder; });
     for (auto& folder : folders)
         if (std::erase_if (folder.projects, [&] (const Project& p) { return p.folder == projectFolder; }) > 0)
             hidden.insert (keyOf (projectFolder));
@@ -318,12 +286,10 @@ void ProjectList::rescan()
         return;
     }
     rescanPending = false;
-    juce::Array<juce::File> folderFiles, openedFiles;
+    juce::Array<juce::File> folderFiles;
     for (auto& f : folders)
         folderFiles.add (f.folder);
-    for (auto& p : opened)
-        openedFiles.add (p.folder);
-    scan = std::make_unique<ScanThread> (*this, folderFiles, openedFiles);
+    scan = std::make_unique<ScanThread> (*this, folderFiles);
     scan->startThread (juce::Thread::Priority::low);
 }
 
@@ -358,11 +324,6 @@ void ProjectList::handleAsyncUpdate()
                     if (! hidden.contains (keyOf (p)))
                         folder.projects.push_back ({ p, project::projectName (p) });
             }
-    for (size_t i = 0; i < finished->openedMissing.size(); ++i)
-        for (auto& p : opened)
-            if (p.folder == finished->opened[(int)i])
-                p.missing = finished->openedMissing[i];
-
     changed();
     if (rescanPending)
         rescan();

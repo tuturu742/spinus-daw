@@ -1,8 +1,11 @@
 #pragma once
 
+#include "RecordingTime.h"
 #include "model/Model.h"
 
 #include <tracktion_engine/tracktion_engine.h>
+
+#include <optional>
 
 namespace spinus
 {
@@ -108,6 +111,7 @@ private:
     juce::String inputName;
     double sampleRate = 0.0;
     bool recording = false, metering = false;
+    std::optional<recording::InputUse> inputUse; // while metering or recording
     std::atomic<bool> writing { false };
     juce::TimeSliceThread writerThread { "Spinus audio recording" };
     std::atomic<double> firstStreamTime { -1.0 };

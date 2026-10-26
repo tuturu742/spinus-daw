@@ -51,6 +51,14 @@ juce::String AudioSetup::applyDefaults (juce::AudioDeviceManager& manager)
     return "No audio device could be opened";
 }
 
+juce::String AudioSetup::pickJackInput (const juce::StringArray& jackInputs, const juce::StringArray& microphones)
+{
+    for (const auto& input : jackInputs)
+        if (microphones.contains (input))
+            return input;
+    return {};
+}
+
 AudioSetup::Status AudioSetup::getStatus (juce::AudioDeviceManager& manager)
 {
     Status s;
