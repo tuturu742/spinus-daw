@@ -20,6 +20,8 @@ IdeaRecorder::~IdeaRecorder()
 {
     onFinished = nullptr;
     onStopped = nullptr;
+    if (inputUse)
+        inputUse->leaveInputsOn();
     cancel();
 }
 
@@ -61,13 +63,25 @@ juce::Result IdeaRecorder::startFree (double seconds)
 juce::Result IdeaRecorder::begin()
 {
     auto& edit = session.getEdit();
-    input = recording::findAudioInput (edit);
-
-    if (input == nullptr)
+    if (recording::findAudioInput (edit) == nullptr)
         return juce::Result::fail ("Spinus has no audio input to record from: choose one in Options › Audio.");
 
-    // The input chosen in Options › Audio (a sound card with many inputs has them all in the recording input).
+    // The input chosen in Options › Audio, switched on (a sound card with many inputs has those in use in the
+    // recording input).
     const auto chosen = recording::getDefaultInput (edit.engine);
+    if (! inputUse)
+        inputUse.emplace (edit.engine);
+    if (auto used = recording::useInputs (edit.engine, { chosen }); used.failed())
+    {
+        inputUse.reset();
+        return used;
+    }
+    input = recording::findAudioInput (edit); // rebuilt if the sound card restarted
+    if (input == nullptr)
+    {
+        inputUse.reset();
+        return juce::Result::fail ("Spinus has no audio input to record from: choose one in Options › Audio.");
+    }
     const auto order = recording::activeInputChannels (edit.engine);
     const auto at = std::find (order.begin(), order.end(), chosen);
     inputChannel = at != order.end() ? (int)std::distance (order.begin(), at) : 0;
@@ -79,7 +93,10 @@ juce::Result IdeaRecorder::begin()
                             ? session.getProjectFolder().getChildFile ("cache").getChildFile ("ideas")
                             : juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("spinus-ideas");
     if (! folder.createDirectory())
+    {
+        inputUse.reset();
         return juce::Result::fail ("Cannot create " + folder.getFullPathName());
+    }
     file =
         folder.getChildFile (juce::Time::getCurrentTime().formatted ("take-%Y%m%d-%H%M%S.wav")).getNonexistentSibling();
 
@@ -89,7 +106,10 @@ juce::Result IdeaRecorder::begin()
         stream,
         juce::AudioFormatWriterOptions().withSampleRate (sampleRate).withNumChannels (1).withBitsPerSample (24));
     if (created == nullptr)
+    {
+        inputUse.reset();
         return juce::Result::fail ("Cannot write " + file.getFullPathName());
+    }
 
     writerThread.startThread();
     writer = std::make_unique<juce::AudioFormatWriter::ThreadedWriter> (created.release(), writerThread, 65536);
@@ -195,6 +215,7 @@ void IdeaRecorder::stopRecording()
     }
     writer.reset(); // writes what is left and closes the file
     writerThread.stopThread (2000);
+    inputUse.reset();
 
     if (! free)
     {

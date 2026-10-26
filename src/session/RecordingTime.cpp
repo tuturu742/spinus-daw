@@ -1,5 +1,7 @@
 #include "RecordingTime.h"
 
+#include <map>
+
 namespace spinus::recording
 {
 
@@ -58,7 +60,7 @@ int getDefaultInput (te::Engine& engine)
 {
     const auto active = activeInputChannels (engine);
     const auto saved = engine.getPropertyStorage().getPropertiesFile().getIntValue (defaultInputSetting, -1);
-    if (saved >= 0 && std::find (active.begin(), active.end(), saved) != active.end())
+    if (juce::isPositiveAndBelow (saved, inputChannelNames (engine).size()))
         return saved;
     return active.empty() ? 0 : active.front();
 }
@@ -112,6 +114,50 @@ void refreshInputLayout (te::Engine& engine)
     // The same sound card with other inputs in use: Tracktion keeps its layout unless asked again.
     devices.applyWaveDeviceLayout (devices.getCurrentWaveDeviceLayout());
     devices.dispatchPendingUpdates();
+}
+
+namespace
+{
+std::map<const te::Engine*, int>& inputUsers()
+{
+    static std::map<const te::Engine*, int> users;
+    return users;
+}
+} // namespace
+
+InputUse::InputUse (te::Engine& e) : engine (e) { ++inputUsers()[&engine]; }
+
+InputUse::~InputUse()
+{
+    auto& users = inputUsers();
+    if (--users[&engine] <= 0)
+    {
+        users.erase (&engine);
+        if (release)
+            releaseInputs (engine);
+    }
+}
+
+int InputUse::count (te::Engine& e)
+{
+    const auto& users = inputUsers();
+    const auto found = users.find (&e);
+    return found != users.end() ? found->second : 0;
+}
+
+void releaseInputs (te::Engine& engine)
+{
+    if (InputUse::count (engine) > 0)
+        return;
+    auto& manager = engine.getDeviceManager().deviceManager;
+    auto* device = manager.getCurrentAudioDevice();
+    if (device == nullptr || device->getActiveInputChannels().isZero())
+        return;
+    auto setup = manager.getAudioDeviceSetup();
+    setup.useDefaultInputChannels = false;
+    setup.inputChannels.clear();
+    manager.setAudioDeviceSetup (setup, true);
+    refreshInputLayout (engine);
 }
 
 } // namespace spinus::recording

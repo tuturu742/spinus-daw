@@ -7,9 +7,25 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- **Spinus froze, and every program crackled, when a webcam microphone was chosen to record from:** Spinus
+  kept the microphone open all the time, and through PipeWire a webcam's microphone can become the clock
+  of the whole system's sound, with small buffers for every program. Spinus now opens the microphone only
+  while a track is armed, something records, or **Options › Audio** is open.
+- **First start with music playing:** Spinus could choose the program playing (a browser, say) as what to
+  record from. It now chooses a microphone, or nothing.
 - **Closing a song you only opened no longer asks to save it.** Some plugins (Ample's, for example) change
   their own settings a moment after loading; Spinus took that for a change of yours. A plugin's settings now
   count only if you opened its window; changes made with Spinus's own controls count as always.
+
+### The Browser
+
+- **Projects** no longer lists **Opened**: the projects you opened are under **File › Open recent**. Add
+  the folder you keep your songs in to see them all; a song you save there shows up at once.
+
+### Windows and shortcuts
+
+- **Spinus opens as you left it:** maximised or full screen if it was, otherwise at its size and place, with
+  your panels laid out at that size (they were squeezed into a small window before).
 
 ## 0.1.0-alpha.2 (2026-10-26)
 
