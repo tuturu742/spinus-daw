@@ -23,12 +23,15 @@ public:
 
     /** Opens the settings in a dialog window. */
     static void show (juce::AudioDeviceManager&, juce::Component* centreAround, PipeWireInput* = nullptr,
-                      std::function<int()> getDefaultInput = {}, std::function<void (int)> onDefaultInputChosen = {});
+                      std::function<int()> getDefaultInput = {}, std::function<void (int)> onDefaultInputChosen = {},
+                      std::function<void()> onClosed = {});
 
     /** The input recorded when no audio track is armed (from 0), and telling when the user chooses one:
         armed tracks switch other inputs on too, so the inputs in use don't say which it is. */
     std::function<int()> getDefaultInput;
     std::function<void (int)> onDefaultInputChosen;
+    /** The window closed (MainView switches the inputs off again unless something records). */
+    std::function<void()> onClosed;
 
     /** ALSA's own plugins (rate converters, up/down mixers, OSS and JACK bridges) that are no use to choose
         directly; hidden from the lists. */

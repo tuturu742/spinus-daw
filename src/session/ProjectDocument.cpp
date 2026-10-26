@@ -48,7 +48,18 @@ bool ProjectDocument::hasUnsavedEdits() const { return session.getHistory().getS
 
 bool ProjectDocument::hasUnsavedChanges() const
 {
-    return hasUnsavedEdits() || session.getAdapter().captureDeviceStates() != savedStates;
+    if (hasUnsavedEdits())
+        return true;
+    // Only a device whose window was opened can have been changed by the user outside Spinus's commands.
+    const auto now = session.getAdapter().captureDeviceStates();
+    for (const auto& device : session.getDevicesShown())
+    {
+        const auto current = now.find (device);
+        const auto saved = savedStates.find (device);
+        if (current != now.end() && (saved == savedStates.end() || saved->second != current->second))
+            return true;
+    }
+    return false;
 }
 
 void ProjectDocument::markSaved()

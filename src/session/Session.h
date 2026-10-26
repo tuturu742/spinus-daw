@@ -10,6 +10,8 @@
 #include "session/LauncherRecorder.h"
 #include "session/MidiRecorder.h"
 #include "session/Suggestions.h"
+
+#include <set>
 #include "session/Tuner.h"
 #include "plugins/DeviceList.h"
 #include "plugins/SandboxList.h"
@@ -172,6 +174,13 @@ public:
     /** "Cutoff (Surge XT - Bass)". */
     juce::String describeLastMovedControl() const;
 
+    /** Devices whose own window was opened since the project was opened: their settings may have been changed
+        there. Only for these does a change of settings count as unsaved (ProjectDocument), since plugins also
+        change their settings by themselves after loading (samples found, a window size noted). Changes made
+        through Spinus's controls are commands, so they count anyway. */
+    void noteDeviceWindowShown (model::DeviceId device) { devicesShown.insert (device); }
+    const std::set<model::DeviceId>& getDevicesShown() const noexcept { return devicesShown; }
+
     /** What an automation target is called, e.g. "Bass volume" or "Surge XT - Filter 1 Cutoff". */
     juce::String describeTarget (const model::ParameterTarget&) const;
     /** An automation value (0..1) as the control shows it, e.g. "-6.0 dB" or "1.20 kHz" (a percentage
@@ -250,6 +259,7 @@ private:
     };
     std::unique_ptr<ControlWatcher> controlWatcher;
     std::optional<model::ParameterTarget> lastMoved;
+    std::set<model::DeviceId> devicesShown;
     model::PatternId currentPattern;
     model::ChannelId selectedChannel;
     tracktion::TimePosition playStart;

@@ -162,15 +162,22 @@ AudioSettings::AudioSettings (juce::AudioDeviceManager& m, PipeWireInput* p) : m
     setSize (580, 470);
 }
 
-AudioSettings::~AudioSettings() { manager.removeChangeListener (this); }
+AudioSettings::~AudioSettings()
+{
+    manager.removeChangeListener (this);
+    if (onClosed)
+        onClosed();
+}
 
 void AudioSettings::show (juce::AudioDeviceManager& manager, juce::Component* centreAround, PipeWireInput* pipeWire,
-                          std::function<int()> getDefault, std::function<void (int)> setDefault)
+                          std::function<int()> getDefault, std::function<void (int)> setDefault,
+                          std::function<void()> onClosed)
 {
     juce::DialogWindow::LaunchOptions options;
     auto* settings = new AudioSettings (manager, pipeWire);
     settings->getDefaultInput = std::move (getDefault);
     settings->onDefaultInputChosen = std::move (setDefault);
+    settings->onClosed = std::move (onClosed);
     settings->refresh();
     options.content.setOwned (settings);
     options.dialogTitle = "Audio settings";

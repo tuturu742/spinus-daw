@@ -35,8 +35,9 @@ public:
     /** Undo steps since the last save (cheap: used for the window title). */
     bool hasUnsavedEdits() const;
 
-    /** Unsaved edits, or a device whose settings changed since the last save (asks every plugin for
-        its settings: use before closing, not on every repaint). */
+    /** Unsaved edits, or a device whose window was opened (Session::getDevicesShown) and whose settings
+        changed since the last save (asks those plugins for their settings: use before closing, not on every
+        repaint). */
     bool hasUnsavedChanges() const;
 
     //==============================================================================
