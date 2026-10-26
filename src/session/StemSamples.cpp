@@ -22,7 +22,11 @@ template <typename Processor> Processor* instrumentOf (Session& session, model::
 
 std::unique_ptr<juce::AudioFormatReader> openStem (const juce::File& stem)
 {
-    return std::unique_ptr<juce::AudioFormatReader> (dsp::getAudioFormats().createReaderFor (stem));
+    std::unique_ptr<juce::AudioFormatReader> reader (dsp::getAudioFormats().createReaderFor (stem));
+    if (reader == nullptr) // named for another format than it is (an AIFF file named .wav): by its contents
+        if (auto in = stem.createInputStream())
+            reader.reset (dsp::getAudioFormats().createReaderFor (std::move (in)));
+    return reader;
 }
 } // namespace
 
