@@ -64,6 +64,13 @@
     <display_length compare="ge">1024</display_length>
   </requires>
   <releases>
+    <release version="0.1.0~alpha.2" date="2026-10-26" type="development">
+      <description>
+        <p>The second alpha: report a problem from the Help menu with the logs attached, zoom and follow the
+        playing in the editors, FL Studio's editing keys, shortcuts in every window, the system's plugins in
+        the Flatpak, three more free plugins, and fixes.</p>
+      </description>
+    </release>
     <release version="0.1.0~alpha.1" date="2026-10-24" type="development">
       <description>
         <p>The first alpha, an early release for testers.</p>

@@ -3,7 +3,7 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
-## 0.1.0-alpha.2 (unreleased)
+## 0.1.0-alpha.2 (2026-10-26)
 
 ### Finding out what went wrong
 
@@ -66,7 +66,7 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   often seen adding a Windows plugin, since those take a moment to load). Playback now loops only while it
   plays; with no pattern, pattern mode loops one bar.
 
-## 0.1.0-alpha.1 (unreleased)
+## 0.1.0-alpha.1 (2026-10-24)
 
 The first alpha: an early, quiet release for testers before 0.1.0. Everything below is new.
 

@@ -7,7 +7,7 @@ A free, open-source digital audio workstation with an FL Studio-style workflow a
 *Spinus* is a genus of small songbirds in the finch family (Fringillidae): the siskins and goldfinches.
 The bird in the logo is a siskin.
 
-> **Status: 0.1.0-alpha.1, an early release for testers.** Spinus is in an early, fast-moving stage of
+> **Status: 0.1.0-alpha.2, an early release for testers.** Spinus is in an early, fast-moving stage of
 > development: expect bugs, and save your work often. It runs on Linux and Windows (the Windows build
 > has had the least testing). See [Known issues](docs/user/known-issues.md) and
 > [what's new](CHANGELOG.md), and please [report what you find](https://github.com/tuturu742/spinus-daw/issues).
@@ -50,7 +50,7 @@ On other Linux systems, use the AppImage from the
 [releases page](https://github.com/tuturu742/spinus-daw/releases). See [Installing Spinus](docs/user/install.md)
 for details and the Flatpak.
 
-On Windows 10 or 11 (64-bit), run `Spinus-0.1.0-alpha.1-Setup.exe` from the releases page. See
+On Windows 10 or 11 (64-bit), run `Spinus-0.1.0-alpha.2-Setup.exe` from the releases page. See
 [Installing Spinus › On Windows](docs/user/install.md#on-windows).
 
 ## Building from source (Arch Linux)
