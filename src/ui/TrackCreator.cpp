@@ -783,6 +783,10 @@ void TrackCreator::measureStyle()
 {
     auto* reference = currentReference();
     const auto& rhythm = work->rhythm;
+    // The stems themselves too: the drums' grid comes from the drum stem, the key and chords also from the rest.
+    auto* stemFiles = new juce::DynamicObject();
+    for (const auto& [name, file] : work->stems)
+        stemFiles->setProperty (name, file.getFullPathName());
     juce::Array<juce::var> songs { object ({
         { "name", reference != nullptr ? reference->file.getFileNameWithoutExtension() : juce::String() },
         { "file", work->prepared.getFullPathName() },
@@ -795,6 +799,7 @@ void TrackCreator::measureStyle()
         { "loudness", work->loudness },
         { "parts", juce::var (work->parts.get()) },
         { "drums", work->drums },
+        { "stems", stemFiles },
     }) };
     runStep ("ai.v1.style.summarize", object ({ { "songs", songs } }), "Measuring its style...",
              [this] (const juce::var& result)

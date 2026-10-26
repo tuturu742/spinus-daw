@@ -191,7 +191,7 @@ def test_the_summary_of_several_songs_and_its_plain_words() -> None:
     assert "3 songs: One, Two, Three." in text
     assert "Tempo: 120 to 128 BPM, typically 124 BPM; 4 beats per bar." in text
     assert "mostly minor" in text and "A minor (2)" in text
-    assert "Favourite progression: i - bVI - bIII - bVII" in text
+    assert "Shared progression: i - bVI - bIII - bVII (in 2 songs)." in text
     assert "kick on steps 1, 5, 9, 13" in text and "straight" in text
     assert "Bass: in every song" in text
     assert "Loudness: about -9 LUFS (-12 to -9)" in text
@@ -297,3 +297,151 @@ def test_a_melody_note_on_the_fourth_does_not_make_a_sus4() -> None:
         {"start": 0.5 + i * 2.0, "end": 1.0 + i * 2.0, "pitch": 65, "velocity": 0.8} for i in range(4)
     ]
     assert [c["name"] for c in style.analyze_song(song)["chords"]] == ["C"] * 4
+
+
+# -----------------------------------------------------------------------------------------------
+# The quality round: measured on real songs, checked here on made-up ones.
+
+DRUM_RATE = 44100
+
+
+def drum_stem(
+    beats: list[float], seconds: float, late: float = 0.02, swing: float = 0.5, backbeat: int = 1
+) -> np.ndarray:
+    """A drum stem: a kick (a falling 60 Hz thump) on beats 1 and 3, a snare (a noise burst) on 2 and 4 (on
+    1 and 3 with backbeat=0), hats (short high noise) on every sixteenth, the off-beat ones at `swing`; all
+    `late` seconds after the beat times, as onset detection and beat tracking differ."""
+    rng = np.random.default_rng(7)
+    out = np.zeros(int(seconds * DRUM_RATE))
+
+    def add(time: float, sound: np.ndarray) -> None:
+        start = int((time + late) * DRUM_RATE)
+        if 0 <= start < len(out):
+            part = sound[: len(out) - start]
+            out[start : start + len(part)] += part
+
+    t = np.arange(int(0.25 * DRUM_RATE)) / DRUM_RATE
+    kick = 0.9 * np.sin(2 * np.pi * (60 + 60 * np.exp(-t * 30)) * t) * np.exp(-t * 12)
+    noise = rng.normal(size=int(0.15 * DRUM_RATE))
+    snare = 0.5 * noise * np.exp(-np.arange(len(noise)) / DRUM_RATE * 25)
+    hiss = np.diff(rng.normal(size=int(0.03 * DRUM_RATE) + 1), n=1)
+    hat = 0.15 * np.diff(hiss, prepend=0.0) * np.exp(-np.arange(len(hiss)) / DRUM_RATE * 120)
+    for i, beat in enumerate(beats[:-1]):
+        length = beats[i + 1] - beat
+        add(beat, kick if i % 2 != backbeat else snare)
+        for k, place in enumerate((0.0, swing / 2, 0.5, 0.5 + swing / 2)):
+            add(beat + place * length, hat * (1.0 if k % 2 == 0 else 0.7))
+    return out
+
+
+def test_the_drum_grid_from_the_drum_stem() -> None:
+    song = song_with(["C"] * 12, tempo=120.0)
+    stem = drum_stem(song["beats"], 26.0)
+    grid = style.drum_grid(stem, DRUM_RATE, song)
+    assert grid is not None and grid["from"] == "drum stem"
+    lanes = grid["lanes"]
+    assert [i + 1 for i, p in enumerate(lanes["kick"]) if p >= 0.6] == [1, 9]
+    assert [i + 1 for i, p in enumerate(lanes["snare"]) if p >= 0.6] == [5, 13]
+    # Every sixteenth but those right after a snare, whose noise covers them.
+    assert sum(p >= 0.6 for p in lanes["hats"]) >= 14
+    assert grid["swing"] == pytest.approx(0.5, abs=0.03)  # straight, though every hit is 20 ms late
+    assert 0 < grid["offsetMs"] <= 30  # moved onto the drums (to within a frame)
+    assert not grid["barShifted"]
+
+
+def test_swung_drums_and_a_downbeat_a_beat_off() -> None:
+    song = song_with(["C"] * 12, tempo=100.0)
+    swung = style.drum_grid(drum_stem(song["beats"], 30.0, swing=0.66), DRUM_RATE, song)
+    assert swung is not None and swung["swing"] == pytest.approx(0.66, abs=0.04)
+    # Snares on the beats the bar was said to start on: the bar starts a beat later.
+    off = style.drum_grid(drum_stem(song["beats"], 30.0, backbeat=0), DRUM_RATE, song)
+    assert off is not None and off["barShifted"]
+    assert [i + 1 for i, p in enumerate(off["lanes"]["snare"]) if p >= 0.6] == [5, 13]
+
+
+def test_sections_fall_on_phrases() -> None:
+    novelty = np.zeros(64)
+    novelty[[8, 16, 25]] = [1.0, 1.0, 0.6]  # the last change found a bar late
+    novelty[12] = 0.9  # a fill: too short to be a section in a 64-bar song
+    assert style.phrase_boundaries(novelty, 4) == [0, 8, 16, 24, 32]
+    # A pickup: everything a bar later is on its own phrase grid.
+    assert style.phrase_boundaries(np.roll(novelty, 1), 4)[:4] == [0, 9, 17, 25]
+
+
+def test_loops_count_whichever_chord_they_start_on_and_shared_needs_two_songs() -> None:
+    one = style.analyze_song(song_with(["C", "G", "Am", "F"] * 4, name="One"))
+    two = style.analyze_song(song_with(["Am", "F", "C", "G"] * 4, name="Two"))
+    alone = style.analyze_song(song_with(["C", "F", "G", "F"] * 4, name="Alone"))
+    summary = style.summarize([one, two, alone])
+    top = summary["chords"]["progressions"][0]
+    assert top["shared"] and top["songs"] == 2
+    assert "Shared progression:" in "\n".join(summary["plain"])
+    lonely = "\n".join(style.summarize([alone])["plain"])
+    assert "No progression is shared by two songs; the one repeated most is I - IV - V - IV" in lonely
+
+
+def test_unlike_grooves_are_not_averaged() -> None:
+    four = add_drums(song_with(["C"] * 8, name="Four"))
+    half = song_with(["C"] * 8, name="Half")
+    half["drums"] = [
+        {"time": t, "kind": k}
+        for i, t in enumerate(half["beats"])
+        for k in ("kick" if i % 4 == 0 else "", "snare" if i % 4 == 2 else "")
+        if k
+    ]
+    songs = [style.analyze_song(four), style.analyze_song({**four, "name": "Four again"}), style.analyze_song(half)]
+    drums = style.summarize(songs)["drums"]
+    assert [len(g["songs"]) for g in drums["grooves"]] == [2, 1]
+    assert drums["lanes"]["kick"][4] == pytest.approx(1.0)  # the main groove's, not a blend
+    text = "\n".join(style.summarize(songs)["plain"])
+    assert "Main groove (2 of 3 songs" in text and "Another groove (Half)" in text
+
+
+def test_the_key_by_votes_and_the_bass_tells_relative_keys_apart() -> None:
+    # A minor and C major share their notes; the bass sitting on A decides.
+    minor = song_with(["Am", "F", "C", "G", "Am", "Dm", "Am", "Am"] * 2, key=(0, "major"))
+    key = style.estimate_key(minor, None, None)
+    assert key is not None and key["name"] == "A minor"
+    assert key["votes"]["Analyzer"] == "C major" and "C major" in key["alternatives"]
+    major = style.estimate_key(song_with(["C", "F", "G", "C"] * 4, key=(0, "major")), None, None)
+    assert major is not None and major["name"] == "C major" and major["confidence"] == "high"
+
+
+def test_a_fast_song_with_a_snare_on_every_beat_may_be_half_as_fast() -> None:
+    groove = {"steps": 16, "lanes": {"kick": [0.0] * 16, "snare": [1.0, 0, 0, 0] * 4, "hats": [0.0] * 16}}
+    assert style.tempo_doubt(180.0, groove) == "half"
+    assert style.tempo_doubt(120.0, groove) is None
+    slow = {"steps": 16, "lanes": {"kick": [0.0] * 16, "snare": [0, 0, 1.0, 0] * 4, "hats": [0.0] * 16}}
+    assert style.tempo_doubt(70.0, slow) == "double"
+
+
+def test_short_notes_do_not_make_chords_and_the_longest_bass_note_is_the_root() -> None:
+    song = song_with(["C"] * 2)
+    # A flurry of short Bs and a short low E in the bass: still C.
+    song["parts"]["other"] += [
+        {"start": 0.5 + i * 0.1, "end": 0.55 + i * 0.1, "pitch": 71, "velocity": 1.0} for i in range(10)
+    ]
+    song["parts"]["bass"].append({"start": 0.5, "end": 0.6, "pitch": 28, "velocity": 1.0})
+    assert [c["name"] for c in style.analyze_song(song)["chords"]] == ["C", "C"]
+
+
+def test_the_recognised_hits_are_a_second_opinion_on_kick_and_snare() -> None:
+    song = song_with(["C"] * 12, tempo=120.0)
+    stem = drum_stem(song["beats"], 26.0)
+    # The recogniser heard every snare as a kick: the grid's kick on 5 and 13 is then only half sure.
+    song["drums"] = [{"time": t + 0.02, "kind": "kick"} for t in song["beats"]]
+    grid = style.drum_grid(stem, DRUM_RATE, song)
+    assert grid is not None and grid["from"] == "drum stem and recognised hits"
+    assert grid["lanes"]["kick"][0] == pytest.approx(1.0) and 0.4 <= grid["lanes"]["kick"][4] <= 0.8
+    assert [i + 1 for i, p in enumerate(grid["lanes"]["snare"]) if p >= 0.5] == [5, 13]
+
+
+def test_a_key_most_estimates_agree_on_is_kept_whatever_the_bass() -> None:
+    # As in A Forest: the mix, the stems and the Analyzer say A minor; the bass starting phrases on C does not
+    # turn it into C major.
+    from spinus_ai.analysis import MINOR
+
+    a_minor = np.roll(MINOR, 9)
+    song = song_with(["C", "Am", "C", "Am"] * 4, key=(9, "minor"))
+    key = style.estimate_key(song, a_minor, a_minor)
+    assert key is not None and key["name"] == "A minor" and key["confidence"] in ("high", "medium")

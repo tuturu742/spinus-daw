@@ -516,9 +516,12 @@ TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATC
         const auto& f = r.features;
         lines.add (r.file.getFileName() + " | " + creator.describe (r) + " | " +
                    juce::String (took.contains (r.file.getFileName()) ? took[r.file.getFileName()] : 0.0, 0) +
-                   " s | tempo " + f["tempo"].toString() + " | key " + f["key"]["name"].toString() + " | bars " +
-                   f["bars"].toString() + " | sections " + juce::String (f["sections"].size()) + " | LUFS " +
-                   f["loudness"]["lufs"].toString() + " | swing " + f["groove"]["swing"].toString());
+                   " s | tempo " + juce::String ((double)f["tempo"], 1) +
+                   (f["tempoDoubt"].isString() ? " (" + f["tempoDoubt"].toString() + "?)" : juce::String()) +
+                   " | key " + f["key"]["name"].toString() + " (" + f["key"]["confidence"].toString() + ", found " +
+                   f["keyFound"].toString() + ") | bars " + f["bars"].toString() + " | sections " +
+                   juce::String (f["sections"].size()) + " | LUFS " + juce::String ((double)f["loudness"]["lufs"], 1) +
+                   " | swing " + f["groove"]["swing"].toString() + " | drums from " + f["groove"]["from"].toString());
     }
     lines.add ({});
     lines.add (creator.getSummaryText());

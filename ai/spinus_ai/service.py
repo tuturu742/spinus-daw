@@ -861,7 +861,8 @@ class Service:
     async def style_summarize(self, params: dict[str, Any], notify: Notify) -> Any:
         """What reference songs share: {songs: [song]}, each song either {features} (from an earlier result's
         perSong) or the Analyzer's results for it ({name, file (the mix as WAV, for the sections), tempo,
-        beatsPerBar, firstDownbeat, beats, downbeats, key, loudness, parts, drums}; spinus_ai.style.analyze_song).
+        beatsPerBar, firstDownbeat, beats, downbeats, key, loudness, parts, drums, stems {name: WAV file}};
+        spinus_ai.style.analyze_song).
         The result is the style summary, with each song's features in perSong (kept by Spinus, so a song
         is measured once). Needs NumPy only."""
         if importlib.util.find_spec("numpy") is None:
@@ -891,10 +892,17 @@ class Service:
                            "step": f"Measuring the style of {song.get('name', 'a song')}"})  # fmt: skip
 
                 def measure(song: dict[str, Any] = song) -> dict[str, Any]:
+                    # The drums and the harmonic stems, for the drums' grid, the key and the chords.
+                    wanted = ("drums", *style.HARMONIC)
+                    stems = {
+                        name: read_wav(str(path))
+                        for name, path in (song.get("stems") or {}).items()
+                        if name in wanted and Path(str(path)).is_file()
+                    }
                     if song.get("file"):
                         audio, rate = read_wav(str(song["file"]))
-                        return style.analyze_song(song, audio, rate)
-                    return style.analyze_song(song)
+                        return style.analyze_song(song, audio, rate, stems)
+                    return style.analyze_song(song, stems=stems)
 
                 features.append(await run_blocking(measure))
             return await run_blocking(lambda: style.summarize(features))

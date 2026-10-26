@@ -82,16 +82,26 @@ of Spinus is shown as not used, and is analyzed again when you add it.
 Once the songs are analyzed, **What the songs have in common** says it in plain words, for example:
 
 - **Tempo**: "120 to 128 BPM, typically 124 BPM; 4 beats per bar."
-- **Key**: "mostly minor (67 % of the songs): A minor (2), C major." Chords are named from each song's
-  key with Roman numerals, so songs in different keys can be compared: in A minor, A minor is **i**,
-  C major is **bIII** (three semitones up, major) and F major is **bVI**.
-- **Chords**: how often the chord changes, the chords used most, and the favourite progression
-  ("i - bVI - bIII - bVII").
+- **Tempo, second thoughts**: when a fast song has its snare on every beat, Spinus adds that it "may be
+  felt at half that speed" (and the other way round for a slow one). The tempo itself is left as found.
+- **Key**: "mostly minor (67 % of the songs): A minor (2), C major." Spinus asks several independent
+  estimates (the whole mix, the instruments without drums and voice, the notes it heard, with two kinds of
+  key profile) and takes the one most agree on. When they disagree, it says so: "Not sure of the key of:
+  ...". Chords are named from each song's key with Roman numerals, so songs in different keys can be
+  compared: in A minor, A minor is **i**, C major is **bIII** (three semitones up, major) and F major is
+  **bVI**.
+- **Chords**: how often the chord changes, the chords used most, and a progression the songs share
+  ("Shared progression: i - bVI - bIII - bVII (in 2 songs)"). A loop counts the same whichever chord you
+  start it from, and it is called shared only when at least two songs play it three times or more;
+  otherwise Spinus says no progression is shared and names the one repeated most, in one song.
 - **Drums**: on which of the 16 steps of a bar the kick, the snare (or clap) and the hi-hats usually
   play, numbered as in the [Channel Rack](channel-rack.md), and whether the beat is straight or swung.
+  Spinus listens to the drum part itself for this. Songs with different grooves are not mixed into one:
+  you get the main groove (and in how many songs), and the other grooves beside it.
 - **Parts**: bass, vocals, other instruments: in how many of the songs, from which note to which, how
   many notes a bar, and whether they play single notes or chords.
-- **Sections**: how long they usually are in bars (8 bars, say), and how many a song has.
+- **Sections**: how long they usually are in bars (8 or 16, say), and how many a song has. Sections
+  follow the song's 4-bar phrases, and a short fill does not count as a section of its own.
 - **Loudness**: about how loud the songs are (LUFS, as the [Loudness Meter](loudness-meter.md) shows),
   their peaks, and how much quieter the quiet parts are.
 

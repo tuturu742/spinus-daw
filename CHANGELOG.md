@@ -19,6 +19,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   the Analyzer has seen before offers **Continue from the existing analysis** or **Analyze anew**.
   **Saved analyses...** shows the space it takes and deletes stems or songs (never your own audio files).
   See [Saved analyses](docs/user/track-creator.md#saved-analyses).
+- **Track creator, better summaries** (checked on 23 real songs in five styles): the drum groove comes from
+  the drum part itself, so straight songs no longer read as swung; songs with different grooves are no
+  longer averaged into one; sections follow 4- and 8-bar phrases; a chord loop counts the same whichever
+  chord it starts on, and is called shared only when two songs really play it; the key comes from several
+  estimates, with a note when they disagree; a fast song that may be felt at half speed is pointed out.
 - **Analyzer:** the tempo it finds is more precise (it could be off by a few BPM, jumping between values
   such as 130.4, 136.4 and 142.9).
 
