@@ -411,19 +411,19 @@ void PartSoundsPanel::listenCloser (size_t part)
                                         r.note = "Not compared by listening: " + matchError;
                                     else if (const auto* list = found["presets"].getArray())
                                     {
-                                        // Ranked again: the measurements' order and the listening's count alike.
-                                        std::map<juce::String, int> heard;
-                                        for (int k = 0; k < list->size(); ++k)
-                                            heard[(*list)[k]["id"].toString()] = k;
+                                        // Ranked again: the measurements' order and the listening's (by its
+                                        // CLAP score alone: the measurements are already counted) alike.
+                                        for (auto i : presets)
+                                            for (int m = 0; m < list->size(); ++m)
+                                                if ((*list)[m]["id"].toString() == r.choices[i].preset)
+                                                    r.choices[i].clap = (double)(*list)[m]["score"];
                                         std::vector<std::pair<double, size_t>> order;
                                         for (size_t k = 0; k < presets.size(); ++k)
                                         {
-                                            auto& c = r.choices[presets[k]];
-                                            const auto place =
-                                                heard.contains (c.preset) ? heard[c.preset] : (int)presets.size();
-                                            for (int m = 0; m < list->size(); ++m)
-                                                if ((*list)[m]["id"].toString() == c.preset)
-                                                    c.clap = (double)(*list)[m]["score"];
+                                            const auto clap = r.choices[presets[k]].clap;
+                                            int place = 0;
+                                            for (auto other : presets)
+                                                place += r.choices[other].clap > clap ? 1 : 0;
                                             order.emplace_back ((double)k + (double)place + 0.01 * (double)k,
                                                                 presets[k]);
                                         }

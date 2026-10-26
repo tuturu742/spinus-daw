@@ -37,7 +37,7 @@ struct Target
     juce::StringArray roles;           // the roles that fit, the best first
     int low = 0, median = 0, high = 0; // MIDI notes (0: unknown)
     double notesPerBar = 0.0, voices = 1.0;
-    bool chords = false; // plays more than one note at a time (voices over 1.3)
+    bool chords = false; // the other instruments play more than one note at a time (voices over 1.3)
     double tempo = 0.0;  // the songs' median tempo (drum loops)
     int songs = 0;       // how many reference songs have the part
 };

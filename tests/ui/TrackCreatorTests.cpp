@@ -2,6 +2,7 @@
 
 #include "AnalysisFakes.h"
 #include "ai/AnalysisJobs.h"
+#include "ai/Proposal.h"
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
 #include "session/PartSounds.h"
@@ -479,7 +480,7 @@ TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATC
     REQUIRE (out.createDirectory().wasOk());
 
     EngineHost host { { .openAudioDevice = false } };
-    Session session (host.getEngine());
+    Session session (host.getEngine(), makeDevices (host.getEngine())); // Spinus's own and the built Surge XT
     ai::AiService service (settings);
     service.setEnabled (true);
     const auto python = ai::AiService::getDefaultModelsFolder().getSiblingFile ("python");
@@ -789,7 +790,8 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
         SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
     Analysis a;
     const auto context = makePartSoundsContext (a);
-    PartSoundsPanel panel (a.session, [context] { return context; });
+    Session session { a.host.getEngine(), makeDevices (a.host.getEngine()) }; // with the Drum Machine
+    PartSoundsPanel panel (session, [context] { return context; });
     panel.setSize (700, 600);
 
     // Without AI: chosen by the measurements alone, and it says so.
@@ -847,21 +849,22 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     }
 
     // Added as one undo step.
-    const auto channels = a.session.getProject().channels.size();
-    const auto steps = a.session.getHistory().getUndoDescriptions().size();
+    const auto channels = session.getProject().channels.size();
+    const auto steps = session.getHistory().getUndoDescriptions().size();
     REQUIRE (panel.addToProject());
     INFO (panel.getStatusText());
     CHECK (panel.getStatusText().contains ("one undo step"));
-    CHECK (a.session.getProject().channels.size() == channels + 4);
-    CHECK (a.session.getHistory().getUndoDescriptions().size() == steps + 1);
-    CHECK (a.session.getHistory().getUndoDescriptions().strings.getLast() == "Track creator: sounds for 4 parts");
+    CHECK_FALSE (panel.getStatusText().contains ("Not every sound loaded"));
+    CHECK (session.getProject().channels.size() == channels + 4);
+    CHECK (session.getHistory().getUndoDescriptions().size() == steps + 1);
+    CHECK (session.getHistory().getUndoDescriptions().strings.getLast() == "Track creator: sounds for 4 parts");
     REQUIRE (panel.getAddedChannels().size() == 4);
-    const auto* bassChannel = a.session.getProject().findChannel (panel.getAddedChannels()[0]);
+    const auto* bassChannel = session.getProject().findChannel (panel.getAddedChannels()[0]);
     REQUIRE (bassChannel != nullptr);
     CHECK (bassChannel->name == "Bass (Track creator)");
     CHECK_FALSE (bassChannel->instrument->parameters.empty()); // the tuned settings
-    REQUIRE (a.session.getHistory().undo());
-    CHECK (a.session.getProject().channels.size() == channels);
+    REQUIRE (session.getHistory().undo());
+    CHECK (session.getProject().channels.size() == channels);
 }
 #endif
 
@@ -957,7 +960,7 @@ TEST_CASE ("Track creator: sounds for the parts of real songs (SPINUS_REALMUSIC_
                " s); roles learnt from " + juce::String (index.roleExamples) + " named presets");
 
     EngineHost host { { .openAudioDevice = false } };
-    Session session (host.getEngine());
+    Session session (host.getEngine(), makeDevices (host.getEngine())); // Spinus's own and the built Surge XT
     ai::AiService service (settings);
     service.setEnabled (true);
     const auto library = AnalysisLibrary::inAiFolder (service.getFolder());

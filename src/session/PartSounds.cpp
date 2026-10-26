@@ -109,7 +109,9 @@ std::vector<Target> targetsFromSummary (const juce::var& summary)
         t.high = (int)p["high"];
         t.notesPerBar = (double)p["notesPerBar"];
         t.voices = p.hasProperty ("voices") ? (double)p["voices"] : 1.0;
-        t.chords = t.voices > 1.3;
+        // Chords are the other instruments' (Basic Pitch hears a bass's or a voice's overlapping notes as
+        // more than one voice now and then).
+        t.chords = t.part == "other" && t.voices > 1.3;
         t.tempo = tempo;
         if (t.part == "bass")
             t.roles = { "bass" };
@@ -697,7 +699,8 @@ namespace
 /** The key's tonic (pitch class) and whether it is minor, from the summary's commonest key ("D minor"). */
 std::pair<int, bool> keyOf (const juce::var& summary)
 {
-    const auto name = summary["keys"][0]["name"].toString();
+    const auto* keys = summary["keys"].getArray();
+    const auto name = keys != nullptr && ! keys->isEmpty() ? keys->getReference (0)["name"].toString() : juce::String();
     static const juce::StringArray notes { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     const auto tonic = notes.indexOf (name.upToFirstOccurrenceOf (" ", false, false));
     return { tonic < 0 ? 0 : tonic, name.containsIgnoreCase ("minor") };
@@ -727,7 +730,10 @@ std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const
             {
                 const auto at = (bar * 16 + step) * beat / 4.0;
                 auto on = [&] (const char* lane, bool fallback)
-                { return lanes[lane].isArray() ? (double)lanes[lane][step] >= 0.5 : fallback; };
+                {
+                    const auto* values = lanes[lane].getArray();
+                    return values != nullptr && values->size() == 16 ? (double)values->getReference (step) >= 0.5 : fallback;
+                };
                 if (on ("kick", step % 4 == 0))
                     notes.push_back ({ noteOf ("kick"), at, beat / 4.0, 0.9f });
                 if (on ("snare", step == 4 || step == 12))
