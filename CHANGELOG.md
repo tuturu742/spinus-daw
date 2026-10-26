@@ -3,6 +3,14 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## Not released yet
+
+### Fixes
+
+- **Closing a song you only opened no longer asks to save it.** Some plugins (Ample's, for example) change
+  their own settings a moment after loading; Spinus took that for a change of yours. A plugin's settings now
+  count only if you opened its window; changes made with Spinus's own controls count as always.
+
 ## 0.1.0-alpha.2 (2026-10-26)
 
 ### Finding out what went wrong

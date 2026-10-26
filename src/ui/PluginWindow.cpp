@@ -119,6 +119,8 @@ void PluginWindow::install (Session& session, juce::Component* owner)
                                             te::Plugin& plugin) -> std::unique_ptr<juce::Component>
                                         {
                                             auto device = session.getAdapter().findDevice (plugin);
+                                            if (device)
+                                                session.noteDeviceWindowShown (*device);
                                             connectSlicesToPattern (session, plugin);
                                             connectBuiltInPresets (session, plugin);
                                             auto title = device ? session.getDeviceTitle (*device) : juce::String();
