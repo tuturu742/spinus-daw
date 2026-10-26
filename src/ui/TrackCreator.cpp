@@ -2,7 +2,9 @@
 #include "ai/AnalysisJobs.h"
 
 #include "AnalysisLibraryView.h"
+#include "SoundIndexView.h"
 #include "Theme.h"
+#include "session/ProgramFolder.h"
 #include "session/SongPreparation.h"
 
 #include <algorithm>
@@ -208,10 +210,26 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
                               "deleting them");
     libraryButton.onClick = [this] { showLibrary(); };
 
+    soundsTitle.setText ("Sounds you have", juce::dontSendNotification);
+    soundsStatus.setJustificationType (juce::Justification::centredLeft);
+    soundsStatus.setMinimumHorizontalScale (1.0f);
+    updateSoundsButton.setTooltip (
+        "Measure how your instruments' presets and the samples in your Browser folders sound "
+        "(only what is new or changed), in the background and in a separate program");
+    updateSoundsButton.onClick = [this] { updateSoundIndex(); };
+    stopSoundsButton.onClick = [this] { cancelSoundIndex(); };
+    showSoundsButton.setTooltip ("The sounds measured so far, with the role Spinus guesses for each, and a search");
+    showSoundsButton.onClick = [this] { showSounds(); };
+    soundOptions.helper = getHelperProgram ("spinus-plugin-scanner");
+    soundOptions.hostLibraries = plugins::getHostLibraries();
+    getSoundSources = [this] { return findSoundSources (session.getDeviceList()); };
+
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &addButton, &folderButton, &removeButton,
                                                              &clearButton, &list, &status, &summaryTitle, &summaryText,
-                                                             &saveButton, &libraryButton, &notice })
+                                                             &saveButton, &libraryButton, &notice, &soundsTitle,
+                                                             &soundsStatus, &updateSoundsButton, &showSoundsButton })
         addAndMakeVisible (c);
+    addChildComponent (stopSoundsButton);
     for (auto* c : std::initializer_list<juce::Component*> { &cancelButton, &againButton, &needsText, &downloadButton,
                                                              &engineButton })
         addChildComponent (c);
@@ -222,6 +240,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
 
 TrackCreator::~TrackCreator()
 {
+    indexer = nullptr; // stops the update (its helper is killed)
     *alive = false;
     *run = false;
     task = nullptr;
@@ -247,7 +266,100 @@ juce::File TrackCreator::getListFile() const
     return service != nullptr ? service->getFolder().getChildFile ("track-creator.json") : juce::File();
 }
 
-void TrackCreator::showLibrary() { AnalysisLibraryView::show (getLibrary(), this); }
+void TrackCreator::showLibrary()
+{
+    AnalysisLibraryView::show (getLibrary(), this, soundIndexFolder,
+                               [safe = juce::Component::SafePointer (this)]
+                               {
+                                   if (safe != nullptr)
+                                       safe->showSoundSummary ("The sound index was deleted.");
+                               });
+}
+
+//==============================================================================
+void TrackCreator::setSoundIndexFolder (const juce::File& folder)
+{
+    soundIndexFolder = folder;
+    showSoundSummary();
+}
+
+void TrackCreator::showSoundSummary (const juce::String& after)
+{
+    soundSummaryShown = true;
+    const auto s = SoundIndex::readSummary (soundIndexFolder);
+    juce::String text;
+    if (s.updated == juce::Time())
+        text = "No sound index yet. Update sound index measures the presets of your instruments and the samples in "
+               "your Browser's sample folders, so the next steps can choose the closest sounds you have.";
+    else
+    {
+        auto count = [] (int n, const char* one, const char* many)
+        { return juce::String (n) + " " + (n == 1 ? one : many); };
+        text = "Sound index: " + count (s.instruments, "instrument", "instruments") + ", " +
+               count (s.presets, "preset", "presets") + ", " + count (s.samples, "sample", "samples") + "; updated " +
+               s.updated.formatted ("%d %b %Y %H:%M") +
+               (s.problems > 0 ? " (" + count (s.problems, "problem", "problems") + ", see Show sounds)"
+                               : juce::String()) +
+               ".";
+    }
+    if (after.isNotEmpty())
+        text = after + " " + text;
+    soundsStatus.setText (text, juce::dontSendNotification);
+    updateButtons();
+}
+
+void TrackCreator::updateSoundIndex()
+{
+    if (isIndexingSounds())
+        return;
+    indexer = std::make_unique<SoundIndexer> (soundIndexFolder, soundOptions);
+    indexing = true;
+    const auto sources = getSoundSources ? getSoundSources() : std::vector<SoundSource>();
+    const auto folders = getSampleFolders ? getSampleFolders() : juce::Array<juce::File>();
+    const bool started = indexer->start (
+        sources, folders,
+        [this] (const SoundIndexer::Progress& p)
+        {
+            if (p.stage.isEmpty())
+                return;
+            const auto stage = p.stage == "samples" ? juce::String ("samples") : juce::String ("instruments");
+            soundsStatus.setText (
+                "Updating the sound index: " + stage + " " + juce::String (juce::jmin (p.done + 1, p.total)) + " of " +
+                    juce::String (p.total) + (p.current.isNotEmpty() ? " (" + p.current + ")" : juce::String()) + ", " +
+                    juce::String (p.sounds) + " measured so far...",
+                juce::dontSendNotification);
+        },
+        [this] (const SoundIndexer::Result& r)
+        {
+            indexing = false;
+            lastSoundResult = r;
+            const auto measured = r.soundsMeasured + r.samplesMeasured, removed = r.soundsRemoved + r.samplesRemoved;
+            juce::String after =
+                r.cancelled ? "Stopped; what was measured is kept, Update carries on from there."
+                            : "Updated: " + juce::String (measured) + " sounds measured" +
+                                  (removed > 0 ? ", " + juce::String (removed) + " gone" : juce::String()) + ".";
+            showSoundSummary (after);
+        });
+    if (! started)
+        indexing = false;
+    if (! started)
+        soundsStatus.setText ("The sound index could not be updated now.", juce::dontSendNotification);
+    updateButtons();
+}
+
+void TrackCreator::cancelSoundIndex()
+{
+    if (indexer != nullptr)
+        indexer->cancel(); // reports the stop through its finished callback
+}
+
+void TrackCreator::showSounds() { SoundIndexView::show (soundIndexFolder, this); }
+
+void TrackCreator::visibilityChanged()
+{
+    if (isVisible() && ! soundSummaryShown)
+        showSoundSummary();
+}
 
 void TrackCreator::remember() const
 {
@@ -980,6 +1092,8 @@ void TrackCreator::updateButtons()
     downloadButton.setEnabled (! busy);
     if (! needsText.isVisible())
         engineButton.setVisible (false);
+    updateSoundsButton.setEnabled (! indexing);
+    stopSoundsButton.setVisible (indexing);
     resized();
 }
 
@@ -1005,9 +1119,9 @@ void TrackCreator::paint (juce::Graphics& g)
 {
     const auto& theme = themeOf (*this);
     g.fillAll (theme.get ("panel"));
-    for (auto* l : { &intro, &summaryTitle })
+    for (auto* l : { &intro, &summaryTitle, &soundsTitle })
         l->setColour (juce::Label::textColourId, theme.get ("text"));
-    for (auto* l : { &status, &notice })
+    for (auto* l : std::initializer_list<juce::Label*> { &status, &notice, &soundsStatus })
         l->setColour (juce::Label::textColourId, theme.get ("textDim"));
     needsText.setColour (juce::Label::textColourId, theme.get ("accent"));
     list.setColour (juce::ListBox::backgroundColourId, theme.get ("background"));
@@ -1017,6 +1131,18 @@ void TrackCreator::resized()
 {
     auto area = getLocalBounds().reduced (10);
     notice.setBounds (area.removeFromBottom (40));
+    {
+        auto r = area.removeFromBottom (28);
+        updateSoundsButton.setBounds (r.removeFromLeft (150).reduced (0, 1));
+        r.removeFromLeft (6);
+        showSoundsButton.setBounds (r.removeFromLeft (130).reduced (0, 1));
+        r.removeFromLeft (6);
+        if (stopSoundsButton.isVisible())
+            stopSoundsButton.setBounds (r.removeFromLeft (70).reduced (0, 1));
+        soundsStatus.setBounds (area.removeFromBottom (40));
+        soundsTitle.setBounds (area.removeFromBottom (22));
+        area.removeFromBottom (6);
+    }
     intro.setBounds (area.removeFromTop (40));
     area.removeFromTop (4);
     {

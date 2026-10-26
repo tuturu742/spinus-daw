@@ -2,6 +2,10 @@
 // hangs while loading cannot take Spinus down. Started by spinus::plugins::PluginScanner.
 //
 // Usage: spinus-plugin-scanner --format <VST3|CLAP|LV2|VST|...> --file <path> --output <result.xml>
+//
+// Also the sound index's helper (session/SoundRender.h): plays an instrument's presets or reads sample
+// files, out of Spinus's process.
+//        spinus-plugin-scanner --sound-index <request.json> --output <result.jsonl>
 
 #include <juce_events/juce_events.h>
 
@@ -9,6 +13,7 @@
 #include "core/Log.h"
 #include "plugins/HostLibraries.h"
 #include "plugins/PluginScanner.h"
+#include "session/SoundRender.h"
 
 int main (int argc, char* argv[])
 {
@@ -23,6 +28,10 @@ int main (int argc, char* argv[])
     auto value = [&] (const char* flag)
     { return args.indexOf (flag) >= 0 ? args[args.indexOf (flag) + 1] : juce::String(); };
     const auto format = value ("--format"), file = value ("--file"), output = value ("--output");
+
+    if (const auto request = value ("--sound-index"); request.isNotEmpty() && output.isNotEmpty())
+        return spinus::runSoundIndexProcess (juce::File::getCurrentWorkingDirectory().getChildFile (request),
+                                             juce::File::getCurrentWorkingDirectory().getChildFile (output));
 
     if (format.isEmpty() || file.isEmpty() || output.isEmpty())
     {

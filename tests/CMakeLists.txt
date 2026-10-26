@@ -73,6 +73,8 @@ add_executable (spinus_tests
     session/SynthProfileTests.cpp
     session/InstrumentPresetsTests.cpp
     session/PresetPreviewsTests.cpp
+    session/SoundDescriptorsTests.cpp
+    session/SoundIndexTests.cpp
     session/SuggestionsTests.cpp
     session/TunerTests.cpp
     ui/AnalysisEngineTests.cpp
@@ -231,6 +233,18 @@ set_target_properties (spinus_test_synth_clap PROPERTIES
     PREFIX "" OUTPUT_NAME "test-synth" SUFFIX ".clap"
     LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
 add_dependencies (spinus_tests spinus_test_synth_clap)
+
+# The same synth with two presets that crash and hang it, for the sound index's helper (SoundIndexTests.cpp).
+add_library (spinus_test_misbehaving_clap MODULE plugins/TestSynthClap.c)
+target_include_directories (spinus_test_misbehaving_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+target_compile_definitions (spinus_test_misbehaving_clap PRIVATE MISBEHAVING=1)
+if (NOT WIN32)
+    target_link_libraries (spinus_test_misbehaving_clap PRIVATE m)
+endif()
+set_target_properties (spinus_test_misbehaving_clap PROPERTIES
+    PREFIX "" OUTPUT_NAME "misbehaving-synth" SUFFIX ".clap"
+    LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
+add_dependencies (spinus_tests spinus_test_misbehaving_clap)
 
 # A small LV2 plugin with X11 UIs that misbehave as real ones do (Lv2UiTestPlugin.c), for Lv2GuiTests.cpp.
 if (UNIX AND NOT APPLE)

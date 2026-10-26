@@ -1,6 +1,7 @@
 #include "AnalysisLibraryView.h"
 
 #include "Theme.h"
+#include "session/SoundIndex.h"
 
 namespace spinus::ui
 {
@@ -15,7 +16,8 @@ const Theme& themeOf (const juce::Component& c)
 }
 } // namespace
 
-AnalysisLibraryView::AnalysisLibraryView (AnalysisLibrary l) : library (std::move (l))
+AnalysisLibraryView::AnalysisLibraryView (AnalysisLibrary l, juce::File sounds)
+    : library (std::move (l)), soundsFolder (std::move (sounds))
 {
     intro.setText ("What Spinus learnt about the songs you analyzed (tempo, key, notes, style) and their stems, "
                    "kept so they are not analyzed again. Deleting removes only these, never your own audio files; "
@@ -36,16 +38,27 @@ AnalysisLibraryView::AnalysisLibraryView (AnalysisLibrary l) : library (std::mov
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &total, &list, &stemsButton, &songButton,
                                                              &allStemsButton, &everythingButton })
         addAndMakeVisible (c);
-    setSize (600, 420);
+    soundsButton.setTooltip ("Delete what the Track creator measured of your instruments and samples (never the sounds "
+                             "themselves); Update sound index measures them again");
+    soundsButton.onClick = [this] { deleteSoundIndex(); };
+    soundsText.setJustificationType (juce::Justification::centredLeft);
+    addChildComponent (soundsText);
+    addChildComponent (soundsButton);
+    soundsText.setVisible (soundsFolder != juce::File());
+    soundsButton.setVisible (soundsFolder != juce::File());
+    setSize (640, 450);
     refresh();
 }
 
 AnalysisLibraryView::~AnalysisLibraryView() { list.setModel (nullptr); }
 
-void AnalysisLibraryView::show (const AnalysisLibrary& library, juce::Component* near)
+void AnalysisLibraryView::show (const AnalysisLibrary& library, juce::Component* near,
+                                const juce::File& soundIndexFolder, std::function<void()> onSoundIndexDeleted)
 {
     juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (new AnalysisLibraryView (library));
+    auto* view = new AnalysisLibraryView (library, soundIndexFolder);
+    view->onSoundIndexDeleted = std::move (onSoundIndexDeleted);
+    options.content.setOwned (view);
     options.dialogTitle = "Saved analyses";
     options.componentToCentreAround = near;
     options.useNativeTitleBar = true;
@@ -92,9 +105,29 @@ void AnalysisLibraryView::refresh()
                        : juce::String ((int)entries.size()) + (entries.size() == 1 ? " song, " : " songs, ") +
                              sizeText (bytes) + " in all, of which stems " + sizeText (stems) + ".",
                    juce::dontSendNotification);
+    if (soundsFolder != juce::File())
+    {
+        const auto used = SoundIndex (soundsFolder).getDiskUse();
+        soundsText.setText (used > 0 ? "The Track creator's sound index (how your instruments and samples sound): " +
+                                           sizeText (used) + "."
+                                     : juce::String ("The Track creator's sound index: none yet."),
+                            juce::dontSendNotification);
+    }
     list.updateContent();
     list.repaint();
     updateButtons();
+}
+
+bool AnalysisLibraryView::deleteSoundIndex()
+{
+    if (soundsFolder == juce::File() || SoundIndexer::isAnyRunning())
+        return false;
+    SoundIndex index (soundsFolder);
+    const bool done = index.removeAll();
+    refresh();
+    if (onSoundIndexDeleted)
+        onSoundIndexDeleted();
+    return done;
 }
 
 bool AnalysisLibraryView::deleteStems (int row)
@@ -139,6 +172,7 @@ void AnalysisLibraryView::updateButtons()
     stemsButton.setEnabled (selected && entries[(size_t)row].stemBytes > 0);
     allStemsButton.setEnabled (std::any_of (entries.begin(), entries.end(), [] (auto& e) { return e.stemBytes > 0; }));
     everythingButton.setEnabled (! entries.empty());
+    soundsButton.setEnabled (soundsFolder != juce::File() && soundsFolder.exists() && ! SoundIndexer::isAnyRunning());
 }
 
 void AnalysisLibraryView::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected)
@@ -159,6 +193,7 @@ void AnalysisLibraryView::paint (juce::Graphics& g)
     g.fillAll (theme.get ("panel"));
     intro.setColour (juce::Label::textColourId, theme.get ("textDim"));
     total.setColour (juce::Label::textColourId, theme.get ("text"));
+    soundsText.setColour (juce::Label::textColourId, theme.get ("text"));
     list.setColour (juce::ListBox::backgroundColourId, theme.get ("background"));
 }
 
@@ -177,6 +212,13 @@ void AnalysisLibraryView::resized()
     buttons.removeFromRight (6);
     allStemsButton.setBounds (buttons.removeFromRight (130).reduced (0, 1));
     area.removeFromBottom (6);
+    if (soundsFolder != juce::File())
+    {
+        auto row = area.removeFromBottom (28);
+        soundsButton.setBounds (row.removeFromRight (170).reduced (0, 1));
+        soundsText.setBounds (row);
+        area.removeFromBottom (6);
+    }
     list.setBounds (area);
 }
 

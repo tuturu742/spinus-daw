@@ -10,15 +10,17 @@ namespace spinus::ui
 /** The analysis library's window ("Saved analyses...", from the Analyzer and the Track creator): every song
     Spinus has analyzed, the space it takes and how much of that is stems, the total, and deleting a song's
     stems, a song, all stems or everything. Only the library's own files are deleted, never the user's
-    songs; a song is analyzed again when it is needed. */
+    songs; a song is analyzed again when it is needed. With the sound index's folder, also the space the Track
+    creator's sound index takes, and deleting it (not while it is being updated). */
 class AnalysisLibraryView final : public juce::Component, private juce::ListBoxModel
 {
 public:
-    explicit AnalysisLibraryView (AnalysisLibrary);
+    explicit AnalysisLibraryView (AnalysisLibrary, juce::File soundIndexFolder = {});
     ~AnalysisLibraryView() override;
 
     /** Opens it in a window of its own beside `near`. */
-    static void show (const AnalysisLibrary&, juce::Component* near);
+    static void show (const AnalysisLibrary&, juce::Component* near, const juce::File& soundIndexFolder = {},
+                      std::function<void()> onSoundIndexDeleted = {});
 
     /** Reads the library again (sizes included). */
     void refresh();
@@ -33,6 +35,10 @@ public:
     bool deleteSong (int row);
     bool deleteAllStems();
     bool deleteEverything();
+    /** Deletes the sound index (it is made again by Update sound index); false while it is being updated. */
+    bool deleteSoundIndex();
+    juce::String getSoundIndexText() const { return soundsText.getText(); }
+    std::function<void()> onSoundIndexDeleted;
     void selectRow (int row) { list.selectRow (row); }
 
     void resized() override;
@@ -45,11 +51,13 @@ private:
     void updateButtons();
 
     AnalysisLibrary library;
+    juce::File soundsFolder;
     std::vector<AnalysisLibrary::Entry> entries;
     juce::Label intro, total;
     juce::ListBox list;
     juce::TextButton stemsButton { "Delete its stems" }, songButton { "Delete" }, allStemsButton { "Delete all stems" },
-        everythingButton { "Delete everything" };
+        everythingButton { "Delete everything" }, soundsButton { "Delete the sound index" };
+    juce::Label soundsText;
 };
 
 } // namespace spinus::ui

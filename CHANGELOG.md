@@ -49,6 +49,16 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   longer averaged into one; sections follow 4- and 8-bar phrases; a chord loop counts the same whichever
   chord it starts on, and is called shared only when two songs really play it; the key comes from several
   estimates, with a note when they disagree; a fast song that may be felt at half speed is pointed out.
+- **Track creator, your sounds:** **Update sound index** listens once to the presets of your instruments
+  (3x Osc, the Drum Machine, the free downloads and your installed instrument plugins) and to the samples in
+  your Browser sample folders, and notes how each sounds and what it is probably for (bass, lead, pad,
+  pluck, keys, drums, fx; kick, snare, hat...; a loop's tempo and key). It runs in the background in a
+  separate program, so a plugin that crashes or freezes is only skipped; later updates listen only to what
+  is new or changed. **Show sounds...** lists and searches the results, and **Saved analyses...** shows the
+  space they take and deletes them. No AI is needed. See
+  [Your sounds](docs/user/track-creator.md#your-sounds).
+- **3x Osc:** in Mono, a key still held when playback stopped is let go, so the next note no longer slides
+  from it or hangs on after it ends; "all sound off" now silences it at once.
 - **Analyzer:** the tempo it finds is more precise (it could be off by a few BPM, jumping between values
   such as 130.4, 136.4 and 142.9).
 

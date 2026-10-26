@@ -3,8 +3,8 @@
 Give the Track creator a few songs you like, or a whole album, and it tells you what they have in common:
 their **tempo**, **key**, **chords**, **drum groove**, which **parts** play and how high or low, how long
 their **sections** are, and how **loud** they are. Later versions will use this to make a new song in
-that style, with the instruments you have installed. For now it does the first step: listening and
-summing up.
+that style, with the instruments you have installed. For now it does the first two steps: listening and
+summing up, and [getting to know your sounds](#your-sounds).
 
 ![The Track creator](images/track-creator.png)
 
@@ -77,6 +77,9 @@ Deleting never touches your own audio files, only what Spinus kept. The saved an
 settings folder (`~/.config/Spinus DAW/ai/library`), not in your projects. A song kept by an older version
 of Spinus is shown as not used, and is analyzed again when you add it.
 
+The window also shows how much space the [sound index](#your-sounds) takes, with **Delete the sound
+index** (it is made again the next time you click **Update sound index**).
+
 ## The summary
 
 Once the songs are analyzed, **What the songs have in common** says it in plain words, for example:
@@ -112,13 +115,52 @@ hi-hat now and then. The more songs, the steadier the summary.
 how often each progression and each chord-to-chord change comes, every song's sections and parts. This
 file is what the Track creator's next steps will start from.
 
+## Your sounds
+
+To pick sounds for a new song later, the Track creator first gets to know the sounds you have. Under
+**Sounds you have**, click **Update sound index**. Spinus then listens to:
+
+- **Your instruments' presets**: 3x Osc and the Drum Machine, the free instruments you downloaded through
+  Spinus (Surge XT, Odin 2, OB-Xf, Six Sines), and the instrument plugins on your computer that the
+  Browser lists (CLAP, VST3, LV2, VST2, and Windows plugins added through Spinus). Each preset plays a few
+  short test notes, which nobody hears.
+- **Your samples**: the files in the folders you added in the **Browser › Samples** list ("Add a folder of
+  samples"), and the folders inside them. Nothing else on your disk is looked at.
+
+For each sound Spinus notes how it starts and fades, how bright it is, whether it has a clear pitch, which
+notes it plays, whether it plays chords, and what it is probably for: **bass, lead, pad, pluck, keys,
+drums** or **fx**. A sample gets a kind (**kick, snare, clap, hat, cymbal, tom, perc, bass** or
+**other**), and a loop its tempo, length in bars and key where Spinus can tell. A preset or file whose name
+says what it is ("Deep Sub Bass", a "Kicks" folder, "128 BPM", "D#min") is taken at its word. Files that are
+not audio (MIDI files, project files, text, zip archives) are left out; an audio file named with the wrong
+extension (an AIFF called .wav) is still read.
+
+- It runs **in the background**, so you can keep working; the line under **Sounds you have** shows how far
+  it is. **Stop** stops it: what was done is kept, and the next update carries on from there.
+- The first time takes a while (Surge XT alone has about 3,000 presets: about 20 minutes on a fast
+  computer). After that, **only what is new or changed** is listened to: a new plugin, an updated one, new
+  preset files, new or changed samples. Removed ones leave the index.
+- **Plugins can't crash Spinus here**: the listening happens in a separate helper program. A preset that
+  makes it crash or freeze is skipped and counted as a problem; so is a plugin that doesn't load (it is
+  tried again once it's updated).
+- **Show sounds...** lists everything Spinus measured, with its guess and a few details ("attack 5 ms,
+  sustained, brightness 820 Hz, C1-C7, chords"), and a search box: type "bass", "pad", "Surge" or "kick
+  sample" to check its guesses. When a name says one thing and the sound another, both are shown ("sounds
+  like pad").
+- It needs no AI connection and no analysis engine, and nothing is sent anywhere. The index is kept in
+  Spinus's settings folder (`~/.config/Spinus DAW/ai/sounds`) and can be deleted in
+  [Saved analyses](#saved-analyses).
+
+The guesses are a program's, made from a few test notes: a bass preset that sounds bright can be called a
+lead, and an unusual drum sample "perc" or "other". The next step uses them only as a first sorting.
+
 ## What comes next
 
 The Track creator is being built in steps:
 
 1. **References and their style** (this version): the summary above.
-2. **Your sounds**: Spinus listens once, in the background, to the presets of the instruments you have
-   installed, so it knows what each can sound like.
+2. **Your sounds** (this version): the [sound index](#your-sounds) of your instruments' presets and your
+   samples.
 3. **The instruments for each part**: for each part (bass, chords, lead, drums) it picks the instrument
    and preset closest to the references, then tunes it (as the Analyzer's closest preset and tuned synths
    do), chooses effects, and lets the [Automixer](automixer.md) balance the mix.
