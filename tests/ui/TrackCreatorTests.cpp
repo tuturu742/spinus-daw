@@ -774,10 +774,10 @@ PartSoundsPanel::Context makePartSoundsContext (Analysis& a)
     PartSoundsPanel::Context c;
     c.summary = summary;
     c.songs.push_back ({ digest, "Song" });
-    c.library = library;
+    c.library = std::move (library);
     c.indexFolder = indexFolder;
     c.workFolder = a.t.root.getChildFile ("work");
-    c.helper = helper;
+    c.helper = std::move (helper);
     c.service = &a.service;
     return c;
 }
@@ -789,7 +789,7 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     if (ai::AiService::findInstallation().python == juce::File())
         SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
     Analysis a;
-    const auto context = makePartSoundsContext (a);
+    auto context = makePartSoundsContext (a);
     Session session { a.host.getEngine(), makeDevices (a.host.getEngine()) }; // with the Drum Machine
     PartSoundsPanel panel (session, [context] { return context; });
     panel.setSize (700, 600);
@@ -807,6 +807,8 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     CHECK (rows[0].target.part == "bass");
     CHECK (rows[0].measured >= 10);
     REQUIRE (rows[0].chosen() != nullptr);
+    for (const auto& c : rows[0].choices)
+        UNSCOPED_INFO (c.title() << " " << c.distance << ": " << c.reasons());
     CHECK (rows[0].chosen()->name == "Dark Square"); // its own sound, measured back
     CHECK (rows[3].chosen()->kind == parts::Choice::Kind::drumSamples);
     CHECK (rows[3].chosen()->drums.at ("kick").endsWith ("Kick 1.wav"));
@@ -862,7 +864,7 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     const auto* bassChannel = session.getProject().findChannel (panel.getAddedChannels()[0]);
     REQUIRE (bassChannel != nullptr);
     CHECK (bassChannel->name == "Bass (Track creator)");
-    CHECK_FALSE (bassChannel->instrument->parameters.empty()); // the tuned settings
+    CHECK_FALSE (bassChannel->instrument.value().parameters.empty()); // the tuned settings
     REQUIRE (session.getHistory().undo());
     CHECK (session.getProject().channels.size() == channels);
 }
@@ -874,7 +876,7 @@ TEST_CASE ("Track creator sounds for each part screenshot for the manual", "[.sc
     if (ai::AiService::findInstallation().python == juce::File())
         SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
     Analysis a;
-    const auto context = makePartSoundsContext (a);
+    auto context = makePartSoundsContext (a);
     a.service.setEnabled (true);
     REQUIRE (a.installEngine());
     SpinusLookAndFeel look (Theme::dark());

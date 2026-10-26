@@ -127,10 +127,10 @@ PartSoundsPanel::PartSoundsPanel (Session& s, std::function<Context()> c) : sess
     addButton.onClick = [this] { addToProject(); };
     viewport.setViewedComponent (&list, false);
     viewport.setScrollBarsShown (true, false);
-    for (auto* c :
+    for (auto* component :
          std::initializer_list<juce::Component*> { &intro, &closerButton, &tuneButton, &effectsButton, &chooseButton,
                                                    &effectsAgainButton, &addButton, &viewport, &status })
-        addAndMakeVisible (c);
+        addAndMakeVisible (component);
     addChildComponent (stopButton);
     updateButtons();
 }
@@ -304,15 +304,15 @@ void PartSoundsPanel::listenCloser (size_t part)
 {
     if (! closerButton.getToggleState() || ! aiReady() || part >= rows.size())
         return tuneNext (0);
-    auto& row = rows[part];
+    const auto& candidates = rows[part];
     // The first five presets of one instrument (the closest's), compared by closest preset's CLAP model.
     std::vector<size_t> presets;
-    const auto* first = row.chosen();
-    for (size_t i = 0; i < row.choices.size(); ++i)
-        if (row.choices[i].kind == parts::Choice::Kind::preset && first != nullptr &&
-            first->kind == parts::Choice::Kind::preset && row.choices[i].instrument == first->instrument)
+    const auto* first = candidates.chosen();
+    for (size_t i = 0; i < candidates.choices.size(); ++i)
+        if (candidates.choices[i].kind == parts::Choice::Kind::preset && first != nullptr &&
+            first->kind == parts::Choice::Kind::preset && candidates.choices[i].instrument == first->instrument)
             presets.push_back (i);
-    if (presets.size() < 2 || row.stem == juce::File())
+    if (presets.size() < 2 || candidates.stem == juce::File())
         return listenCloser (part + 1);
 
     // Is the CLAP model there?
@@ -320,11 +320,11 @@ void PartSoundsPanel::listenCloser (size_t part)
         *context.service, alive,
         [this, part, presets] (const ai::EngineCheck& engine)
         {
-            bool clap = false;
+            bool hasClap = false;
             if (auto* models = engine.models["models"].getArray())
                 for (auto& m : *models)
-                    clap = clap || (m["id"].toString() == "clap_music" && (bool)m["downloaded"]);
-            if (engine.error.isNotEmpty() || ! engine.installed || ! clap)
+                    hasClap = hasClap || (m["id"].toString() == "clap_music" && (bool)m["downloaded"]);
+            if (engine.error.isNotEmpty() || ! engine.installed || ! hasClap)
             {
                 notes.addIfNotAlreadyThere ("Listening closer needs the analysis engine and the CLAP model (the "
                                             "Analyzer's closest preset downloads it); the measurements alone chose.");
@@ -409,14 +409,14 @@ void PartSoundsPanel::listenCloser (size_t part)
                                     auto& r = rows[part];
                                     if (matchError.isNotEmpty())
                                         r.note = "Not compared by listening: " + matchError;
-                                    else if (const auto* list = found["presets"].getArray())
+                                    else if (const auto* heard = found["presets"].getArray())
                                     {
                                         // Ranked again: the measurements' order and the listening's (by its
                                         // CLAP score alone: the measurements are already counted) alike.
                                         for (auto i : presets)
-                                            for (int m = 0; m < list->size(); ++m)
-                                                if ((*list)[m]["id"].toString() == r.choices[i].preset)
-                                                    r.choices[i].clap = (double)(*list)[m]["score"];
+                                            for (int m = 0; m < heard->size(); ++m)
+                                                if ((*heard)[m]["id"].toString() == r.choices[i].preset)
+                                                    r.choices[i].clap = (double)(*heard)[m]["score"];
                                         std::vector<std::pair<double, size_t>> order;
                                         for (size_t k = 0; k < presets.size(); ++k)
                                         {
@@ -643,12 +643,12 @@ void PartSoundsPanel::setEffectsFor()
                     job.clear();
                     if (error.isNotEmpty())
                         return finish ("No effects: " + error);
-                    juce::Array<juce::var> list;
+                    juce::Array<juce::var> partNames;
                     for (const auto& n : names)
-                        list.add (n);
+                        partNames.add (n);
                     context.service->call ("ai.v1.mix.toward",
                                            object ({ { "mix", mix },
-                                                     { "parts", list },
+                                                     { "parts", partNames },
                                                      { "referenceLoudness", context.summary["loudness"]["lufs"] } }),
                                            [this, a = alive] (const juce::var& result, const juce::String& towardError)
                                            {

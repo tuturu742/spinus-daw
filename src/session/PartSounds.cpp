@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <tuple>
 
 namespace spinus::parts
 {
@@ -48,6 +49,10 @@ double median (std::vector<double> v)
 }
 
 double logTime (double seconds) { return std::log10 (juce::jmax (0.0, seconds) + 0.003); }
+
+/** A note's attack on a log scale where everything under about 20 ms counts as nearly instant (a stem's notes
+    measure a few milliseconds slower than they are: the note before still rings as the next starts). */
+double logAttack (double seconds) { return std::log10 (juce::jmax (0.0, seconds) + 0.02); }
 
 /** A preset's brightness in harmonics at a note: its test notes' (C1 to C7), between the two nearest that
     sounded; else what the held C3 measured. */
@@ -346,7 +351,7 @@ double presetDistance (const juce::var& sound, const Measured& stem, juce::Strin
     const auto pitch = stem.medianPitch();
     const auto mine = presetHarmonicsAt (sound, pitch), theirs = stem.medianHarmonics();
     std::vector<double> d;
-    d.push_back ((logTime (s.attack) - logTime (m.attack)) / 0.35);
+    d.push_back ((logAttack (s.attack) - logAttack (m.attack)) / 0.35);
     if (mine > 0.0 && theirs > 0.0)
         d.push_back (std::log2 (mine / theirs) / 1.0);
     d.push_back ((s.noisiness - m.noisiness) / 0.15);
@@ -510,7 +515,7 @@ std::vector<Choice> chooseMelodic (const Target& target, const Reference& refere
                 const auto harmonicsDiff = s.harmonicBrightness > 0.0 && reference.notes.medianHarmonics() > 0.0
                                                ? std::log2 (s.harmonicBrightness / reference.notes.medianHarmonics())
                                                : 0.0;
-                const double d[] = { (logTime (s.attack) - logTime (m.attack)) / 0.35, harmonicsDiff,
+                const double d[] = { (logAttack (s.attack) - logAttack (m.attack)) / 0.35, harmonicsDiff,
                                      (s.noisiness - m.noisiness) / 0.15 };
                 c.distance = std::sqrt ((d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) / 3.0);
                 c.compared = true;
@@ -583,7 +588,7 @@ std::vector<Choice> chooseDrums (const Target& target, const Reference& referenc
     {
         for (auto& [drum, list] : candidates)
             std::stable_sort (list.begin(), list.end(), [] (const auto& a, const auto& b)
-                              { return a.first != b.first ? a.first < b.first : a.second->path < b.second->path; });
+                              { return std::tie (a.first, a.second->path) < std::tie (b.first, b.second->path); });
         const auto sets =
             juce::jmin ((size_t)3, candidates["kick"].size(), candidates["snare"].size(), candidates["hat"].size());
         for (size_t k = 0; k < sets; ++k)
@@ -732,7 +737,8 @@ std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const
                 auto on = [&] (const char* lane, bool fallback)
                 {
                     const auto* values = lanes[lane].getArray();
-                    return values != nullptr && values->size() == 16 ? (double)values->getReference (step) >= 0.5 : fallback;
+                    return values != nullptr && values->size() == 16 ? (double)values->getReference (step) >= 0.5
+                                                                     : fallback;
                 };
                 if (on ("kick", step % 4 == 0))
                     notes.push_back ({ noteOf ("kick"), at, beat / 4.0, 0.9f });

@@ -390,20 +390,20 @@ void TrackCreator::showSounds() { SoundIndexView::show (soundIndexFolder, this);
 juce::StringArray TrackCreator::getIncludedPlugins() const
 {
     juce::StringArray keys;
-    if (const auto* list = juce::JSON::parse (soundIndexFolder.getChildFile ("plugins.json"))["include"].getArray())
-        for (const auto& k : *list)
+    if (const auto* saved = juce::JSON::parse (soundIndexFolder.getChildFile ("plugins.json"))["include"].getArray())
+        for (const auto& k : *saved)
             keys.add (k.toString());
     return keys;
 }
 
 void TrackCreator::setIncludedPlugins (const juce::StringArray& keys)
 {
-    juce::Array<juce::var> list;
+    juce::Array<juce::var> chosen;
     for (const auto& k : keys)
-        list.add (k);
+        chosen.add (k);
     soundIndexFolder.createDirectory();
     soundIndexFolder.getChildFile ("plugins.json")
-        .replaceWithText (juce::JSON::toString (object ({ { "include", list } })) + "\n");
+        .replaceWithText (juce::JSON::toString (object ({ { "include", chosen } })) + "\n");
 }
 
 std::vector<SoundSource> TrackCreator::getAllSoundSources() const { return findSoundSources (session.getDeviceList()); }

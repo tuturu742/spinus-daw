@@ -50,7 +50,7 @@ juce::AudioBuffer<float> play (const Voice& v, const std::vector<sounds::Note>& 
     juce::AudioBuffer<float> b (1, (int)((end + tail) * rate));
     b.clear();
     std::vector<sounds::Note> playing = notes;
-    if (v.mono && playing.size() > 1 && playing.front().start == playing.back().start)
+    if (v.mono && playing.size() > 1 && std::abs (playing.front().start - playing.back().start) < 1.0e-9)
         playing = { playing.back() };
     for (auto& n : playing)
     {
@@ -331,8 +331,8 @@ TEST_CASE ("Sounds per part: the role guess learnt from presets that name their 
 {
     // Two kinds of preset: dark one-note sounds named basses, bright slow chords named pads; then unnamed
     // ones of each kind.
-    std::mt19937 random (3);
-    std::uniform_real_distribution<double> jitter (0.9, 1.1);
+    juce::Random random (3); // the same every time
+    auto jitter = [&random] (auto&) { return 0.9 + 0.2 * random.nextDouble(); };
     SoundIndex index (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("spinus-unused-index"));
     auto& synth = index.instruments["plugin-synth"];
     synth.source = sourceNamed ("plugin-synth", "Synth");
@@ -456,14 +456,14 @@ TEST_CASE ("Sounds per part: the proposal adds every part in one undo step", "[s
     CHECK (made.name == "Bass (Track creator)");
     CHECK (made.group == "Track creator");
     REQUIRE (made.instrument.has_value());
-    CHECK (made.instrument->stockType == "spinus.3x-osc");
-    CHECK (made.instrument->parameters.at ("cutoff") == Approx (0.4f));
+    CHECK (made.instrument.value().stockType == "spinus.3x-osc");
+    CHECK (made.instrument.value().parameters.at ("cutoff") == Approx (0.4f));
     const auto* insert = project.findInsert (made.targetInsert);
     REQUIRE (insert != nullptr);
     CHECK (insert->volumeDb == Approx (-4.5));
     CHECK (insert->effects.size() == 2);
-    CHECK (project.channels[before.channels.size() + 1].instrument->stockType == "spinus.sampler");
-    CHECK (project.channels[before.channels.size() + 2].instrument->stockType == "spinus.drum-machine");
+    CHECK (project.channels[before.channels.size() + 1].instrument.value().stockType == "spinus.sampler");
+    CHECK (project.channels[before.channels.size() + 2].instrument.value().stockType == "spinus.drum-machine");
     const auto* master = project.findInsert (model::masterInsertId);
     REQUIRE (master != nullptr);
     CHECK (master->effects.size() == 1);
@@ -593,9 +593,9 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
     INFO (problem);
     REQUIRE (tuned.has_value());
     CHECK (reports > 0);
-    CHECK (tuned->tries >= 60); // the last generation is finished
-    CHECK (tuned->distance < tuned->startDistance);
-    CHECK_FALSE (tuned->settings.empty());
+    CHECK (tuned.value().tries >= 60); // the last generation is finished
+    CHECK (tuned.value().distance < tuned.value().startDistance);
+    CHECK_FALSE (tuned.value().settings.empty());
 
     // An instrument with nothing to tune says so.
     const auto organ = testSynth ("test-synth.clap", "Spinus Test Organ");
