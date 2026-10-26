@@ -26,9 +26,9 @@ text. A plugin's own window, drawn by the plugin, keeps the keys it is given.
 | **Ctrl+Alt+1**, **2**, **3** | The Compose, Arrange and Mix [layouts](main-window.md#layouts) |
 | **Ctrl+Alt+4** to **9** | Your own saved layouts, in the order saved |
 
-The Launcher, Routing, Automation editor, Analyzer and Automixer open from the **View** menu. The
-Analyzer is experimental: it is in the menu (and in **Options › Keyboard shortcuts...**) only while
-**Show experimental features** is ticked in **Options › AI...**.
+The Launcher, Routing, Automation editor, Analyzer, Track creator and Automixer open from the **View**
+menu. The Analyzer and the Track creator are experimental: they are in the menu (and in **Options ›
+Keyboard shortcuts...**) only while **Show experimental features** is ticked in **Options › AI...**.
 
 ## Playing and recording
 

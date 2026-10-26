@@ -408,7 +408,7 @@ features; projects keep working unchanged either way.
 - Started by Spinus only when AI is turned on (above), and then lazily, when an AI feature is first used. Listens on 127.0.0.1 on a port of its choosing and answers only Spinus, which proves itself with a token passed in a private file: any program can connect to a local port, and the service holds the user's provider keys. One transport for Linux and Windows. Spinus starts it as `python ai/run_spinus_ai.py --log <file>`, so even import errors reach the log, and with `--session-log <run>-ai.log` for its part of the session log (§14), redacted the same way; requests' parameters (what the user asked) are never logged.
 - JSON-RPC methods are versioned (`ai.v1.stems.separate`, …). Every long task is a **job** with id, progress events, cancel, and result.
 - Models are downloaded on first use to `~/.local/share/spinus/models/` with checksum verification and a visible size/progress prompt. Nothing is downloaded without the user agreeing.
-- Results are cached in the project `cache/` folder keyed by audio-file hash and model version.
+- Results are cached in the project `cache/` folder keyed by audio-file hash and model version. The Track creator's per-song style (§12.10) is the exception: it describes songs outside any project, so it is kept in the settings folder.
 
 **Compute device**
 
@@ -494,7 +494,7 @@ Two modes, two implementations:
 
 User drops a song into the Analyzer panel. Pipeline, each step shown with progress:
 
-**Experimental:** the Analyzer is shown only while **Options › AI › Show experimental features** is on (off by default; kept with "AI on" in the AI service's `settings.json`). While it is off the panel is unavailable in the `Workspace` (hidden, and no menu, shortcut or layout opens it); turning it on or off takes effect at once. The analysis engine runs on Linux only; on Windows the Analyzer's stems, tempo and key are not available (§17).
+**Experimental:** the Analyzer is shown only while **Options › AI › Show experimental features** is on (off by default; kept with "AI on" in the AI service's `settings.json`). While it is off the panel is unavailable in the `Workspace` (hidden, and no menu, shortcut or layout opens it); turning it on or off takes effect at once. The Track creator (§12.10) is gated the same way. The analysis engine runs on Linux only; on Windows the Analyzer's stems, tempo and key are not available (§17).
 
 1. **Tempo, beat grid, key** detection. Offer to set the project tempo/key.
 2. **Stem separation** (vocals, drums, bass, other; 6-stem when available: + piano, guitar).
@@ -529,6 +529,20 @@ The panel shows a short notice that analyzing copyrighted songs is for study and
 - Read tools answer from a snapshot of the project sent with each question, never from the live project.
 - **Action tools** (write): every write tool produces a **Proposal** (steps from `docs/dev/commands.schema.json`; a step may use an earlier step's result as `"$1.channel"`; Spinus tries them on a copy of the project to check and describe them): a list of commands shown as a diff ("Add channel: Sampler", "Set Insert 3 EQ band 2: −3 dB at 300 Hz"). User clicks Apply (one undo step) or Reject. Never auto-applied.
 - Can trigger the other AI features (generate pattern, automix, analyze) on the user's behalf, still through proposals.
+
+### 12.10 Feature: Track creator (experimental)
+
+The user gives a few reference songs (an album or a selection) and, in the end, gets a new, editable Spinus project in a similar style. Experimental and gated exactly as the Analyzer (§12.7): **Options › AI › Show experimental features**, panel `trackCreator`, View › Track creator (experimental). Owner decision 2026-10-26: started before 0.1.0 as an experimental feature that needs no polish for the release. Built in four milestones:
+
+1. **References → style summary** (in 0.1.0). The panel `ui/TrackCreator` takes audio files or a folder (an album: its songs and those one folder down) as a list with each song's progress, removable one by one or cleared. Each song goes through the Analyzer's steps, shared with it (`session/SongPreparation`: decoding to WAV, named by contents; `ai/AnalysisJobs`: running a job, checking the engine and model files): `ai.v1.analyze.tempo` and `.key`, `ai.v1.mix.analyze` on the whole song for loudness, `ai.v1.stems.separate` (Demucs, 4 stems), `ai.v1.transcribe.drums` on the drums and `ai.v1.transcribe.notes` on the other stems. Then `ai.v1.style.summarize` (`spinus_ai/style.py`, NumPy only, no model) measures the song's *features*: one chord per bar (the harmonic stems' notes as chroma, matched to chord templates, the bass's lowest note favouring its root) named as Roman numerals from the song's key; the drums on the sixteenth grid (kick, snare, hats per step) and swing; each part's register, notes per bar and voices; sections from a novelty curve over the bars' chroma and loudness, labelled by likeness; loudness (LUFS, true peak, crest, section contrast). A song's features are kept in the settings folder (`ai/cache/track-creator/<sha256-20>-v<version>.json`, a few KB), not in a project: references belong to no project, and a song added again anywhere is ready at once. The large intermediate files (decoded song, stems) go to a temporary folder deleted after each song, since an album's stems would take gigabytes. The version is `TrackCreator::analysisVersion`, equal to `style.FEATURES_VERSION` (a test checks). Once all songs are analyzed, the same method with every song's features gives the **style summary** (`kind: spinus.style-summary`, `version`): tempo median and range, meters, keys and mode shares, chord shares, bars per chord, top 4-chord progressions with counts, chord-to-chord transition frequencies, per-step drum probabilities for the most common bar length, swing, per-part song count, register (MIDI low/median/high), notes per bar and voices, section lengths and forms, loudness, every song's features (`perSong`), and `plain`: the same in plain sentences, shown in the panel. **Save summary...** writes it as JSON. Nothing changes the project, so no command is needed.
+
+Milestones 2 to 4 are planned:
+
+2. **Sound library index.** The installed instruments' presets are rendered once, in the background, in a separate process (so a crashing plugin cannot take Spinus down), into timbre embeddings, extending what closest preset does (§12.7, `ai.v1.presets.*`) to every installed instrument.
+3. **Sounds per part.** For each part of the summary, the closest instrument and preset from that index, then synth match (§12.7) toward the references; effects picked and set the same way; then the automixer (§12.5) balances the mix. Every instrument and effect plugin the user has is considered, besides Spinus's own devices and the free downloads.
+4. **The new song.** Sections, chords, bass, drums and a melody are written from the summary, both ways, offline by default: a **rules-based generator** working from the summary's explicit numbers (per-step drum probabilities, progression and transition frequencies, section lengths, each part's register and note density) needs no AI connection and is the default; when an LLM connection is set up, the Assistant (§12.9) can refine or vary it, as the pattern generator does (§12.4). The result is one proposal applied in one undo step through commands; one part at a time can be redone ("new bassline", "darker chords"). **Similar, never copied:** only the style is taken; the references' melodies, lyrics and audio are not reproduced. Notes and settings are generated, not audio: no audio-generating models (their weights are mostly non-commercial, §3).
+
+The panel shows the Analyzer's notice: analyzing songs is for study and personal use; only the style is measured; the user is responsible for rights when releasing.
 
 ---
 
@@ -625,7 +639,8 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   matching (§12.5).
 - **Experimental** (shown only with Options › AI › Show experimental features, §12.7): the track
   analyzer with all three sound-recreation options; synth match and closest preset for any instrument
-  plugin.
+  plugin; the Track creator (§12.10), built in milestones: the first, a style summary of reference
+  songs, is done; the others follow while it stays experimental.
 - **Packages:** the Arch packages, an AppImage, a Flatpak, and a Windows installer for Windows 10 and 11,
   64-bit (§16). **macOS** is not planned (releasing for it needs a paid Apple developer account).
 - The flagship synth is **Surge XT**; a Spinus-built flagship synth is not planned.
@@ -638,20 +653,6 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   makes no sound and passes audio through; it can sit on any insert or as an instrument without notes.
 - **Flathub:** publish the Flatpak there. **Windows:** a signed installer.
 - **The track analyzer out of experimental** (§12.7), and the analysis engine on Windows.
-- **Track creator** (experimental, after 0.1.0): the user gives a few reference songs (an album or a
-  selection) and gets a new, editable Spinus project in a similar style.
-  - **Style summary.** The track analyzer (§12.7) summarizes what the references share: tempo range,
-    key and mode, chord habits, drum grooves, the instruments, sections and their lengths, and loudness.
-  - **New song.** The Assistant (§12.9) writes a new song from that summary through commands, as a
-    proposal applied in one undo step. The user can redo one part at a time ("new bassline", "darker
-    chords").
-  - **Sounds from what is installed.** The creator considers every instrument and effect plugin the user
-    has installed, besides Spinus's own devices and the free downloads. For each part it picks the one
-    that fits best, then tunes its sound toward the references: closest preset, then synth match (§12.7).
-    Effects are picked and set the same way, then the automixer (§12.5) balances the mix.
-  - **Similar, never copied.** The style is taken; the references' melodies, lyrics and audio are not
-    reproduced. Notes and settings are generated, not audio: no audio-generating models (their weights
-    are mostly non-commercial, §3).
 - **Spinus Plugins** (after 0.1.0): new open-source instruments and effects for sounds that open source
   doesn't cover well yet, in their own repository ([spinus-plugins](https://github.com/tuturu742/spinus-plugins),
   GPL-3.0-or-later). They are built as CLAP, VST3 and LV2 for Linux and Windows, so they work in any DAW.

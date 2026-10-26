@@ -1,5 +1,5 @@
 #include "Analyzer.h"
-#include "core/ChildProcess.h"
+#include "ai/AnalysisJobs.h"
 #include "project/AudioImport.h"
 
 #include "Theme.h"
@@ -7,10 +7,9 @@
 #include "commands/CommandRegistry.h"
 #include "dsp/sampler/SampleStorage.h"
 #include "project/ProjectFiles.h"
+#include "session/SongPreparation.h"
 #include "model/ModelJson.h"
 #include "plugins/sandbox/SandboxPluginFormat.h"
-
-#include <juce_cryptography/juce_cryptography.h>
 
 #include <set>
 
@@ -55,10 +54,6 @@ juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items
 
 const char* const noteNames[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 
-// Read by Spinus itself, and through the system's ffmpeg when it is installed.
-constexpr const char* ownFormats = project::ownAudioFormats;
-constexpr const char* ffmpegFormats = project::ffmpegAudioFormats;
-
 /** What the Analyzer names a stem's channel, audio clip and Playlist track: the stem first, so that it shows
     where names are cut short ("Drums (My Song)" for its notes, "Drums stem (My Song)" for its audio). */
 juce::String stemLabel (const juce::String& stem, const juce::String& song)
@@ -66,34 +61,6 @@ juce::String stemLabel (const juce::String& stem, const juce::String& song)
     return stem.substring (0, 1).toUpperCase() + stem.substring (1) + " (" + song + ")";
 }
 
-bool isAudioFile (const juce::String& path)
-{
-    const juce::File file (path);
-    return file.hasFileExtension (ownFormats) || file.hasFileExtension (ffmpegFormats);
-}
-
-/** Decodes a song Spinus cannot read itself with the system's ffmpeg (not linked or shipped). Fails when
-    ffmpeg is missing or cannot read it either. */
-juce::Result decodeWithFfmpeg (const juce::File& source, const juce::File& wav, const juce::Thread& thread)
-{
-    core::ChildProcess ffmpeg;
-    if (! ffmpeg.start (juce::StringArray { "ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i",
-                                            source.getFullPathName(), "-vn", "-ac", "2", "-c:a", "pcm_f32le", "-f",
-                                            "wav", wav.getFullPathName() },
-                        core::ChildProcess::wantStdErr))
-        return juce::Result::fail ("Spinus cannot read " + source.getFileName() +
-                                   " by itself. Install ffmpeg (sudo pacman -S ffmpeg) to read it.");
-    while (! ffmpeg.waitForProcessToFinish (200))
-        if (thread.threadShouldExit())
-        {
-            ffmpeg.kill();
-            return juce::Result::fail ("Stopped.");
-        }
-    if (ffmpeg.getExitCode() != 0 || ! wav.existsAsFile())
-        return juce::Result::fail ("Spinus cannot read " + source.getFileName() + ": " +
-                                   ffmpeg.readAllProcessOutput().trim().upToFirstOccurrenceOf ("\n", false, false));
-    return juce::Result::ok();
-}
 } // namespace
 
 //==============================================================================
@@ -180,51 +147,7 @@ public:
 
     juce::Result decode()
     {
-        if (destination.existsAsFile())
-            return juce::Result::ok(); // decoded before (the name carries the song's contents)
-        destination.getParentDirectory().createDirectory();
-        const auto partial = destination.withFileExtension ("partial");
-        partial.deleteFile();
-        std::unique_ptr<juce::AudioFormatReader> reader (dsp::getAudioFormats().createReaderFor (source));
-        if (reader == nullptr && source.hasFileExtension (ffmpegFormats))
-        {
-            auto decoded = decodeWithFfmpeg (source, partial, *this);
-            if (decoded.wasOk() && ! partial.moveFileTo (destination))
-                decoded = juce::Result::fail ("Spinus cannot write " + destination.getFullPathName());
-            partial.deleteFile();
-            progress = 1.0;
-            return decoded;
-        }
-        if (reader == nullptr || reader->sampleRate <= 0.0 || reader->lengthInSamples <= 0)
-            return juce::Result::fail ("Spinus cannot read " + source.getFileName() +
-                                       ". It reads WAV, AIFF, FLAC, Ogg and MP3 files, and Opus, M4A and others "
-                                       "when ffmpeg is installed.");
-        juce::WavAudioFormat wav;
-        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (partial);
-        auto writer = wav.createWriterFor (
-            stream, juce::AudioFormatWriterOptions()
-                        .withSampleRate (reader->sampleRate)
-                        .withNumChannels (2)
-                        .withBitsPerSample (32)
-                        .withSampleFormat (juce::AudioFormatWriterOptions::SampleFormat::floatingPoint));
-        if (writer == nullptr)
-            return juce::Result::fail ("Spinus cannot write " + partial.getFullPathName());
-        juce::AudioBuffer<float> buffer (2, 65536);
-        for (juce::int64 at = 0; at < reader->lengthInSamples; at += buffer.getNumSamples())
-        {
-            if (threadShouldExit())
-                return juce::Result::fail ("Stopped.");
-            const auto count = (int)std::min<juce::int64> (buffer.getNumSamples(), reader->lengthInSamples - at);
-            reader->read (&buffer, 0, count, at, true, true);
-            if (reader->numChannels == 1)
-                buffer.copyFrom (1, 0, buffer, 0, 0, count);
-            writer->writeFromAudioSampleBuffer (buffer, 0, count);
-            progress = (double)(at + count) / (double)reader->lengthInSamples;
-        }
-        writer = nullptr;
-        if (! partial.moveFileTo (destination))
-            return juce::Result::fail ("Spinus cannot write " + destination.getFullPathName());
-        return juce::Result::ok();
+        return prepareSong (source, destination, [this] { return threadShouldExit(); }, progress);
     }
 
     Analyzer& analyzer;
@@ -267,9 +190,7 @@ Analyzer::Analyzer (Session& s, ai::AiService* a) : Panel ("analyzer", "Analyzer
 
     chooseButton.onClick = [this]
     {
-        chooser = std::make_unique<core::FileDialog> (
-            "Choose a song to analyze", juce::File(),
-            "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3;*.opus;*.m4a;*.aac;*.mp4;*.webm;*.mka;*.wma;*.alac;*.ape;*.wv");
+        chooser = std::make_unique<core::FileDialog> ("Choose a song to analyze", juce::File(), songFilePatterns());
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [safe = juce::Component::SafePointer (this)] (const core::FileDialog& c)
                               {
@@ -401,11 +322,7 @@ bool Analyzer::analyze (const juce::File& file)
     songText.setText (file.getFileName(), juce::dontSendNotification);
 
     // Named by the song's contents, so a song analyzed before is not decoded again.
-    juce::FileInputStream in (file);
-    const auto hash = juce::SHA256 (in).toHexString().substring (0, 16);
-    prepared = getCacheFolder().getChildFile (file.getFileNameWithoutExtension().retainCharacters (
-                                                  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_ ") +
-                                              "-" + hash + ".wav");
+    prepared = preparedSongFile (getCacheFolder(), file, contentDigest (file));
     setStep (Step::preparing, "Preparing the song...");
     progress = 0.0;
     decoder = std::make_unique<Decoder> (*this, file, prepared);
@@ -434,41 +351,30 @@ void Analyzer::checkReady (const std::function<void()>& then, const juce::String
         return fail ("AI is off.");
     }
     setStep (step, "Checking the analysis engine...");
-    service->call ("ai.v1.compute.status", {},
-                   [this, a = alive, then, alsoNeeded] (const juce::var& engine, const juce::String& error)
-                   {
-                       if (! *a)
-                           return;
-                       if (error.isNotEmpty())
-                           return fail (error);
-                       if (! engine["uses"].isObject())
-                       {
-                           needsShowModels = false;
-                           needsText.setText ("The Analyzer needs the analysis engine (PyTorch) installed first.",
-                                              juce::dontSendNotification);
-                           engineButton.setVisible (true);
-                           return fail ("The analysis engine is not installed.");
-                       }
-                       const bool gpu = engine["uses"]["device"].toString() != "cpu";
-                       beatModel = gpu ? "beat_this_final0" : "beat_this_small0";
-                       service->call (
-                           "ai.v1.stems.models", {},
-                           [this, a2 = alive, then, alsoNeeded] (const juce::var& list, const juce::String& error2)
-                           {
-                               if (! *a2)
-                                   return;
-                               if (error2.isNotEmpty())
-                                   return fail (error2);
-                               readModels (list);
-                               engineButton.setVisible (false);
-                               needsText.setText ({}, juce::dontSendNotification); // AI and engine are fine
-                               showNeeds (alsoNeeded);
-                               if (! missingModels.empty())
-                                   return fail ("Model files are missing.");
-                               resume = nullptr; // it is under way
-                               then();
-                           });
-                   });
+    ai::checkAnalysisEngine (*service, alive,
+                             [this, then, alsoNeeded] (const ai::EngineCheck& engine)
+                             {
+                                 if (engine.error.isNotEmpty())
+                                     return fail (engine.error);
+                                 if (! engine.installed)
+                                 {
+                                     needsShowModels = false;
+                                     needsText.setText (
+                                         "The Analyzer needs the analysis engine (PyTorch) installed first.",
+                                         juce::dontSendNotification);
+                                     engineButton.setVisible (true);
+                                     return fail ("The analysis engine is not installed.");
+                                 }
+                                 beatModel = engine.gpu ? "beat_this_final0" : "beat_this_small0";
+                                 readModels (engine.models);
+                                 engineButton.setVisible (false);
+                                 needsText.setText ({}, juce::dontSendNotification); // AI and engine are fine
+                                 showNeeds (alsoNeeded);
+                                 if (! missingModels.empty())
+                                     return fail ("Model files are missing.");
+                                 resume = nullptr; // it is under way
+                                 then();
+                             });
 }
 
 void Analyzer::readModels (const juce::var& list)
@@ -629,33 +535,22 @@ void Analyzer::runJob (const juce::String& method, const juce::var& params, cons
     progress = 0.0;
     job = "starting";
     updateButtons();
-    service->call (method, params,
-                   [this, a = alive, what, done] (const juce::var& started, const juce::String& error)
-                   {
-                       if (! *a)
-                           return;
-                       if (error.isNotEmpty())
-                           return fail (error);
-                       job = started["job"].toString();
-                       // The job's end comes as an update; listen for it once.
-                       auto id = std::make_shared<int> (0);
-                       *id = service->addListener (
-                           [this, a2 = alive, id, jobId = job, done] (const juce::String& m, const juce::var& p)
-                           {
-                               if (! *a2 || m != "ai.v1.job.update" || p["job"].toString() != jobId)
-                                   return;
-                               const auto kind = p["kind"].toString();
-                               if (kind != "done" && kind != "error")
-                                   return;
-                               juce::MessageManager::callAsync ([s = service, id] { s->removeListener (*id); });
-                               job.clear();
-                               progress = -1.0;
-                               if (kind == "error")
-                                   return fail (p["message"].toString());
-                               done (p["result"]);
-                           });
-                       updateButtons();
-                   });
+    // Its progress reaches the window through the listener setService() adds.
+    ai::runJob (
+        *service, method, params, alive,
+        [this] (const juce::String& started)
+        {
+            job = started;
+            updateButtons();
+        },
+        [this, done] (const juce::var& result, const juce::String& error)
+        {
+            if (error.isNotEmpty())
+                return fail (error);
+            job.clear();
+            progress = -1.0;
+            done (result);
+        });
     juce::ignoreUnused (what);
 }
 
@@ -2074,7 +1969,7 @@ void Analyzer::updateButtons()
 //==============================================================================
 bool Analyzer::isInterestedInFileDrag (const juce::StringArray& files)
 {
-    return files.size() == 1 && isAudioFile (files[0]);
+    return files.size() == 1 && isSongFile (juce::File (files[0]));
 }
 
 void Analyzer::filesDropped (const juce::StringArray& files, int, int)

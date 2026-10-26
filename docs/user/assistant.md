@@ -18,9 +18,10 @@ connection you chose. Untick **Turn on AI features** at any time: the AI part st
 work exactly as before.
 
 **Show experimental features** (below the connections) shows features that are still being worked on and
-may change, be slow or not work well. For now that is the [Analyzer](analyzer.md). It is off at first;
-tick it and **View › Analyzer (experimental)** appears at once, untick it and the Analyzer closes.
-Spinus remembers the choice.
+may change, be slow or not work well. For now that is the [Analyzer](analyzer.md) and the
+[Track creator](track-creator.md). It is off at first; tick it and **View › Analyzer (experimental)** and
+**View › Track creator (experimental)** appear at once, untick it and they close. Spinus remembers the
+choice.
 
 ## Connections
 

@@ -169,6 +169,9 @@ If something goes wrong, the line under the buttons says what. Hover over it to 
 full, and right-click it and choose **Copy message** to paste it into a bug report. The same works in the
 Automixer, the analysis engine window and the AI settings.
 
+To learn what several songs (an album, say) have in common rather than taking one apart, use the
+[Track creator](track-creator.md).
+
 ## About other people's songs
 
 The analysis and the separation use freely available open-source models made by others; they are not

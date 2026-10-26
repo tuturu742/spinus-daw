@@ -6,8 +6,9 @@ downloads it only when you ask, and keeps it in one place for all your projects.
 
 ![Options › AI › Analysis engine](images/analysis-engine.png)
 
-The analysis engine is used by the [Analyzer](analyzer.md), which is **experimental**: it shows only
-while **Show experimental features** is ticked in **Options › AI...**.
+The analysis engine is used by the [Analyzer](analyzer.md) and the [Track creator](track-creator.md),
+which are **experimental**: they show only while **Show experimental features** is ticked in
+**Options › AI...**.
 
 ## Installing it
 

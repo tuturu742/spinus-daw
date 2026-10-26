@@ -76,6 +76,7 @@ add_executable (spinus_tests
     session/TunerTests.cpp
     ui/AnalysisEngineTests.cpp
     ui/AnalyzerTests.cpp
+    ui/TrackCreatorTests.cpp
     ui/ExperimentalFeaturesTests.cpp
     ui/OwnerSongsTests.cpp
     ui/AutomixerTests.cpp
@@ -114,7 +115,7 @@ if (WIN32)
           plugins/WindowsPluginsTests.cpp plugins/WindowsReproTests.cpp ui/WindowsPluginsDialogTests.cpp plugins/ArchiveReaderTests.cpp
           plugins/PluginDownloadsTests.cpp ai/AiTests.cpp plugins/PluginScannerTests.cpp session/SynthMatchTests.cpp
           ui/AnalysisEngineTests.cpp ui/BrowserTests.cpp acceptance/AnalysisAcceptanceTests.cpp ui/AnalyzerTests.cpp
-          ui/OwnerSongsTests.cpp ui/ManyInstrumentsTests.cpp)
+          ui/OwnerSongsTests.cpp ui/ManyInstrumentsTests.cpp ui/TrackCreatorTests.cpp)
     set_target_properties (spinus_tests PROPERTIES SOURCES "${testSources}")
     target_link_libraries (spinus_tests PRIVATE spinus_core spinus_test_support spinus_warnings Catch2::Catch2)
 else()

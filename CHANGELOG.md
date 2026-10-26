@@ -3,6 +3,18 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## Not released yet
+
+### Experimental
+
+- **Track creator** (experimental, **View › Track creator** once **Show experimental features** is ticked
+  in **Options › AI...**): add a few songs you like, or an album folder, and Spinus sums up what they have
+  in common: tempo, key and mode, the chords they use and their favourite progressions, the drum groove
+  step by step, which parts play and how high or low, how long the sections are, and how loud the songs
+  are. Each song is analyzed once and remembered, so adding it again is instant. The summary is shown in
+  plain words and can be saved as a file. Making a new song in that style comes in later versions. See
+  [the Track creator](docs/user/track-creator.md).
+
 ## 0.1.0-alpha.2 (2026-10-26)
 
 ### Finding out what went wrong

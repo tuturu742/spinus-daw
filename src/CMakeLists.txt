@@ -3,6 +3,8 @@
 add_library (spinus_core STATIC
     ai/AiService.cpp
     ai/AiService.h
+    ai/AnalysisJobs.cpp
+    ai/AnalysisJobs.h
     ai/Proposal.cpp
     ai/Proposal.h
     commands/Command.cpp
@@ -218,6 +220,8 @@ add_library (spinus_core STATIC
     session/Session.cpp
     session/SlicesToPattern.cpp
     session/StemSamples.cpp
+    session/SongPreparation.cpp
+    session/SongPreparation.h
     session/HiddenInstrument.cpp
     session/InstrumentPresets.cpp
     session/PresetPreviews.cpp
@@ -238,6 +242,8 @@ add_library (spinus_core STATIC
     ui/AiSettingsDialog.cpp
     ui/AiSettingsDialog.h
     ui/Analyzer.cpp
+    ui/TrackCreator.cpp
+    ui/TrackCreator.h
     ui/AudioTracks.cpp
     ui/AudioTracks.h
     ui/AutomationEditor.cpp
