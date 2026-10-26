@@ -16,6 +16,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Closing a song you only opened no longer asks to save it.** Some plugins (Ample's, for example) change
   their own settings a moment after loading; Spinus took that for a change of yours. A plugin's settings now
   count only if you opened its window; changes made with Spinus's own controls count as always.
+- **3x Osc in Mono no longer hangs on or slides from a key held when playback stopped:** stopping lets go
+  of every key, so the next note starts on its own pitch and ends when you let go of it. "All sound off"
+  now silences 3x Osc at once.
 
 ### The Browser
 

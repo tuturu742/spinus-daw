@@ -231,6 +231,32 @@ TEST_CASE ("3x Osc in Mono slides from note to note", "[dsp][3xosc]")
     CHECK (synth.getNumActiveVoices() == 2);
 }
 
+TEST_CASE ("3x Osc in Mono forgets the keys held when all notes stop", "[dsp][3xosc]")
+{
+    ThreeOscProcessor synth;
+    set (synth, ThreeOscProcessor::parameterId ("shape", 0), 0.0f); // sine
+    set (synth, "voices", 1.0f);                                    // Mono (slides)
+    set (synth, "glide", 0.2f);
+    set (synth, "release", 0.05f);
+    Player player (synth);
+
+    // A key held when playback stops (all notes off, never its own note off)...
+    player.play (0.3, { on (57) });
+    player.play (0.5, { juce::MidiMessage::allNotesOff (1) });
+    // ...is not held any more: the next note starts on its own pitch, and ends when let go.
+    auto out = player.play (0.3, { on (69) });
+    CHECK (frequencyOf (out[0], 0, 4800) == Catch::Approx (440.0).epsilon (0.01));
+    out = player.play (0.5, { off (69) });
+    CHECK (rms (out[0], 0.3, 0.5) < 1.0e-4f);
+    CHECK (synth.getNumActiveVoices() == 0);
+
+    // All sound off stops at once.
+    player.play (0.3, { on (60) });
+    out = player.play (0.1, { juce::MidiMessage::allSoundOff (1) });
+    CHECK (rms (out[0], 0.0, 0.1) < 1.0e-4f);
+    CHECK (synth.getNumActiveVoices() == 0);
+}
+
 TEST_CASE ("3x Osc follows an MPE controller: per-note pitch bend, pressure and slide", "[dsp][3xosc][mpe]")
 {
     ThreeOscProcessor synth;
