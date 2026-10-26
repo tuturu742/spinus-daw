@@ -1,5 +1,6 @@
 #include "Analyzer.h"
 #include "AnalysisLibraryView.h"
+#include "session/SoundIndex.h"
 #include "ai/AnalysisJobs.h"
 #include "project/AudioImport.h"
 
@@ -376,7 +377,7 @@ AnalysisLibrary Analyzer::getLibrary() const
     return AnalysisLibrary::inAiFolder (service != nullptr ? service->getFolder() : juce::File());
 }
 
-void Analyzer::showLibrary() { AnalysisLibraryView::show (getLibrary(), this); }
+void Analyzer::showLibrary() { AnalysisLibraryView::show (getLibrary(), this, SoundIndex::getDefaultFolder()); }
 
 bool Analyzer::hasEarlierAnalysis() const { return choosing && earlier.isObject(); }
 

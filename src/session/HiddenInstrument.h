@@ -1,6 +1,7 @@
 #pragma once
 
 #include "InstrumentPresets.h"
+#include "OfflineInstrument.h"
 #include "Session.h"
 
 namespace spinus
@@ -16,8 +17,8 @@ namespace spinus
 class HiddenInstrument
 {
 public:
-    static constexpr double sampleRate = 48000.0;
-    static constexpr int blockSize = 512;
+    static constexpr double sampleRate = OfflineInstrument::sampleRate;
+    static constexpr int blockSize = OfflineInstrument::blockSize;
 
     HiddenInstrument (Session&, const juce::String& stockType);
     /** Any instrument: Spinus's own, a downloaded one or an installed plugin. */
@@ -36,25 +37,17 @@ public:
     /** Loads any preset (a file, a state, a program or a discovered one) and waits until it is in place. */
     juce::Result loadPreset (const InstrumentPreset&);
 
-    struct Note
-    {
-        int note = 60;
-        double start = 0.0, length = 1.0; // seconds
-        float velocity = 0.8f;
-    };
+    using Note = OfflineInstrument::Note;
     /** Plays the notes from silence and returns the sound (mono, at sampleRate), `tail` seconds after the
         last note ends. */
     juce::AudioBuffer<float> render (const std::vector<Note>&, double tail = 0.4);
 
 private:
-    /** Stops every note, cuts what still rings, and waits a moment. */
-    void silence();
-    void play (int samples, const juce::MidiBuffer&, juce::AudioBuffer<float>* into);
-
     juce::String problem;
     std::unique_ptr<tracktion::Edit> edit;
     tracktion::Plugin::Ptr plugin;
     juce::AudioPluginInstance* instance = nullptr;
+    std::unique_ptr<OfflineInstrument> player; // plays `instance` (Spinus's and the sound index's way)
 };
 
 } // namespace spinus

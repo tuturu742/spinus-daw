@@ -5,6 +5,7 @@
 #include "ai/AiService.h"
 #include "session/AnalysisLibrary.h"
 #include "session/Session.h"
+#include "session/SoundIndex.h"
 #include "MessageLabel.h"
 
 #include <memory>
@@ -33,6 +34,11 @@ namespace spinus::ui
     Nothing here changes the project. It needs AI turned on, the analysis engine installed and the model
     files downloaded (unless the library already has what they would find); it says what is missing and
     offers to fix it, like the Analyzer.
+
+    The second step, the sound index (SoundIndex), lives here too: Update sound index measures how the
+    instruments and samples on this computer sound, in the background and in a separate program
+    (SoundIndexer), so later steps can choose the closest sound the user has for each part. It needs neither
+    AI nor the AI service.
 
     Message thread only (each song is read and decoded on a thread of its own). */
 class TrackCreator final : public Panel, public juce::FileDragAndDropTarget, private juce::AsyncUpdater
@@ -113,13 +119,36 @@ public:
     /** Where a song's large files are made while it is analyzed (a temporary folder, deleted after). */
     juce::File getWorkFolder (const juce::String& digest) const;
 
-    juce::Rectangle<int> getDefaultBounds() const override { return { 100, 70, 680, 600 }; }
+    //==============================================================================
+    // The sound index.
+
+    /** The Browser's sample folders (the main window sets this). */
+    std::function<juce::Array<juce::File>()> getSampleFolders;
+    /** The instruments to measure: by default the Browser's (findSoundSources). Tests set their own. */
+    std::function<std::vector<SoundSource>()> getSoundSources;
+    /** Where the index is kept (SoundIndex::getDefaultFolder()) and how the helper runs (tests). */
+    void setSoundIndexFolder (const juce::File&);
+    juce::File getSoundIndexFolder() const { return soundIndexFolder; }
+    void setSoundIndexOptions (SoundIndexer::Options o) { soundOptions = std::move (o); }
+
+    /** Brings the index up to date in the background (what is new or changed); progress shows in the panel. */
+    void updateSoundIndex();
+    void cancelSoundIndex();
+    bool isIndexingSounds() const noexcept { return indexing; }
+    juce::String getSoundIndexText() const { return soundsStatus.getText(); }
+    /** The last update's result (tests); none before the first. */
+    const std::optional<SoundIndexer::Result>& getLastSoundIndexResult() const noexcept { return lastSoundResult; }
+    /** Opens the list of indexed sounds, with search. */
+    void showSounds();
+
+    juce::Rectangle<int> getDefaultBounds() const override { return { 100, 70, 680, 680 }; }
 
     bool isInterestedInFileDrag (const juce::StringArray&) override;
     void filesDropped (const juce::StringArray&, int x, int y) override;
 
     void resized() override;
     void paint (juce::Graphics&) override;
+    void visibilityChanged() override;
 
 private:
     class Preparer;
@@ -151,6 +180,7 @@ private:
     Reference* currentReference();
     void remember() const;
     void recall();
+    void showSoundSummary (const juce::String& after = {});
 
     Session& session;
     ai::AiService* service = nullptr;
@@ -188,6 +218,16 @@ private:
     juce::Label summaryTitle;
     juce::TextEditor summaryText;
     std::unique_ptr<core::FileDialog> chooser;
+
+    juce::File soundIndexFolder = SoundIndex::getDefaultFolder();
+    SoundIndexer::Options soundOptions;
+    std::unique_ptr<SoundIndexer> indexer;
+    std::optional<SoundIndexer::Result> lastSoundResult;
+    bool soundSummaryShown = false, indexing = false;
+    juce::Label soundsTitle;
+    MessageLabel soundsStatus;
+    juce::TextButton updateSoundsButton { "Update sound index" }, stopSoundsButton { "Stop" },
+        showSoundsButton { "Show sounds..." };
 };
 
 } // namespace spinus::ui

@@ -4,7 +4,10 @@
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
 #include "session/SongPreparation.h"
+#include "session/SoundDescriptors.h"
+#include "ui/AnalysisLibraryView.h"
 #include "ui/Analyzer.h"
+#include "ui/SoundIndexView.h"
 #include "ui/Theme.h"
 #include "ui/TrackCreator.h"
 
@@ -298,7 +301,16 @@ TEST_CASE ("Track creator screenshot for the manual", "[.screenshot][manual]")
     SpinusLookAndFeel look (Theme::dark());
     TrackCreator creator (a.session, &a.service);
     creator.setLookAndFeel (&look);
-    creator.setSize (680, 600);
+    creator.setSize (680, 680);
+    // A sound index as a computer with Surge XT and a few sample packs might have.
+    const auto sounds = a.t.root.getChildFile ("sounds");
+    sounds.createDirectory();
+    sounds.getChildFile ("index.json")
+        .replaceWithText (R"({"kind": "spinus.sound-index", "version": )" + juce::String (SoundIndex::version) +
+                          R"(, "descriptorsVersion": )" + juce::String (sounds::descriptorsVersion) +
+                          R"(, "updated": "2026-10-26T14:02:00", "summary": {"instruments": 6, "presets": 3204,
+                              "samples": 418, "problems": 0}})");
+    creator.setSoundIndexFolder (sounds);
     const auto album = a.t.root.getChildFile ("Album");
     REQUIRE (album.createDirectory().wasOk());
     const auto first = makeSong (album, "01 Morning Light");
@@ -529,3 +541,74 @@ TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATC
     creator.saveSummary (out.getChildFile (batch.getFileName() + ".json"));
     CHECK (creator.getSummary().isObject());
 }
+
+//==============================================================================
+#if defined(SPINUS_PLUGIN_SCANNER) && defined(SPINUS_BROKEN_PLUGINS_DIR)
+TEST_CASE ("Track creator: the sound index is updated in the background, listed and deleted, without AI",
+           "[ui][trackcreator][sounds]")
+{
+    TempFolder t;
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine() };
+    TrackCreator creator (session, nullptr); // no AI service: the sound index does not need it
+    const auto folder = t.root.getChildFile ("sounds");
+    creator.setSoundIndexFolder (folder);
+    SoundIndexer::Options options;
+    options.helper = juce::File (SPINUS_PLUGIN_SCANNER);
+    creator.setSoundIndexOptions (options);
+    SoundSource synth;
+    synth.key = "plugin-test-synth";
+    synth.name = synth.pluginName = "Spinus Test Synth";
+    synth.format = "CLAP";
+    synth.file = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("test-synth.clap").getFullPathName();
+    synth.fingerprint = "1";
+    creator.getSoundSources = [synth] { return std::vector<SoundSource> { synth }; };
+    const auto samples = t.root.getChildFile ("Samples");
+    {
+        // A kick: a falling sine, half a second.
+        samples.createDirectory();
+        juce::AudioBuffer<float> kick (1, 24000);
+        double phase = 0.0;
+        for (int i = 0; i < kick.getNumSamples(); ++i)
+        {
+            const auto time = i / 48000.0;
+            phase += (50.0 + 100.0 * std::exp (-time / 0.03)) / 48000.0;
+            kick.setSample (0, i, (float)(0.9 * std::sin (2.0 * M_PI * phase) * std::exp (-time / 0.12)));
+        }
+        std::unique_ptr<juce::OutputStream> stream =
+            std::make_unique<juce::FileOutputStream> (samples.getChildFile ("one.wav"));
+        auto writer = juce::WavAudioFormat().createWriterFor (
+            stream, juce::AudioFormatWriterOptions().withSampleRate (48000).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        writer->writeFromAudioSampleBuffer (kick, 0, kick.getNumSamples());
+    }
+    creator.getSampleFolders = [samples] { return juce::Array<juce::File> { samples }; };
+
+    CHECK (creator.getSoundIndexText().contains ("No sound index yet"));
+    creator.updateSoundIndex();
+    CHECK (creator.isIndexingSounds());
+    REQUIRE (waitFor ([&] { return ! creator.isIndexingSounds(); }, 120000));
+    REQUIRE (creator.getLastSoundIndexResult());
+    CHECK (creator.getLastSoundIndexResult().value().soundsMeasured == 6);
+    CHECK (creator.getLastSoundIndexResult().value().samplesMeasured == 1);
+    CHECK (creator.getSoundIndexText().contains ("1 instrument, 6 presets, 1 sample"));
+
+    // The list, with search.
+    SoundIndexView view (folder);
+    CHECK (view.getShown().size() == 7);
+    view.search ("pad");
+    REQUIRE (view.getShown().size() == 1);
+    CHECK (view.getShown()[0].name == "Soft Sine Pad");
+    view.search ("kick sample");
+    REQUIRE (view.getShown().size() == 1);
+    CHECK (view.getShown()[0].name == "one.wav");
+    CHECK (SoundIndexView::describe (view.getShown()[0]).contains ("kick"));
+
+    // Its space in Saved analyses, and deleting it.
+    AnalysisLibraryView saved (AnalysisLibrary (t.root.getChildFile ("library")), folder);
+    CHECK (saved.getSoundIndexText().contains ("KB"));
+    REQUIRE (saved.deleteSoundIndex());
+    CHECK_FALSE (folder.exists());
+    CHECK (saved.getSoundIndexText().contains ("none yet"));
+}
+#endif

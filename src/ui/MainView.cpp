@@ -582,6 +582,7 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     workspace.setPanelAvailable ("analyzer", false); // experimental: until Options > AI says otherwise
     {
         auto creator = std::make_unique<TrackCreator> (session, nullptr);
+        creator->getSampleFolders = [this] { return browser->getSampleFolders(); }; // what the sound index measures
         creator->onSetUpEngine = [this]
         {
             showAiSettings();

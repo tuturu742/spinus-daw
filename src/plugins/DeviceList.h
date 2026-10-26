@@ -50,6 +50,7 @@ public:
     /** Where the bundled devices' plugin files are looked for, as given to registerBundledDevices. Not
         set: every bundled device counts as available. */
     void setBundledFolders (std::vector<juce::File>);
+    const std::optional<std::vector<juce::File>>& getBundledFolders() const noexcept { return bundledFolders; }
 
     void refresh();
 

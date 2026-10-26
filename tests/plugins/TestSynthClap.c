@@ -8,13 +8,29 @@
    "Spinus Test Organ": a sine with only Volume, Bypass and Transpose: nothing to tune.
 
    The synth has six presets of its own, listed through CLAP preset discovery (inside the plugin, by load
-   key) and loaded through preset-load, for closest preset; the organ has none. */
+   key) and loaded through preset-load, for closest preset; the organ has none.
+
+   Built with MISBEHAVING=1 it is "Spinus Misbehaving Synth" (misbehaving-synth.clap), for the sound index's
+   tests: two more presets, "Crashes" (its sound crashes the process) and "Hangs" (its sound never comes:
+   processing stops answering). */
 
 #include <clap/clap.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if MISBEHAVING
+    #ifdef _WIN32
+        #include <windows.h>
+        #define CRASH() (*(volatile int*)0 = 0)
+        #define PAUSE() Sleep (1000)
+    #else
+        #include <signal.h>
+        #include <unistd.h>
+        #define CRASH() raise (SIGSEGV)
+        #define PAUSE() sleep (1)
+    #endif
+#endif
 
 #define PI 3.14159265358979323846
 
@@ -64,7 +80,11 @@ static const param_t organ_params[ORGAN_PARAMS] = {
 };
 
 /* The synth's presets: Wave, Cutoff, Resonance, Attack, Decay, Sustain, Release (the rest as by default). */
-#define PRESETS 6
+#if MISBEHAVING
+    #define PRESETS 8
+#else
+    #define PRESETS 6
+#endif
 static const struct
 {
     const char* name;
@@ -73,13 +93,24 @@ static const struct
     { "Bright Saw", { 0, 1.0, 0.1, 0.0, 0.3, 0.8, 0.1 } },     { "Dark Square", { 1, 0.3, 0.2, 0.0, 0.3, 0.8, 0.1 } },
     { "Soft Sine Pad", { 2, 0.8, 0.0, 0.6, 0.5, 0.9, 0.5 } },  { "Square Pluck", { 1, 0.7, 0.3, 0.0, 0.15, 0.0, 0.1 } },
     { "Resonant Saw", { 0, 0.45, 0.85, 0.0, 0.4, 0.7, 0.1 } }, { "Sine Pluck", { 2, 0.5, 0.0, 0.0, 0.1, 0.0, 0.05 } },
+#if MISBEHAVING
+    { "Crashes", { 0, 1.0, 0.1, 0.0, 0.3, 0.8, 0.1 } },        { "Hangs", { 0, 1.0, 0.1, 0.0, 0.3, 0.8, 0.1 } },
+#endif
 };
 
 static const char* const features[] = { CLAP_PLUGIN_FEATURE_INSTRUMENT, CLAP_PLUGIN_FEATURE_SYNTHESIZER, NULL };
 
+#if MISBEHAVING
+    #define SYNTH_ID "io.github.tuturu742.spinus.test.misbehaving-synth"
+    #define SYNTH_NAME "Spinus Misbehaving Synth"
+#else
+    #define SYNTH_ID "io.github.tuturu742.spinus.test.synth"
+    #define SYNTH_NAME "Spinus Test Synth"
+#endif
+
 static const clap_plugin_descriptor_t synth_descriptor = { CLAP_VERSION_INIT,
-                                                           "io.github.tuturu742.spinus.test.synth",
-                                                           "Spinus Test Synth",
+                                                           SYNTH_ID,
+                                                           SYNTH_NAME,
                                                            "Spinus tests",
                                                            "",
                                                            "",
@@ -108,6 +139,7 @@ typedef struct
     double rate, phase, low, band, level;
     int note, gate; /* the note playing (-1: none), whether its key is down */
     int stage;      /* 0 attack, 1 decay, 2 sustain, 3 release */
+    int misbehave;  /* MISBEHAVING: 1 crash, 2 hang while processing */
 } synth_t;
 
 static synth_t* self (const clap_plugin_t* p) { return (synth_t*)p->plugin_data; }
@@ -292,6 +324,7 @@ static bool preset_from_location (const clap_plugin_t* p, uint32_t kind, const c
         s->values[i] = presets[index].values[i];
     for (int i = 7; i < s->count; ++i)
         s->values[i] = s->infos[i].value;
+    s->misbehave = index >= 6 ? index - 5 : 0;
     return true;
 }
 static const clap_plugin_preset_load_t preset_load = { preset_from_location };
@@ -398,6 +431,12 @@ static float next_sample (synth_t* s)
 static clap_process_status process (const clap_plugin_t* p, const clap_process_t* process)
 {
     synth_t* s = self (p);
+#if MISBEHAVING
+    if (s->misbehave == 1)
+        CRASH();
+    while (s->misbehave == 2)
+        PAUSE();
+#endif
     const uint32_t frames = process->frames_count;
     const uint32_t events = process->in_events->size (process->in_events);
     uint32_t next = 0;
@@ -498,7 +537,7 @@ static bool provider_metadata (const clap_preset_discovery_provider_t* provider,
     (void)location;
     if (kind != CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN)
         return false;
-    const clap_universal_plugin_id_t id = { "clap", "io.github.tuturu742.spinus.test.synth" };
+    const clap_universal_plugin_id_t id = { "clap", SYNTH_ID };
     for (int i = 0; i < PRESETS; ++i)
     {
         char key[8];
