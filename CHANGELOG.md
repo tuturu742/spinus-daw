@@ -19,6 +19,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Projects** no longer lists **Opened**: the projects you opened are under **File › Open recent**. Add
   the folder you keep your songs in to see them all; a song you save there shows up at once.
 
+### Windows and shortcuts
+
+- **Spinus opens as you left it:** maximised or full screen if it was, otherwise at its size and place, with
+  your panels laid out at that size (they were squeezed into a small window before).
+
 ## 0.1.0-alpha.2 (2026-10-26)
 
 ### Finding out what went wrong

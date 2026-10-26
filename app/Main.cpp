@@ -225,7 +225,8 @@ public:
         session->getDeviceList().setCatalog (catalog.get());
 
         document = std::make_unique<ProjectDocument> (*session, getSettingsFolder());
-        mainWindow = std::make_unique<MainWindow> (getApplicationName(), *session, *document);
+        mainWindow = std::make_unique<MainWindow> (getApplicationName(), *session, *document,
+                                                   getSettingsFolder().getChildFile ("main-window.txt"));
         windowIcons = std::make_unique<ui::WindowIcons>();
         auto& view = mainWindow->getView();
         view.onQuit = [] { quit(); };
@@ -515,26 +516,57 @@ private:
         return true;
     }
 
-    class MainWindow : public juce::DocumentWindow
+    /** The main window comes back where and as it was: its size and place, maximised or full screen (the state
+        is kept in `stateFile` a few seconds after it changes, and on closing). */
+    class MainWindow : public juce::DocumentWindow, private juce::Timer
     {
     public:
-        MainWindow (const juce::String& name, Session& session, ProjectDocument& document)
-            : DocumentWindow (name, juce::Colour (0xff1e2227), DocumentWindow::allButtons)
+        MainWindow (const juce::String& name, Session& session, ProjectDocument& document, juce::File state)
+            : DocumentWindow (name, juce::Colour (0xff1e2227), DocumentWindow::allButtons),
+              stateFile (std::move (state))
         {
             setUsingNativeTitleBar (true);
             setContentOwned (new ui::MainView (session, &document), true);
             setResizable (true, true);
             centreWithSize (getWidth(), getHeight());
             setVisible (true);
+            savedState = stateFile.loadFileAsString().trim();
+            if (savedState.isNotEmpty())
+                restoreWindowStateFromString (savedState);
+            startTimer (3000);
         }
 
-        ~MainWindow() override { clearContentComponent(); }
+        ~MainWindow() override
+        {
+            saveState();
+            clearContentComponent();
+        }
 
         ui::MainView& getView() { return *static_cast<ui::MainView*> (getContentComponent()); }
 
-        void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+        void closeButtonPressed() override
+        {
+            saveState();
+            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        }
 
     private:
+        void timerCallback() override { saveState(); }
+
+        void saveState()
+        {
+            if (getPeer() == nullptr || isMinimised())
+                return;
+            if (const auto state = getWindowStateAsString(); state != savedState && stateFile != juce::File())
+            {
+                stateFile.replaceWithText (state);
+                savedState = state;
+            }
+        }
+
+        juce::File stateFile;
+        juce::String savedState;
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
     };
 

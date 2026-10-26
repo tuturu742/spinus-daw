@@ -774,7 +774,12 @@ void MainView::setLayoutsFile (const juce::File& file)
         {
             if (safe != nullptr)
                 if (auto last = safe->layouts->getLast(); last.isValid())
+                {
                     safe->applyLayout (last);
+                    safe->startLayout = last;
+                    safe->startLayoutSize = safe->workspace.getBounds();
+                    safe->startLayoutUntil = juce::Time::getMillisecondCounter() + startLayoutMs;
+                }
         });
 }
 
@@ -1777,6 +1782,19 @@ void MainView::resized()
     }
 
     workspace.setBounds (area);
+
+    // A window restored maximised or full screen gets its size from the desktop a moment after the last layout
+    // was put back, in the smaller window: put it back again at the new size (panels are kept as proportions).
+    if (startLayout.isValid())
+    {
+        if (juce::Time::getMillisecondCounter() > startLayoutUntil)
+            startLayout = {};
+        else if (workspace.getBounds() != startLayoutSize)
+        {
+            startLayoutSize = workspace.getBounds();
+            workspace.setLayout (startLayout);
+        }
+    }
 }
 
 //==============================================================================
