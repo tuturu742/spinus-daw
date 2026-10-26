@@ -19,6 +19,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   the Analyzer has seen before offers **Continue from the existing analysis** or **Analyze anew**.
   **Saved analyses...** shows the space it takes and deletes stems or songs (never your own audio files).
   See [Saved analyses](docs/user/track-creator.md#saved-analyses).
+- **Analyzer:** the tempo it finds is more precise (it could be off by a few BPM, jumping between values
+  such as 130.4, 136.4 and 142.9).
 
 ## 0.1.0-alpha.2 (2026-10-26)
 

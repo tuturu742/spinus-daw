@@ -450,3 +450,79 @@ TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is fo
     CHECK (analyzer.getStems().empty());
     CHECK (library.read (digest)["features"].isObject()); // the style stays
 }
+
+TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATCH)", "[.realmusic]")
+{
+    // A check by hand, not run in CI: real songs through the real analysis engine and models, installed the
+    // way Spinus installs them into the settings and models folders of the HOME it runs with (use a scratch
+    // HOME). Writes <batch>.txt (per song: time, tempo, key; the summary in words) and <batch>.json (the
+    // summary) into SPINUS_REALMUSIC_OUT. The songs are only read.
+    const juce::File batch (juce::SystemStats::getEnvironmentVariable ("SPINUS_REALMUSIC_BATCH", {}));
+    const juce::File out (juce::SystemStats::getEnvironmentVariable ("SPINUS_REALMUSIC_OUT", {}));
+    const juce::File settings (juce::SystemStats::getEnvironmentVariable ("SPINUS_REALMUSIC_SETTINGS", {}));
+    if (! batch.isDirectory() || out == juce::File() || settings == juce::File())
+        SKIP ("set SPINUS_REALMUSIC_BATCH, SPINUS_REALMUSIC_OUT and SPINUS_REALMUSIC_SETTINGS");
+    REQUIRE (out.createDirectory().wasOk());
+
+    EngineHost host { { .openAudioDevice = false } };
+    Session session (host.getEngine());
+    ai::AiService service (settings);
+    service.setEnabled (true);
+    const auto python = ai::AiService::getDefaultModelsFolder().getSiblingFile ("python");
+    if (! python.getChildFile ("cpu/spinus-build.json").existsAsFile() &&
+        python.findChildFiles (juce::File::findFiles, true, "spinus-build.json").isEmpty())
+    {
+        service.call ("ai.v1.compute.install", juce::JSON::parse (R"({"build": "cpu"})"), {});
+        REQUIRE (waitFor ([&] { return python.getChildFile ("cpu/spinus-build.json").existsAsFile(); }, 3600000));
+    }
+
+    TrackCreator creator (session, &service);
+    creator.clearReferences(); // only this batch
+    const auto started = juce::Time::getMillisecondCounterHiRes();
+    REQUIRE (creator.addReferences ({ batch }) > 0);
+    // Each song's time: from when it starts to when it is done. The model files are downloaded when asked
+    // for (the first time), then the songs carry on.
+    std::map<juce::String, double> begun, took;
+    bool downloaded = false;
+    REQUIRE (waitFor (
+        [&]
+        {
+            const auto now = juce::Time::getMillisecondCounterHiRes();
+            for (const auto& r : creator.getReferences())
+            {
+                const auto name = r.file.getFileName();
+                if (r.status == TrackCreator::Status::preparing || r.status == TrackCreator::Status::analyzing)
+                    begun.emplace (name, now);
+                if ((r.status == TrackCreator::Status::done || r.status == TrackCreator::Status::failed) &&
+                    ! took.contains (name))
+                    took[name] = (now - (begun.contains (name) ? begun[name] : started)) / 1000.0;
+            }
+            if (! creator.isBusy() && ! downloaded && creator.getDownloadSize() > 0 &&
+                creator.getNeedsText().isNotEmpty())
+            {
+                downloaded = true;
+                creator.downloadModels(); // it carries on with the songs once they are there
+                return false;
+            }
+            return ! creator.isBusy();
+        },
+        6 * 3600000));
+
+    juce::StringArray lines;
+    lines.add ("Batch: " + batch.getFileName() + " (" + juce::String (creator.getReferences().size()) + " songs, " +
+               juce::String ((juce::Time::getMillisecondCounterHiRes() - started) / 1000.0, 0) + " s in all)");
+    for (const auto& r : creator.getReferences())
+    {
+        const auto& f = r.features;
+        lines.add (r.file.getFileName() + " | " + creator.describe (r) + " | " +
+                   juce::String (took.contains (r.file.getFileName()) ? took[r.file.getFileName()] : 0.0, 0) +
+                   " s | tempo " + f["tempo"].toString() + " | key " + f["key"]["name"].toString() + " | bars " +
+                   f["bars"].toString() + " | sections " + juce::String (f["sections"].size()) + " | LUFS " +
+                   f["loudness"]["lufs"].toString() + " | swing " + f["groove"]["swing"].toString());
+    }
+    lines.add ({});
+    lines.add (creator.getSummaryText());
+    out.getChildFile (batch.getFileName() + ".txt").replaceWithText (lines.joinIntoString ("\n") + "\n");
+    creator.saveSummary (out.getChildFile (batch.getFileName() + ".json"));
+    CHECK (creator.getSummary().isObject());
+}

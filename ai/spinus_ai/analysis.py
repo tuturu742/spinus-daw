@@ -26,7 +26,12 @@ def rhythm(beats: list[float], downbeats: list[float]) -> dict[str, Any]:
     if len(beats) < 2:
         return {"tempo": None, "beatsPerBar": None, "firstDownbeat": None, "beats": beats, "downbeats": downbeats}
     intervals = np.diff(np.asarray(beats))
-    tempo = float(60.0 / np.median(intervals))
+    # The beats come on the model's 20 ms frames, so one interval is off by up to a frame (at 136 BPM the
+    # median alone jumps between 130.4, 136.4 and 142.9). The mean of the steady intervals (within 10 % of
+    # the median: no gaps or doubled beats) averages that out.
+    middle = float(np.median(intervals))
+    steady = intervals[np.abs(intervals - middle) <= 0.1 * middle]
+    tempo = float(60.0 / (steady.mean() if len(steady) else middle))
     counts: Counter[int] = Counter()
     for a, b in itertools.pairwise(downbeats):
         counts[sum(1 for t in beats if a - 0.02 <= t < b - 0.02)] += 1

@@ -34,17 +34,17 @@ from typing import Any
 
 import numpy as np
 
-FEATURES_VERSION = 1  # change when what analyze_song measures changes (Spinus then analyzes songs again)
+FEATURES_VERSION = 2  # change when what analyze_song measures changes (Spinus then analyzes songs again)
 SUMMARY_VERSION = 1  # change when the summary's format changes
 
 NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
-# Chord templates: intervals from the root. Four-note chords must fit clearly better to be chosen.
+# Chord templates: intervals from the root. Four-note chords and sus4 must fit clearly better to be chosen.
 QUALITIES: dict[str, tuple[int, ...]] = {
     "maj": (0, 4, 7),
     "min": (0, 3, 7),
     "dim": (0, 3, 6),
-    "sus4": (0, 5, 7),
+    "sus4": (0, 5, 7),  # a melody note on the fourth easily looks like one: it must fit clearly better
     "7": (0, 4, 7, 10),
     "maj7": (0, 4, 7, 11),
     "m7": (0, 3, 7, 10),
@@ -127,7 +127,7 @@ def best_chord(profile: np.ndarray, bass: int | None) -> tuple[int, str, float] 
             template = np.zeros(12)
             template[[(root + i) % 12 for i in intervals]] = 1.0
             score = float(unit @ template) / math.sqrt(len(intervals))
-            if len(intervals) > 3:
+            if len(intervals) > 3 or quality == "sus4":
                 score -= SEVENTH_PENALTY
             if bass is not None and bass == root:
                 score += BASS_BONUS
@@ -197,20 +197,26 @@ def groove_of(song: dict[str, Any]) -> dict[str, Any] | None:
     first = beat_position(bars[0], beats) if bars else 0.0
     used: dict[str, set[tuple[int, int]]] = {lane: set() for lane in LANES}
     active: set[int] = set()
-    offbeats: list[float] = []
     step_seconds = float(np.median(np.diff(beats))) / 4
+    found = []  # (position in beats from the first bar, kind)
     for hit in hits:
         time = float(hit["time"])
-        if time < beats[0] - step_seconds or time > beats[-1] + 4 * step_seconds:
-            continue
-        position = beat_position(time, beats)
-        relative = position - first
+        if beats[0] - step_seconds <= time <= beats[-1] + 4 * step_seconds:
+            found.append((beat_position(time, beats) - first, str(hit.get("kind", ""))))
+    # Hits are found a little late (onset detection), the same for all: how late, from the hits close to
+    # the eighths, is taken off before they are placed. Otherwise a fast straight song reads as swung, and
+    # swung off-beats slip onto the next sixteenth.
+    lags = [((p * 2 + 0.5) % 1.0) - 0.5 for p, _ in found]
+    close = [lag for lag in lags if abs(lag) <= 0.15]
+    late = float(np.median(close)) / 2 if len(close) >= 8 else 0.0
+    offbeats: list[float] = []
+    for position, kind in found:
+        relative = position - late
         sixteenth = round(relative * 4)
         if sixteenth < 0:
             continue
         bar, step = divmod(sixteenth, steps)
         active.add(bar)
-        kind = str(hit.get("kind", ""))
         for lane, kinds in LANES.items():
             if kind in kinds:
                 used[lane].add((bar, step))
@@ -543,6 +549,11 @@ def summarize(songs: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def per_bar(count: float) -> str:
+    """4.48 -> "4.5", 26.49 -> "26": as precise as it is worth."""
+    return f"{count:.0f}" if count >= 10 else f"{round(count, 1):g}"
+
+
 def steps_text(probabilities: list[float], low: float, high: float) -> str:
     return ", ".join(str(i + 1) for i, p in enumerate(probabilities) if low <= p < high)
 
@@ -598,15 +609,17 @@ def describe(summary: dict[str, Any]) -> list[str]:
     if drums["songs"]:
         words = []
         for lane, label in (("kick", "kick"), ("snare", "snare or clap"), ("hats", "hi-hats")):
-            often = steps_text(drums["lanes"][lane], 0.5, 2.0)
-            sometimes = steps_text(drums["lanes"][lane], 0.2, 0.5)
-            if often or sometimes:
-                text = f"{label} on steps {often}" if often else f"{label} only now and then"
-                if often and sometimes:
-                    text += f" (sometimes also {sometimes})"
-                elif sometimes:
-                    text += f" (on {sometimes})"
-                words.append(text)
+            probabilities = drums["lanes"][lane]
+            often = steps_text(probabilities, 0.5, 2.0)
+            # Below that, only the few likeliest steps: a long list of 20-40 % steps says nothing.
+            likely = sorted(
+                (i for i, p in enumerate(probabilities) if 0.25 <= p < 0.5), key=lambda i: -probabilities[i]
+            )
+            sometimes = ", ".join(str(i + 1) for i in sorted(likely[:3]))
+            if often:
+                words.append(f"{label} on steps {often}" + (f" (sometimes also {sometimes})" if sometimes else ""))
+            elif sometimes:
+                words.append(f"{label} with no steady place (most often on {sometimes})")
         swing = drums["swing"]
         feel = "straight" if swing < 0.54 else "lightly swung" if swing < 0.6 else "swung"
         lines.append(f"Drums ({drums['steps']} steps a bar): {'; '.join(words) or 'sparse'}; {feel}.")
@@ -620,7 +633,7 @@ def describe(summary: dict[str, Any]) -> list[str]:
         voices = "chords" if entry["voices"] >= 1.8 else "single notes"
         lines.append(
             f"{name}: in {songs}, {note_name(entry['low'])} to {note_name(entry['high'])}, "
-            f"about {entry['notesPerBar']:g} notes a bar, mostly {voices}."
+            f"about {per_bar(entry['notesPerBar'])} notes a bar, mostly {voices}."
         )
     sections = summary["sections"]
     if sections["lengths"]:

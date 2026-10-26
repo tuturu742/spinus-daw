@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from spinus_ai.analysis import chroma, key_of, rhythm
 
@@ -48,3 +49,12 @@ def test_tempo_and_bars_from_beats() -> None:
     assert found["tempo"] == 120.0 and found["beatsPerBar"] == 3 and found["firstDownbeat"] == 0.1
     assert rhythm([1.0], [])["tempo"] is None
     assert rhythm(beats, [])["beatsPerBar"] == 4  # no downbeats: assume 4
+
+
+def test_the_tempo_is_not_stuck_on_the_models_frames() -> None:
+    # Beat This! gives beats on 20 ms frames: 135 BPM beats rounded to them still read 135, not 136.4.
+    beats = [round((0.3 + i * 60.0 / 135.0) / 0.02) * 0.02 for i in range(200)]
+    assert rhythm(beats, beats[::4])["tempo"] == pytest.approx(135.0, abs=0.1)
+    # A gap (a break with no beat found) does not pull it down.
+    with_gap = beats[:100] + [b + 2.0 for b in beats[100:]]
+    assert rhythm(with_gap, with_gap[::4])["tempo"] == pytest.approx(135.0, abs=0.1)

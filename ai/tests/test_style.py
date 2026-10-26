@@ -93,9 +93,7 @@ def test_progressions_and_how_often_chords_change() -> None:
     songs = [
         style.analyze_song(song_with(["C", "G", "Am", "F"] * 4, name="One")),
         # Two bars per chord, transposed to G: the same progression in numerals.
-        style.analyze_song(
-            song_with(["G", "G", "D", "D", "Em", "Em", "C", "C"] * 2, key=(7, "major"), name="Two")
-        ),
+        style.analyze_song(song_with(["G", "G", "D", "D", "Em", "Em", "C", "C"] * 2, key=(7, "major"), name="Two")),
     ]
     summary = style.summarize(songs)
     top = summary["chords"]["progressions"][0]
@@ -265,3 +263,37 @@ async def test_notes_and_drum_hits_kept_from_before_are_only_placed(tmp_path: Pa
     assert [(n["start"], n["pitch"]) for n in done["result"]["notes"]] == [(0, 60), (960, 62)]
     assert not list((tmp_path / "config" / "cache").glob("drum-recogniser-*"))  # never trained
     await service.close()
+
+
+def test_loose_drums_and_busy_parts_are_said_briefly() -> None:
+    # Real songs give many 20-40 % steps: only the likeliest few are named. Busy parts get whole numbers.
+    summary = style.summarize([style.analyze_song(add_drums(song_with(["C"] * 8)))])
+    summary["drums"]["lanes"]["kick"] = [0.3, 0.26, 0.45, 0.28, 0.27, 0.4, 0.3, 0.2] * 2
+    summary["parts"]["other"]["notesPerBar"] = 26.49
+    text = "\n".join(style.describe(summary))
+    assert "kick with no steady place (most often on 3, 6, 11)" in text
+    assert "about 26 notes a bar" in text
+    assert "about 4 notes a bar" in text  # the bass
+
+
+def test_hits_found_a_little_late_are_not_swing() -> None:
+    # Onset detection finds hits a few milliseconds late. At 166 BPM, 25 ms late on every hit made a
+    # straight sixteenth groove read as swung (0.64); measured from the eighths' own lateness it is straight.
+    song = song_with(["C"] * 16, tempo=166.0)
+    beat = song["beats"][1] - song["beats"][0]
+    song["drums"] = [{"time": t + beat * k / 4 + 0.025, "kind": "closed_hat"} for t in song["beats"] for k in range(4)]
+    assert style.analyze_song(song)["groove"]["swing"] == pytest.approx(0.5, abs=0.02)
+    # Swung and late: still swung.
+    song["drums"] = [
+        {"time": t + beat * k + 0.025, "kind": "closed_hat"} for t in song["beats"] for k in (0, 0.31, 0.5, 0.81)
+    ]
+    assert style.analyze_song(song)["groove"]["swing"] == pytest.approx(0.62, abs=0.02)
+
+
+def test_a_melody_note_on_the_fourth_does_not_make_a_sus4() -> None:
+    # A C major chord with a passing F in the melody (a quarter of the bar) is still C.
+    song = song_with(["C"] * 4)
+    song["parts"]["other"] += [
+        {"start": 0.5 + i * 2.0, "end": 1.0 + i * 2.0, "pitch": 65, "velocity": 0.8} for i in range(4)
+    ]
+    assert [c["name"] for c in style.analyze_song(song)["chords"]] == ["C"] * 4

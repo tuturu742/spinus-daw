@@ -522,7 +522,9 @@ class Service:
             digest = await run_blocking(lambda: file_digest(song))
             cached = cache_root / "analysis" / f"{digest[:20]}-{model.id}.json"
             if cached.exists():
-                return {**json.loads(cached.read_text(encoding="utf-8")), "cached": True}
+                # The beats are what was kept; the tempo and bars are worked out again (as this version does).
+                kept = json.loads(cached.read_text(encoding="utf-8"))
+                return {**rhythm(list(kept.get("beats") or []), list(kept.get("downbeats") or [])), "cached": True}
 
             async def progress(update: dict[str, Any]) -> None:
                 await say({"kind": "progress", "done": float(update.get("done", 0.0)), "total": 1.0,

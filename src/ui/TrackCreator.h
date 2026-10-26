@@ -50,7 +50,7 @@ public:
     /** The version of the measured style kept in the library (its `features`); change it with
         spinus_ai.style.FEATURES_VERSION (a test checks they agree), so songs measured by an older Spinus are
         measured again. */
-    static constexpr int analysisVersion = 1;
+    static constexpr int analysisVersion = 2;
 
     enum class Status
     {
