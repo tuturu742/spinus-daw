@@ -201,9 +201,20 @@ void ThreeOscEngine::handle (const juce::MidiMessage& m, const ThreeOscSettings&
     }
     else if (m.isAllNotesOff() || m.isAllSoundOff())
     {
+        // Every key is let go (Mono's held keys too, or the next note would slide from one of them and its
+        // release go back to it); all sound off also stops what still rings.
+        monoCount = 0;
         for (auto& v : voices)
-            if (v.active)
+        {
+            v.held = false;
+            if (m.isAllSoundOff())
+            {
+                v.active = false;
+                v.envelope.reset();
+            }
+            else if (v.active)
                 v.envelope.noteOff();
+        }
     }
 }
 
