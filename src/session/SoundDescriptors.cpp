@@ -797,10 +797,17 @@ juce::String classifyHit (const Descriptors& d, const HitShape& h)
     if (tonal && settled < 250.0 && d.length >= 0.6 && h.pitchDrop < 3.0 && d.noisiness < 0.3)
         return "bass";
     // Mostly under 150 Hz and short: a kick (very low, or its pitch sweeping down far; a tom's falls a little).
-    if (d.low >= 0.45 && d.brightness < 600.0 && d.length < 1.5 && (settled < 70.0 || h.pitchDrop >= 6.0 || ! tonal))
+    // (The lowest pitch heard: a short kick's tail may be too short for the later one.)
+    const auto lowest = d.fundamental > 0.0 ? juce::jmin (settled, d.fundamental) : settled;
+    if (d.low >= 0.45 && d.brightness < 600.0 && d.length < 1.5 &&
+        (lowest < 70.0 || h.pitchDrop >= 6.0 || ! tonal || (d.length < 0.25 && lowest < 120.0 && d.low >= 0.8)))
         return "kick";
-    if (h.bursts >= 2 && d.noisiness >= 0.35 && d.brightness >= 600.0 && d.brightness <= 6000.0)
+    // Several hands a few milliseconds apart (two bursts are as often a snare's rough start).
+    if (h.bursts >= 3 && d.noisiness >= 0.35 && d.brightness >= 600.0 && d.brightness <= 6000.0)
         return "clap";
+    // Long, bright and without one pitch: a cymbal, however noisy its measure (a crash's ringing partials).
+    if (! tonal && d.length >= 0.8 && d.brightness >= 3000.0 && d.high >= 0.25)
+        return "cymbal";
     if (noisy)
     {
         if (d.high >= 0.85) // nearly all over 5 kHz
@@ -809,8 +816,15 @@ juce::String classifyHit (const Descriptors& d, const HitShape& h)
             return "perc";
         if (d.length <= 0.8)
             return "snare";
-        return d.high >= 0.25 ? "cymbal" : "other";
+        // Long: a hit that dies fast and then rings in its room is a snare or a clap with reverb; noise that
+        // keeps on is a cymbal.
+        if (d.decay < 0.15)
+            return h.bursts >= 3 ? "clap" : "snare";
+        return d.high >= 0.25 || d.brightness >= 2000.0 ? "cymbal" : "other";
     }
+    // Bright, rough and without one pitch, though not as noisy as noise: a tighter snare.
+    if (! tonal && d.noisiness >= 0.2 && d.brightness >= 1500.0 && d.length <= 0.6 && d.attack < 0.02)
+        return "snare";
     // A pitched hit with few overtones: a tom (a cowbell's are many).
     if (tonal && settled >= 60.0 && settled <= 450.0 && d.length <= 1.5 && d.length >= 0.12 &&
         d.brightness <= 2.5 * settled)
@@ -909,7 +923,11 @@ juce::String keyFromName (const juce::String& name)
         const auto rest = w.substring (used);
         const auto next = words[i + 1].toLowerCase();
         juce::String mode;
-        if (rest == "m" || rest == "min" || rest == "minor" || (rest.isEmpty() && (next == "minor" || next == "min")))
+        if (i > 0 && words[i - 1].equalsIgnoreCase ("key"))
+            // "Key D#m7", "Key Gaug5": a chord named as the key; minor when its third is.
+            mode = rest.startsWith ("m") && ! rest.startsWith ("maj") ? "minor" : "major";
+        else if (rest == "m" || rest == "min" || rest == "minor" ||
+                 (rest.isEmpty() && (next == "minor" || next == "min")))
             mode = "minor";
         // ("F#", "Eb": a key named by its note alone is major.)
         else if (rest == "maj" || rest == "major" || rest == "M" ||
@@ -1004,41 +1022,13 @@ double tempoFromOnsets (const float* x, int count, double rate)
 }
 
 //==============================================================================
-SampleSound describeSample (const juce::AudioBuffer<float>& mono, double rate, const juce::File& file)
+namespace
 {
-    SampleSound s;
-    const auto* x = mono.getReadPointer (0);
-    const auto count = mono.getNumSamples();
-    s.duration = count / rate;
-    if (s.duration > 60.0)
-    {
-        s.kind = "long";
-        s.sampleClass = s.soundClass = "other";
-        s.classFrom = "sound";
-        return s;
-    }
-    s.sound = describe (x, count, rate, 0.0);
-    const auto onsets = findOnsets (x, count, rate);
-    const auto name = file.getFileNameWithoutExtension();
-    const auto words = wordsOf (name + " " + file.getParentDirectory().getFileName());
-    const auto namedTempo = tempoFromName (name);
-    const bool namedLoop = matches (words, { "loop" }) || namedTempo > 0.0;
-    const bool spread = onsets.size() >= 4 && ! onsets.empty() && onsets.back() - onsets.front() >= 0.5 * s.duration;
-    const bool loop = s.duration >= 1.0 && (namedLoop || (s.duration >= 1.5 && spread));
-
-    if (! loop)
-    {
-        s.kind = "one-shot";
-        s.soundClass = classifyHit (s.sound, measureHit (x, count, rate));
-        const auto named = classFromName (file);
-        s.sampleClass = named.isNotEmpty() ? named : s.soundClass;
-        s.classFrom = named.isNotEmpty() ? "name" : "sound";
-        return s;
-    }
-
-    s.kind = "loop";
-    // Its class, from the sounds between its onsets: mostly drum hits make a drum loop; otherwise it plays
-    // notes, low ones a bass line.
+/** The class of a loop from the sounds between its onsets: mostly drum hits make a drum loop; otherwise it
+    plays notes, low ones a bass line. */
+juce::String loopClassOf (const float* x, int count, double rate, const std::vector<double>& onsets,
+                          const Descriptors& whole)
+{
     int hits = 0, segments = 0;
     std::vector<double> pitches;
     for (size_t i = 0; i < onsets.size() && segments < 64; ++i)
@@ -1060,76 +1050,143 @@ SampleSound describeSample (const juce::AudioBuffer<float>& mono, double rate, c
         else if (d.fundamental > 0.0 && d.pitched >= 0.6)
             pitches.push_back (d.fundamental);
     }
-    const bool drums = segments == 0 ? s.sound.noisiness >= 0.35 : hits * 2 >= segments;
-    s.soundClass = drums ? "drums" : pitches.empty() ? "other" : median (pitches) < 180.0 ? "bass" : "melodic";
-    juce::String named;
-    if (matches (words, { "drum", "beat", "perc", "kick", "snare", "hat", "break", "groove", "top" }))
-        named = "drums";
-    else if (matches (words, { "bass", "808" }, { "sub" }))
-        named = "bass";
-    else if (matches (words, { "chord", "key", "piano", "synth", "guitar", "melod", "lead", "pad", "arp", "string",
-                               "vocal", "vox" }))
-        named = "melodic";
-    s.sampleClass = named.isNotEmpty() ? named : s.soundClass;
-    s.classFrom = named.isNotEmpty() ? "name" : "sound";
+    const bool drums = segments == 0 ? whole.noisiness >= 0.35 : hits * 2 >= segments;
+    return drums ? "drums" : pitches.empty() ? "other" : median (pitches) < 180.0 ? "bass" : "melodic";
+}
 
-    // Tempo: named; or the whole bars of 4/4 that fit the onsets' tempo (a loop is cut to whole bars); or the
-    // onsets' tempo alone.
-    if (namedTempo > 0.0)
+/** The tempo of a loop from its sound: the whole bars of 4/4 that fit the onsets' tempo (a loop is cut to
+    whole bars), or the onsets' tempo alone; `from` says which. 0 when none is found. */
+double loopTempoOf (const float* x, int count, double rate, double duration, juce::String& from)
+{
+    const auto heard = tempoFromOnsets (x, count, rate);
+    if (heard <= 0.0)
+        return 0.0;
+    double tempo = 0.0, bestDistance = std::log (1.06);
+    for (const int bars : { 1, 2, 4, 8, 16, 32 })
     {
-        s.tempo = namedTempo;
-        s.tempoFrom = "name";
+        const auto candidate = 240.0 * bars / duration;
+        if (candidate < 60.0 || candidate > 200.0)
+            continue;
+        // The onsets' tempo, or twice or half of it (a little less likely), or 3/2, 3/4, 4/3, 2/3 of it (a
+        // dotted or triplet pattern repeats at those; less likely again).
+        for (const auto [factor, penalty] :
+             { std::pair (1.0, 0.0), std::pair (2.0, 0.01), std::pair (0.5, 0.01), std::pair (1.5, 0.02),
+               std::pair (0.75, 0.02), std::pair (4.0 / 3.0, 0.02), std::pair (2.0 / 3.0, 0.02) })
+            if (const auto distance = std::abs (std::log (candidate / (heard * factor))) + penalty;
+                distance < bestDistance)
+            {
+                bestDistance = distance;
+                tempo = candidate;
+                from = "length";
+            }
     }
-    else if (const auto heard = tempoFromOnsets (x, count, rate); heard > 0.0)
+    if (tempo <= 0.0)
     {
-        double bestDistance = std::log (1.06);
-        for (const int bars : { 1, 2, 4, 8, 16, 32 })
-        {
-            const auto tempo = 240.0 * bars / s.duration;
-            if (tempo < 60.0 || tempo > 200.0)
-                continue;
-            // The onsets' tempo, or twice or half of it (a little less likely).
-            for (const auto [factor, penalty] : { std::pair (1.0, 0.0), std::pair (2.0, 0.01), std::pair (0.5, 0.01) })
-                if (const auto distance = std::abs (std::log (tempo / (heard * factor))) + penalty;
-                    distance < bestDistance)
-                {
-                    bestDistance = distance;
-                    s.tempo = tempo;
-                    s.tempoFrom = "length";
-                }
-        }
-        if (s.tempo <= 0.0)
-        {
-            s.tempo = heard;
-            while (s.tempo < 70.0)
-                s.tempo *= 2.0;
-            while (s.tempo >= 180.0)
-                s.tempo /= 2.0;
-            s.tempoFrom = "onsets";
-        }
-        s.tempo = std::round (s.tempo * 10.0) / 10.0;
+        tempo = heard;
+        while (tempo < 70.0)
+            tempo *= 2.0;
+        while (tempo >= 180.0)
+            tempo /= 2.0;
+        from = "onsets";
     }
-    if (s.tempo > 0.0)
-        s.bars = std::round (s.duration * s.tempo / 240.0 * 100.0) / 100.0;
+    return std::round (tempo * 10.0) / 10.0;
+}
+} // namespace
 
-    // Key: named, or from the chroma of a loop with notes in it.
-    if (const auto key = keyFromName (name); key.isNotEmpty())
+SampleSound describeSample (const juce::AudioBuffer<float>& mono, double rate, const juce::File& file)
+{
+    SampleSound s;
+    const auto* x = mono.getReadPointer (0);
+    const auto count = mono.getNumSamples();
+    s.duration = count / rate;
+    if (s.duration > 60.0)
     {
-        s.key = key;
-        s.keyFrom = "name";
+        s.kind = s.soundKind = "long";
+        s.sampleClass = s.soundClass = "other";
+        s.classFrom = "sound";
+        return s;
     }
-    else if (s.soundClass != "drums")
+    s.sound = describe (x, count, rate, 0.0);
+    const auto onsets = findOnsets (x, count, rate);
+    const auto name = file.getFileNameWithoutExtension();
+    const auto words = wordsOf (name + " " + file.getParentDirectory().getFileName());
+    const auto namedTempo = tempoFromName (name);
+
+    // A loop or a one-shot: the name says (loop, BPM, one shot), else the sound: onsets over at least half of
+    // a second and a half or more.
+    // Only onsets where the level really rises (by 3 dB over the 50 ms before) to within 20 dB of the peak count:
+    // a crash's or a long kick's decaying tail flickers, but does not start again.
+    std::vector<double> strong;
+    {
+        const auto hop = juce::jmax (1, (int)std::round (rate * 0.005));
+        const auto level = levels (x, count, hop, hop * 2);
+        const auto peak = level.empty() ? 0.0 : *std::max_element (level.begin(), level.end());
+        auto at = [&] (double t)
+        { return (size_t)juce::jlimit (0, (int)level.size() - 1, (int)std::round (t * rate / hop)); };
+        for (const auto t : onsets)
+        {
+            double after = 0.0, before = 0.0;
+            for (auto i = at (t); i <= at (t + 0.05); ++i)
+                after = juce::jmax (after, level[i]);
+            int n = 0;
+            for (auto i = at (t - 0.06); i <= at (t - 0.01); ++i, ++n)
+                before += level[i];
+            before /= juce::jmax (1, n);
+            if (after >= 0.1 * peak && (t < 0.06 || after >= 1.4 * before))
+                strong.push_back (t);
+        }
+    }
+    const bool spread = strong.size() >= 4 && strong.back() - strong.front() >= 0.5 * s.duration;
+    s.soundKind = s.duration >= 1.5 && spread ? "loop" : "one-shot";
+    const bool namedLoop = matches (words, { "loop" }) || namedTempo > 0.0;
+    const bool namedOneShot = matches (words, { "oneshot" }) || (words.contains ("one") && words.contains ("shot")) ||
+                              (words.contains ("one") && words.contains ("shots"));
+    s.kind = namedLoop && s.duration >= 1.0 ? "loop" : namedOneShot ? "one-shot" : s.soundKind;
+
+    // What the sound alone says of its class, tempo and key, whatever the name (kept to check the guesses).
+    s.soundClass = s.kind == "loop" ? loopClassOf (x, count, rate, onsets, s.sound)
+                                    : classifyHit (s.sound, measureHit (x, count, rate));
+    if (s.kind == "loop")
+        s.soundTempo = loopTempoOf (x, count, rate, s.duration, s.soundTempoFrom);
+    // A key for what has notes: a loop that is not drums, a one-shot that is a note or a chord (bass, other).
+    const bool hasNotes =
+        s.kind == "loop" ? s.soundClass != "drums" : s.soundClass == "bass" || s.soundClass == "other";
+    if (hasNotes && s.sound.noisiness < 0.35 && s.duration >= 0.3)
     {
         const auto c = chroma (x, count, rate, 0.0, juce::jmin (s.duration, 30.0));
         double fit = 0.0;
         const auto heardKey = keyOf (c, &fit);
-        const auto most = *std::max_element (c.begin(), c.end());
-        if (fit >= 0.55 && most >= 1.6 / 12.0)
-        {
-            s.key = heardKey;
-            s.keyFrom = "sound";
-        }
+        if (fit >= 0.55 && *std::max_element (c.begin(), c.end()) >= 1.6 / 12.0)
+            s.soundKey = heardKey;
     }
+
+    // The name first, as for presets.
+    if (s.kind == "loop")
+    {
+        juce::String named;
+        if (matches (words, { "drum", "beat", "perc", "kick", "snare", "hat", "break", "groove", "top", "bongo" }))
+            named = "drums";
+        else if (matches (words, { "bass", "808" }, { "sub" }))
+            named = "bass";
+        else if (matches (words, { "chord", "key", "piano", "synth", "guitar", "melod", "lead", "pad", "arp", "string",
+                                   "vocal", "vox", "pluck", "zither", "mal" }))
+            named = "melodic";
+        s.sampleClass = named.isNotEmpty() ? named : s.soundClass;
+        s.classFrom = named.isNotEmpty() ? "name" : "sound";
+        s.tempo = namedTempo > 0.0 ? namedTempo : s.soundTempo;
+        s.tempoFrom = namedTempo > 0.0 ? juce::String ("name") : s.soundTempoFrom;
+        if (s.tempo > 0.0)
+            s.bars = std::round (s.duration * s.tempo / 240.0 * 100.0) / 100.0;
+    }
+    else
+    {
+        const auto named = classFromName (file);
+        s.sampleClass = named.isNotEmpty() ? named : s.soundClass;
+        s.classFrom = named.isNotEmpty() ? "name" : "sound";
+    }
+    const auto namedKey = keyFromName (name);
+    s.key = namedKey.isNotEmpty() ? namedKey : s.soundKey;
+    s.keyFrom = namedKey.isNotEmpty() ? juce::String ("name") : s.soundKey.isNotEmpty() ? "sound" : "";
     return s;
 }
 
@@ -1154,6 +1211,13 @@ juce::var toVar (const SampleSound& s)
         o->setProperty ("key", s.key);
         o->setProperty ("keyFrom", s.keyFrom);
     }
+    // What the sound alone says, where the name decided.
+    o->setProperty ("soundKind", s.soundKind);
+    if (s.soundTempo > 0.0)
+        o->setProperty ("soundTempo", s.soundTempo);
+    if (s.soundKey.isNotEmpty())
+        o->setProperty ("soundKey", s.soundKey);
+
     return juce::var (o);
 }
 

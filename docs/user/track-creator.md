@@ -131,7 +131,9 @@ For each sound Spinus notes how it starts and fades, how bright it is, whether i
 notes it plays, whether it plays chords, and what it is probably for: **bass, lead, pad, pluck, keys,
 drums** or **fx**. A sample gets a kind (**kick, snare, clap, hat, cymbal, tom, perc, bass** or
 **other**), and a loop its tempo, length in bars and key where Spinus can tell. A preset or file whose name
-says what it is ("Deep Sub Bass", a "Kicks" folder) is taken at its word.
+says what it is ("Deep Sub Bass", a "Kicks" folder, "128 BPM", "D#min") is taken at its word. Files that are
+not audio (MIDI files, project files, text, zip archives) are left out; an audio file named with the wrong
+extension (an AIFF called .wav) is still read.
 
 - It runs **in the background**, so you can keep working; the line under **Sounds you have** shows how far
   it is. **Stop** stops it: what was done is kept, and the next update carries on from there.

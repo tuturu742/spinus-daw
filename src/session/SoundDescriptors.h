@@ -162,6 +162,9 @@ struct SampleSound
     double tempo = 0, bars = 0;         // a loop (0: not found)
     juce::String tempoFrom;             // "name", "length" (whole bars at the onsets' tempo) or "onsets"
     juce::String key, keyFrom;          // "A minor"; "name" or "sound"
+    // What the sound alone says (the name, when it says, decides the above).
+    juce::String soundKind, soundTempoFrom, soundKey;
+    double soundTempo = 0;
 };
 
 /** `mono` at `rate`; the file's name (and its folder's) can name the class, tempo and key. */

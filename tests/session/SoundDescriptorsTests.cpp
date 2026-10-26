@@ -28,6 +28,8 @@ Descriptors describeBuffer (const juce::AudioBuffer<float>& b, double held)
     return describe (b.getReadPointer (0), b.getNumSamples(), rate, held);
 }
 
+std::mt19937 seeded (unsigned seed) { return std::mt19937 (seed); }
+
 /** A file name for the name-reading code (nothing is written there). */
 juce::File fileAt (const juce::String& path)
 {
@@ -433,6 +435,26 @@ TEST_CASE ("Samples: synthetic drums are classified by their sound", "[sounds]")
     const auto info = describeSample (kick(), rate, fileAt ("samples/a1.wav"));
     CHECK (info.kind == "one-shot");
     CHECK (info.classFrom == "sound");
+}
+
+TEST_CASE ("Samples: a long crash whose tail flickers is one sample, not a loop", "[sounds]")
+{
+    // Eight seconds of noise dying away, with the small random swells a real cymbal's tail has.
+    auto random = seeded (3); // the same tail every run
+    std::uniform_real_distribution<double> wobble (0.7, 1.3);
+    double g = 1.0;
+    int at = 0;
+    auto crash = noise (8.0, 3000.0, 0.0,
+                        [&] (double t)
+                        {
+                            if (++at % 2400 == 0)
+                                g = wobble (random);
+                            return 1.2 * g * std::exp (-t / 1.2);
+                        });
+    const auto info = describeSample (crash, rate, fileAt ("p/x/c.wav"));
+    CHECK (info.kind == "one-shot");
+    CHECK (info.soundKind == "one-shot");
+    CHECK (info.soundClass == "cymbal");
 }
 
 TEST_CASE ("Samples: names and folders name the class", "[sounds]")

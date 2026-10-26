@@ -202,8 +202,15 @@ int runSamples (const juce::var& request, Lines& out)
             auto* o = new juce::DynamicObject();
             juce::var sample (o);
             std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
-            if (reader == nullptr || reader->sampleRate <= 0.0 || reader->lengthInSamples <= 0)
+            // A file whose extension is not its format (AIFF named .wav, WAV named .mp3, as some packs have):
+            // every format is tried on its contents.
+            if (reader == nullptr)
+                if (auto in = file.createInputStream())
+                    reader.reset (formats.createReaderFor (std::move (in)));
+            if (reader == nullptr || reader->sampleRate <= 0.0)
                 o->setProperty ("problem", "Spinus cannot read it.");
+            else if (reader->lengthInSamples <= 0)
+                o->setProperty ("problem", "It holds no sound.");
             else
             {
                 // At most a minute and a bit is read: anything longer is a song, not a sample.

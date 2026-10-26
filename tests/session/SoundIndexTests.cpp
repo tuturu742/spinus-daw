@@ -3,11 +3,13 @@
 
 #include "dsp/threeosc/ThreeOscPresets.h"
 #include "session/SoundDescriptors.h"
+#include "session/ProgramFolder.h"
 #include "session/SoundIndex.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
 #include <cmath>
+#include <iostream>
 #include <random>
 
 using namespace spinus;
@@ -245,6 +247,19 @@ TEST_CASE ("Sound index: Spinus's 3x Osc, a CLAP synth and a sample folder, in t
     writeHat (pack.getChildFile ("a2.wav"));
     writeBass (pack.getChildFile ("Basses/b1.wav"));
     pack.getChildFile ("broken.wav").replaceWithText ("RIFF, but not really a WAV file");
+    {
+        // An AIFF file named .wav (some packs have them): read by its contents.
+        juce::AudioBuffer<float> b (1, 22050);
+        for (int i = 0; i < b.getNumSamples(); ++i)
+            b.setSample (0, i, (float)(0.5 * std::sin (2 * pi * 55.0 * i / 44100.0) * std::exp (-i / 8000.0)));
+        std::unique_ptr<juce::OutputStream> stream =
+            std::make_unique<juce::FileOutputStream> (pack.getChildFile ("aiff inside.wav"));
+        auto writer = juce::AiffAudioFormat().createWriterFor (
+            stream, juce::AudioFormatWriterOptions().withSampleRate (44100).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        writer->writeFromAudioSampleBuffer (b, 0, b.getNumSamples());
+    }
+    writeWav (pack.getChildFile ("empty.wav"), [] (double) { return 0.0; }, 0.0); // a header, no sound
 
     SoundIndex index (temp.folder.getChildFile ("index"));
     const std::vector<SoundSource> sources { threeOsc(), testSynth() };
@@ -290,7 +305,7 @@ TEST_CASE ("Sound index: Spinus's 3x Osc, a CLAP synth and a sample folder, in t
     CHECK ((*findSound (synth, "Dark Square"))["role"].toString() == "bass");
 
     // The samples (the broken file noted, not fatal).
-    REQUIRE (index.samples.size() == 4);
+    REQUIRE (index.samples.size() == 6);
     std::map<juce::String, juce::var> byName;
     for (const auto& s : index.samples)
         byName[juce::File (s.path).getFileName()] = s.info;
@@ -298,16 +313,18 @@ TEST_CASE ("Sound index: Spinus's 3x Osc, a CLAP synth and a sample folder, in t
     CHECK (byName["a2.wav"]["class"].toString() == "hat");
     CHECK (byName["b1.wav"]["class"].toString() == "bass");
     CHECK (byName["broken.wav"].hasProperty ("problem"));
+    CHECK (byName["empty.wav"]["problem"].toString() == "It holds no sound.");
+    CHECK (byName["aiff inside.wav"]["kind"].toString() == "one-shot");
     const auto summary = index.summarize();
     CHECK (summary.instruments == 2);
-    CHECK (summary.samples == 3);
+    CHECK (summary.samples == 4);
 
     // Kept on disk.
     SoundIndex kept (temp.folder.getChildFile ("index"));
     kept.load();
     CHECK (kept.instruments.size() == 2);
-    CHECK (kept.samples.size() == 4);
-    CHECK (kept.rows().size() == (size_t)(osc.sounds.size() + 6 + 4));
+    CHECK (kept.samples.size() == 6);
+    CHECK (kept.rows().size() == (size_t)(osc.sounds.size() + 6 + 6));
 
     // Nothing changed: nothing is measured again.
     result = SoundIndexer::update (kept, helperOptions(), sources, { pack }, {}, {});
@@ -332,7 +349,7 @@ TEST_CASE ("Sound index: Spinus's 3x Osc, a CLAP synth and a sample folder, in t
     byName.clear();
     for (const auto& s : kept.samples)
         byName[juce::File (s.path).getFileName()] = s.info;
-    CHECK (byName.size() == 4);
+    CHECK (byName.size() == 6);
     CHECK (byName["a1.wav"]["class"].toString() == "hat");
     CHECK (byName["a3.wav"]["class"].toString() == "kick");
 }
@@ -416,3 +433,33 @@ TEST_CASE ("Sound index: the background indexer reports on the message thread", 
     CHECK_FALSE (SoundIndexer::isAnyRunning());
 }
 #endif
+
+//==============================================================================
+/** The sample index on the folders of the Browser's sample list (sample-folders.txt in the settings folder of
+    the HOME it runs with), timed, then updated again with nothing changed. The index goes to that HOME's
+    settings too. Never writes in the sample folders. Run by hand: spinus_tests "[.realsamples]". */
+TEST_CASE ("Sound index on the Browser's real sample folders", "[.realsamples]")
+{
+    juce::Array<juce::File> folders;
+    for (const auto& line :
+         juce::StringArray::fromLines (getSettingsFolder().getChildFile ("sample-folders.txt").loadFileAsString()))
+        if (line.trim().isNotEmpty())
+            folders.add (juce::File (line.trim()));
+    if (folders.isEmpty())
+        SKIP ("no sample folders in " + getSettingsFolder().getFullPathName().toStdString());
+    SoundIndex index (SoundIndex::getDefaultFolder());
+    index.load();
+    auto options = helperOptions();
+    options.soundTimeoutMs = 30000;
+    options.loadTimeoutMs = 60000;
+    auto started = juce::Time::getMillisecondCounterHiRes();
+    auto result = SoundIndexer::update (index, options, {}, folders, {}, {});
+    const auto first = (juce::Time::getMillisecondCounterHiRes() - started) / 1000.0;
+    started = juce::Time::getMillisecondCounterHiRes();
+    const auto again = SoundIndexer::update (index, options, {}, folders, {}, {});
+    const auto second = (juce::Time::getMillisecondCounterHiRes() - started) / 1000.0;
+    std::cout << "measured " << result.samplesMeasured << " samples (" << result.problems << " problems) in " << first
+              << " s; nothing changed: " << again.samplesMeasured << " measured in " << second << " s; index "
+              << index.getFolder().getFullPathName() << "\n";
+    CHECK (again.samplesMeasured == 0);
+}
