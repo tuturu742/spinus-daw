@@ -3,6 +3,7 @@
 #include "core/FileDialog.h"
 #include "Workspace.h"
 #include "ai/AiService.h"
+#include "session/AnalysisLibrary.h"
 #include "session/Session.h"
 #include "session/PresetPreviews.h"
 #include "session/StemSamples.h"
@@ -75,6 +76,20 @@ public:
     /** "lead-vocal" -> "lead vocals", "hh" -> "hi-hat": a stem's name as the window shows it. */
     static juce::String stemDisplayName (const juce::String& stem);
     void cancel();
+
+    /** The analysis library (shared with the Track creator; none without the AI service). What the Analyzer
+        finds goes there: tempo, key, stems (as FLAC) and notes, by the song's contents. */
+    AnalysisLibrary getLibrary() const;
+    /** Opens the library's window (its songs, the space they take, deleting). */
+    void showLibrary();
+    /** The song was analyzed before (the library has its tempo, key or stems): analyze() stops once the song
+        is prepared, and offers to continue from it or to analyze it anew. */
+    bool hasEarlierAnalysis() const;
+    /** Continues from the earlier analysis: its tempo, key and kept stems (no separating again), and later the
+        notes found before. What is missing is found as usual. */
+    bool continueFromEarlier();
+    /** Analyzes the song again from the start, replacing what was kept (its notes are found again too). */
+    bool analyzeAnew();
     bool useTempo();
     bool useKey();
     /** Puts these stems on Playlist tracks of their own, as audio. One undo step. */
@@ -312,6 +327,11 @@ private:
     bool replicates (const juce::String& stem) const;
     static Sounds soundFor (const Source&, Way);
     void findKey();
+    void applyTempo (const juce::var& result);
+    void applyKey (const juce::var& result);
+    /** Uses a separation's stems kept in the library (decoded into the cache folder), then `then`. */
+    void useKeptStems (const juce::String& model, const std::function<void()>& then);
+    void showStems (const juce::String& model);
     void fail (const juce::String& message);
     void setStep (Step, const juce::String& message = {});
     void updateButtons();
@@ -323,6 +343,11 @@ private:
 
     Step step = Step::idle;
     juce::File song, prepared;
+    juce::String songDigest;                  // its contents' SHA-256: its name in the analysis library
+    juce::var earlier;                        // what the library had of it (void when analyzed anew)
+    bool choosing = false;                    // asking whether to continue from the earlier analysis
+    juce::String stemsModel;                  // the separation model of `stems`
+    std::unique_ptr<BackgroundTask> stemTask; // keeping or restoring stems
     std::unique_ptr<Decoder> decoder;
     juce::String job, beatModel;
     std::vector<juce::String> missingModels;
@@ -372,7 +397,8 @@ private:
         useKeyButton { "Use for the song" }, separateButton { "Separate" }, downloadButton { "Download" },
         sourcesButton { "Sources and licences..." }, addButton { "Add to the project" },
         engineButton { "Set up the analysis engine..." }, cancelButton { "Cancel" },
-        drumFolderButton { "Drum samples..." };
+        drumFolderButton { "Drum samples..." }, continueButton { "Continue from the existing analysis" },
+        anewButton { "Analyze anew" }, libraryButton { "Saved analyses..." };
     juce::ComboBox stemCount;
     juce::Viewport stemsView;
     juce::Component stemRows; // the stems' rows, scrolled by stemsView

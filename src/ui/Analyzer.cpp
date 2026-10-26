@@ -1,4 +1,5 @@
 #include "Analyzer.h"
+#include "AnalysisLibraryView.h"
 #include "ai/AnalysisJobs.h"
 #include "project/AudioImport.h"
 
@@ -225,13 +226,21 @@ Analyzer::Analyzer (Session& s, ai::AiService* a) : Panel ("analyzer", "Analyzer
             onSetUpEngine();
     };
     cancelButton.onClick = [this] { cancel(); };
+    continueButton.setTooltip ("Use the tempo, key and stems found when this song was analyzed before");
+    continueButton.onClick = [this] { continueFromEarlier(); };
+    anewButton.setTooltip ("Analyze the song again from the start");
+    anewButton.onClick = [this] { analyzeAnew(); };
+    libraryButton.setTooltip ("The songs Spinus has analyzed (here and in the Track creator), the space they take, "
+                              "and deleting them");
+    libraryButton.onClick = [this] { showLibrary(); };
 
     for (auto* c : std::initializer_list<juce::Component*> {
              &intro, &songText, &status, &tempoLabel, &tempoText, &keyLabel, &keyText, &stemsLabel, &stemsText, &notice,
-             &chooseButton, &useTempoButton, &useKeyButton, &separateButton, &stemCount, &sourcesButton })
+             &chooseButton, &useTempoButton, &useKeyButton, &separateButton, &stemCount, &sourcesButton,
+             &libraryButton })
         addAndMakeVisible (c);
     for (auto* c : std::initializer_list<juce::Component*> { &needsText, &downloadButton, &engineButton, &bar,
-                                                             &cancelButton, &addButton })
+                                                             &cancelButton, &addButton, &continueButton, &anewButton })
         addChildComponent (c);
     // The stems' rows scroll: separating into many instruments can give a dozen or more.
     stemRows.addChildComponent (drumFolderButton);
@@ -249,6 +258,7 @@ Analyzer::~Analyzer()
 {
     session.getDeviceList().removeChangeListener (this);
     *alive = false;
+    stemTask = nullptr;
     decoder = nullptr;
     if (service != nullptr && listener != 0)
         service->removeListener (listener);
@@ -322,7 +332,13 @@ bool Analyzer::analyze (const juce::File& file)
     songText.setText (file.getFileName(), juce::dontSendNotification);
 
     // Named by the song's contents, so a song analyzed before is not decoded again.
-    prepared = preparedSongFile (getCacheFolder(), file, contentDigest (file));
+    songDigest = contentDigest (file);
+    prepared = preparedSongFile (getCacheFolder(), file, songDigest);
+    stemsModel.clear();
+    choosing = false;
+    earlier = getLibrary().read (songDigest);
+    if (! earlier["rhythm"].isObject() && ! earlier["key"].isObject() && getLibrary().stemModels (songDigest).isEmpty())
+        earlier = juce::var();
     setStep (Step::preparing, "Preparing the song...");
     progress = 0.0;
     decoder = std::make_unique<Decoder> (*this, file, prepared);
@@ -337,7 +353,115 @@ void Analyzer::handleAsyncUpdate()
     decoder = nullptr;
     if (result.failed())
         return fail (result.getErrorMessage());
+    if (earlier.isObject())
+    {
+        // Analyzed before: continue from it, or anew.
+        juce::StringArray what;
+        if (earlier["rhythm"].isObject())
+            what.add ("tempo");
+        if (earlier["key"].isObject())
+            what.add ("key");
+        for (const auto& model : getLibrary().stemModels (songDigest))
+            what.add (model == "htdemucs_6s" ? "6 stems" : model == "mvsep_mega_53" ? "many instruments" : "4 stems");
+        choosing = true;
+        setStep (Step::idle, "Spinus analyzed this song before (" + what.joinIntoString (", ") +
+                                 "). Continue from that, or analyze it anew?");
+        return;
+    }
     checkReady ([this] { findTempo(); });
+}
+
+AnalysisLibrary Analyzer::getLibrary() const
+{
+    return AnalysisLibrary::inAiFolder (service != nullptr ? service->getFolder() : juce::File());
+}
+
+void Analyzer::showLibrary() { AnalysisLibraryView::show (getLibrary(), this); }
+
+bool Analyzer::hasEarlierAnalysis() const { return choosing && earlier.isObject(); }
+
+bool Analyzer::continueFromEarlier()
+{
+    if (! hasEarlierAnalysis() || isBusy())
+        return false;
+    choosing = false;
+    if (earlier["rhythm"].isObject())
+        applyTempo (earlier["rhythm"]);
+    if (earlier["key"].isObject())
+        applyKey (earlier["key"]);
+    // What is still missing is found as usual (it needs the AI service).
+    auto rest = [this]
+    {
+        if (! rhythm && beatTimes.empty() && ! earlier["rhythm"].isObject())
+            return checkReady ([this] { findTempo(); });
+        if (! key)
+            return checkReady ([this] { findKey(); });
+        setStep (Step::done, stems.empty() ? "Continued from the earlier analysis. Split it into stems to hear and "
+                                             "learn its parts."
+                                           : "Continued from the earlier analysis. Choose what to do with each stem "
+                                             "below, then click Add to the project.");
+    };
+    // The stems of the separation the Stems box names, or else any kept.
+    const auto models = getLibrary().stemModels (songDigest);
+    auto model = separationModel (stemCount.getSelectedId());
+    if (! models.contains (model) && ! models.isEmpty())
+        model = models[0];
+    if (! models.contains (model))
+        return rest(), true;
+    stemCount.setSelectedId (model == "mvsep_mega_53" ? manyInstruments
+                             : model == "htdemucs_6s" ? 6
+                                                      : 4,
+                             juce::dontSendNotification);
+    useKeptStems (model, rest);
+    return true;
+}
+
+bool Analyzer::analyzeAnew()
+{
+    if (! hasEarlierAnalysis() || isBusy())
+        return false;
+    choosing = false;
+    // The notes found before belong to the stems found before: found again with the new ones.
+    getLibrary().update (songDigest, song.getFileName(),
+                         [] (juce::DynamicObject& o)
+                         {
+                             o.removeProperty ("notes");
+                             o.removeProperty ("drums");
+                         });
+    earlier = juce::var();
+    setStep (Step::tempo);
+    checkReady ([this] { findTempo(); });
+    return true;
+}
+
+void Analyzer::useKeptStems (const juce::String& model, const std::function<void()>& then)
+{
+    setStep (Step::separating, "Using the stems kept before...");
+    auto restored = std::make_shared<std::map<juce::String, juce::File>>();
+    stemTask = std::make_unique<BackgroundTask> (
+        "Spinus analyzer stems",
+        [library = getLibrary(), digest = songDigest, folder = getCacheFolder().getChildFile ("kept-stems"), model,
+         restored] (const std::function<bool()>& stop)
+        { return library.restoreStems (digest, model, folder, *restored, stop); },
+        [this, restored, model, then] (const juce::Result& result)
+        {
+            stemTask = nullptr;
+            if (result.failed() || restored->empty())
+                return fail ("The stems kept before cannot be used: " + result.getErrorMessage());
+            stems = *restored;
+            showStems (model);
+            then();
+        });
+}
+
+void Analyzer::showStems (const juce::String& model)
+{
+    stemsModel = model;
+    juce::StringArray names;
+    for (const auto& [name, file] : stems)
+        names.add (name);
+    stemsText.setText (names.joinIntoString (", "), juce::dontSendNotification);
+    updateNoteChoices();
 }
 
 /** AI on, the analysis engine installed and the models downloaded; otherwise says what is missing. */
@@ -562,22 +686,28 @@ void Analyzer::findTempo()
             "Finding the beat",
             [this] (const juce::var& result)
             {
-                beatTimes.clear();
-                if (auto* list = result["beats"].getArray())
-                    for (auto& b : *list)
-                        beatTimes.push_back ((double)b);
-                if (! result["tempo"].isVoid())
-                {
-                    rhythm = Rhythm { (double)result["tempo"], (double)result["firstDownbeat"],
-                                      juce::jmax (1, (int)result["beatsPerBar"]) };
-                    tempoText.setText (juce::String (rhythm->tempo, 1) + " BPM, " + juce::String (rhythm->beatsPerBar) +
-                                           " beats per bar",
-                                       juce::dontSendNotification);
-                }
-                else
-                    tempoText.setText ("No steady beat found.", juce::dontSendNotification);
+                getLibrary().set (songDigest, song.getFileName(), "rhythm", result);
+                applyTempo (result);
                 findKey();
             });
+}
+
+void Analyzer::applyTempo (const juce::var& result)
+{
+    beatTimes.clear();
+    if (auto* list = result["beats"].getArray())
+        for (auto& b : *list)
+            beatTimes.push_back ((double)b);
+    if (! result["tempo"].isVoid())
+    {
+        rhythm = Rhythm { (double)result["tempo"], (double)result["firstDownbeat"],
+                          juce::jmax (1, (int)result["beatsPerBar"]) };
+        tempoText.setText (juce::String (rhythm->tempo, 1) + " BPM, " + juce::String (rhythm->beatsPerBar) +
+                               " beats per bar",
+                           juce::dontSendNotification);
+    }
+    else
+        tempoText.setText ("No steady beat found.", juce::dontSendNotification);
 }
 
 void Analyzer::findKey()
@@ -586,15 +716,20 @@ void Analyzer::findKey()
     runJob ("ai.v1.analyze.key", object ({ { "file", prepared.getFullPathName() } }), "Finding the key",
             [this] (const juce::var& result)
             {
-                key = model::Key { (int)result["tonic"], result["scale"].toString() };
-                const auto confidence = (double)result["confidence"];
-                keyText.setText (result["name"].toString() + (confidence < 0.3
-                                                                  ? juce::String (" (not sure; also maybe ") +
-                                                                        result["others"][0]["name"].toString() + ")"
-                                                                  : juce::String()),
-                                 juce::dontSendNotification);
+                getLibrary().set (songDigest, song.getFileName(), "key", result);
+                applyKey (result);
                 setStep (Step::done, "Done. Split it into stems to hear and learn its parts.");
             });
+}
+
+void Analyzer::applyKey (const juce::var& result)
+{
+    key = model::Key { (int)result["tonic"], result["scale"].toString() };
+    const auto confidence = (double)result["confidence"];
+    keyText.setText (result["name"].toString() + (confidence < 0.3 ? juce::String (" (not sure; also maybe ") +
+                                                                         result["others"][0]["name"].toString() + ")"
+                                                                   : juce::String()),
+                     juce::dontSendNotification);
 }
 
 juce::String Analyzer::stemDisplayName (const juce::String& stem)
@@ -619,6 +754,17 @@ bool Analyzer::separate (int count)
     const auto model = separationModel (count);
     stemCount.setSelectedId (count, juce::dontSendNotification); // what the window then says it needs
     resume = [this] { separate (stemCount.getSelectedId()); };
+    // Separated with this model before (here or in the Track creator): those stems, kept in the library.
+    if (earlier.isObject() && ! getLibrary().findStems (songDigest, model).empty())
+    {
+        useKeptStems (model,
+                      [this]
+                      {
+                          setStep (Step::done, "Separated before. Choose what to do with each stem below, then click "
+                                               "Add to the project.");
+                      });
+        return true;
+    }
     setStep (Step::separating, "Separating...");
     checkReady (
         [this, model]
@@ -631,18 +777,24 @@ bool Analyzer::separate (int count)
                               { "cacheFolder", getCacheFolder().getFullPathName() },
                               { "quiet", session.isPlaying() } }),
                     "Separating",
-                    [this] (const juce::var& result)
+                    [this, model] (const juce::var& result)
                     {
                         stems.clear();
-                        juce::StringArray names;
                         if (auto* o = result["stems"].getDynamicObject())
                             for (auto& property : o->getProperties())
-                            {
                                 stems[property.name.toString()] = juce::File (property.value.toString());
-                                names.add (property.name.toString());
-                            }
-                        stemsText.setText (names.joinIntoString (", "), juce::dontSendNotification);
-                        updateNoteChoices();
+                        showStems (model);
+                        // Kept in the library as FLAC (in the background), for the next time and the Track creator.
+                        if (getLibrary().isAvailable() && songDigest.isNotEmpty())
+                        {
+                            earlier = getLibrary().read (songDigest);
+                            stemTask = std::make_unique<BackgroundTask> (
+                                "Spinus analyzer stems",
+                                [library = getLibrary(), digest = songDigest, model,
+                                 kept = stems] (const std::function<bool()>& stop)
+                                { return library.keepStems (digest, model, kept, stop); },
+                                [] (const juce::Result&) {});
+                        }
                         setStep (Step::done, "Separated. Choose what to do with each stem below, then click "
                                              "Add to the project.");
                     });
@@ -1231,19 +1383,36 @@ void Analyzer::transcribeNext()
     juce::Array<juce::var> beats;
     for (auto b : beatTimes)
         beats.add (b);
-    const auto* method = soundOf (name) == Sounds::song ? "ai.v1.samples.make"
-                         : name == "drums"              ? "ai.v1.transcribe.drums"
-                                                        : "ai.v1.transcribe.notes";
-    runJob (method,
-            object ({ { "file", stems[name].getFullPathName() },
-                      { "drums", name == "drums" },
-                      { "beats", beats },
-                      { "firstDownbeat", rhythm ? rhythm->firstDownbeat : 0.0 },
-                      { "beatsPerBar", rhythm ? rhythm->beatsPerBar : 4 },
-                      { "cacheFolder", getCacheFolder().getFullPathName() } }),
-            soundOf (name) == Sounds::song ? "Cutting samples" : "Listening for notes",
-            [this, name] (const juce::var& result)
+    const bool ownSounds = soundOf (name) == Sounds::song;
+    const auto* method = ownSounds         ? "ai.v1.samples.make"
+                         : name == "drums" ? "ai.v1.transcribe.drums"
+                                           : "ai.v1.transcribe.notes";
+    auto params = object ({ { "file", stems[name].getFullPathName() },
+                            { "drums", name == "drums" },
+                            { "beats", beats },
+                            { "firstDownbeat", rhythm ? rhythm->firstDownbeat : 0.0 },
+                            { "beatsPerBar", rhythm ? rhythm->beatsPerBar : 4 },
+                            { "cacheFolder", getCacheFolder().getFullPathName() } });
+    // Found before in these stems (the library keeps them by separation): not listened for again.
+    const auto notesKey = stemsModel + "/" + name;
+    if (! ownSounds && stemsModel.isNotEmpty())
+    {
+        const auto entry = getLibrary().read (songDigest);
+        if (const auto& hits = entry["drums"][juce::Identifier (stemsModel)]; name == "drums" && hits.isArray())
+            params.getDynamicObject()->setProperty ("hits", hits);
+        if (const auto& known = entry["notes"][juce::Identifier (notesKey)]; name != "drums" && known.isArray())
+            params.getDynamicObject()->setProperty ("known", known);
+    }
+    runJob (method, params, ownSounds ? "Cutting samples" : "Listening for notes",
+            [this, name, ownSounds, notesKey] (const juce::var& result)
             {
+                if (! ownSounds && stemsModel.isNotEmpty())
+                {
+                    if (name == "drums" && result["hits"].isArray())
+                        getLibrary().setIn (songDigest, song.getFileName(), "drums", stemsModel, result["hits"]);
+                    else if (name != "drums" && result["seconds"].isArray())
+                        getLibrary().setIn (songDigest, song.getFileName(), "notes", notesKey, result["seconds"]);
+                }
                 if (auto* list = result["samples"].getArray())
                 {
                     auto& cut = pieces[name];
@@ -1792,6 +1961,11 @@ bool Analyzer::addNotesToProject()
 
 void Analyzer::cancel()
 {
+    if (stemTask != nullptr && step == Step::separating)
+    {
+        stemTask = nullptr;
+        return fail ("Stopped.");
+    }
     if (step == Step::preparing)
     {
         decoder = nullptr;
@@ -1954,6 +2128,8 @@ void Analyzer::updateButtons()
                                  drums->second.chosenWay() == Way::closestPreset);
     drumFolderButton.setEnabled (! isBusy());
     chooseButton.setEnabled (! isBusy());
+    continueButton.setVisible (hasEarlierAnalysis() && ! isBusy());
+    anewButton.setVisible (continueButton.isVisible());
     downloadButton.setEnabled (! isBusy());
     bar.setVisible (isBusy());
     cancelButton.setVisible (isBusy() && step != Step::downloading);
@@ -2002,8 +2178,18 @@ void Analyzer::resized()
     auto top = area.removeFromTop (28);
     chooseButton.setBounds (top.removeFromLeft (140));
     top.removeFromLeft (8);
+    libraryButton.setBounds (top.removeFromRight (140));
+    top.removeFromRight (8);
     songText.setBounds (top);
     area.removeFromTop (6);
+    if (continueButton.isVisible())
+    {
+        auto r = area.removeFromTop (28);
+        continueButton.setBounds (r.removeFromLeft (260).reduced (0, 1));
+        r.removeFromLeft (8);
+        anewButton.setBounds (r.removeFromLeft (140).reduced (0, 1));
+        area.removeFromTop (6);
+    }
 
     if (needsText.isVisible())
     {

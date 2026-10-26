@@ -236,3 +236,32 @@ async def test_the_service_measures_each_song_once_then_summarizes(tmp_path: Pat
     with pytest.raises(RpcError, match="list of songs"):
         await service.handle("ai.v1.style.summarize", {"songs": []}, None)  # type: ignore[arg-type]
     await service.close()
+
+
+async def test_notes_and_drum_hits_kept_from_before_are_only_placed(tmp_path: Path) -> None:
+    # Spinus's analysis library keeps what Basic Pitch and the drum recogniser found: given back, neither
+    # runs again (Basic Pitch's model is not even downloaded here, nor the recogniser trained).
+    from test_listening import write_wav
+    from test_stems import collect, service_with_fake_engine
+
+    service = service_with_fake_engine(tmp_path, [])
+    beats = [0.5 * i for i in range(9)]
+    known = [{"start": 0.0, "end": 0.45, "pitch": 45, "velocity": 0.8}, {"start": 1.0, "end": 1.4, "pitch": 48,
+                                                                          "velocity": 0.7}]  # fmt: skip
+    done, updates = await collect(
+        service, "ai.v1.transcribe.notes", {"known": known, "beats": beats, "firstDownbeat": 0.0}
+    )
+    assert done["kind"] == "done", done
+    assert [(n["start"], n["pitch"]) for n in done["result"]["notes"]] == [(0, 45), (1920, 48)]
+    assert done["result"]["seconds"] == known
+
+    stem = write_wav(tmp_path / "drums.wav", chord_audio((36,), 4.0, 0.3), RATE)
+    hits = [{"time": 0.0, "kind": "kick", "pad": 60, "velocity": 1.0},
+            {"time": 0.5, "kind": "snare", "pad": 62, "velocity": 0.9}]  # fmt: skip
+    params = {"file": str(stem), "hits": hits, "beats": beats, "firstDownbeat": 0.0, "cacheFolder": str(tmp_path / "c")}
+    done, updates = await collect(service, "ai.v1.transcribe.drums", params)
+    assert done["kind"] == "done", done
+    assert not any("Learning" in u.get("step", "") for u in updates)
+    assert [(n["start"], n["pitch"]) for n in done["result"]["notes"]] == [(0, 60), (960, 62)]
+    assert not list((tmp_path / "config" / "cache").glob("drum-recogniser-*"))  # never trained
+    await service.close()

@@ -3,6 +3,7 @@
 #include "core/FileDialog.h"
 #include "Workspace.h"
 #include "ai/AiService.h"
+#include "session/AnalysisLibrary.h"
 #include "session/Session.h"
 #include "MessageLabel.h"
 
@@ -18,14 +19,20 @@ namespace spinus::ui
     down). Each is analyzed in turn with the Analyzer's steps: prepared (decoded to WAV), its beat
     (Beat This!) and key, its loudness (as the automixer measures it), split into 4 stems (Demucs), the
     drums' hits and the other stems' notes (Basic Pitch); then the AI service measures its style
-    (ai.v1.style.summarize: chords per bar, drum steps, parts, sections). What a song gave is kept in
-    the settings folder (ai/cache/track-creator), named by the song's contents, so a song added again is
-    ready at once; the large files (the decoded song, its stems) are made in a temporary folder and
-    deleted after each song. Once all are analyzed, the summary of what the songs share is shown in plain
-    words and can be saved as a JSON file (the input of the Track creator's later steps).
+    (ai.v1.style.summarize: chords per bar, drum steps, parts, sections).
+
+    Everything found goes into the analysis library (AnalysisLibrary, in the settings folder), shared with
+    the Analyzer: a song added again, or analyzed in the Analyzer before, reuses what is there (its tempo,
+    key, stems, notes), and one whose style was measured is ready at once. The decoded song and the stems'
+    WAV files are made in a temporary folder and deleted after each song. Once all are analyzed, the
+    summary of what the songs share is shown in plain words and can be saved as a JSON file (the input of
+    the Track creator's later steps). The list of songs and the last summary are remembered
+    (track-creator.json beside the library); at the next start the songs whose style is known are ready,
+    and the others wait for Analyze again, so starting Spinus never starts the AI service.
 
     Nothing here changes the project. It needs AI turned on, the analysis engine installed and the model
-    files downloaded; it says what is missing and offers to fix it, like the Analyzer.
+    files downloaded (unless the library already has what they would find); it says what is missing and
+    offers to fix it, like the Analyzer.
 
     Message thread only (each song is read and decoded on a thread of its own). */
 class TrackCreator final : public Panel, public juce::FileDragAndDropTarget, private juce::AsyncUpdater
@@ -34,13 +41,15 @@ public:
     TrackCreator (Session&, ai::AiService*);
     ~TrackCreator() override;
 
+    /** The AI service; the first time, the remembered songs come back. */
     void setService (ai::AiService*);
 
     /** Opens Options > AI on the analysis engine page. */
     std::function<void()> onSetUpEngine;
 
-    /** Kept analyses are named with this; change it with spinus_ai.style.FEATURES_VERSION (a test checks
-        they agree), so songs measured by an older Spinus are analyzed again. */
+    /** The version of the measured style kept in the library (its `features`); change it with
+        spinus_ai.style.FEATURES_VERSION (a test checks they agree), so songs measured by an older Spinus are
+        measured again. */
     static constexpr int analysisVersion = 1;
 
     enum class Status
@@ -56,11 +65,12 @@ public:
     {
         juce::File file;
         Status status = Status::waiting;
-        juce::String step;       // what is being done, or the problem
-        double progress = -1.0;  // of the step, 0 to 1 (-1: unknown)
-        bool keptBefore = false; // its analysis was kept from before
-        juce::String digest;     // its contents' SHA-256
-        juce::var features;      // what spinus_ai.style measured (perSong)
+        juce::String step;                  // what is being done, or the problem
+        double progress = -1.0;             // of the step, 0 to 1 (-1: unknown)
+        bool keptBefore = false;            // its style was in the library already
+        juce::String digest;                // its contents' SHA-256
+        juce::int64 size = 0, modified = 0; // the file when its digest was read (remembered with it)
+        juce::var features;                 // what spinus_ai.style measured (perSong)
     };
 
     //==============================================================================
@@ -80,6 +90,8 @@ public:
     void downloadModels();
     /** Writes the summary as JSON. False if there is none or it cannot be written. */
     bool saveSummary (const juce::File&) const;
+    /** Opens the window of the analysis library (its songs, the space they take, deleting). */
+    void showLibrary();
 
     const std::vector<Reference>& getReferences() const noexcept { return references; }
     /** The text of a song's row: its name, then how it is going ("Done", "Finding the beat... 40 %"). */
@@ -91,9 +103,13 @@ public:
     juce::String getStatusText() const { return status.getText(); }
     juce::String getNeedsText() const { return needsText.getText(); }
     juce::int64 getDownloadSize() const noexcept { return downloadSize; }
+    /** The AI steps run for the songs so far (tests: what the library saved). */
+    const juce::StringArray& getMethodsRun() const noexcept { return methodsRun; }
 
-    /** Where each song's analysis is kept: the AI service's folder, cache/track-creator. */
-    juce::File getKeptFolder() const;
+    /** The analysis library (none without the AI service). */
+    AnalysisLibrary getLibrary() const;
+    /** Where the list of songs and the last summary are remembered. */
+    juce::File getListFile() const;
     /** Where a song's large files are made while it is analyzed (a temporary folder, deleted after). */
     juce::File getWorkFolder (const juce::String& digest) const;
 
@@ -115,10 +131,12 @@ private:
     void checkReady (const std::function<void()>& then);
     void runStep (const juce::String& method, const juce::var& params, const juce::String& words,
                   const std::function<void (const juce::var&)>& done);
+    void runTask (const juce::String& words, BackgroundTask::Work, const std::function<void()>& then);
     void findTempo();
     void findKey();
     void measureLoudness();
     void separate();
+    void keepStems();
     void transcribeNext();
     void measureStyle();
     void finishSong (const juce::var& features, bool keptBefore);
@@ -131,6 +149,8 @@ private:
     void updateButtons();
     juce::StringArray neededModels() const;
     Reference* currentReference();
+    void remember() const;
+    void recall();
 
     Session& session;
     ai::AiService* service = nullptr;
@@ -140,6 +160,7 @@ private:
     std::vector<Reference> references;
     int current = -1; // the song being analyzed
     std::unique_ptr<Preparer> preparer;
+    std::unique_ptr<BackgroundTask> task; // keeping or restoring the current song's stems
     std::unique_ptr<Work> work;
     juce::String job; // the AI service's job for the current step
     juce::String beatModel;
@@ -150,17 +171,18 @@ private:
     };
     std::vector<Missing> missing;
     juce::int64 downloadSize = 0;
-    bool downloading = false, summarizing = false;
+    bool downloading = false, summarizing = false, recalled = false;
     juce::String summarized; // the songs (digests) the summary is of
     juce::var summary;
     juce::File workRoot;
+    juce::StringArray methodsRun;
 
     juce::Label intro;
     MessageLabel status, notice, needsText;
     juce::TextButton addButton { "Add songs..." }, folderButton { "Add a folder..." }, removeButton { "Remove" },
         clearButton { "Clear" }, cancelButton { "Cancel" }, againButton { "Analyze again" },
         downloadButton { "Download" }, engineButton { "Set up the analysis engine..." },
-        saveButton { "Save summary..." };
+        saveButton { "Save summary..." }, libraryButton { "Saved analyses..." };
     std::unique_ptr<Rows> rows;
     juce::ListBox list;
     juce::Label summaryTitle;

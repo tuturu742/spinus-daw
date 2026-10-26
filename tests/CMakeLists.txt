@@ -68,6 +68,7 @@ add_executable (spinus_tests
     session/DeviceParametersTests.cpp
     session/DownloadedPluginsTests.cpp
     session/StemSamplesTests.cpp
+    session/AnalysisLibraryTests.cpp
     session/SynthMatchTests.cpp
     session/SynthProfileTests.cpp
     session/InstrumentPresetsTests.cpp

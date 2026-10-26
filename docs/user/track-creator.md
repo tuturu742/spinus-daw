@@ -51,11 +51,31 @@ then measures its style. Separating takes the longest, as in the Analyzer: much 
 than on the CPU, so an album takes a while. The first time, Spinus spends a few seconds learning its own
 drum sounds.
 
-**A song is analyzed once.** What Spinus found is kept in its settings folder (in
-`~/.config/Spinus DAW/ai/cache/track-creator`, a few kilobytes per song), recognised by the song's contents.
-Add the same song again, even under another name or in another project, and it is **Done (analyzed
-before)** at once. The large files made on the way (the decoded song and its stems) are deleted after
-each song. Deleting that folder is safe: the songs are then analyzed again.
+**A song is analyzed once.** Everything Spinus finds (tempo, key, loudness, notes, drum hits, the style and
+the stems) goes into its [saved analyses](#saved-analyses), shared with the [Analyzer](analyzer.md). Add the
+same song again, even under another name or in another project, and it is **Done (analyzed before)** at
+once. A song you already took apart in the Analyzer starts from what the Analyzer found: its beat, key and
+stems are used as they are, which saves most of the time.
+
+**Your list is remembered.** Close Spinus and open the Track creator again: your songs are still there, the
+analyzed ones done, with the summary as it was. Songs that were not finished wait until you click
+**Analyze again** (Spinus doesn't start analyzing by itself when it starts).
+
+## Saved analyses
+
+**Saved analyses...** (in the Track creator and in the Analyzer) shows every song Spinus has analyzed, how
+much space each takes and how much of that is stems, and the total. Stems take most of the space (a
+four-minute song's four stems take in the order of 100 MB); what was measured takes a few kilobytes.
+
+- **Delete its stems**: the selected song's stems go; what was measured stays. If you need them again, the
+  song is split again.
+- **Delete**: everything kept of the selected song.
+- **Delete all stems**: every song's stems; the measurements stay.
+- **Delete everything**: the whole list.
+
+Deleting never touches your own audio files, only what Spinus kept. The saved analyses are in Spinus's
+settings folder (`~/.config/Spinus DAW/ai/library`), not in your projects. A song kept by an older version
+of Spinus is shown as not used, and is analyzed again when you add it.
 
 ## The summary
 

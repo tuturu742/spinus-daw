@@ -4,6 +4,7 @@
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
 #include "session/SongPreparation.h"
+#include "ui/Analyzer.h"
 #include "ui/Theme.h"
 #include "ui/TrackCreator.h"
 
@@ -245,11 +246,18 @@ TEST_CASE ("Track creator: says what is missing, analyzes a song, keeps it, sums
     CHECK (juce::JSON::parse (saved)["kind"].toString() == "spinus.style-summary");
     CHECK (juce::JSON::parse (saved)["plain"].size() == summary["plain"].size());
 
-    // Kept in the settings folder by the song's contents; the large files are gone.
-    const auto kept = creator.getKeptFolder().getChildFile (digest.substring (0, 20) + "-v" +
-                                                            juce::String (TrackCreator::analysisVersion) + ".json");
-    CHECK (kept.isAChildOf (t.root));
-    CHECK (kept.existsAsFile());
+    // Everything found is in the analysis library (the settings folder), by the song's contents: the stems as
+    // FLAC too. The large files are gone.
+    const auto library = creator.getLibrary();
+    CHECK (library.getFolder().isAChildOf (t.root));
+    const auto entry = library.read (digest);
+    CHECK ((int)entry["features"]["version"] == TrackCreator::analysisVersion);
+    CHECK (entry["rhythm"].isObject());
+    CHECK (entry["key"]["name"].toString() == "A minor");
+    CHECK (entry["loudness"].isObject());
+    CHECK (entry["notes"]["htdemucs/bass"].isArray());
+    CHECK (entry["drums"]["htdemucs"].isArray());
+    CHECK (library.findStems (digest, "htdemucs").size() == 4);
     CHECK (! work.exists());
 
     // Removed and added again (a copy under another name): ready at once, from what was kept.
@@ -318,4 +326,127 @@ TEST_CASE ("Track creator screenshot for the manual", "[.screenshot][manual]")
     REQUIRE (
         juce::PNGImageFormat().writeImageToStream (creator.createComponentSnapshot (creator.getLocalBounds()), stream));
     creator.setLookAndFeel (nullptr);
+}
+
+TEST_CASE ("Track creator: the songs and the summary are remembered, without starting the AI service",
+           "[ui][ai][trackcreator]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    a.service.setEnabled (true);
+    REQUIRE (a.installEngine());
+    a.placeModels();
+    const auto song = makeSong (a.t.root, "Song One");
+    const auto waiting = makeMajorSong (a.t.root, "Not Yet");
+    juce::String summaryText;
+    {
+        TrackCreator creator (a.session, &a.service);
+        placeFindings (creator, song, minorBass, minorChords);
+        REQUIRE (creator.addReferences ({ song }) == 1);
+        REQUIRE (waitFor ([&] { return allSettled (creator); }, 240000));
+        REQUIRE (statusOf (creator, 0) == TrackCreator::Status::done);
+        summaryText = creator.getSummaryText();
+        REQUIRE (summaryText.contains ("Song One"));
+        // A second song, stopped before it is analyzed.
+        REQUIRE (creator.addReferences ({ waiting }) == 1);
+        creator.cancel();
+        CHECK (creator.getListFile().existsAsFile());
+    }
+
+    // The next start: a new AI service (not running), the same settings folder.
+    ai::AiService next (a.t.root, a.models);
+    TrackCreator creator (a.session, nullptr);
+    CHECK (creator.getReferences().empty());
+    creator.setService (&next);
+    REQUIRE (creator.getReferences().size() == 2);
+    INFO (creator.getListFile().loadFileAsString());
+    CHECK (statusOf (creator, 0) == TrackCreator::Status::done);
+    CHECK (creator.getReferences()[0].keptBefore);
+    CHECK (statusOf (creator, 1) != TrackCreator::Status::done);
+    CHECK (creator.getSummaryText() == summaryText);
+    CHECK (! creator.isBusy());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+    CHECK (next.getState() != ai::AiService::State::running);
+    CHECK (next.getState() != ai::AiService::State::starting);
+    CHECK (creator.getMethodsRun().isEmpty());
+}
+
+TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is found twice", "[ui][ai][trackcreator]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    a.service.setEnabled (true);
+    REQUIRE (a.installEngine());
+    a.placeModels();
+    const auto song = makeSong (a.t.root, "Shared Song");
+    const auto digest = contentDigest (song);
+
+    // The Analyzer finds the tempo and key and separates (the stand-in Demucs); the stems go into the
+    // library as FLAC in the background.
+    Analyzer analyzer (a.session, &a.service);
+    analyzer.setSize (660, 560);
+    REQUIRE (analyzer.analyze (song));
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    INFO (analyzer.getStatusText());
+    REQUIRE (analyzer.getRhythm().has_value());
+    CHECK (! analyzer.hasEarlierAnalysis()); // the first time
+    REQUIRE (analyzer.separate (4));
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    REQUIRE (analyzer.getStems().size() == 4);
+    const auto library = analyzer.getLibrary();
+    REQUIRE (waitFor ([&] { return library.findStems (digest, "htdemucs").size() == 4; }, 30000));
+    CHECK (library.read (digest)["rhythm"].isObject());
+    CHECK (library.read (digest)["key"].isObject());
+
+    // The same song dropped again: continue from the earlier analysis, nothing separated again.
+    REQUIRE (analyzer.analyze (song));
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    REQUIRE (analyzer.hasEarlierAnalysis());
+    CHECK (analyzer.getStatusText().contains ("analyzed this song before (tempo, key, 4 stems)"));
+    CHECK (analyzer.getStems().empty());
+    REQUIRE (analyzer.continueFromEarlier());
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    INFO (analyzer.getStatusText());
+    CHECK (analyzer.getStatusText().startsWith ("Continued from the earlier analysis"));
+    CHECK (analyzer.getTempoText() == "120.0 BPM, 4 beats per bar");
+    CHECK (analyzer.getKeyText().startsWith ("A minor"));
+    REQUIRE (analyzer.getStems().size() == 4);
+    CHECK (analyzer.getStems().at ("bass").getParentDirectory().getParentDirectory().getFileName() == "kept-stems");
+    CHECK (analyzer.getStems().at ("bass").hasFileExtension ("wav"));
+
+    // The Track creator takes all that from the library: only the loudness, the drums and the style are new.
+    // (The notes, as if the Analyzer had found them with Basic Pitch, which is not in the repository.)
+    auto lib = library;
+    lib.setIn (digest, {}, "notes", "htdemucs/bass",
+               juce::JSON::parse (R"([{"start": 0.1, "end": 1.9, "pitch": 45}])"));
+    lib.setIn (digest, {}, "notes", "htdemucs/other",
+               juce::JSON::parse (R"([{"start": 0.1, "end": 1.9, "pitch": 57}, {"start": 0.1, "end": 1.9, "pitch": 60},
+                                     {"start": 0.1, "end": 1.9, "pitch": 64}])"));
+    lib.setIn (digest, {}, "notes", "htdemucs/vocals", juce::JSON::parse ("[]"));
+    TrackCreator creator (a.session, &a.service);
+    REQUIRE (creator.addReferences ({ song }) == 1);
+    REQUIRE (waitFor ([&] { return allSettled (creator); }, 240000));
+    INFO (creator.describe (creator.getReferences()[0]));
+    REQUIRE (statusOf (creator, 0) == TrackCreator::Status::done);
+    const auto& run = creator.getMethodsRun();
+    INFO (run.joinIntoString (", "));
+    CHECK (! run.contains ("ai.v1.analyze.tempo"));
+    CHECK (! run.contains ("ai.v1.analyze.key"));
+    CHECK (! run.contains ("ai.v1.stems.separate"));
+    CHECK (! run.contains ("ai.v1.transcribe.notes"));
+    CHECK (run.contains ("ai.v1.style.summarize"));
+    CHECK (creator.getReferences()[0].features["chords"][0]["roman"].toString() == "i");
+
+    // Analyze anew: everything is found again, the notes of the old stems forgotten.
+    REQUIRE (analyzer.analyze (song));
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    REQUIRE (analyzer.hasEarlierAnalysis());
+    REQUIRE (analyzer.analyzeAnew());
+    CHECK (! library.read (digest)["notes"].isObject());
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    CHECK (analyzer.getStatusText().startsWith ("Done."));
+    CHECK (analyzer.getStems().empty());
+    CHECK (library.read (digest)["features"].isObject()); // the style stays
 }

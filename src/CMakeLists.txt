@@ -221,6 +221,8 @@ add_library (spinus_core STATIC
     session/SlicesToPattern.cpp
     session/StemSamples.cpp
     session/SongPreparation.cpp
+    session/AnalysisLibrary.cpp
+    session/AnalysisLibrary.h
     session/SongPreparation.h
     session/HiddenInstrument.cpp
     session/InstrumentPresets.cpp
@@ -243,6 +245,8 @@ add_library (spinus_core STATIC
     ui/AiSettingsDialog.h
     ui/Analyzer.cpp
     ui/TrackCreator.cpp
+    ui/AnalysisLibraryView.cpp
+    ui/AnalysisLibraryView.h
     ui/TrackCreator.h
     ui/AudioTracks.cpp
     ui/AudioTracks.h

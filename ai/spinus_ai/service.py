@@ -567,7 +567,22 @@ class Service:
     async def transcribe_notes(self, params: dict[str, Any], notify: Notify) -> Any:
         """Notes of a melodic stem with Basic Pitch: {file, beats, firstDownbeat, cacheFolder}.
         The result: {notes: [{start, length (ticks from the first downbeat), pitch, velocity}], seconds:
-        [{start, end, pitch, velocity}]}, cached by the stem's contents."""
+        [{start, end, pitch, velocity}]}, cached by the stem's contents. With `known` (the seconds Spinus kept
+        in its analysis library from an earlier time) Basic Pitch is not run: they are only placed on the beats."""
+        known = params.get("known")
+        if isinstance(known, list):
+            if importlib.util.find_spec("numpy") is None:
+                raise RpcError(-32000, "Turning parts into notes needs NumPy: install the python-numpy package.")
+            known_beats = [float(b) for b in params.get("beats", [])]
+            known_first = float(params.get("firstDownbeat", known_beats[0] if known_beats else 0.0))
+
+            async def place(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+                from .transcribe import place_on_beats
+
+                found = [dict(n) for n in known]
+                return {"notes": place_on_beats(found, known_beats, known_first), "seconds": found}
+
+            return {"job": self.job(notify, place)}
         missing = [m for m in ("numpy", "onnxruntime") if importlib.util.find_spec(m) is None]
         if missing:
             raise RpcError(-32000, "Turning parts into notes needs python-numpy and python-onnxruntime-cpu.")
@@ -609,9 +624,11 @@ class Service:
         {notes: [{start, length, pitch (a Drum Machine pad), velocity}], hits: [{time, kind, pad, velocity}],
         groups: [{pad, kind, name, count, start, end}]}: hits of one kind that sound clearly different get a
         pad each, with accents relative to each group's loudest hit. The first time, the
-        recogniser is trained on this computer (a few seconds)."""
+        recogniser is trained on this computer (a few seconds). With `hits` (kept in Spinus's analysis library
+        from an earlier time: [{time, kind, pad, velocity}]) the hits are not looked for again."""
         if importlib.util.find_spec("numpy") is None:
             raise RpcError(-32000, "Turning drums into steps needs NumPy: install the python-numpy package.")
+        known = params.get("hits")
         stem = Path(str(params.get("file", "")))
         if not stem.is_file():
             raise RpcError(-32602, f"There is no audio file at {stem}.")
@@ -623,7 +640,7 @@ class Service:
             from . import drums
             from .compute.worker import read_wav
 
-            found = await self.drum_hits(stem, cache_root, say)
+            found = [dict(h) for h in known] if isinstance(known, list) else await self.drum_hits(stem, cache_root, say)
             audio, rate = await run_blocking(lambda: read_wav(str(stem)))
             hits, groups = await run_blocking(lambda: drums.group_hits(audio, rate, found))
             return {"notes": drums.place_hits(hits, beats, first_downbeat), "hits": hits, "groups": groups}
