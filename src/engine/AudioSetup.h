@@ -16,6 +16,11 @@ struct AudioSetup
         Returns a description of what was chosen. */
     static juce::String applyDefaults (juce::AudioDeviceManager&);
 
+    /** JACK lists every program that plays sound as an input, and JUCE takes the first: a music player
+        playing when Spinus first starts would be what it records. The first of `jackInputs` that is one of
+        PipeWire's `microphones` (their descriptions or names, PipeWireInput::listSources), else none. */
+    static juce::String pickJackInput (const juce::StringArray& jackInputs, const juce::StringArray& microphones);
+
     /** What the settings page shows. */
     struct Status
     {

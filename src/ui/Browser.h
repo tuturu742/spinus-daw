@@ -21,10 +21,9 @@ namespace spinus::ui
     hear it (Session::getSamplePreview), double-click to add it to the Channel Rack (onUseSample), or
     drag it onto the Channel Rack, the Playlist or Audio tracks (sampleFromDrag reads the drag).
 
-    Projects (the ProjectList, kept in the settings): the demo song (when it is installed), the projects opened
-    or saved in Spinus, and the projects in folders the user adds ("+ Add a folder of projects"), searched in
-    the background. Double-click one to open it (onOpenProject, onOpenDemo: MainView asks to save changes
-    first). A project that is not on disk any more is shown dimmed, "missing", until it is removed.
+    Projects (the ProjectList, kept in the settings): the demo songs (when they are installed) and the projects
+    in folders the user adds ("+ Add a folder of projects"), searched in the background. Double-click one to
+    open it (onOpenProject, onOpenDemo: MainView asks to save changes first).
 */
 class Browser final : public juce::Component,
                       private juce::ListBoxModel,
