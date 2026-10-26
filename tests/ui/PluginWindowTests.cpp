@@ -141,8 +141,10 @@ TEST_CASE ("A window opens with a title, and closes when its effect is removed",
     REQUIRE (f.mixer.renameInsert (bus, "Reverb"));
     const auto echo = f.addEcho (bus);
 
+    CHECK (! f.session.getDevicesShown().contains (echo));
     REQUIRE (f.mixer.showEffectWindow (echo));
     CHECK (f.session.isDeviceWindowShowing (echo));
+    CHECK (f.session.getDevicesShown().contains (echo)); // its settings may now change: asked about on closing
     auto* window = Fixture::findWindow ("Sidechain Echo - 1 Reverb");
     REQUIRE (window != nullptr);
     CHECK (window->getWidth() > 50); // the generic editor: the test plugin has no window of its own

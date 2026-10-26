@@ -201,6 +201,7 @@ project::ProjectData Session::captureProjectData() const { return { getProject()
 
 void Session::loadProject (project::ProjectData data)
 {
+    devicesShown.clear();
     auto& transport = edit->getTransport();
     transport.stop (false, true);
     transport.setPosition (te::TimePosition());

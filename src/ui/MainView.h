@@ -289,6 +289,11 @@ private:
         is ended (or hangs) still comes back with the windows as they were. */
     std::unique_ptr<juce::TimedCallback> layoutKeeper;
     juce::ValueTree keptLayout;
+    // The last layout, put back at start, again while the window settles on its size (resized()).
+    static constexpr juce::uint32 startLayoutMs = 3000;
+    juce::ValueTree startLayout;
+    juce::Rectangle<int> startLayoutSize;
+    juce::uint32 startLayoutUntil = 0;
     FileChooserHandler chooseFile;
     std::unique_ptr<core::FileDialog> activeChooser;
 

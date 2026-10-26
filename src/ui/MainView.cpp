@@ -787,7 +787,12 @@ void MainView::setLayoutsFile (const juce::File& file)
         {
             if (safe != nullptr)
                 if (auto last = safe->layouts->getLast(); last.isValid())
+                {
                     safe->applyLayout (last);
+                    safe->startLayout = last;
+                    safe->startLayoutSize = safe->workspace.getBounds();
+                    safe->startLayoutUntil = juce::Time::getMillisecondCounter() + startLayoutMs;
+                }
         });
 }
 
@@ -946,12 +951,12 @@ void MainView::parentHierarchyChanged() { updateTitle(); }
 
 void MainView::listOpenProject()
 {
-    // Every project opened or saved (File › Open, Open recent, the command line, Save As, the Browser) is listed
-    // in the Browser's Projects (session/ProjectList).
+    // A project opened or saved (File › Open, Open recent, the command line, Save As, the Browser) inside one of
+    // the Browser's folders of projects is listed there at once (session/ProjectList).
     if (document == nullptr || document->isUntitled() || document->getFolder() == listedFolder)
         return;
     listedFolder = document->getFolder();
-    browser->getProjects().addOpened (listedFolder);
+    browser->getProjects().noteUsed (listedFolder);
 }
 
 void MainView::setDemoFolders (juce::File demoFolder, juce::File copyParent)
@@ -1797,6 +1802,19 @@ void MainView::resized()
     }
 
     workspace.setBounds (area);
+
+    // A window restored maximised or full screen gets its size from the desktop a moment after the last layout
+    // was put back, in the smaller window: put it back again at the new size (panels are kept as proportions).
+    if (startLayout.isValid())
+    {
+        if (juce::Time::getMillisecondCounter() > startLayoutUntil)
+            startLayout = {};
+        else if (workspace.getBounds() != startLayoutSize)
+        {
+            startLayoutSize = workspace.getBounds();
+            workspace.setLayout (startLayout);
+        }
+    }
 }
 
 //==============================================================================
@@ -2304,14 +2322,19 @@ bool MainView::perform (const InvocationInfo& info)
         return true;
     }
     case showAudioSettings:
-
+    {
+        // While the window is open, the input chosen there is on, for its meter; off again after.
+        auto& engine = session.getEdit().engine;
+        auto inputUse = std::make_shared<recording::InputUse> (engine);
+        if (engine.getDeviceManager().deviceManager.getAudioDeviceSetup().inputDeviceName.isNotEmpty())
+            recording::useInputs (engine, { recording::getDefaultInput (engine) });
         AudioSettings::show (
-            session.getEdit().engine.getDeviceManager().deviceManager, this,
-            EngineHost::getPipeWireInput (session.getEdit().engine),
+            engine.getDeviceManager().deviceManager, this, EngineHost::getPipeWireInput (engine),
             [this] { return recording::getDefaultInput (session.getEdit().engine); },
-            [this] (int input) { recording::setDefaultInput (session.getEdit().engine, input); });
-
+            [this] (int input) { recording::setDefaultInput (session.getEdit().engine, input); },
+            [inputUse]() mutable { inputUse.reset(); });
         return true;
+    }
 
     case exportAudio:
         ExportDialog::show (session, this);
