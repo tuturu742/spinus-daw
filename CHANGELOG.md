@@ -13,6 +13,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   while a track is armed, something records, or **Options › Audio** is open.
 - **First start with music playing:** Spinus could choose the program playing (a browser, say) as what to
   record from. It now chooses a microphone, or nothing.
+- **Closing a song you only opened no longer asks to save it.** Some plugins (Ample's, for example) change
+  their own settings a moment after loading; Spinus took that for a change of yours. A plugin's settings now
+  count only if you opened its window; changes made with Spinus's own controls count as always.
 
 ### The Browser
 

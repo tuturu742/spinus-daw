@@ -81,10 +81,16 @@ TEST_CASE ("Save, edit, undo back to the saved state, and open again", "[session
     CHECK (! f.document->hasUnsavedChanges());
     CHECK (f.document->save().failed()); // no folder yet
 
+    // A plugin changing its own settings (as some do after loading) is not a change of the user's; one whose
+    // window was opened may have been changed there.
     REQUIRE (f.compressor() != nullptr);
     f.compressor()->setThreshold (0.25f);
     const auto threshold = f.compressor()->getThreshold();
     CHECK (! f.document->hasUnsavedEdits());
+    CHECK (! f.document->hasUnsavedChanges());
+    const auto compressor = f.session.getAdapter().findDevice (*f.compressor());
+    REQUIRE (compressor.has_value());
+    f.session.noteDeviceWindowShown (compressor.value_or (model::DeviceId {}));
     CHECK (f.document->hasUnsavedChanges()); // a device setting changed
 
     const auto folder = f.temp.root.getChildFile ("Song"); // "" is added
