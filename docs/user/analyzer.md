@@ -169,6 +169,23 @@ If something goes wrong, the line under the buttons says what. Hover over it to 
 full, and right-click it and choose **Copy message** to paste it into a bug report. The same works in the
 Automixer, the analysis engine window and the AI settings.
 
+To learn what several songs (an album, say) have in common rather than taking one apart, use the
+[Track creator](track-creator.md).
+
+## A song analyzed before
+
+What the Analyzer finds (tempo, key, the stems and the notes it heard in them) is kept in Spinus's
+[saved analyses](track-creator.md#saved-analyses), shared with the Track creator and recognised by the
+song's contents, whatever its name or project. When you drop a song that was analyzed before (here or in
+the Track creator), the Analyzer says what it has and offers:
+
+- **Continue from the existing analysis**: the tempo, key and stems come back at once, without separating
+  again, and notes already found are not listened for again.
+- **Analyze anew**: everything is found again, as for a new song.
+
+**Saved analyses...** (at the bottom) shows how much space this takes and lets you delete stems or whole
+songs.
+
 ## About other people's songs
 
 The analysis and the separation use freely available open-source models made by others; they are not

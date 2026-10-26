@@ -25,6 +25,7 @@
 | [Routing](mixer.md#the-routing-panel) | View menu |
 | [Automation editor](playlist.md#the-automation-editor) | View menu, or double-click an automation clip |
 | [Analyzer](analyzer.md) (experimental) | View menu, once **Show experimental features** is ticked in **Options › AI...** |
+| [Track creator](track-creator.md) (experimental) | View menu, once **Show experimental features** is ticked in **Options › AI...** |
 | [Automixer](automixer.md) | View menu |
 
 Every key is listed in [Keyboard shortcuts](keyboard-shortcuts.md).

@@ -5,10 +5,12 @@
 #include "ui/AiSettingsDialog.h"
 #include "ui/MainView.h"
 
+#include <vector>
+
 using namespace spinus;
 using namespace spinus::ui;
 
-/* Options > AI > Show experimental features: the Analyzer is experimental, and is
+/* Options > AI > Show experimental features: the Analyzer and the Track creator are experimental, and are
    nowhere in the main window while that is off. */
 
 namespace
@@ -39,34 +41,63 @@ bool viewMenuHas (MainView& view, juce::CommandID command)
     return false;
 }
 
-/** A layout (as layouts.xml keeps it) with the Analyzer open in front of the Playlist. */
-juce::ValueTree layoutWithAnalyzer (MainView& view)
+/** The experimental panels and the commands that open them. */
+const std::vector<std::pair<juce::String, juce::CommandID>> experimentalPanels {
+    { "analyzer", MainView::showAnalyzer },
+    { "trackCreator", MainView::showTrackCreator },
+};
+
+/** A layout (as layouts.xml keeps it) with a panel open in front of the Playlist. */
+juce::ValueTree layoutWith (MainView& view, const juce::String& id = "analyzer")
 {
     auto layout = view.getCurrentLayout();
     for (auto panel : layout)
-        if (panel["id"] == "analyzer" || panel["id"] == "playlist")
+        if (panel["id"] == id || panel["id"] == "playlist")
             panel.setProperty ("visible", true, nullptr);
-    // Back to front: the Analyzer last.
-    auto analyzer = layout.getChildWithProperty ("id", "analyzer");
-    layout.removeChild (analyzer, nullptr);
-    layout.appendChild (analyzer, nullptr);
+    // Back to front: the panel last.
+    auto front = layout.getChildWithProperty ("id", id);
+    layout.removeChild (front, nullptr);
+    layout.appendChild (front, nullptr);
     return layout;
 }
 
-/** Every way to open the Analyzer: false if none worked. */
-bool canOpenAnalyzer (MainView& view)
+juce::ValueTree layoutWithAnalyzer (MainView& view) { return layoutWith (view, "analyzer"); }
+
+/** Every way to open an experimental panel: false if none worked. */
+bool canOpen (MainView& view, const juce::String& id, juce::CommandID command)
 {
     auto& workspace = view.getWorkspace();
-    workspace.hidePanel ("analyzer");
-    invoke (view, MainView::showAnalyzer);
-    workspace.showPanel ("analyzer");
-    workspace.detachPanel ("analyzer");
-    view.getWindowLayouts().save ("With the Analyzer", layoutWithAnalyzer (view));
-    view.useLayout ("With the Analyzer");
-    view.getWindowLayouts().remove ("With the Analyzer");
-    const bool opened = workspace.isPanelVisible ("analyzer");
-    workspace.hidePanel ("analyzer");
+    workspace.hidePanel (id);
+    invoke (view, command);
+    workspace.showPanel (id);
+    workspace.detachPanel (id);
+    view.getWindowLayouts().save ("With it", layoutWith (view, id));
+    view.useLayout ("With it");
+    view.getWindowLayouts().remove ("With it");
+    const bool opened = workspace.isPanelVisible (id);
+    workspace.hidePanel (id);
     return opened;
+}
+
+bool canOpenAnalyzer (MainView& view) { return canOpen (view, "analyzer", MainView::showAnalyzer); }
+
+/** No experimental panel can be opened, nor is in the View menu or the keyboard shortcuts. */
+bool noneAvailable (MainView& view)
+{
+    for (auto& [id, command] : experimentalPanels)
+        if (viewMenuHas (view, command) || view.isCommandAvailable (command) || invoke (view, command) ||
+            canOpen (view, id, command))
+            return false;
+    return true;
+}
+
+/** Each experimental panel is in the View menu, the keyboard shortcuts, and opens every way. */
+bool allAvailable (MainView& view)
+{
+    for (auto& [id, command] : experimentalPanels)
+        if (! viewMenuHas (view, command) || ! view.isCommandAvailable (command) || ! canOpen (view, id, command))
+            return false;
+    return true;
 }
 } // namespace
 
@@ -106,6 +137,7 @@ TEST_CASE ("Without the AI service the Analyzer is nowhere", "[ui][experimental]
     CHECK (! ui.view.isCommandAvailable (MainView::showAnalyzer)); // not in Options > Keyboard shortcuts
     CHECK (! invoke (ui.view, MainView::showAnalyzer));
     CHECK (! canOpenAnalyzer (ui.view));
+    CHECK (noneAvailable (ui.view)); // the Track creator neither
     // The rest of the window works as before.
     CHECK (invoke (ui.view, MainView::showMixer));
     CHECK (ui.view.getWorkspace().isPanelVisible ("mixer"));
@@ -120,15 +152,17 @@ TEST_CASE ("Show experimental features: off, on, off again", "[ui][ai][experimen
     ui.view.setAiService (&service);
     auto& workspace = ui.view.getWorkspace();
 
-    // Off by default: no Analyzer.
+    // Off by default: no Analyzer, no Track creator.
     CHECK (! ui.view.areExperimentalFeaturesShown());
     CHECK (! viewMenuHas (ui.view, MainView::showAnalyzer));
     CHECK (! ui.view.isCommandAvailable (MainView::showAnalyzer));
     CHECK (! canOpenAnalyzer (ui.view));
+    CHECK (noneAvailable (ui.view));
 
     // Turned on in Options > AI (AI itself still off): it is there at once.
     AiSettingsDialog settings (service);
     CHECK (settings.getExperimentalNote().contains ("Analyzer"));
+    CHECK (settings.getExperimentalNote().contains ("Track creator"));
     settings.setShowExperimental (true);
     CHECK (ui.view.areExperimentalFeaturesShown());
     CHECK (viewMenuHas (ui.view, MainView::showAnalyzer));
@@ -140,6 +174,13 @@ TEST_CASE ("Show experimental features: off, on, off again", "[ui][ai][experimen
     ui.view.getCommandInfo (MainView::showAnalyzer, info);
     CHECK (info.shortName.contains ("experimental"));
     CHECK (canOpenAnalyzer (ui.view));
+    CHECK (allAvailable (ui.view));
+    REQUIRE (invoke (ui.view, MainView::showTrackCreator));
+    CHECK (workspace.getPanel ("trackCreator")->getPanelTitle() == "Track creator (experimental)");
+    juce::ApplicationCommandInfo creatorInfo (MainView::showTrackCreator);
+    ui.view.getCommandInfo (MainView::showTrackCreator, creatorInfo);
+    CHECK (creatorInfo.shortName == "Track creator (experimental)");
+    workspace.hidePanel ("trackCreator");
 
     // A layout saved now, with the Analyzer open (as layouts.xml keeps the last one).
     const auto saved = layoutWithAnalyzer (ui.view);
@@ -157,8 +198,20 @@ TEST_CASE ("Show experimental features: off, on, off again", "[ui][ai][experimen
     CHECK (! workspace.isPanelVisible ("analyzer"));
     CHECK (workspace.isPanelVisible ("playlist")); // the rest of the layout still applies
     CHECK (! canOpenAnalyzer (ui.view));
+    CHECK (noneAvailable (ui.view));
 
-    // A detached Analyzer closes too.
+    // The same for an open Track creator, in a layout of its own.
+    settings.setShowExperimental (true);
+    ui.view.getWindowLayouts().save ("References", layoutWith (ui.view, "trackCreator"));
+    REQUIRE (ui.view.useLayout ("References"));
+    CHECK (workspace.isPanelVisible ("trackCreator"));
+    settings.setShowExperimental (false);
+    CHECK (! workspace.isPanelVisible ("trackCreator"));
+    REQUIRE (ui.view.useLayout ("References"));
+    CHECK (! workspace.isPanelVisible ("trackCreator"));
+    CHECK (noneAvailable (ui.view));
+
+    // A detached Analyzer (or Track creator) closes too.
     settings.setShowExperimental (true);
     workspace.showPanel ("analyzer");
     workspace.detachPanel ("analyzer");
@@ -166,6 +219,13 @@ TEST_CASE ("Show experimental features: off, on, off again", "[ui][ai][experimen
     settings.setShowExperimental (false);
     CHECK (! workspace.isPanelVisible ("analyzer"));
     CHECK (! workspace.isPanelDetached ("analyzer"));
+    settings.setShowExperimental (true);
+    workspace.showPanel ("trackCreator");
+    workspace.detachPanel ("trackCreator");
+    CHECK (workspace.isPanelDetached ("trackCreator"));
+    settings.setShowExperimental (false);
+    CHECK (! workspace.isPanelVisible ("trackCreator"));
+    CHECK (! workspace.isPanelDetached ("trackCreator"));
 }
 
 TEST_CASE ("Show experimental features, remembered: the Analyzer is there at the next start", "[ui][ai][experimental]")
@@ -181,4 +241,5 @@ TEST_CASE ("Show experimental features, remembered: the Analyzer is there at the
     CHECK (ui.view.areExperimentalFeaturesShown());
     CHECK (viewMenuHas (ui.view, MainView::showAnalyzer));
     CHECK (canOpenAnalyzer (ui.view));
+    CHECK (allAvailable (ui.view));
 }

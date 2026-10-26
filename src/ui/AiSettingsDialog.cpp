@@ -115,8 +115,8 @@ AiSettingsDialog::AiSettingsDialog (ai::AiService& s) : service (s)
     experimentalToggle.setToggleState (service.showsExperimentalFeatures(), juce::dontSendNotification);
     experimentalToggle.onClick = [this] { setShowExperimental (experimentalToggle.getToggleState()); };
     experimentalNote.setText ("Shows features that are still being worked on and may change, be slow or not work "
-                              "well. For now that is the Analyzer in the View menu, which finds a song's tempo, key "
-                              "and stems. Turning this off closes them.",
+                              "well: for now the Analyzer and the Track creator in the View menu. Turning this off "
+                              "closes them.",
                               juce::dontSendNotification);
     experimentalNote.setJustificationType (juce::Justification::topLeft);
     experimentalNote.setFont (juce::FontOptions (13.0f));

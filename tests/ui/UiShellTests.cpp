@@ -75,8 +75,8 @@ TEST_CASE ("FL shortcuts open and close the panels", "[ui]")
     auto& workspace = view.getWorkspace();
 
     CHECK (workspace.getPanelIds() == juce::StringArray { "channelRack", "playlist", "pianoRoll", "mixer", "history",
-                                                          "routing", "analyzer", "automixer", "launcher", "automation",
-                                                          "audioTracks" });
+                                                          "routing", "analyzer", "trackCreator", "automixer",
+                                                          "launcher", "automation", "audioTracks" });
 
     auto keyFor = [&] (int command)
     { return view.getCommandManager().getKeyMappings()->getKeyPressesAssignedToCommand (command)[0]; };

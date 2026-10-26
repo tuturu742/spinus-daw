@@ -27,6 +27,28 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Spinus opens as you left it:** maximised or full screen if it was, otherwise at its size and place, with
   your panels laid out at that size (they were squeezed into a small window before).
 
+### Experimental
+
+- **Track creator** (experimental, **View › Track creator** once **Show experimental features** is ticked
+  in **Options › AI...**): add a few songs you like, or an album folder, and Spinus sums up what they have
+  in common: tempo, key and mode, the chords they use and their favourite progressions, the drum groove
+  step by step, which parts play and how high or low, how long the sections are, and how loud the songs
+  are. Each song is analyzed once and remembered, so adding it again is instant. The summary is shown in
+  plain words and can be saved as a file. Your list of songs and the summary are remembered. Making a new
+  song in that style comes in later versions. See [the Track creator](docs/user/track-creator.md).
+- **Saved analyses** (Analyzer and Track creator): what Spinus finds about a song (tempo, key, stems,
+  notes, style) is kept and shared by both, so a song is never split or analyzed twice. Dropping a song
+  the Analyzer has seen before offers **Continue from the existing analysis** or **Analyze anew**.
+  **Saved analyses...** shows the space it takes and deletes stems or songs (never your own audio files).
+  See [Saved analyses](docs/user/track-creator.md#saved-analyses).
+- **Track creator, better summaries** (checked on 23 real songs in five styles): the drum groove comes from
+  the drum part itself, so straight songs no longer read as swung; songs with different grooves are no
+  longer averaged into one; sections follow 4- and 8-bar phrases; a chord loop counts the same whichever
+  chord it starts on, and is called shared only when two songs really play it; the key comes from several
+  estimates, with a note when they disagree; a fast song that may be felt at half speed is pointed out.
+- **Analyzer:** the tempo it finds is more precise (it could be off by a few BPM, jumping between values
+  such as 130.4, 136.4 and 142.9).
+
 ## 0.1.0-alpha.2 (2026-10-26)
 
 ### Finding out what went wrong

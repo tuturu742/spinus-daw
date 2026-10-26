@@ -80,7 +80,8 @@ public:
         layout7,
         layout8,
         layout9,
-        reportProblem, // Help › Report a problem: a report file and GitHub's new issue page
+        reportProblem,    // Help › Report a problem: a report file and GitHub's new issue page
+        showTrackCreator, // View › Track creator (experimental)
     };
 
     /** Which layout a layout command opens: 0 for Compose (layout1) to 8 (layout9); -1 for other commands. */
@@ -160,8 +161,9 @@ public:
     void setAiService (ai::AiService*);
     void showAiSettings();
 
-    /** Options > AI > Show experimental features (off without an AI service). While it is off the Analyzer is
-        nowhere: not in the View menu, the keyboard shortcuts or a layout, and its command does nothing. */
+    /** Options > AI > Show experimental features (off without an AI service). While it is off the experimental
+        panels (the Analyzer, the Track creator) are nowhere: not in the View menu, the keyboard shortcuts or a
+        layout, and their commands do nothing. */
     bool areExperimentalFeaturesShown() const noexcept { return experimentalShown; }
     /** False for the commands of experimental features while they are hidden. */
     bool isCommandAvailable (juce::CommandID) const;

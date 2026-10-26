@@ -147,6 +147,7 @@ class Service:
             "ai.v1.presets.match": self.presets_match,
             "ai.v1.mix.analyze": self.mix_analyze,
             "ai.v1.mix.plan": self.mix_plan,
+            "ai.v1.style.summarize": self.style_summarize,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -521,7 +522,9 @@ class Service:
             digest = await run_blocking(lambda: file_digest(song))
             cached = cache_root / "analysis" / f"{digest[:20]}-{model.id}.json"
             if cached.exists():
-                return {**json.loads(cached.read_text(encoding="utf-8")), "cached": True}
+                # The beats are what was kept; the tempo and bars are worked out again (as this version does).
+                kept = json.loads(cached.read_text(encoding="utf-8"))
+                return {**rhythm(list(kept.get("beats") or []), list(kept.get("downbeats") or [])), "cached": True}
 
             async def progress(update: dict[str, Any]) -> None:
                 await say({"kind": "progress", "done": float(update.get("done", 0.0)), "total": 1.0,
@@ -566,7 +569,22 @@ class Service:
     async def transcribe_notes(self, params: dict[str, Any], notify: Notify) -> Any:
         """Notes of a melodic stem with Basic Pitch: {file, beats, firstDownbeat, cacheFolder}.
         The result: {notes: [{start, length (ticks from the first downbeat), pitch, velocity}], seconds:
-        [{start, end, pitch, velocity}]}, cached by the stem's contents."""
+        [{start, end, pitch, velocity}]}, cached by the stem's contents. With `known` (the seconds Spinus kept
+        in its analysis library from an earlier time) Basic Pitch is not run: they are only placed on the beats."""
+        known = params.get("known")
+        if isinstance(known, list):
+            if importlib.util.find_spec("numpy") is None:
+                raise RpcError(-32000, "Turning parts into notes needs NumPy: install the python-numpy package.")
+            known_beats = [float(b) for b in params.get("beats", [])]
+            known_first = float(params.get("firstDownbeat", known_beats[0] if known_beats else 0.0))
+
+            async def place(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+                from .transcribe import place_on_beats
+
+                found = [dict(n) for n in known]
+                return {"notes": place_on_beats(found, known_beats, known_first), "seconds": found}
+
+            return {"job": self.job(notify, place)}
         missing = [m for m in ("numpy", "onnxruntime") if importlib.util.find_spec(m) is None]
         if missing:
             raise RpcError(-32000, "Turning parts into notes needs python-numpy and python-onnxruntime-cpu.")
@@ -608,9 +626,11 @@ class Service:
         {notes: [{start, length, pitch (a Drum Machine pad), velocity}], hits: [{time, kind, pad, velocity}],
         groups: [{pad, kind, name, count, start, end}]}: hits of one kind that sound clearly different get a
         pad each, with accents relative to each group's loudest hit. The first time, the
-        recogniser is trained on this computer (a few seconds)."""
+        recogniser is trained on this computer (a few seconds). With `hits` (kept in Spinus's analysis library
+        from an earlier time: [{time, kind, pad, velocity}]) the hits are not looked for again."""
         if importlib.util.find_spec("numpy") is None:
             raise RpcError(-32000, "Turning drums into steps needs NumPy: install the python-numpy package.")
+        known = params.get("hits")
         stem = Path(str(params.get("file", "")))
         if not stem.is_file():
             raise RpcError(-32602, f"There is no audio file at {stem}.")
@@ -622,7 +642,7 @@ class Service:
             from . import drums
             from .compute.worker import read_wav
 
-            found = await self.drum_hits(stem, cache_root, say)
+            found = [dict(h) for h in known] if isinstance(known, list) else await self.drum_hits(stem, cache_root, say)
             audio, rate = await run_blocking(lambda: read_wav(str(stem)))
             hits, groups = await run_blocking(lambda: drums.group_hits(audio, rate, found))
             return {"notes": drums.place_hits(hits, beats, first_downbeat), "hits": hits, "groups": groups}
@@ -832,6 +852,60 @@ class Service:
                            "step": f"Listening to {name}"})  # fmt: skip
                 loaded[name] = await run_blocking(functools.partial(read_wav, str(file)))
             return await run_blocking(lambda: analyze_mix(loaded))
+
+        return {"job": self.job(notify, work)}
+
+    # -----------------------------------------------------------------------------------------------
+    # Track creator: the style of reference songs (spinus_ai.style).
+
+    async def style_summarize(self, params: dict[str, Any], notify: Notify) -> Any:
+        """What reference songs share: {songs: [song]}, each song either {features} (from an earlier result's
+        perSong) or the Analyzer's results for it ({name, file (the mix as WAV, for the sections), tempo,
+        beatsPerBar, firstDownbeat, beats, downbeats, key, loudness, parts, drums, stems {name: WAV file}};
+        spinus_ai.style.analyze_song).
+        The result is the style summary, with each song's features in perSong (kept by Spinus, so a song
+        is measured once). Needs NumPy only."""
+        if importlib.util.find_spec("numpy") is None:
+            raise RpcError(-32000, "The Track creator needs NumPy: install the python-numpy package.")
+        songs = params.get("songs")
+        if not isinstance(songs, list) or not songs or not all(isinstance(s, dict) for s in songs):
+            raise RpcError(-32602, "songs must be a list of songs.")
+        for song in songs:
+            file = song.get("file")
+            if file and not Path(str(file)).is_file():
+                raise RpcError(-32602, f"There is no audio file at {file}.")
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            from . import style
+            from .compute.worker import read_wav
+
+            features = []
+            for i, song in enumerate(songs):
+                if isinstance(song.get("features"), dict):
+                    found = song["features"]
+                    if found.get("version") != style.FEATURES_VERSION:
+                        raise RuntimeError(f"{found.get('name', 'A song')} was measured by an older Spinus: "
+                                           "remove it and add it again.")  # fmt: skip
+                    features.append(found)
+                    continue
+                await say({"kind": "progress", "done": i / len(songs), "total": 1.0,
+                           "step": f"Measuring the style of {song.get('name', 'a song')}"})  # fmt: skip
+
+                def measure(song: dict[str, Any] = song) -> dict[str, Any]:
+                    # The drums and the harmonic stems, for the drums' grid, the key and the chords.
+                    wanted = ("drums", *style.HARMONIC)
+                    stems = {
+                        name: read_wav(str(path))
+                        for name, path in (song.get("stems") or {}).items()
+                        if name in wanted and Path(str(path)).is_file()
+                    }
+                    if song.get("file"):
+                        audio, rate = read_wav(str(song["file"]))
+                        return style.analyze_song(song, audio, rate, stems)
+                    return style.analyze_song(song, stems=stems)
+
+                features.append(await run_blocking(measure))
+            return await run_blocking(lambda: style.summarize(features))
 
         return {"job": self.job(notify, work)}
 

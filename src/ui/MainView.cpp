@@ -4,6 +4,7 @@
 #include "ColourMenu.h"
 
 #include "Analyzer.h"
+#include "TrackCreator.h"
 #include "AudioTracks.h"
 #include "AutomationEditor.h"
 #include "Automixer.h"
@@ -579,6 +580,17 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     };
     workspace.addPanel (std::move (analyzer));
     workspace.setPanelAvailable ("analyzer", false); // experimental: until Options > AI says otherwise
+    {
+        auto creator = std::make_unique<TrackCreator> (session, nullptr);
+        creator->onSetUpEngine = [this]
+        {
+            showAiSettings();
+            if (aiService != nullptr)
+                AiSettingsDialog::showAnalysisEngineIfOpen();
+        };
+        workspace.addPanel (std::move (creator));
+        workspace.setPanelAvailable ("trackCreator", false); // experimental, as the Analyzer
+    }
     workspace.addPanel (std::make_unique<Automixer> (session, nullptr));
     workspace.addPanel (std::make_unique<Launcher> (session));
     workspace.addPanel (std::make_unique<AutomationEditor> (session));
@@ -1136,6 +1148,8 @@ void MainView::setAiService (ai::AiService* service)
 {
     if (auto* analyzer = dynamic_cast<Analyzer*> (workspace.getPanel ("analyzer")))
         analyzer->setService (service);
+    if (auto* creator = dynamic_cast<TrackCreator*> (workspace.getPanel ("trackCreator")))
+        creator->setService (service);
     if (auto* automixer = dynamic_cast<Automixer*> (workspace.getPanel ("automixer")))
         automixer->setService (service);
     if (aiService != nullptr)
@@ -1199,12 +1213,17 @@ void MainView::updateExperimentalFeatures()
     if (show == experimentalShown)
         return;
     experimentalShown = show;
-    workspace.setPanelAvailable ("analyzer", show); // turned off: an open Analyzer closes
+    // Turned off: an open experimental panel closes.
+    workspace.setPanelAvailable ("analyzer", show);
+    workspace.setPanelAvailable ("trackCreator", show);
     menuItemsChanged();
     commandManager.commandStatusChanged();
 }
 
-bool MainView::isCommandAvailable (juce::CommandID id) const { return id != showAnalyzer || experimentalShown; }
+bool MainView::isCommandAvailable (juce::CommandID id) const
+{
+    return (id != showAnalyzer && id != showTrackCreator) || experimentalShown;
+}
 
 void MainView::updateAiButtons()
 {
@@ -1665,7 +1684,7 @@ juce::PopupMenu MainView::getMenuForIndex (int index, const juce::String&)
     case 2:
         for (auto id :
              { showPlaylist, showLauncher, showChannelRack, showAudioTracks, showPianoRoll, showMixer, showRouting,
-               showAutomationEditor, showAnalyzer, showAutomixer, toggleBrowser, toggleAssistant })
+               showAutomationEditor, showAnalyzer, showTrackCreator, showAutomixer, toggleBrowser, toggleAssistant })
             if (isCommandAvailable (id))
                 menu.addCommandItem (cm, id);
         menu.addSeparator();
@@ -1831,6 +1850,7 @@ void MainView::getAllCommands (juce::Array<juce::CommandID>& ids)
                     showMixer,
                     showHistory,
                     showAnalyzer,
+                    showTrackCreator,
                     showAutomixer,
                     showLauncher,
                     showAutomationEditor,
@@ -1907,6 +1927,12 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
     case showAnalyzer:
         info.setInfo ("Analyzer (experimental)", "Drop a song in to find its tempo, key and stems", "View", 0);
         info.setTicked (workspace.isPanelVisible ("analyzer"));
+        info.setActive (experimentalShown);
+        break;
+    case showTrackCreator:
+        info.setInfo ("Track creator (experimental)", "Add songs you like to see what their style has in common",
+                      "View", 0);
+        info.setTicked (workspace.isPanelVisible ("trackCreator"));
         info.setActive (experimentalShown);
         break;
     case showAutomixer:
@@ -2143,6 +2169,11 @@ bool MainView::perform (const InvocationInfo& info)
         if (! experimentalShown)
             return false;
         workspace.togglePanel ("analyzer");
+        return true;
+    case showTrackCreator:
+        if (! experimentalShown)
+            return false;
+        workspace.togglePanel ("trackCreator");
         return true;
     case showAutomixer:
         workspace.togglePanel ("automixer");
