@@ -104,14 +104,16 @@ SoundSource threeOsc()
     return s;
 }
 
-SoundIndexer::Options helperOptions()
+// Short limits only where a test waits for a hang; a Debug + AddressSanitizer build needs well over 4 s
+// to render some presets.
+SoundIndexer::Options helperOptions (int timeoutMs = 60000)
 {
     SoundIndexer::Options o;
 #if defined(SPINUS_PLUGIN_SCANNER)
     o.helper = juce::File (SPINUS_PLUGIN_SCANNER);
 #endif
-    o.soundTimeoutMs = 4000;
-    o.loadTimeoutMs = 4000;
+    o.soundTimeoutMs = timeoutMs;
+    o.loadTimeoutMs = timeoutMs;
     return o;
 }
 
@@ -381,7 +383,7 @@ TEST_CASE ("Sound index: an instrument that crashes or hangs while loading is a 
     auto crash = testSynth ("crash.clap", "Crash");
     auto hang = testSynth ("hang.clap", "Hang");
     auto missing = testSynth ("missing.clap", "Missing");
-    const auto result = SoundIndexer::update (index, helperOptions(), { crash, hang, missing }, {}, {}, {});
+    const auto result = SoundIndexer::update (index, helperOptions (4000), { crash, hang, missing }, {}, {}, {});
     CHECK (result.problems == 3);
     CHECK (index.instruments.at (crash.key).problem.contains ("crashed while loading"));
     CHECK (index.instruments.at (hang.key).problem.contains ("stopped answering while loading"));
