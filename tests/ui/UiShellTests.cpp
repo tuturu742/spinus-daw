@@ -456,6 +456,33 @@ TEST_CASE ("Window layouts: Spinus's three, saved ones, and the last one at the 
     file.deleteFile();
 }
 
+// Restored maximised, the main window opens small and gets the screen's size a moment later: the last layout
+// is put back at that size, not squeezed into the small window.
+TEST_CASE ("The last layout fits the window's size once it is restored maximised", "[ui][layouts]")
+{
+    const auto file = juce::File::createTempFile (".xml");
+    {
+        Ui ui;
+        ui.view.setSize (1600, 1000);
+        ui.view.setLayoutsFile (file);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        REQUIRE (invoke (ui.view, MainView::layout3)); // Mix: the Mixer over the lower 60 %
+        ui.view.getWindowLayouts().setLast (ui.view.getCurrentLayout());
+    }
+
+    Ui again;
+    again.view.setSize (800, 600); // the window before the desktop maximises it
+    again.view.setLayoutsFile (file);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    again.view.setSize (1600, 1000);
+    auto& workspace = again.view.getWorkspace();
+    const auto mixer = workspace.getPanel ("mixer")->getParentComponent()->getBounds();
+    CHECK (mixer.getY() == juce::roundToInt (0.4f * (float)workspace.getHeight()));
+    CHECK (mixer.getBottom() >= workspace.getHeight() - 1);
+    CHECK (mixer.getWidth() >= workspace.getWidth() - 1);
+    file.deleteFile();
+}
+
 TEST_CASE ("Saved layouts get Ctrl+Alt+4 to 9; the windows are kept while Spinus runs", "[ui][layouts]")
 {
     const auto file = juce::File::createTempFile (".xml");

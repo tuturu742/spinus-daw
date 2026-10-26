@@ -54,7 +54,9 @@ Reset ... to Spinus's** brings Spinus's back. Panels in their own windows are sa
 screen.
 
 Spinus also opens with the panels where they were when you last used it: it keeps them a few seconds
-after each change, so they come back even if Spinus was ended without closing. Layouts are kept for you,
+after each change, so they come back even if Spinus was ended without closing. The window itself comes
+back the same way: its size and place, and maximised or full screen if it was (in
+`~/.config/Spinus DAW/main-window.txt`). Layouts are kept for you,
 not in projects (in `~/.config/Spinus DAW/layouts.xml`). Two Spinus windows open at once keep each other's
 saved layouts.
 

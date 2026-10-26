@@ -3,6 +3,13 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## Not released yet
+
+### Windows and shortcuts
+
+- **Spinus opens as you left it:** maximised or full screen if it was, otherwise at its size and place, with
+  your panels laid out at that size (they were squeezed into a small window before).
+
 ## 0.1.0-alpha.2 (2026-10-26)
 
 ### Finding out what went wrong
