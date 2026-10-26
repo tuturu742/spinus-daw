@@ -30,6 +30,9 @@ juce::Result loadDrumPadFile (Session&, model::ChannelId, int note, const juce::
     drum before a better sample is chosen). */
 juce::Result copyDrumPad (Session&, model::ChannelId, int from, int to, const juce::String& name);
 
+/** Replaces the channel's Sampler zones with one sample played on every key, at its own pitch on `rootNote`. */
+juce::Result loadSamplerFile (Session&, model::ChannelId, const juce::File&, int rootNote);
+
 /** Replaces the channel's Sampler zones with the pieces, one key each, played at their own pitch. */
 juce::Result loadSamplerPieces (Session&, model::ChannelId, const juce::File& stem, const std::vector<StemPiece>&);
 

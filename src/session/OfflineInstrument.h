@@ -41,8 +41,11 @@ public:
     /** Plays the notes from silence and returns the sound (mono, at sampleRate), `tail` seconds after the
         last note ends. */
     juce::AudioBuffer<float> render (const std::vector<Note>&, double tail = 0.4);
+    /** The same in stereo (left and right as the plugin plays them). */
+    juce::AudioBuffer<float> renderStereo (const std::vector<Note>&, double tail = 0.4);
 
 private:
+    juce::AudioBuffer<float> renderChannels (const std::vector<Note>&, double tail, int channels);
     /** Stops every note, cuts what still rings, and waits a moment. */
     void silence();
     void play (int samples, const juce::MidiBuffer&, juce::AudioBuffer<float>* into);

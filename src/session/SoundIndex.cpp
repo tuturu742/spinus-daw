@@ -188,12 +188,14 @@ void SoundIndex::load()
     samples.clear();
     sampleFolders.clear();
     updated = {};
+    roleExamples = 0;
     const auto index = juce::JSON::parse (root.getChildFile ("index.json"));
     // Another version, or measured another way: as if there were none (everything is measured again).
     if (index["kind"].toString() != indexKind || (int)index["version"] != version ||
         (int)index["descriptorsVersion"] != sounds::descriptorsVersion)
         return;
     updated = juce::Time::fromISO8601 (index["updated"].toString());
+    roleExamples = (int)index["roleExamples"];
     if (const auto* folders = index["sampleFolders"].getArray())
         for (const auto& f : *folders)
             sampleFolders.add (f.toString());
@@ -266,6 +268,7 @@ bool SoundIndex::saveIndex() const
                                 { "updated", updated.toISO8601 (true) },
                                 { "instruments", list },
                                 { "sampleFolders", folders },
+                                { "roleExamples", roleExamples },
                                 { "summary", object ({ { "instruments", counts.instruments },
                                                        { "presets", counts.presets },
                                                        { "samples", counts.samples },
@@ -303,6 +306,7 @@ bool SoundIndex::removeAll()
     samples.clear();
     sampleFolders.clear();
     updated = {};
+    roleExamples = 0;
     return ! root.exists() || root.deleteRecursively();
 }
 
@@ -407,6 +411,53 @@ std::vector<SoundIndex::SampleFile> SoundIndex::changedSamples (const std::vecto
         if (k == known.end() || k->second->size != f.size || k->second->modified != f.modified)
             changed.push_back (f);
     }
+    return changed;
+}
+
+int SoundIndex::learnRoles()
+{
+    sounds::RoleGuess guess;
+    std::vector<std::pair<juce::var, int>> all; // each sound, and its place among the examples (-1: none)
+    for (auto& [key, instrument] : instruments)
+        for (auto& sound : instrument.sounds)
+        {
+            if (sound.hasProperty ("problem") || (bool)sound["silent"])
+                continue;
+            int at = -1;
+            if (sound["roleFrom"].toString() == "name")
+            {
+                at = guess.size();
+                guess.add (sound, sound["role"].toString());
+            }
+            all.emplace_back (sound, at);
+        }
+    roleExamples = guess.canLearn() ? guess.size() : 0;
+    guess.prepare();
+    int changed = 0;
+    std::set<const juce::DynamicObject*> touched;
+    for (auto& [sound, at] : all)
+    {
+        auto* o = sound.getDynamicObject();
+        const auto rules =
+            sound.hasProperty ("ruleRole") ? sound["ruleRole"].toString() : sound["soundRole"].toString();
+        // An example is guessed from the others only, so Show sounds tells honestly where they differ.
+        const auto learnt = roleExamples > 0 ? guess.guess (sound, 15, at) : juce::String();
+        const auto role = learnt.isNotEmpty() ? learnt : rules;
+        const auto from = learnt.isNotEmpty() ? "learnt" : "rules";
+        if (sound["soundRole"].toString() == role && sound["soundRoleFrom"].toString() == from)
+            continue;
+        o->setProperty ("ruleRole", rules);
+        o->setProperty ("soundRole", role);
+        o->setProperty ("soundRoleFrom", from);
+        if (sound["roleFrom"].toString() != "name")
+            o->setProperty ("role", role);
+        touched.insert (o);
+        ++changed;
+    }
+    for (auto& [key, instrument] : instruments)
+        if (std::any_of (instrument.sounds.begin(), instrument.sounds.end(),
+                         [&] (const juce::var& v) { return touched.contains (v.getDynamicObject()); }))
+            saveInstrument (instrument);
     return changed;
 }
 
@@ -626,7 +677,7 @@ SoundIndexer::Run SoundIndexer::runHelper (const Options& options, const juce::v
             lastNews = juce::Time::getMillisecondCounterHiRes();
             if (v.hasProperty ("begin"))
                 run.stuckOn = v["begin"].toString();
-            if (v.hasProperty ("sound") || v.hasProperty ("sample"))
+            if (v.hasProperty ("sound") || v.hasProperty ("sample") || v.hasProperty ("rendered"))
                 run.stuckOn.clear();
             if (v.hasProperty ("done"))
                 run.finished = true;
@@ -843,6 +894,9 @@ SoundIndexer::Result SoundIndexer::update (SoundIndex& index, const Options& opt
         if (result.cancelled)
             break;
     }
+
+    // The role guess, learnt again from the presets whose names say their role.
+    index.learnRoles();
 
     // Samples: the files in the Browser's sample folders.
     if (! result.cancelled)
