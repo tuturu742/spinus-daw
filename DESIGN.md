@@ -422,6 +422,7 @@ features; projects keep working unchanged either way.
 - GPU kernel caches (MIOpen, comgr) go under `~/.cache/spinus/gpu/`; `cudnn.benchmark` stays off.
 - Pin exact torch builds in `ai/spinus_ai/compute/locks/<build>.txt` (written by `tools/compute-locks.py`), one per GPU family and vendor: each needs a different index and build, pytorch.org's ROCm wheels skip some cards (gfx1151 among them), and an unpinned upgrade can break a GPU without warning. Upgrading them requires re-running `tools/owner-checks/ai-gpu-benchmark.sh` and `tools/owner-checks/gpu.sh`.
 - Do **not** set `PYTORCH_HIP_ALLOC_CONF`; it is reported to crash PyTorch on gfx1151.
+- **Windows:** the same engine, with its own catalog and locks (`compute/builds-windows.json`, `locks/windows/`, from `tools/compute-locks.py --windows` for `x86_64-pc-windows-msvc`): the CPU, CUDA 13, CUDA 12 and XPU builds, the same torch as on Linux. AMD's TheRock builds exist for Windows but are left out: there is no `/sys/class/kfd` to read a card's gfx target from, so an AMD card on Windows is listed and the CPU build suggested, with the reason. GPUs come from `Win32_VideoController` (PowerShell), Nvidia's details from `nvidia-smi` as on Linux (or its driver version from Windows' own, 32.0.15.6094 → 560.94). The installer brings `uv.exe` (pinned, as the Flatpak's uv) in `ai\bin\`; environments use `Scripts\python.exe`; a stopped install ends uv's process tree with `taskkill /T`; the worker lowers itself to below-normal priority. The Windows workflow's **Windows AI service** job runs the AI service's tests on Windows and the whole Track creator path on the real CPU engine (`ai/tests/test_real_engine.py`).
 - **Other GPUs:** every GPU target TheRock's stable channel builds (AMD Radeon RDNA 1-4), pytorch.org's CUDA 13 and CUDA 12 builds for Nvidia, and its XPU build for Intel Arc and Core Ultra graphics. Each is pinned with hashes in `ai/spinus_ai/compute/locks/`; only gfx1151 and the CPU build are tested, the others are labelled "untested". Nvidia's and Intel's libraries inside their builds are not open source: Spinus never distributes them; the user's computer downloads them from PyPI and pytorch.org after a question that says so.
 - **Analysis engine:** PyTorch runs in a worker process started from the chosen build's environment (`spinus_ai.compute.worker`), not in the AI service, so a GPU crash or a stopped job never takes the service down.
 - Device selection order: the GPU build suited to the detected GPU (Nvidia, then AMD, then Intel) → CPU. A startup self-test runs one tiny tensor operation on the GPU; on any failure (e.g. memory access fault) Spinus falls back to CPU for that session and says why in Options › AI › Analysis engine.
@@ -498,7 +499,7 @@ Two modes, two implementations:
 
 User drops a song into the Analyzer panel. Pipeline, each step shown with progress:
 
-**Experimental:** the Analyzer is shown only while **Options › AI › Show experimental features** is on (off by default; kept with "AI on" in the AI service's `settings.json`). While it is off the panel is unavailable in the `Workspace` (hidden, and no menu, shortcut or layout opens it); turning it on or off takes effect at once. The Track creator (§12.10) is gated the same way. The analysis engine runs on Linux only; on Windows the Analyzer's stems, tempo and key are not available (§17).
+**Experimental:** the Analyzer is shown only while **Options › AI › Show experimental features** is on (off by default; kept with "AI on" in the AI service's `settings.json`). While it is off the panel is unavailable in the `Workspace` (hidden, and no menu, shortcut or layout opens it); turning it on or off takes effect at once. The Track creator (§12.10) is gated the same way. The analysis engine runs on Linux and Windows (§12.1).
 
 1. **Tempo, beat grid, key** detection. Offer to set the project tempo/key.
 2. **Stem separation** (vocals, drums, bass, other; 6-stem when available: + piano, guitar).
@@ -677,7 +678,7 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   time with the song (tempo and playing state from the transport; livelier when the Master is louder). It
   makes no sound and passes audio through; it can sit on any insert or as an instrument without notes.
 - **Flathub:** publish the Flatpak there. **Windows:** a signed installer.
-- **The track analyzer out of experimental** (§12.7), and the analysis engine on Windows.
+- **The track analyzer out of experimental** (§12.7), and AMD graphics cards for the analysis engine on Windows.
 - **Spinus Plugins** (after 0.1.0): new open-source instruments and effects for sounds that open source
   doesn't cover well yet, in their own repository ([spinus-plugins](https://github.com/tuturu742/spinus-plugins),
   GPL-3.0-or-later). They are built as CLAP, VST3 and LV2 for Linux and Windows, so they work in any DAW.

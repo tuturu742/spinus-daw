@@ -7,12 +7,14 @@ there only when every file is, with the right size.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -211,9 +213,24 @@ def find_model(model_id: str) -> AnalysisModel | None:
     return next((m for m in MODELS if m.id == model_id), None)
 
 
+# Waits before trying a file again after a server error or a dropped connection (the hosts have bad
+# minutes; one 500 from GitHub or Hugging Face should not fail a 300 MB download).
+RETRY_WAITS = (2.0, 5.0, 15.0)
+
+
+def unreachable(model: AnalysisModel, url: str, why: str) -> str:
+    """Spinus doesn't keep copies of other people's models: each comes from its authors' own server, and
+    when that one is down, the user is told whose it is and to try later."""
+    return (
+        f"{model.name} can't be downloaded right now: its authors' server ({urlsplit(url).hostname}) isn't "
+        f"answering ({why}). This is on their side, not Spinus's; please try again later."
+    )
+
+
 class WeightStore:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, retry_waits: tuple[float, ...] = RETRY_WAITS) -> None:
         self.root = root
+        self.retry_waits = retry_waits
 
     def folder(self, model: AnalysisModel) -> Path:
         return self.root / model.id
@@ -236,16 +253,30 @@ class WeightStore:
         try:
             for f in model.files:
                 url = model.file_url(f)
-                digest = hashlib.sha256()
-                async with client.stream("GET", url, follow_redirects=True) as response:
-                    if response.status_code != 200:
-                        raise RuntimeError(f"Could not download {f.path} ({response.status_code}).")
-                    with (folder / f.path).open("wb") as out:
-                        async for chunk in response.aiter_bytes(1 << 20):
-                            out.write(chunk)
-                            digest.update(chunk)
-                            done += len(chunk)
-                            await progress(done, max(model.size, done))
+                start = done
+                for wait in (*self.retry_waits, None):
+                    digest = hashlib.sha256()
+                    done = start
+                    try:
+                        async with client.stream("GET", url, follow_redirects=True) as response:
+                            if response.status_code != 200:
+                                if not (response.status_code >= 500 or response.status_code == 429):
+                                    raise RuntimeError(f"Could not download {f.path} ({response.status_code}).")
+                                if wait is None:
+                                    raise RuntimeError(unreachable(model, url, f"server error {response.status_code}"))
+                                await asyncio.sleep(wait)
+                                continue
+                            with (folder / f.path).open("wb") as out:
+                                async for chunk in response.aiter_bytes(1 << 20):
+                                    out.write(chunk)
+                                    digest.update(chunk)
+                                    done += len(chunk)
+                                    await progress(done, max(model.size, done))
+                        break
+                    except httpx.TransportError as error:
+                        if wait is None:
+                            raise RuntimeError(unreachable(model, url, type(error).__name__)) from error
+                        await asyncio.sleep(wait)
                 if digest.hexdigest() != f.sha256:
                     raise RuntimeError(f"{f.path} did not match its checksum: download it again.")
             (folder / ".partial").unlink()

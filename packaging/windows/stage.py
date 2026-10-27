@@ -9,6 +9,7 @@ installed:
     ai/spinus_ai, ai/run_spinus_ai.py, ai/docs/user, ai/commands.schema.json   (as cmake/SpinusInstall.cmake)
     ai/python/       the Windows embeddable Python (PSF licence), pinned, with the service's packages from
                      ai/uv.lock (Windows wheels, hashes checked) in ai/python/Lib/site-packages
+    ai/bin/uv.exe    uv (MIT or Apache-2.0), pinned: installs the analysis engine when the user asks
     demo/<Name>/            the demo songs (as cmake/SpinusInstall.cmake's share/spinus/demo)
     samples/Spinus Starter Pack/   the starter sample pack (as share/spinus/samples)
     LICENSE.txt, THIRD_PARTY.md, docs/   (the manual)
@@ -31,6 +32,9 @@ from pathlib import Path
 PYTHON_VERSION = "3.12.10"  # the last 3.12 release with Windows binaries
 PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 PYTHON_SHA256 = "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3"
+# The same uv as the Flatpak's.
+UV_URL = "https://github.com/astral-sh/uv/releases/download/0.12.24/uv-x86_64-pc-windows-msvc.zip"
+UV_SHA256 = "7c38608c8a18ee137d748a1773053b07ec8f3a30fab49aebaa6f4e4efeceb019"
 PROGRAMS = ["spinus.exe", "spinus-plugin-scanner.exe", "spinus-plugin-host.exe"]
 
 source = Path(__file__).resolve().parents[2]
@@ -48,6 +52,13 @@ def fetch(url: str, sha256: str, cache: Path) -> Path:
     if hashlib.sha256(target.read_bytes()).hexdigest() != sha256:
         raise SystemExit(f"{target.name} is not the expected file (its checksum differs)")
     return target
+
+
+def stage_uv(ai: Path, cache: Path) -> None:
+    with zipfile.ZipFile(fetch(UV_URL, UV_SHA256, cache)) as archive:
+        name = next(n for n in archive.namelist() if n.rsplit("/", 1)[-1] == "uv.exe")
+        (ai / "bin").mkdir(parents=True, exist_ok=True)
+        (ai / "bin" / "uv.exe").write_bytes(archive.read(name))
 
 
 def stage_python(ai: Path, cache: Path) -> None:
@@ -109,6 +120,7 @@ def main() -> None:
     shutil.copytree(source / "docs" / "user", ai / "docs" / "user")
     shutil.copy2(source / "docs" / "dev" / "commands.schema.json", ai)
     stage_python(ai, cache)
+    stage_uv(ai, cache)
 
     # The demo songs: every project folder in demo/ (src/session/DemoSong.h).
     for song in sorted((source / "demo").iterdir()):

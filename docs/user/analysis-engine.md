@@ -21,7 +21,8 @@ which are **experimental**: they show only while **Show experimental features** 
 5. A bar shows the progress. **Cancel** stops it and removes what was downloaded. You can close the
    window meanwhile: opening it again shows the progress.
 
-Installing needs the `uv` tool. If the window says so, install it with `sudo pacman -S uv`.
+Installing needs the `uv` tool. If the window says so, install it with `sudo pacman -S uv`. The
+AppImage, the Flatpak and the Windows installer bring it along.
 
 ## Which build?
 
@@ -32,6 +33,13 @@ Installing needs the `uv` tool. If the window says so, install it with `sudo pac
 | Older Nvidia cards or drivers (driver 525 or newer) | Nvidia (CUDA 12) | about 3.7 GB, 6.8 GB |
 | Intel Arc, Core Ultra graphics | Intel (XPU) | about 2.5 GB, 7.4 GB |
 | None of these | CPU only | about 0.3 GB, 1 GB |
+
+### On Windows
+
+The analysis engine works on Windows 10 and 11 too, with **CPU only** (about 0.2 GB to download, 0.7 GB
+on disk), **Nvidia** (CUDA 13 or 12, about 2 to 2.7 GB, 3.2 to 4.4 GB) and **Intel (XPU)** (about 1.5 GB,
+4.1 GB). AMD Radeon cards aren't used on Windows yet: Spinus can't tell there which of AMD's builds a
+card needs, so the window suggests **CPU only**, which works on every computer, only more slowly.
 
 The window shows the exact sizes for your card.
 
@@ -53,13 +61,13 @@ the CPU: it is slower, but it works.
 - **Use the CPU only** leaves the graphics card alone, for example while you play a game or run a local AI
   chat model on it.
 
-If your account may not use the graphics card, the window says so: add yourself to the `render` and
+On Linux, if your account may not use the graphics card, the window says so: add yourself to the `render` and
 `video` groups (`sudo usermod -aG render,video $USER`), then log out and back in.
 
 ## Removing it
 
-Select an installed build and click **Remove**. Everything is in `~/.local/share/spinus/python/`;
-deleting that folder removes it too. Compiled graphics card code is kept in `~/.cache/spinus/gpu/`,
+Select an installed build and click **Remove**. Everything is in `~/.local/share/spinus/python/`
+(on Windows `C:\Users\<you>\.local\share\spinus\python\`); deleting that folder removes it too. Compiled graphics card code is kept in `~/.cache/spinus/gpu/`,
 which can also be deleted at any time.
 
 When Spinus is updated to a newer PyTorch, an installed build says **an update is available**: the old
