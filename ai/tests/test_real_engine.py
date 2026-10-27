@@ -12,6 +12,7 @@ import asyncio
 import math
 import os
 import random
+import re
 import struct
 from pathlib import Path
 from typing import Any
@@ -98,7 +99,14 @@ async def test_the_track_creator_runs_on_the_real_engine(tmp_path: Path) -> None
         test = (await job(service, "ai.v1.compute.test", {}))["test"]
         assert test["ok"], test
         for model in ("htdemucs", "beat_this_small0", "basic_pitch"):
-            await job(service, "ai.v1.stems.download", {"model": model})
+            try:
+                await job(service, "ai.v1.stems.download", {"model": model})
+            except AssertionError as error:
+                # The models come from their authors' servers (Beat This! from its university's): when one
+                # keeps answering with a server error, that is their outage, not Spinus's.
+                if re.search(r"Could not download .* \(5\d\d\)", str(error)):
+                    pytest.skip(f"{model}'s server is down: {error}")
+                raise
 
         song = made_song(tmp_path / "song.wav")
         cache = tmp_path / "work"
