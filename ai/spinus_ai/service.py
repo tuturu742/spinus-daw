@@ -22,7 +22,7 @@ from .assistant import NoConnection, ask
 from .compute.engine import Engine, EngineError
 from .compute.environments import InstallError
 from .compute.weights import WeightStore, find_model
-from .connections import DEFAULT_BASE_URLS, ConnectionStore, KeyStore
+from .connections import DEFAULT_BASE_URLS, ConnectionStore, KeyStore, key_mismatch
 from .embeddings import ModelStore, default_models_folder, missing_dependencies, run_blocking
 from .gateway import ProviderError, list_models
 from .manual import Manual
@@ -193,10 +193,14 @@ class Service:
         }
 
     async def save_connection(self, params: dict[str, Any], notify: Notify) -> Any:
+        provider = str(params.get("provider", ""))
+        mismatch = key_mismatch(params.get("baseUrl") or None, provider, params.get("key") or None)
+        if mismatch:
+            raise RpcError(-32602, mismatch)
         try:
             connection = self.connections.upsert(
                 str(params.get("name", "")),
-                str(params.get("provider", "")),
+                provider,
                 params.get("baseUrl") or None,
                 params.get("key") or None,
                 params.get("id") or None,
@@ -222,7 +226,8 @@ class Service:
             log.warning(
                 "Connection test of %s (%s) failed: %s: %s", connection.name, connection.provider, error.kind, error
             )
-            return {"ok": False, "message": str(error)}
+            mismatch = key_mismatch(connection.base_url, connection.provider, key) if error.kind == "auth" else None
+            return {"ok": False, "message": mismatch or str(error)}
         log.info("Connection test of %s (%s): %d models", connection.name, connection.provider, len(models))
         connection.models = sorted(models)
         self.connections.save()

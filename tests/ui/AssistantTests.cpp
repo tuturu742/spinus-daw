@@ -111,6 +111,39 @@ TEST_CASE ("Ask, see the proposal, apply it as one undo step: through the servic
     CHECK (service.getState() == ai::AiService::State::off);
 }
 
+TEST_CASE ("AI settings: a key for another provider is refused, and a new connection is selected", "[ui][ai]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+
+    TempFolder t;
+    FakeProvider provider;
+    REQUIRE (provider.ready);
+    ai::AiService service (t.root);
+    AiSettingsDialog settings (service);
+    settings.setAiOn (true);
+
+    // An OpenAI key with the Provider left at Anthropic: nothing is saved, and the message says what to choose.
+    settings.addConnection ("anthropic", "Mixed up", "sk-proj-not-a-real-key", {});
+    REQUIRE (waitFor ([&] { return ! settings.isWaiting(); }));
+    CHECK (settings.getConnections().empty());
+    CHECK (settings.getStatusText().contains ("OpenAI-compatible service"));
+
+    // Two connections: the one just added is the one selected, so Test tests it.
+    for (const auto* name : { "First", "Second" })
+    {
+        const auto before = settings.getConnections().size();
+        settings.addConnection ("local", name, {}, provider.url());
+        REQUIRE (waitFor (
+            [&]
+            {
+                return ! settings.isWaiting() && settings.getConnections().size() == before + 1 &&
+                       ! settings.getConnections().back().models.isEmpty();
+            }));
+    }
+    CHECK (settings.getConnections()[(size_t)settings.getSelectedConnection()].name == "Second");
+}
+
 TEST_CASE ("Assistant and AI settings screenshots for the manual", "[.screenshot][ai]")
 {
     TempFolder t;
