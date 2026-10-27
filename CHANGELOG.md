@@ -93,6 +93,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   first song. With **Let the AI vary the plan** and an AI connection, the AI may change the sections, the
   chord loops and the melody's shape, checked against the style. See
   [Write a song](docs/user/track-creator.md#write-a-song).
+- **Track creator, a full arrangement:** **Arrangement** on the Write a song page (remembered) chooses a
+  **Sketch** of four parts, as before, or a **Full** arrangement of about a dozen channels, laid out like the
+  demo songs: the drums split into kick, snare and hats; a sub bass when the bass leaves room for one; a pad,
+  an arpeggio and a counter-melody; a riser before each chorus and an impact where it starts. Verses stay
+  thin and choruses get everything. Each channel is coloured and grouped by family (Drums, Bass, Synths,
+  Leads, FX) with its own mixer insert, a family's inserts play into a bus of its name, and each layer has
+  its own Playlist track under its family's, so you can see the layers come and go. Layers the Sounds page
+  did not choose for get the closest sound of their role from your sound index. Still one undo step.
 - **Track creator, your sounds:** the sound index now measures Spinus's own instruments and the free
   downloads; your other plugins only when you tick them under **Your plugins...**. The role of a preset
   whose name does not say it is learnt from your presets that do (on Surge XT's presets: right for 57 %

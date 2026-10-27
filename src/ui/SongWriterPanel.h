@@ -7,7 +7,9 @@
 #include "session/Session.h"
 #include "session/SongWriter.h"
 
+#include <map>
 #include <memory>
+#include <optional>
 
 namespace spinus::ui
 {
@@ -16,12 +18,14 @@ namespace spinus::ui
     summary, to read about, listen to and apply.
 
     Write asks the AI service (ai.v1.song.write, spinus_ai/songwriter.py) for a song: rules and seeded chance on
-    this computer, no AI connection needed; with "Let the AI vary the plan" and an AI connection, the AI may vary
-    the sections, chord loops and melody shapes (checked against the style; the rules write every note).
-    Another version writes again with a new seed; Redo part writes one part or one section again, keeping the
-    rest. Listen renders the project as it would be with the song (the proposal tried on a copy) and plays it;
-    Apply puts it into the project through commands as one undo step (session/SongWriter), or, once a song is
-    in, only the parts or sections written again. Mix it opens the automixer toward the reference songs.
+    this computer, no AI connection needed. The arrangement (remembered between runs) is a sketch of four parts,
+    or a full arrangement of about a dozen layers laid out as the demo songs are (session/SongWriter), each layer
+    without a sound chosen on the Sounds page getting the closest sound of its role from the sound index; with "Let the
+   AI vary the plan" and an AI connection, the AI may vary the sections, chord loops and melody shapes (checked against
+   the style; the rules write every note). Another version writes again with a new seed; Redo part writes one part or
+   one section again, keeping the rest. Listen renders the project as it would be with the song (the proposal tried on a
+   copy) and plays it; Apply puts it into the project through commands as one undo step (session/SongWriter), or, once a
+   song is in, only the parts or sections written again. Mix it opens the automixer toward the reference songs.
 
     Nothing changes the project before Apply (AGENTS rule 3). Without the AI service the panel says so; the rest
     of Spinus works as ever. Message thread only. */
@@ -36,6 +40,7 @@ public:
         juce::File workFolder;         // for the preview's rendering
         juce::Array<juce::File> songs; // the reference songs (the automixer's reference)
         parts::Plan sounds;            // the sounds chosen on the Sounds page (none: Spinus's own)
+        juce::File indexFolder;        // the sound index, for a full arrangement's other layers
     };
 
     SongWriterPanel (Session&, std::function<Context()> context);
@@ -60,6 +65,12 @@ public:
     std::function<void (const juce::File& reference)> onMix;
 
     void setRefine (bool on) { refineButton.setToggleState (on, juce::dontSendNotification); }
+    /** "sketch" (four parts) or "full" (about a dozen layers): what Write writes next. Remembered. */
+    void setArrangement (const juce::String& size);
+    juce::String getArrangement() const;
+    /** The sound each layer of the full song gets that the Sounds page did not choose (layer id -> what was
+        found in the sound index), worked out once per song. */
+    const std::map<juce::String, parts::Choice>& getLayerChoices();
     void setSeed (int s) { fixedSeed = s; }
 
     bool isBusy() const noexcept { return busy; }
@@ -69,7 +80,7 @@ public:
     /** What the last Apply made (none before it). */
     const song::Applied& getApplied() const noexcept { return applied; }
     /** What Apply would do now: the whole song, or only what was written again; void when nothing. */
-    juce::var makeProposal (juce::String* error = nullptr) const;
+    juce::var makeProposal (juce::String* error = nullptr);
     juce::File getLastPreview() const { return lastPreview; }
 
     void resized() override;
@@ -81,7 +92,9 @@ private:
     void updateButtons();
     void showRedoMenu();
     bool aiReady() const;
-    song::Options optionsFor (const model::Project&) const;
+    song::Options optionsFor (const model::Project&);
+    /** The chosen sound of a full arrangement's layer: the Sounds page's for its part, or the index's. */
+    std::optional<parts::Plan::Part> chosenForLayer (const song::Layer&);
 
     Session& session;
     std::function<Context()> getContext;
@@ -100,7 +113,11 @@ private:
 
     juce::Label intro;
     MessageLabel status;
+    juce::Label sizeLabel;
+    juce::ComboBox sizeBox;
     juce::ToggleButton refineButton { "Let the AI vary the plan (uses your AI connection)" };
+    std::map<juce::String, parts::Choice> layerChoices; // for `song`
+    bool layerChoicesKnown = false;
     juce::TextButton writeButton { "Write" }, againButton { "Another version" }, redoButton { "Redo part..." },
         listenButton { "Listen" }, stopButton { "Stop" }, applyButton { "Apply" }, mixButton { "Mix it..." };
     juce::TextEditor text;

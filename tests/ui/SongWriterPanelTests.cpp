@@ -4,6 +4,9 @@
 #include "FakeProvider.h"
 #include "dsp/sampler/SampleStorage.h"
 #include "engine/EngineHost.h"
+#include "session/ProjectDocument.h"
+#include "ui/MainView.h"
+#include "ui/Playlist.h"
 #include "ui/SongWriterPanel.h"
 #include "ui/Theme.h"
 
@@ -78,6 +81,7 @@ TEST_CASE ("Track creator: a song written, heard before Apply, applied and a par
     SongWriterPanel panel (session, [&context] { return context; });
     panel.setSize (700, 560);
     panel.setSeed (11);
+    panel.setArrangement ("sketch"); // whatever an earlier test left
 
     // AI off: no service is started, and the panel says what to do.
     CHECK_FALSE (panel.write());
@@ -160,6 +164,70 @@ TEST_CASE ("Track creator: a song written, heard before Apply, applied and a par
     CHECK (panel.makeProposal()["summary"].toString().startsWith ("a new song"));
 }
 
+TEST_CASE ("Track creator: a full arrangement is written, heard and applied as one undo step, the choice remembered",
+           "[ui][trackcreator][song]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    TempFolder t;
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine(), makeDevices (host.getEngine()) };
+    ai::AiService service { t.root, t.root.getChildFile ("models") };
+    service.setEnabled (true);
+    SongWriterPanel::Context context;
+    context.summary = testSummary();
+    context.service = &service;
+    context.workFolder = t.root.getChildFile ("song");
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        panel.setArrangement ("sketch");
+    }
+    SongWriterPanel panel (session, [&context] { return context; });
+    panel.setSize (700, 560);
+    panel.setSeed (5);
+    CHECK (panel.getArrangement() == "sketch");
+    panel.setArrangement ("full");
+    {
+        SongWriterPanel again (session, [&context] { return context; });
+        CHECK (again.getArrangement() == "full"); // remembered
+    }
+
+    const auto before = session.getProject();
+    REQUIRE (panel.write());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    INFO (panel.getStatusText());
+    REQUIRE (song::isFull (panel.getSong()));
+    const auto layers = song::layersOf (panel.getSong());
+    CHECK (layers.size() >= 10);
+    CHECK (panel.getText().contains ("full arrangement"));
+    CHECK (panel.getText().contains ("Drums, Bass, Synths, Leads, FX"));
+
+    REQUIRE (panel.listen());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 600000));
+    INFO (panel.getStatusText());
+    REQUIRE (panel.getLastPreview().existsAsFile());
+    CHECK (peakOf (panel.getLastPreview()) > 0.01f);
+    CHECK (session.getProject() == before);
+    session.getSamplePreview().stop();
+
+    REQUIRE (panel.apply());
+    CHECK (session.getHistory().getUndoDescriptions().size() == 1);
+    CHECK (session.getProject().channels.size() == before.channels.size() + layers.size());
+    REQUIRE (panel.getApplied().full);
+    REQUIRE (panel.getApplied().isIn (session.getProject()));
+
+    // A new lead: the lead and counter-melody layers change, as one more undo step.
+    REQUIRE (panel.redo ("lead"));
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    CHECK (panel.makeProposal()["summary"].toString() == "new lead");
+    REQUIRE (panel.apply());
+    CHECK (session.getHistory().getUndoDescriptions().size() == 2);
+
+    REQUIRE (session.getHistory().undo());
+    REQUIRE (session.getHistory().undo());
+    CHECK (session.getProject().channels == before.channels);
+}
+
 TEST_CASE ("Track creator: without the AI service, the song page says so", "[ui][trackcreator][song]")
 {
     EngineHost host { { .openAudioDevice = false } };
@@ -193,6 +261,7 @@ TEST_CASE ("Track creator write a song screenshot for the manual", "[.screenshot
     panel.setLookAndFeel (&look);
     panel.setSize (700, 520);
     panel.setSeed (3);
+    panel.setArrangement ("full");
     REQUIRE (panel.write());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
@@ -209,4 +278,43 @@ TEST_CASE ("Track creator write a song screenshot for the manual", "[.screenshot
     }
     REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
     panel.setLookAndFeel (nullptr);
+}
+
+TEST_CASE ("Track creator full arrangement Playlist screenshot for the manual", "[.screenshot][manual]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    TempFolder t;
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine(), makeDevices (host.getEngine()) };
+    ai::AiService service { t.root, t.root.getChildFile ("models") };
+    service.setEnabled (true);
+    SongWriterPanel::Context context;
+    context.summary = testSummary();
+    context.service = &service;
+    SongWriterPanel panel (session, [&context] { return context; });
+    panel.setSeed (3);
+    panel.setArrangement ("full");
+    REQUIRE (panel.write());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    REQUIRE (panel.apply());
+
+    ProjectDocument document (session, t.root.getChildFile ("settings"));
+    MainView view (session, &document);
+    view.setSize (1280, 800);
+    REQUIRE (view.useLayout ("Arrange"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+    auto* playlist = dynamic_cast<Playlist*> (view.getWorkspace().getPanel ("playlist"));
+    REQUIRE (playlist != nullptr);
+    playlist->zoom (1.0 / 2.5, 0.0f);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
+    auto* frame = playlist->getParentComponent();
+    REQUIRE (frame != nullptr);
+    const auto image = view.createComponentSnapshot (view.getLocalArea (frame, frame->getLocalBounds()), true, 1.0f);
+    const auto file = juce::File (SPINUS_TEST_FILES_DIR)
+                          .getParentDirectory()
+                          .getChildFile ("docs/user/images/track-creator-full.png");
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
 }

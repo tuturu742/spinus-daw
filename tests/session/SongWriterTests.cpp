@@ -277,3 +277,185 @@ TEST_CASE ("Song writer: one part or one section written again, the rest kept, o
         song::makeProposal (juce::JSON::parse (R"({"kind": "other"})"), history.getProject(), {}, &error).isObject());
     CHECK (error.contains ("not a song"));
 }
+
+namespace
+{
+/** makeSong as a full arrangement: drums split into three layers, a pad in the chorus only, a riser before the
+    chorus and an impact where it starts. `bassPitch` makes another bass. */
+juce::var makeFullSong (int bassPitch = 45)
+{
+    auto song = makeSong (bassPitch);
+    const auto extra = juce::JSON::parse (juce::String (R"({
+        "size": "full",
+        "layers": [
+            {"id": "kick", "name": "Kick", "family": "Drums", "part": "drums", "role": "drums", "drums": true},
+            {"id": "snare", "name": "Snare", "family": "Drums", "part": "drums", "role": "drums", "drums": true},
+            {"id": "hats", "name": "Hats & Cymbals", "family": "Drums", "part": "drums", "role": "drums", "drums": true},
+            {"id": "bass", "name": "Bass", "family": "Bass", "part": "bass", "role": "bass", "drums": false,
+             "register": [31, 38, 47]},
+            {"id": "pad", "name": "Pad", "family": "Synths", "part": "chords", "role": "pad", "drums": false,
+             "register": [52, 61, 73]},
+            {"id": "lead", "name": "Lead", "family": "Leads", "part": "lead", "role": "lead", "drums": false},
+            {"id": "riser", "name": "Riser", "family": "FX", "part": "fx", "role": "fx", "drums": false},
+            {"id": "impact", "name": "Impacts", "family": "FX", "part": "fx", "role": "drums", "drums": true}],
+        "layerParts": {
+            "kick": {"verse": [{"start": 0, "length": 120, "drum": "kick", "velocity": 0.9}],
+                     "chorus": [{"start": 0, "length": 120, "drum": "kick", "velocity": 0.9}]},
+            "snare": {"verse": [{"start": 960, "length": 120, "drum": "snare", "velocity": 0.8}]},
+            "hats": {"verse": [{"start": 480, "length": 120, "drum": "hat", "velocity": 0.5}],
+                     "chorus": [{"start": 0, "length": 120, "drum": "crash", "velocity": 0.8}]},
+            "bass": {"verse": [{"start": 0, "length": 900, "pitch": BASS, "velocity": 0.8}],
+                     "chorus": [{"start": 0, "length": 1800, "pitch": 48, "velocity": 0.8}]},
+            "pad": {"chorus": [{"start": 0, "length": 7000, "pitch": 60, "velocity": 0.5},
+                               {"start": 0, "length": 7000, "pitch": 64, "velocity": 0.5}]},
+            "lead": {"chorus": [{"start": 960, "length": 480, "pitch": 64, "velocity": 0.7}]}},
+        "fx": {
+            "riser": {"bars": 2, "at": [0], "notes": [{"start": 0, "length": 7400, "pitch": 69, "velocity": 0.8}]},
+            "impact": {"bars": 1, "at": [2], "notes": [{"start": 0, "length": 120, "drum": "kick", "velocity": 1.0},
+                                                       {"start": 0, "length": 120, "drum": "crash", "velocity": 1.0}]}}
+    })")
+                                              .replace ("BASS", juce::String (bassPitch)));
+    for (const auto& p : extra.getDynamicObject()->getProperties())
+        song.getDynamicObject()->setProperty (p.name, p.value);
+    return song;
+}
+
+const model::Channel* channelNamed (const model::Project& project, const juce::String& name)
+{
+    for (const auto& c : project.channels)
+        if (c.name == name)
+            return &c;
+    return nullptr;
+}
+
+const model::Lane* laneNamed (const model::Project& project, const juce::String& name)
+{
+    for (const auto& l : project.playlist.lanes)
+        if (l.name == name)
+            return &l;
+    return nullptr;
+}
+
+std::vector<model::Ticks> clipStartsOn (const model::Project& project, const model::Lane& lane)
+{
+    std::vector<model::Ticks> starts;
+    for (const auto& clip : project.playlist.clips)
+        if (clip.lane == lane.id)
+            starts.push_back (clip.start);
+    std::sort (starts.begin(), starts.end());
+    return starts;
+}
+} // namespace
+
+TEST_CASE ("Song writer: a full arrangement is laid out by family, its layers coming and going, one undo step",
+           "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    const auto before = history.getProject();
+    const auto song = makeFullSong();
+    REQUIRE (song::isFull (song));
+    REQUIRE (song::layersOf (song).size() == 8);
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    const auto json = song::makeProposal (song, history.getProject(), options, &error);
+    INFO (error);
+    REQUIRE (json.isObject());
+    auto proposal = ai::Proposal::prepare (json, history);
+    INFO (proposal.error);
+    REQUIRE (proposal.canApply());
+    CHECK (sameContent (history.getProject(), before));
+    proposal.undoName = "Track creator: " + proposal.summary;
+    REQUIRE (proposal.apply (history).wasOk());
+    const auto& project = history.getProject();
+
+    // A channel per layer, coloured and grouped by family, on an insert of its own named and coloured alike.
+    CHECK (project.channels.size() == before.channels.size() + 8);
+    for (const auto& layer : song::layersOf (song))
+    {
+        const auto* c = channelNamed (project, layer.name);
+        INFO (layer.name);
+        REQUIRE (c != nullptr);
+        CHECK (c->group == layer.family);
+        CHECK (c->colour == (juce::uint32)song::familyColour (layer.family).substring (1).getHexValue64());
+        const auto* insert = project.findInsert (c->targetInsert);
+        REQUIRE (insert != nullptr);
+        CHECK (insert->name == layer.name);
+        REQUIRE (c->instrument.has_value());
+        CHECK (c->instrument->stockType == (layer.drums ? "spinus.drum-machine" : "spinus.3x-osc"));
+    }
+    // A bus for each family of two or more channels (Drums, FX), which their inserts play into.
+    juce::StringArray buses;
+    for (const auto& insert : project.mixer.inserts)
+        if (std::none_of (project.channels.begin(), project.channels.end(),
+                          [&] (const model::Channel& c) { return c.targetInsert == insert.id; }))
+            buses.add (insert.name);
+    buses.removeString ("Master");
+    CHECK (buses == juce::StringArray { "Drums", "FX" });
+    const auto* kickInsert = project.findInsert (channelNamed (project, "Kick")->targetInsert);
+    REQUIRE (kickInsert != nullptr);
+    const auto* drumsBus = project.findInsert (kickInsert->output);
+    REQUIRE (drumsBus != nullptr);
+    CHECK (drumsBus->name == "Drums");
+
+    // Patterns only where a layer plays: the pad in the chorus, not the verse; one pattern per effect.
+    CHECK (patternNamed (project, "Song 1: Verse - Kick") != nullptr);
+    CHECK (patternNamed (project, "Song 1: Chorus - Pad") != nullptr);
+    CHECK (patternNamed (project, "Song 1: Verse - Pad") == nullptr);
+    CHECK (patternNamed (project, "Song 1: Verse - Lead") == nullptr);
+    const auto* riser = patternNamed (project, "Song 1: Riser");
+    REQUIRE (riser != nullptr);
+    CHECK (riser->length == 2 * 3840);
+    const auto* kickVerse = patternNamed (project, "Song 1: Verse - Kick");
+    CHECK (pitchesOf (*kickVerse, channelNamed (project, "Kick")->id) == std::vector<int> { 60 });
+    CHECK (pitchesOf (*patternNamed (project, "Song 1: Chorus - Hats & Cymbals"),
+                      channelNamed (project, "Hats & Cymbals")->id) == std::vector<int> { 70 });
+
+    // A folder track per family, a track per layer under it, the clips where the layer plays.
+    const auto* drums = laneNamed (project, "Song 1: Drums");
+    const auto* kick = laneNamed (project, "Kick");
+    const auto* pad = laneNamed (project, "Pad");
+    const auto* riserLane = laneNamed (project, "Riser");
+    const auto* impacts = laneNamed (project, "Impacts");
+    REQUIRE (drums != nullptr);
+    REQUIRE (kick != nullptr);
+    REQUIRE (pad != nullptr);
+    REQUIRE (riserLane != nullptr);
+    REQUIRE (impacts != nullptr);
+    CHECK (kick->group == drums->id);
+    CHECK (pad->group == laneNamed (project, "Song 1: Synths")->id);
+    CHECK (clipStartsOn (project, *kick) == std::vector<model::Ticks> { 0, 7680, 15360 });
+    CHECK (clipStartsOn (project, *pad) == std::vector<model::Ticks> { 7680 });
+    CHECK (clipStartsOn (project, *riserLane) == std::vector<model::Ticks> { 0 });
+    CHECK (clipStartsOn (project, *impacts) == std::vector<model::Ticks> { 7680 });
+    CHECK (clipStartsOn (project, *drums).empty());
+    CHECK (project.playlist.markers.size() == 3);
+
+    CHECK (history.getUndoDescriptions().size() == 1);
+    CHECK (history.getUndoDescriptions()[0].contains ("8 channels"));
+
+    // What it made is found again, and a new bass is written into the bass layer only.
+    const auto applied = song::findApplied (song, project, "Song 1");
+    REQUIRE (applied.full);
+    REQUIRE (applied.isIn (project));
+    CHECK (applied.layerPatterns.at ("kick").size() == 2);
+    CHECK (applied.layerPatterns.at ("pad").size() == 1);
+    CHECK (applied.layerChannels.at ("kick") == channelNamed (project, "Kick")->id);
+    const auto after = history.getProject();
+    const auto redo = song::makeRedoProposal (makeFullSong (40), applied, "bass", {}, &error);
+    INFO (error);
+    REQUIRE (redo.isObject());
+    auto bass = ai::Proposal::prepare (redo, history);
+    INFO (bass.error);
+    REQUIRE (bass.apply (history).wasOk());
+    CHECK (pitchesOf (*history.getProject().findPattern (applied.layerPatterns.at ("bass").at ("verse")),
+                      applied.layerChannels.at ("bass")) == std::vector<int> { 40 });
+    CHECK (*history.getProject().findPattern (applied.layerPatterns.at ("kick").at ("verse")) ==
+           *after.findPattern (applied.layerPatterns.at ("kick").at ("verse")));
+    CHECK (history.getProject().playlist == after.playlist);
+
+    REQUIRE (history.undo());
+    REQUIRE (history.undo());
+    CHECK (sameContent (history.getProject(), before));
+    CHECK_FALSE (applied.isIn (history.getProject()));
+}
