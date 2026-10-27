@@ -24,6 +24,7 @@ A page for every feature of Spinus. The assistant reads these pages too, so you 
 - [Playlist](playlist.md): arranging patterns into a song
 - [Sampler](sampler.md): playing samples, one-shots and multi-sampled instruments
 - [Drum Machine](drum-machine.md): 16 pads, choke groups and kits
+- [Starter pack](starter-pack.md): the free samples and factory drum kits that come with Spinus
 - [Surge XT](surge-xt.md): the big synth, its presets and macros
 - [3x Osc](3x-osc.md): a quick, simple synth
 - [Beat Slicer](beat-slicer.md): chop a loop into slices and rearrange it

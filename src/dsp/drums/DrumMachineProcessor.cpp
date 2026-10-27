@@ -103,9 +103,42 @@ DrumMachineProcessor::DrumMachineProcessor()
     for (int pad = 0; pad < numPads; ++pad)
         pads[(size_t)pad].note = firstNote + pad;
     loadSynthKit();
+    for (auto* parameter : juce::AudioProcessor::getParameters())
+        parameter->addListener (this);
 }
 
-DrumMachineProcessor::~DrumMachineProcessor() = default;
+DrumMachineProcessor::~DrumMachineProcessor()
+{
+    for (auto* parameter : juce::AudioProcessor::getParameters())
+        parameter->removeListener (this);
+}
+
+void DrumMachineProcessor::setKit (const juce::String& name)
+{
+    kitName = name;
+    kitModified = false;
+    sendChangeMessage();
+}
+
+void DrumMachineProcessor::markModified()
+{
+    if (! kitModified.exchange (true))
+        sendChangeMessage();
+}
+
+void DrumMachineProcessor::parameterGestureChanged (int, bool starting)
+{
+    // A control turned in a window (Spinus's or a host's); automation changes values without gestures.
+    if (starting)
+        markModified();
+}
+
+juce::String DrumMachineProcessor::getKitDisplayName() const
+{
+    if (kitName.isEmpty())
+        return "New kit";
+    return kitModified.load() ? kitName + " *" : kitName;
+}
 
 SamplerSettings DrumMachineProcessor::getPadSettings (int pad) const noexcept
 {
@@ -164,6 +197,7 @@ juce::Result DrumMachineProcessor::loadPadFile (int pad, const juce::File& file)
     p.name = zone.name;
     p.audio = zone.audio;
     p.sampleRate = zone.sampleRate;
+    markModified();
     publish();
     return juce::Result::ok();
 }
@@ -176,6 +210,7 @@ void DrumMachineProcessor::setPadAudio (int pad, juce::AudioBuffer<float> audio,
     p.name = name;
     p.sampleRate = rate;
     p.audio = std::make_shared<const juce::AudioBuffer<float>> (std::move (audio));
+    markModified();
     publish();
 }
 
@@ -184,25 +219,40 @@ void DrumMachineProcessor::clearPad (int pad)
     if (! juce::isPositiveAndBelow (pad, numPads))
         return;
     auto& p = pads[(size_t)pad];
+    if (p.audio != nullptr)
+        markModified();
     p.name = {};
     p.audio = nullptr;
     publish();
 }
 
+void DrumMachineProcessor::clearAllPads()
+{
+    for (auto& p : pads)
+    {
+        p.name = {};
+        p.audio = nullptr;
+    }
+    publish();
+    setKit ({});
+}
+
 void DrumMachineProcessor::setPadNote (int pad, int note)
 {
-    if (juce::isPositiveAndBelow (pad, numPads))
+    if (juce::isPositiveAndBelow (pad, numPads) && pads[(size_t)pad].note != juce::jlimit (0, 127, note))
     {
         pads[(size_t)pad].note = juce::jlimit (0, 127, note);
+        markModified();
         publish();
     }
 }
 
 void DrumMachineProcessor::setPadChoke (int pad, int group)
 {
-    if (juce::isPositiveAndBelow (pad, numPads))
+    if (juce::isPositiveAndBelow (pad, numPads) && pads[(size_t)pad].chokeGroup != juce::jlimit (0, 8, group))
     {
         pads[(size_t)pad].chokeGroup = juce::jlimit (0, 8, group);
+        markModified();
         publish();
     }
 }
@@ -236,15 +286,59 @@ void DrumMachineProcessor::loadSynthKit()
     }
     resetPadParameters();
     publish();
+    setKit ("Spinus Synth Kit");
+}
+
+juce::Result DrumMachineProcessor::loadFactoryKit (const starter::Kit& kit, const juce::File& pack)
+{
+    juce::StringArray missing;
+    for (int i = 0; i < numPads; ++i)
+    {
+        auto& p = pads[(size_t)i];
+        p = Pad { {}, nullptr, 48000.0, firstNote + i, 0 };
+        if (i >= (int)kit.pads.size())
+            continue;
+        const auto& pad = kit.pads[(size_t)i];
+        SampleZone zone;
+        if (const auto file = starter::padFile (pack, pad);
+            ! file.existsAsFile() || readAudioFile (file, zone, 60.0).failed())
+        {
+            missing.add (pad.name.isNotEmpty() ? pad.name : pad.file);
+            continue;
+        }
+        p.name = pad.name.isNotEmpty() ? pad.name : zone.name;
+        p.audio = zone.audio;
+        p.sampleRate = zone.sampleRate;
+        p.chokeGroup = pad.chokeGroup;
+    }
+    resetPadParameters();
+    for (int i = 0; i < juce::jmin (numPads, (int)kit.pads.size()); ++i)
+        for (const auto& [setting, value] : { std::pair { "volume", kit.pads[(size_t)i].volumeDb },
+                                              std::pair { "tune", kit.pads[(size_t)i].tuneSemitones } })
+            if (auto* parameter = parameters.getParameter (parameterId (setting, i));
+                parameter != nullptr && std::abs (value) > 0.001f)
+                parameter->setValueNotifyingHost (parameter->convertTo0to1 (value));
+    publish();
+    setKit (kit.name);
+    if (missing.isEmpty())
+        return juce::Result::ok();
+    return juce::Result::fail ("The kit " + kit.name + " is missing some sounds (" + missing.joinIntoString (", ") +
+                               "): the starter pack is not fully installed");
 }
 
 juce::Result DrumMachineProcessor::saveKit (const juce::File& file)
 {
+    const auto previousName = kitName;
+    const bool previouslyModified = kitModified.load();
+    setKit (file.getFileNameWithoutExtension()); // the saved kit is this file, unchanged
     juce::MemoryBlock state;
     getStateInformation (state);
-    return file.replaceWithData (state.getData(), state.getSize())
-               ? juce::Result::ok()
-               : juce::Result::fail ("Could not write " + file.getFullPathName());
+    if (file.replaceWithData (state.getData(), state.getSize()))
+        return juce::Result::ok();
+    kitName = previousName;
+    kitModified = previouslyModified;
+    sendChangeMessage();
+    return juce::Result::fail ("Could not write " + file.getFullPathName());
 }
 
 juce::Result DrumMachineProcessor::loadKit (const juce::File& file)
@@ -255,6 +349,7 @@ juce::Result DrumMachineProcessor::loadKit (const juce::File& file)
     if (! juce::ValueTree::readFromData (state.getData(), state.getSize()).hasType ("SpinusDrumMachine"))
         return juce::Result::fail (file.getFileName() + " is not a Spinus drum kit");
     setStateInformation (state.getData(), (int)state.getSize());
+    setKit (file.getFileNameWithoutExtension());
     return juce::Result::ok();
 }
 
@@ -333,6 +428,8 @@ void DrumMachineProcessor::getStateInformation (juce::MemoryBlock& destination)
 {
     juce::ValueTree state ("SpinusDrumMachine");
     state.setProperty ("version", 1, nullptr);
+    state.setProperty ("kitName", kitName, nullptr);
+    state.setProperty ("kitModified", kitModified.load(), nullptr);
     state.appendChild (parameters.copyState(), nullptr);
 
     for (int i = 0; i < numPads; ++i)
@@ -387,6 +484,9 @@ void DrumMachineProcessor::setStateInformation (const void* data, int sizeInByte
             pad.sampleRate = zone.sampleRate;
         }
     }
+    // A state saved before kits had names: "Kit", as the button said then.
+    kitName = state.getProperty ("kitName", "Kit").toString();
+    kitModified = (bool)state.getProperty ("kitModified", false);
     publish();
 }
 

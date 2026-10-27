@@ -10,6 +10,7 @@ installed:
     ai/python/       the Windows embeddable Python (PSF licence), pinned, with the service's packages from
                      ai/uv.lock (Windows wheels, hashes checked) in ai/python/Lib/site-packages
     demo/<Name>/            the demo songs (as cmake/SpinusInstall.cmake's share/spinus/demo)
+    samples/Spinus Starter Pack/   the starter sample pack (as share/spinus/samples)
     LICENSE.txt, THIRD_PARTY.md, docs/   (the manual)
 
 Spinus finds ai/python/python.exe by itself (AiService::findInstallation). Beside app/, the installer's
@@ -113,6 +114,8 @@ def main() -> None:
     for song in sorted((source / "demo").iterdir()):
         if song.is_dir() and any(song.glob("*.spn")):
             shutil.copytree(song, app / "demo" / song.name, ignore=shutil.ignore_patterns(".autosave", ".session.lock"))
+    # The starter sample pack (src/dsp/drums/StarterPack.h).
+    shutil.copytree(source / "samples", app / "samples")
     shutil.copy2(source / "LICENSE", app / "LICENSE.txt")
     shutil.copy2(source / "THIRD_PARTY.md", app)
     shutil.copytree(source / "docs" / "user", app / "docs")

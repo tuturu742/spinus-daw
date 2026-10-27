@@ -8,7 +8,7 @@ button. It lists your projects, your samples and everything you can play or put 
 | Section | What is in it |
 |---|---|
 | **Projects** | The demo songs that come with Spinus and folders of projects you add yourself (see [Projects](#projects) below). |
-| **Samples** | Folders of samples on your computer that you add yourself (see [Samples](#samples) below). Spinus does not come with samples. |
+| **Samples** | The [starter pack](starter-pack.md) that comes with Spinus, then folders of samples on your computer that you add yourself (see [Samples](#samples) below). |
 | **Instruments** › **Installed plugins** | Instrument plugins found on your computer. |
 | **Instruments** › **Free open source** | Free, open-source instruments made by others, which Spinus downloads for you: Surge XT and OB-Xf, by the Surge Synth Team, Odin 2 (Linux), by TheWaveWarden, and the Six Sines FM synthesizer. |
 | **Effects** › **Installed plugins** | Effect plugins found on your computer. |
@@ -90,8 +90,13 @@ A project that is gone from one of your folders drops out the next time Spinus l
 
 ## Samples
 
-Spinus does not ship samples, but it shows your own sample libraries: drum kits, loops, one-shots and
-vocals you have downloaded or bought.
+The first folder is the **Spinus Starter Pack**, free sounds that come with Spinus (see
+[Starter pack](starter-pack.md)): drums, loops, a tongue drum, vocal stabs and textures. It is marked
+"included", is never changed, and cannot be removed; right-click it to **Hide the starter pack**
+(right-click **Samples** to show it again).
+
+After it, the Browser shows your own sample libraries: drum kits, loops, one-shots and vocals you have
+downloaded or bought.
 
 - **Add a folder:** click **+ Add a folder of samples...** under **Samples** (or right-click
   **Samples**) and choose the folder. Add as many as you like; Spinus remembers them. Your files are

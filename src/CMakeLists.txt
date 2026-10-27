@@ -64,6 +64,8 @@ add_library (spinus_core STATIC
     dsp/drums/DrumMachineProcessor.h
     dsp/drums/DrumSynth.cpp
     dsp/drums/DrumSynth.h
+    dsp/drums/StarterPack.cpp
+    dsp/drums/StarterPack.h
     dsp/SpinusPluginFormat.h
     dsp/sampler/SampleSet.cpp
     dsp/sampler/SampleStorage.cpp
