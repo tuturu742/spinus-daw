@@ -2,10 +2,10 @@
 
 Give the Track creator a few songs you like, or a whole album, and it tells you what they have in common:
 their **tempo**, **key**, **chords**, **drum groove**, which **parts** play and how high or low, how long
-their **sections** are, and how **loud** they are. Later versions will use this to make a new song in
-that style, with the instruments you have installed. For now it does the first three steps: listening and
-summing up, [getting to know your sounds](#your-sounds), and [choosing a sound for each
-part](#sounds-for-each-part).
+their **sections** are, and how **loud** they are. Then it uses this to make a new song in that style, with
+the instruments you have installed, in four steps: listening and summing up, [getting to know your
+sounds](#your-sounds), [choosing a sound for each part](#sounds-for-each-part), and [writing a
+song](#write-a-song).
 
 ![The Track creator](images/track-creator.png)
 
@@ -16,11 +16,11 @@ it again and the Track creator closes and disappears from the menus; a saved
 [window layout](main-window.md#layouts) doesn't bring it back while it's off.
 
 It changes your song only when you click **Add these sounds to the project** (in
-[Sounds for each part](#sounds-for-each-part)), and that is one step you can undo. Everything else only
-listens and measures.
+[Sounds for each part](#sounds-for-each-part)) or **Apply** (in [Write a song](#write-a-song)), and each
+of those is one step you can undo. Everything else only listens, measures and suggests.
 
-The panel has two pages: **Songs and style** (your songs and what they have in common) and **Sounds for
-each part**. The [sound index](#your-sounds) controls are under both.
+The panel has three pages: **Songs and style** (your songs and what they have in common), **Sounds for
+each part** and **Write a song**. The [sound index](#your-sounds) controls are under all of them.
 
 ## What it needs
 
@@ -218,19 +218,72 @@ These are a program's choices, made from measurements: treat them as a starting 
 ear. A part played by several instruments at once (a guitar and a piano in the "other" stem) is matched as
 one sound.
 
-## What comes next
+## Write a song
 
-The Track creator is being built in steps:
+The last page, **Write a song**, writes a new song in the style of your songs: its sections, chords,
+drums, a bass line, a chords part and a lead melody, as notes in patterns you can edit like any other.
 
-1. **References and their style** (this version): the summary above.
-2. **Your sounds** (this version): the [sound index](#your-sounds) of your instruments' presets and your
-   samples.
-3. **The instruments for each part** (this version): [sounds for each part](#sounds-for-each-part), tuned,
-   with effects and a first mix.
-4. **A new song**: sections, chords, bass, drums and a melody written from the summary by rules that work
-   without any AI connection; with a connection set up, the [assistant](assistant.md) can vary or refine
-   it. It comes as one proposal you apply or reject (one undo step), and you can redo one part at a time
-   ("a new bassline").
+![Write a song](images/track-creator-song.png)
+
+1. Click **Write**. In a moment the page says what it wrote: how long the song is, its tempo and key, its
+   sections ("Intro 8, Verse 16, Chorus 16, ...") and each section's chords, which notes each part plays and
+   how busy it is, and how all this compares with your songs in numbers.
+2. **Listen** plays the song as it would be in your project (through the instruments, the ones the
+   [Sounds for each part](#sounds-for-each-part) page added, or Spinus's own), before anything is changed.
+   **Stop** stops it.
+3. Not quite right? **Another version** writes a different song in the same style. **Redo part...** writes
+   one part again (**New drums**, **New bass**, **New chords**, **New lead**) or one section again (**The
+   chorus again**, with new chords), and keeps everything else exactly as it was.
+4. **Apply** puts the song into your project: the tempo and key, a channel for each part, a pattern per
+   section ("Song 1: Verse"), a Playlist track **Track creator: Song 1** playing the sections in order, and
+   a marker where each section starts. It is **one undo step**: Ctrl+Z takes it all away. After that,
+   **Redo part...** and **Apply** change only that part or section in the patterns (one more undo step
+   each); **Write** and **Apply** add another song ("Song 2") beside the first.
+5. **Mix it...** opens the [Automixer](automixer.md) with your first song as its reference: it measures the
+   parts now that they play notes, and suggests levels, EQ and compression toward your songs. Tick what you
+   want and apply (one undo step).
+
+**How it is written.** Rules on your computer turn the summary's numbers into the song; nothing is sent
+anywhere and no AI connection is needed.
+
+- **Tempo and key**: your songs' usual tempo, moved a little (up to 3 %); the key of one of your songs,
+  sometimes a step higher or lower; minor or major as often as your songs are.
+- **Sections**: an intro, verses, choruses, a bridge and an outro, about as many as your songs have and
+  about as long, each 4, 8, 12, 16... bars as your songs' sections are. A chorus is the same each time
+  (one pattern), so you can change it once.
+- **Chords**: loops of four chords, chosen from the chords your songs use and the way they move from one
+  chord to the next: new combinations, not a copy of one of your songs (a loop that one song plays as its
+  own is used at most once).
+- **Drums**: the kick, snare and hi-hats on the steps your songs play them, a few extra hits by chance
+  (fewer in quiet sections), a fill at the end of each section and a crash at the start of the next.
+- **Bass**: the chords' roots, sometimes the fifth or the octave and a step leading into the next chord,
+  where the kick plays most, as low and as busy as your songs' bass.
+- **Chords part**: the chords played as high and as busy as your songs' other instruments, each chord
+  close to the one before.
+- **Lead**: short phrases that answer each other, in your songs' vocal range and about as many notes a bar,
+  with the chord's own notes on the strong beats and in the key in between. Only the style is used: your
+  songs' melodies are never read (the summary has none).
+
+**Let the AI vary the plan** (off at first): with an AI connection set up in Options › AI, the AI may
+change the order and length of the sections, the chord loops and the shape of the melody. Spinus checks
+what it says against your songs' style (lengths on 4-bar phrases, only your songs' chords) and writes every
+note itself; if the AI isn't reachable or answers something unusable, the rules' song stays, and the page
+says so. This sends the summary's numbers (not your songs) to your AI provider.
+
+The same click of **Write** with the same summary can give a different song; each song keeps its own
+random numbers, so **Redo part...** changes only what you asked for.
+
+**What it needs**: AI turned on in Options › AI (the writing runs in Spinus's AI service, on your
+computer), and a summary from the first page. Without the AI service the page says so; the rest of Spinus
+works as always.
+
+These are a program's songs, made from measurements: a sketch to change by ear, not a finished song.
+
+## How it was built
+
+The Track creator was built in four steps: the summary of your songs' style, the
+[sound index](#your-sounds), [sounds for each part](#sounds-for-each-part), and [writing a
+song](#write-a-song).
 
 Only the style is used: the references' melodies, words and sound are never copied into your song.
 

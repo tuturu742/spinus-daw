@@ -10,6 +10,7 @@
 #include "session/SoundDescriptors.h"
 #include "ui/AnalysisLibraryView.h"
 #include "ui/Analyzer.h"
+#include "ui/Automixer.h"
 #include "ui/SoundIndexView.h"
 #include "ui/Theme.h"
 #include "ui/TrackCreator.h"
@@ -1025,5 +1026,148 @@ TEST_CASE ("Track creator: sounds for the parts of real songs (SPINUS_REALMUSIC_
     lines.add ({});
     lines.add (panel.getStatusText());
     out.getChildFile (batch.getFileName() + "-sounds.txt").replaceWithText (lines.joinIntoString ("\n") + "\n");
+}
+#endif
+
+#if defined(SPINUS_PLUGIN_SCANNER)
+TEST_CASE ("Track creator: a new song in the style of real songs (SPINUS_REALMUSIC_BATCH)", "[.realsong]")
+{
+    // A check by hand, not run in CI, after "Track creator on real songs" analyzed the batch and the sound index
+    // was built (as for "[.realsounds]"). Chooses the sounds for each part and adds them, writes a song in the
+    // style (rules only, seed SPINUS_REALSONG_SEED, default 1), applies it, exports it to <batch>-unmixed.flac,
+    // runs the automixer toward the first song (rules only) and exports <batch>.flac, into SPINUS_REALSONG_OUT,
+    // with the song (<batch>-song.json) and what the panel says about it (<batch>-song.txt). Never plays a sound
+    // out loud; only reads the songs.
+    auto env = [] (const char* name) { return juce::SystemStats::getEnvironmentVariable (name, {}); };
+    const juce::File batch (env ("SPINUS_REALMUSIC_BATCH")), out (env ("SPINUS_REALMUSIC_OUT")),
+        settings (env ("SPINUS_REALMUSIC_SETTINGS")), indexFolder (env ("SPINUS_REALSOUNDS_INDEX")),
+        songOut (env ("SPINUS_REALSONG_OUT"));
+    if (! batch.isDirectory() || ! settings.isDirectory() || indexFolder == juce::File() || songOut == juce::File())
+        SKIP ("set SPINUS_REALMUSIC_BATCH, _OUT, _SETTINGS, SPINUS_REALSOUNDS_INDEX and SPINUS_REALSONG_OUT");
+    const auto summary = juce::JSON::parse (out.getChildFile (batch.getFileName() + ".json"));
+    REQUIRE (summary.isObject());
+    songOut.createDirectory();
+    const auto name = batch.getFileName();
+    juce::StringArray log;
+    auto note = [&] (const juce::String& line)
+    {
+        log.add (line);
+        songOut.getChildFile (name + "-run.log").replaceWithText (log.joinIntoString ("\n") + "\n");
+    };
+
+    SoundIndexer::Options helper;
+    helper.helper = juce::File (SPINUS_PLUGIN_SCANNER);
+    std::vector<SoundSource> sources;
+    for (const auto* own : { "3x-osc", "drum-machine" })
+    {
+        SoundSource s;
+        s.key = juce::String ("stock-spinus.") + own;
+        s.name = juce::String (own) == "3x-osc" ? "3x Osc" : "Drum Machine";
+        s.format = "Spinus";
+        s.file = juce::String ("spinus:") + own;
+        s.stockType = juce::String ("spinus.") + own;
+        s.badge = "Spinus";
+        s.fingerprint = "real check";
+        sources.push_back (s);
+    }
+    if (const juce::File surge (env ("SPINUS_SURGE_CLAP")); surge.exists())
+    {
+        SoundSource s;
+        s.key = "surge-xt";
+        s.name = s.pluginName = "Surge XT";
+        s.format = "CLAP";
+        s.file = surge.getFullPathName();
+        s.stockType = "bundled.surge-xt";
+        s.badge = "CLAP";
+        s.fingerprint = "real check";
+        sources.push_back (s);
+    }
+    juce::Array<juce::File> folders;
+    if (const juce::File samples (env ("SPINUS_REALSOUNDS_SAMPLES")); samples.isDirectory())
+        folders.add (samples);
+    SoundIndex index (indexFolder);
+    index.load();
+    SoundIndexer::update (index, helper, sources, folders, {}, {});
+    note ("Sound index: " + juce::String (index.summarize().presets) + " presets, " +
+          juce::String (index.summarize().samples) + " samples");
+
+    EngineHost host { { .openAudioDevice = false } };
+    Session session (host.getEngine(), makeDevices (host.getEngine()));
+    ai::AiService service (settings);
+    service.setEnabled (true);
+    PartSoundsPanel::Context context;
+    context.summary = summary;
+    juce::Array<juce::File> songs;
+    for (const auto& entry : juce::RangedDirectoryIterator (batch, true, "*.mp3;*.flac;*.wav", juce::File::findFiles))
+    {
+        songs.add (entry.getFile());
+        context.songs.push_back ({ contentDigest (entry.getFile()), entry.getFile().getFileNameWithoutExtension() });
+    }
+    songs.sort();
+    context.library = AnalysisLibrary::inAiFolder (service.getFolder());
+    context.indexFolder = indexFolder;
+    context.workFolder = songOut.getChildFile (name + "-work");
+    context.helper = helper;
+    context.service = &service;
+    PartSoundsPanel sounds (session, [context] { return context; });
+    sounds.setTune (env ("SPINUS_REALSOUNDS_TUNE") != "0");
+    sounds.setTuneTries (
+        env ("SPINUS_REALSOUNDS_TRIES").getIntValue() > 0 ? env ("SPINUS_REALSOUNDS_TRIES").getIntValue() : 300);
+    REQUIRE (sounds.chooseSounds());
+    REQUIRE (waitFor ([&] { return ! sounds.isBusy(); }, 4 * 3600000));
+    note (sounds.getStatusText());
+    for (int i = 0; i < (int)sounds.getRows().size(); ++i)
+        note (sounds.describe (i).upToFirstOccurrenceOf ("\n", false, false));
+    REQUIRE (sounds.addToProject());
+    note (sounds.getStatusText());
+
+    SongWriterPanel writer (session,
+                            [&]
+                            {
+                                SongWriterPanel::Context c;
+                                c.summary = summary;
+                                c.service = &service;
+                                c.workFolder = songOut.getChildFile (name + "-work");
+                                c.songs = songs;
+                                c.sounds = sounds.makePlan();
+                                return c;
+                            });
+    writer.setSeed (env ("SPINUS_REALSONG_SEED").isNotEmpty() ? env ("SPINUS_REALSONG_SEED").getIntValue() : 1);
+    REQUIRE (writer.write());
+    REQUIRE (waitFor ([&] { return ! writer.isBusy(); }, 600000));
+    INFO (writer.getStatusText());
+    REQUIRE (writer.getSong().isObject());
+    REQUIRE (writer.apply());
+    note (writer.getStatusText());
+    songOut.getChildFile (name + "-song.json").replaceWithText (juce::JSON::toString (writer.getSong()));
+    songOut.getChildFile (name + "-song.txt").replaceWithText (writer.getText() + "\n");
+
+    auto exportTo = [&] (const juce::File& file)
+    {
+        engine::ExportSettings exportSettings;
+        exportSettings.format = engine::ExportSettings::Format::flac;
+        std::optional<engine::ExportJob::Result> result;
+        auto job =
+            session.createExportJob (file, exportSettings, [&] (const engine::ExportJob::Result& r) { result = r; });
+        job->start();
+        REQUIRE (waitFor ([&] { return result.has_value(); }, 3600000));
+        INFO (result->error);
+        CHECK (result->ok);
+        note ("Exported " + file.getFullPathName());
+    };
+    exportTo (songOut.getChildFile (name + "-unmixed.flac"));
+
+    // Then mixed: the automixer toward the first reference song (rules only: no AI connection here).
+    Automixer automixer (session, &service);
+    if (! songs.isEmpty())
+        automixer.setReference (songs.getFirst());
+    REQUIRE (automixer.analyze (Automixer::Target::club));
+    REQUIRE (waitFor ([&] { return ! automixer.isBusy(); }, 3600000));
+    note ("Automixer: " + automixer.getStatusText() + " " + automixer.getNote());
+    for (const auto& item : automixer.getItems())
+        note ("  " + item.json["title"].toString() + ": " + item.json["reason"].toString());
+    if (! automixer.getItems().empty())
+        CHECK (automixer.apply());
+    exportTo (songOut.getChildFile (name + ".flac"));
 }
 #endif

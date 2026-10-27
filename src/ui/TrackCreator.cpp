@@ -231,8 +231,11 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
     soundsTab.setClickingTogglesState (false);
     styleTab.setTooltip ("The songs you gave and what they share");
     soundsTab.setTooltip ("The closest sounds you have for each part of the songs, to hear and add to the project");
-    styleTab.onClick = [this] { showPartSounds (false); };
-    soundsTab.onClick = [this] { showPartSounds (true); };
+    songTab.setClickingTogglesState (false);
+    songTab.setTooltip ("A new song in the style of the songs, to listen to and apply");
+    styleTab.onClick = [this] { showPage (Page::style); };
+    soundsTab.onClick = [this] { showPage (Page::sounds); };
+    songTab.onClick = [this] { showPage (Page::song); };
     styleTab.setToggleState (true, juce::dontSendNotification);
     partSounds = std::make_unique<PartSoundsPanel> (session,
                                                     [this]
@@ -251,8 +254,28 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
                                                         return c;
                                                     });
     addChildComponent (*partSounds);
+    songWriter = std::make_unique<SongWriterPanel> (session,
+                                                    [this]
+                                                    {
+                                                        SongWriterPanel::Context c;
+                                                        c.summary = summary;
+                                                        c.service = service;
+                                                        c.workFolder = workRoot.getChildFile ("song");
+                                                        for (const auto& r : references)
+                                                            if (r.status == Status::done)
+                                                                c.songs.add (r.file);
+                                                        c.sounds = partSounds->makePlan();
+                                                        return c;
+                                                    });
+    songWriter->onMix = [this] (const juce::File& reference)
+    {
+        if (onOpenAutomixer)
+            onOpenAutomixer (reference);
+    };
+    addChildComponent (*songWriter);
     addAndMakeVisible (styleTab);
     addAndMakeVisible (soundsTab);
+    addAndMakeVisible (songTab);
     addAndMakeVisible (pluginsButton);
 
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &addButton, &folderButton, &removeButton,
@@ -271,6 +294,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
 
 TrackCreator::~TrackCreator()
 {
+    songWriter = nullptr; // stops its rendering, before its work folder goes
     partSounds = nullptr; // stops what it runs, before its work folder goes
     indexer = nullptr;    // stops the update (its helper is killed)
     *alive = false;
@@ -452,16 +476,19 @@ void TrackCreator::choosePlugins()
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&pluginsButton));
 }
 
-void TrackCreator::showPartSounds (bool sounds)
+void TrackCreator::showPage (Page shown)
 {
-    showingSounds = sounds;
+    page = shown;
+    const bool style = page == Page::style;
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &addButton, &folderButton, &removeButton,
                                                              &clearButton, &list, &status, &summaryTitle, &summaryText,
                                                              &saveButton, &libraryButton })
-        c->setVisible (! sounds);
-    partSounds->setVisible (sounds);
-    styleTab.setToggleState (! sounds, juce::dontSendNotification);
-    soundsTab.setToggleState (sounds, juce::dontSendNotification);
+        c->setVisible (style);
+    partSounds->setVisible (page == Page::sounds);
+    songWriter->setVisible (page == Page::song);
+    styleTab.setToggleState (style, juce::dontSendNotification);
+    soundsTab.setToggleState (page == Page::sounds, juce::dontSendNotification);
+    songTab.setToggleState (page == Page::song, juce::dontSendNotification);
     updateButtons();
     resized();
 }
@@ -1193,12 +1220,13 @@ void TrackCreator::updateButtons()
     const bool busy = isBusy();
     removeButton.setEnabled (list.getSelectedRow() >= 0 && ! downloading);
     clearButton.setEnabled (! references.empty() && ! downloading);
-    cancelButton.setVisible (current >= 0 && ! showingSounds);
-    againButton.setVisible (! busy && ! showingSounds &&
+    const bool showingStyle = page == Page::style;
+    cancelButton.setVisible (current >= 0 && showingStyle);
+    againButton.setVisible (! busy && showingStyle &&
                             std::any_of (references.begin(), references.end(), [] (const Reference& r)
                                          { return r.status == Status::waiting || r.status == Status::failed; }));
     saveButton.setEnabled (summary.isObject());
-    needsText.setVisible (needsText.getText().isNotEmpty() && ! showingSounds);
+    needsText.setVisible (needsText.getText().isNotEmpty() && showingStyle);
     downloadButton.setVisible (needsText.isVisible() && ! missing.empty());
     downloadButton.setEnabled (! busy);
     if (! needsText.isVisible())
@@ -1261,11 +1289,18 @@ void TrackCreator::resized()
         styleTab.setBounds (r.removeFromLeft (150).reduced (0, 1));
         r.removeFromLeft (4);
         soundsTab.setBounds (r.removeFromLeft (170).reduced (0, 1));
+        r.removeFromLeft (4);
+        songTab.setBounds (r.removeFromLeft (120).reduced (0, 1));
         area.removeFromTop (6);
     }
-    if (showingSounds && partSounds != nullptr)
+    if (page == Page::sounds && partSounds != nullptr)
     {
         partSounds->setBounds (area);
+        return;
+    }
+    if (page == Page::song && songWriter != nullptr)
+    {
+        songWriter->setBounds (area);
         return;
     }
     intro.setBounds (area.removeFromTop (40));

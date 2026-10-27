@@ -8,6 +8,7 @@
 #include "session/SoundIndex.h"
 #include "MessageLabel.h"
 #include "PartSoundsPanel.h"
+#include "SongWriterPanel.h"
 
 #include <memory>
 #include <vector>
@@ -157,9 +158,24 @@ public:
     // Sounds for each part (milestone 3).
 
     /** Shows the songs and their style (false) or the sounds for each part (true). */
-    void showPartSounds (bool);
-    bool isShowingPartSounds() const noexcept { return showingSounds; }
+    void showPartSounds (bool sounds) { showPage (sounds ? Page::sounds : Page::style); }
+    bool isShowingPartSounds() const noexcept { return page == Page::sounds; }
     PartSoundsPanel& getPartSounds() noexcept { return *partSounds; }
+
+    //==============================================================================
+    // The new song (milestone 4).
+
+    enum class Page
+    {
+        style,  // the songs and their style
+        sounds, // sounds for each part
+        song    // write a song
+    };
+    void showPage (Page);
+    Page getPage() const noexcept { return page; }
+    SongWriterPanel& getSongWriter() noexcept { return *songWriter; }
+    /** Opens the automixer with this reference song (the main window sets it). */
+    std::function<void (const juce::File& reference)> onOpenAutomixer;
 
     juce::Rectangle<int> getDefaultBounds() const override { return { 100, 70, 720, 720 }; }
 
@@ -248,9 +264,10 @@ private:
     MessageLabel soundsStatus;
     juce::TextButton updateSoundsButton { "Update sound index" }, stopSoundsButton { "Stop" },
         showSoundsButton { "Show sounds..." }, pluginsButton { "Your plugins..." };
-    juce::TextButton styleTab { "Songs and style" }, soundsTab { "Sounds for each part" };
-    bool showingSounds = false;
+    juce::TextButton styleTab { "Songs and style" }, soundsTab { "Sounds for each part" }, songTab { "Write a song" };
+    Page page = Page::style;
     std::unique_ptr<PartSoundsPanel> partSounds;
+    std::unique_ptr<SongWriterPanel> songWriter;
 };
 
 } // namespace spinus::ui

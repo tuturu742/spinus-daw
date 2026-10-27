@@ -237,6 +237,8 @@ add_library (spinus_core STATIC
     session/SoundRender.h
     session/PartSounds.cpp
     session/PartSounds.h
+    session/SongWriter.cpp
+    session/SongWriter.h
     session/InstrumentPresets.cpp
     session/PresetPreviews.cpp
     session/SynthMatch.cpp
@@ -259,6 +261,8 @@ add_library (spinus_core STATIC
     ui/TrackCreator.cpp
     ui/PartSoundsPanel.cpp
     ui/PartSoundsPanel.h
+    ui/SongWriterPanel.cpp
+    ui/SongWriterPanel.h
     ui/AnalysisLibraryView.cpp
     ui/AnalysisLibraryView.h
     ui/SoundIndexView.cpp

@@ -149,6 +149,7 @@ class Service:
             "ai.v1.mix.plan": self.mix_plan,
             "ai.v1.mix.toward": self.mix_toward,
             "ai.v1.style.summarize": self.style_summarize,
+            "ai.v1.song.write": self.song_write,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -907,6 +908,50 @@ class Service:
 
                 features.append(await run_blocking(measure))
             return await run_blocking(lambda: style.summarize(features))
+
+        return {"job": self.job(notify, work)}
+
+    async def song_write(self, params: dict[str, Any], notify: Notify) -> Any:
+        """A new song in the style of a summary (spinus_ai.songwriter): {summary (ai.v1.style.summarize's
+        result), seed, refine (let the AI vary the plan; default false), song and redo ({part} or {section}):
+        that song with one part or section written anew from the seed} -> the song. Rules only, with no model
+        and no AI connection; with refine and a connection, the AI may vary the plan (checked), the rules still
+        write every note, and without one (or when it fails) the rules' song stands, with a note saying so."""
+        from . import songwriter
+
+        summary = params.get("summary")
+        if not isinstance(summary, dict) or summary.get("kind") != "spinus.style-summary":
+            raise RpcError(-32602, "summary must be the Track creator's style summary.")
+        try:
+            seed = int(params.get("seed", 0)) & 0x7FFFFFFF
+        except (TypeError, ValueError) as error:
+            raise RpcError(-32602, "seed must be a number.") from error
+        redo = params.get("redo")
+        if redo is not None and (not isinstance(redo, dict) or not (redo.get("part") or redo.get("section"))):
+            raise RpcError(-32602, "redo names a part or a section.")
+        if redo is not None:
+            try:
+                songwriter.check_song(params.get("song"))
+            except ValueError as error:
+                raise RpcError(-32602, str(error)) from error
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            if redo is not None:
+                part, section = redo.get("part"), redo.get("section")
+                return songwriter.redo(dict(params["song"]), summary, seed,
+                                       str(part) if part else None, str(section) if section else None)  # fmt: skip
+            song = songwriter.write(summary, seed)
+            if not params.get("refine"):
+                return song
+            try:
+                return await songwriter.refine(self.client, self.connections, self.routing, self.usage, summary,
+                                               song, say)  # fmt: skip
+            except NoConnection:
+                song["note"] = "Written by the rules only: no AI connection is set up."
+            except ProviderError as error:
+                song["note"] = f"Written by the rules only: the AI failed ({error})."
+            song["plain"] = songwriter.describe(song)
+            return song
 
         return {"job": self.job(notify, work)}
 

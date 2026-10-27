@@ -51,6 +51,7 @@ Proposal Proposal::prepare (const juce::var& json, const commands::CommandHistor
 
     // A scratch copy: the real project is not touched.
     commands::CommandHistory scratch (history.getProject());
+    p.preview = history.getProject();
     std::vector<juce::var> results;
     const auto* steps = json["steps"].getArray();
     if (steps == nullptr || steps->isEmpty())
@@ -89,6 +90,7 @@ Proposal Proposal::prepare (const juce::var& json, const commands::CommandHistor
         }
         p.steps.push_back (s);
     }
+    p.preview = scratch.getProject();
     return p;
 }
 
