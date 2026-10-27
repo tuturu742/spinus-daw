@@ -379,8 +379,8 @@ TEST_CASE ("Sound index: presets that crash or hang the helper are left out", "[
 TEST_CASE ("Sound index: an instrument that crashes listing its presets and loads its sounds late is still measured",
            "[sounds][index][helper]")
 {
-    // As some big sample instruments do (BFD Player crashed listing its presets; Ample's are silent until their
-    // samples are loaded): its sound as it opens is measured, once it sounds.
+    // As some big sample instruments do (crash while their presets are listed; silent until their samples are
+    // loaded): its sound as it opens is measured, once it sounds.
     TempFolder temp;
     SoundIndex index (temp.folder);
     const auto source = testSynth ("difficult-synth.clap", "Spinus Difficult Synth");

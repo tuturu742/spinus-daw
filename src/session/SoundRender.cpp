@@ -108,7 +108,7 @@ model::Device deviceOf (const juce::var& request)
     return device;
 }
 
-/** Some instruments load their samples in the background after opening (Ample's guitars and basses, big
+/** Some instruments load their samples in the background after opening (big sampled guitars, basses and
     drum libraries), silent until then: the test notes are played again, a second apart, until something
     sounds or `seconds` pass (each wait is a line, so Spinus doesn't take the helper for hung). */
 bool waitUntilAudible (OfflineInstrument& player, Lines& out, double seconds)
