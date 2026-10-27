@@ -23,6 +23,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- **Track creator: choosing which plugins to scan for the sound index crashed Spinus** once some had been
+  ticked before: it read the saved list from memory already freed.
 - **Spinus froze, and every program crackled, when a webcam microphone was chosen to record from:** Spinus
   kept the microphone open all the time, and through PipeWire a webcam's microphone can become the clock
   of the whole system's sound, with small buffers for every program. Spinus now opens the microphone only
