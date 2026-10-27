@@ -6,7 +6,8 @@ manifest.json (beside this script) lists every file: the pack it comes from, its
 and how it is cut. The script reads the originals (never writes there) with ffmpeg and, for each file:
 
 - one-shots: starts at the sound (the silence before it is cut), ends where it has faded 60 dB under its
-  peak (at most `maxSeconds`, 4 s unless the manifest says, with a fade-out when it is cut short);
+  peak (at most `maxSeconds`, 4 s unless the manifest says, with a fade-out when it is cut short), or
+  before a second, separate sound that follows it in some originals (`keepSecondSound` keeps it);
 - loops: kept whole from the start, or exactly `bars` bars of 4/4 at `bpm`, so they repeat in time;
 - textures: `maxSeconds` from `start`, with the manifest's fades;
 - mono when its two channels are the same (within 40 dB), sample rates over 48 kHz brought down to 48 or
@@ -81,6 +82,29 @@ def is_mono(samples: array.array, channels: int) -> bool:
     return mid > 0 and 10 * math.log10(max(side, 1e-12) / mid) < -40
 
 
+def second_sound(level: list[float], rate: int) -> int | None:
+    """Where a one-shot's sound ends when a second, separate sound follows it (a second hit or shake at the
+    end of some originals): the quietest point before a rise of 12 dB or more that comes 120 ms or more after
+    the peak, from 24 dB or more under the peak to within 24 dB of it. A ringing note's beats and a clap's
+    bursts stay well above that dip. None when there is no such sound."""
+    step = max(1, rate // 100)  # 10 ms
+    frames = [db(math.sqrt(sum(v * v for v in level[i : i + step]) / len(level[i : i + step])))
+              for i in range(0, len(level), step)]  # fmt: skip
+    if not frames:
+        return None
+    # The loudest of three frames, so a one-frame dip inside a sound (two partials cancelling) is no gap.
+    frames = [max(frames[max(0, i - 1) : i + 2]) for i in range(len(frames))]
+    top = max(range(len(frames)), key=lambda i: frames[i])
+    low = top
+    for i in range(top + 1, len(frames)):
+        if frames[i] < frames[low]:
+            low = i
+        if (i - top >= 12 and frames[i] - frames[low] >= 12 and frames[low] <= frames[top] - 24
+                and frames[i] >= frames[top] - 24):  # fmt: skip
+            return low * step
+    return None
+
+
 def plan(entry: dict, info: dict, samples: array.array) -> dict:
     """Where to cut, the fades, mono or not, for one file (in the source's samples)."""
     rate, channels = info["rate"], info["channels"]
@@ -99,6 +123,10 @@ def plan(entry: dict, info: dict, samples: array.array) -> dict:
         quiet = peak * 10 ** (-60 / 20)
         last = max(i for i, v in enumerate(level) if v > quiet)
         end = min(count, last + int(0.01 * rate))
+        second = second_sound(level[start:end], rate) if not entry.get("keepSecondSound") else None
+        if second is not None:
+            end = start + second
+            fade_out = fade_out or 0.02
         cap = start + int(float(entry.get("maxSeconds", 4.0)) * rate)
         if end > cap:
             end = cap
