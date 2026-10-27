@@ -150,6 +150,7 @@ class Service:
             "ai.v1.mix.toward": self.mix_toward,
             "ai.v1.style.summarize": self.style_summarize,
             "ai.v1.song.write": self.song_write,
+            "ai.v1.song.describe": self.song_describe,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -956,6 +957,34 @@ class Service:
                 song["note"] = f"Written by the rules only: the AI failed ({error})."
             song["plain"] = songwriter.describe(song)
             return song
+
+        return {"job": self.job(notify, work)}
+
+    async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
+        """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read
+        it; default false)} -> the summary, its `described` saying what was understood. Rules only by default;
+        with ai and a connection the AI reads it (checked), and without one (or when it fails) the rules'
+        reading stands, with a note saying so."""
+        from . import describe
+
+        text = params.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise RpcError(-32602, "Describe the song in a few words first.")
+        if len(text) > 4000:
+            raise RpcError(-32602, "The description is too long: a few sentences are enough.")
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            if not params.get("ai"):
+                return describe.describe(text)
+            try:
+                return await describe.read_with_ai(self.client, self.connections, self.routing, self.usage, text, say)
+            except NoConnection:
+                note = "Read by Spinus's own rules: no AI connection is set up."
+            except ProviderError as error:
+                note = f"Read by Spinus's own rules: the AI failed ({error})."
+            summary = describe.describe(text)
+            summary["described"]["note"] = note
+            return summary
 
         return {"job": self.job(notify, work)}
 

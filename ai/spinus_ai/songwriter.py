@@ -298,6 +298,7 @@ class Style:
     song_bars: float
     vocabularies: dict[str, Vocabulary]
     has_drums: bool
+    without: frozenset[str] = frozenset()  # parts the song leaves out (a described song: "no drums")
 
     @staticmethod
     def from_summary(summary: dict[str, Any]) -> Style:
@@ -368,6 +369,7 @@ class Style:
             song_bars=float(sections.get("songBars") or 96),
             vocabularies=vocabularies(summary),
             has_drums=has_drums,
+            without=frozenset(str(p) for p in summary.get("without") or [] if p in PARTS),
         )
 
     def vocabulary(self, mode: str) -> Vocabulary:
@@ -1267,7 +1269,7 @@ def make_layers(
         notes["chords"][sid] = parts["chords"].get(sid, [])
         notes["lead"][sid] = parts["lead"].get(sid, [])
         for layer, part in (("pad", "chords"), ("arp", "chords"), ("counter", "lead"), ("sub", "bass")):
-            if layer not in notes:
+            if layer not in notes or part in style.without:
                 continue
             rng = rng_for(seeds["parts"][part], seeds["sections"][sid], layer, sid)
             ctx = Context(style, plan, section, section["chords"], rng, sid == last_id, shares)
@@ -1306,9 +1308,11 @@ def make_layers(
             ],
         },
     }
+    if "drums" in style.without:
+        fx.pop("impact")
     layers = []
     for layer_id, name, family, part, role, drums in wanted:
-        if layer_id in fx and not fx[layer_id]["at"]:
+        if (layer_id in fx and not fx[layer_id]["at"]) or (layer_id not in fx and not any(notes[layer_id].values())):
             continue
         layers.append({"id": layer_id, "name": name, "family": family, "part": part, "role": role, "drums": drums})
         register = layer_register(style, layer_id)
@@ -1415,6 +1419,9 @@ def build(
             kept_notes = ((keep or {}).get("parts") or {}).get(part, {}).get(sid)
             if keep is not None and kept_notes is not None and redo_part != part and redo_section != sid:
                 parts[part] = kept_notes
+                continue
+            if part in style.without:
+                parts[part] = []
                 continue
             rng = rng_for(seeds["parts"][part], seeds["sections"][sid], part, sid)
             ctx = Context(

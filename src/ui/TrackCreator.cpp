@@ -127,8 +127,8 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
 {
     setHelpText ("Track creator: add songs you like to see what their style has in common");
     intro.setText ("Add a few songs you like, or an album (a folder). Spinus studies what they have in common: "
-                   "tempo, key, chords, drum groove, parts, sections and loudness. Making a new song in that "
-                   "style comes in a later version.",
+                   "tempo, key, chords, drum groove, parts, sections and loudness. Or describe the song you want in "
+                   "words instead (Describe a song).",
                    juce::dontSendNotification);
     intro.setJustificationType (juce::Justification::topLeft);
     notice.setText ("Analyzing songs is for study and personal use. Only the style is measured, never the songs' "
@@ -233,36 +233,39 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
     soundsTab.setTooltip ("The closest sounds you have for each part of the songs, to hear and add to the project");
     songTab.setClickingTogglesState (false);
     songTab.setTooltip ("A new song in the style of the songs, to listen to and apply");
+    describeTab.setClickingTogglesState (false);
+    describeTab.setTooltip ("Describe the song you want in words instead: its genre, mood, tempo, key and instruments");
+    describeTab.onClick = [this] { showPage (Page::describe); };
     styleTab.onClick = [this] { showPage (Page::style); };
     soundsTab.onClick = [this] { showPage (Page::sounds); };
     songTab.onClick = [this] { showPage (Page::song); };
     styleTab.setToggleState (true, juce::dontSendNotification);
-    partSounds = std::make_unique<PartSoundsPanel> (session,
-                                                    [this]
-                                                    {
-                                                        PartSoundsPanel::Context c;
-                                                        c.summary = summary;
-                                                        for (const auto& r : references)
-                                                            if (r.status == Status::done && r.digest.isNotEmpty())
-                                                                c.songs.push_back (
-                                                                    { r.digest, r.file.getFileNameWithoutExtension() });
-                                                        c.library = getLibrary();
-                                                        c.indexFolder = soundIndexFolder;
-                                                        c.workFolder = workRoot.getChildFile ("sounds");
-                                                        c.helper = soundOptions;
-                                                        c.service = service;
-                                                        return c;
-                                                    });
+    partSounds = std::make_unique<PartSoundsPanel> (
+        session,
+        [this]
+        {
+            PartSoundsPanel::Context c;
+            c.summary = getActiveSummary();
+            for (const auto& r : references)
+                if (! fromDescription && r.status == Status::done && r.digest.isNotEmpty())
+                    c.songs.push_back ({ r.digest, r.file.getFileNameWithoutExtension() });
+            c.library = getLibrary();
+            c.indexFolder = soundIndexFolder;
+            c.workFolder = workRoot.getChildFile ("sounds");
+            c.helper = soundOptions;
+            c.service = service;
+            return c;
+        });
     addChildComponent (*partSounds);
     songWriter = std::make_unique<SongWriterPanel> (session,
                                                     [this]
                                                     {
                                                         SongWriterPanel::Context c;
-                                                        c.summary = summary;
+                                                        c.summary = getActiveSummary();
                                                         c.service = service;
                                                         c.workFolder = workRoot.getChildFile ("song");
                                                         for (const auto& r : references)
-                                                            if (r.status == Status::done)
+                                                            if (! fromDescription && r.status == Status::done)
                                                                 c.songs.add (r.file);
                                                         c.sounds = partSounds->makePlan();
                                                         c.indexFolder = soundIndexFolder;
@@ -274,7 +277,16 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
             onOpenAutomixer (reference);
     };
     addChildComponent (*songWriter);
+    describer = std::make_unique<DescribeSongPanel> ([this] { return service; });
+    describer->onRead = [this] (const juce::var& read)
+    {
+        described = read;
+        fromDescription = true;
+        remember();
+    };
+    addChildComponent (*describer);
     addAndMakeVisible (styleTab);
+    addAndMakeVisible (describeTab);
     addAndMakeVisible (soundsTab);
     addAndMakeVisible (songTab);
     addAndMakeVisible (pluginsButton);
@@ -487,7 +499,9 @@ void TrackCreator::showPage (Page shown)
         c->setVisible (style);
     partSounds->setVisible (page == Page::sounds);
     songWriter->setVisible (page == Page::song);
+    describer->setVisible (page == Page::describe);
     styleTab.setToggleState (style, juce::dontSendNotification);
+    describeTab.setToggleState (page == Page::describe, juce::dontSendNotification);
     soundsTab.setToggleState (page == Page::sounds, juce::dontSendNotification);
     songTab.setToggleState (page == Page::song, juce::dontSendNotification);
     updateButtons();
@@ -513,8 +527,13 @@ void TrackCreator::remember() const
                              { "modified", r.modified } }));
     file.getParentDirectory().createDirectory();
     file.replaceWithText (
-        juce::JSON::toString (object (
-            { { "version", 1 }, { "references", songs }, { "summary", summary }, { "summarized", summarized } })) +
+        juce::JSON::toString (object ({ { "version", 1 },
+                                        { "references", songs },
+                                        { "summary", summary },
+                                        { "summarized", summarized },
+                                        { "description", describer != nullptr ? describer->getText() : juce::String() },
+                                        { "described", described },
+                                        { "fromDescription", fromDescription } })) +
         "\n");
 }
 
@@ -554,6 +573,14 @@ void TrackCreator::recall()
             }
             references.push_back (std::move (r));
         }
+    // The description and its summary, as they were.
+    describer->setText (saved["description"].toString());
+    if (saved["described"]["described"].isObject())
+    {
+        described = saved["described"];
+        fromDescription = (bool)saved["fromDescription"];
+        describer->show (described);
+    }
     // The summary of the same songs comes back as it was, without asking the AI service.
     summary = saved["summary"];
     summarized = saved["summarized"].toString();
@@ -1135,6 +1162,8 @@ void TrackCreator::summarize()
                     summarizing = false;
                     summarized = key; // not asked again for the same songs
                     summary = error.isEmpty() ? result : juce::var();
+                    if (summary.isObject())
+                        fromDescription = false; // the songs, newer than the description
                     remember();
                     status.setText (error.isEmpty() ? juce::String ("Done.")
                                                     : "The summary could not be made: " + error,
@@ -1289,7 +1318,9 @@ void TrackCreator::resized()
         auto r = area.removeFromTop (26);
         styleTab.setBounds (r.removeFromLeft (150).reduced (0, 1));
         r.removeFromLeft (4);
-        soundsTab.setBounds (r.removeFromLeft (170).reduced (0, 1));
+        describeTab.setBounds (r.removeFromLeft (130).reduced (0, 1));
+        r.removeFromLeft (4);
+        soundsTab.setBounds (r.removeFromLeft (160).reduced (0, 1));
         r.removeFromLeft (4);
         songTab.setBounds (r.removeFromLeft (120).reduced (0, 1));
         area.removeFromTop (6);
@@ -1302,6 +1333,11 @@ void TrackCreator::resized()
     if (page == Page::song && songWriter != nullptr)
     {
         songWriter->setBounds (area);
+        return;
+    }
+    if (page == Page::describe && describer != nullptr)
+    {
+        describer->setBounds (area);
         return;
     }
     intro.setBounds (area.removeFromTop (40));

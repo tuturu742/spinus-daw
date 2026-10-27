@@ -101,6 +101,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   Leads, FX) with its own mixer insert, a family's inserts play into a bus of its name, and each layer has
   its own Playlist track under its family's, so you can see the layers come and go. Layers the Sounds page
   did not choose for get the closest sound of their role from your sound index. Still one undo step.
+- **Track creator, describe a song:** a new page, **Describe a song**, is a second way in besides songs you
+  like. Write what you want ("a slow, dark depressive black metal song in D minor at 72 BPM, with a piano")
+  and **Read**: Spinus says what it understood ("Understood: 72 BPM, D minor, slow, dark; genre: depressive
+  black metal; sounds: piano"), and Sounds for each part and Write a song work from it with the sounds you
+  have. It knows eleven genres (DSBM, black metal, synthwave, lo-fi, house, techno, trap, ambient, pop, rock,
+  drum and bass) and words for tempo, key, pace, mood, energy, length, instruments and what to leave out.
+  It reads on your computer; with **Let the AI read it** and an AI connection, the AI reads it instead,
+  checked. See [Describe a song](docs/user/track-creator.md#describe-a-song).
 - **Track creator, your sounds:** the sound index now measures Spinus's own instruments and the free
   downloads; your other plugins only when you tick them under **Your plugins...**. The role of a preset
   whose name does not say it is learnt from your presets that do (on Surge XT's presets: right for 57 %

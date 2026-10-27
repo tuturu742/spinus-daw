@@ -5,7 +5,7 @@ their **tempo**, **key**, **chords**, **drum groove**, which **parts** play and 
 their **sections** are, and how **loud** they are. Then it uses this to make a new song in that style, with
 the instruments you have installed, in four steps: listening and summing up, [getting to know your
 sounds](#your-sounds), [choosing a sound for each part](#sounds-for-each-part), and [writing a
-song](#write-a-song).
+song](#write-a-song). No songs at hand? [Describe the song](#describe-a-song) you want in words instead.
 
 ![The Track creator](images/track-creator.png)
 
@@ -19,8 +19,8 @@ It changes your song only when you click **Add these sounds to the project** (in
 [Sounds for each part](#sounds-for-each-part)) or **Apply** (in [Write a song](#write-a-song)), and each
 of those is one step you can undo. Everything else only listens, measures and suggests.
 
-The panel has three pages: **Songs and style** (your songs and what they have in common), **Sounds for
-each part** and **Write a song**. The [sound index](#your-sounds) controls are under all of them.
+The panel has four pages: **From songs you like** (your songs and what they have in common), **Describe a
+song** (the same, from your words), **Sounds for each part** and **Write a song**. The [sound index](#your-sounds) controls are under all of them.
 
 ## What it needs
 
@@ -120,6 +120,42 @@ hi-hat now and then. The more songs, the steadier the summary.
 **Save summary...** saves it all as a JSON file, with the exact numbers: the drums' chance on each step,
 how often each progression and each chord-to-chord change comes, every song's sections and parts. This
 file is what the Track creator's next steps will start from.
+
+## Describe a song
+
+Instead of songs you like, you can describe the song you want in a few words, and the next pages work
+from that: **Describe a song**, type, and click **Read**.
+
+![Describe a song](images/track-creator-describe.png)
+
+> A slow, dark depressive black metal song in D minor at 72 BPM, with a piano and a choir
+
+Spinus reads it on your computer, with no AI connection, and says what it understood:
+"Understood: 72 BPM, D minor, slow, dark; genre: depressive black metal; sounds: piano, choir". If
+something is missing or wrong, change the words and **Read** again. What it understands:
+
+| You write | What it does |
+|---|---|
+| A **genre**: depressive black metal (DSBM), black metal, synthwave, lo-fi, house, techno, trap, ambient, pop, rock, drum and bass | That genre's usual tempo, chord loops, drum groove, parts, section lengths and loudness. With none named, pop. |
+| A **tempo**: "72 BPM", "tempo 90" | That tempo. |
+| A **key**: "D minor", "F#m", "Bb major" | That key. |
+| **Pace**: slow, fast, downtempo... | A slower or faster tempo than the genre's usual one (when no tempo is given). |
+| **Mood**: dark, sad, melancholic... or happy, bright, uplifting... | Minor or major more often (when no key is given). |
+| **Energy**: calm, chill, mellow... or energetic, aggressive, heavy... | Fewer or more notes and drum hits. |
+| **Length**: short, long, epic | A shorter or longer song. |
+| **Instruments**: piano, strings, choir, organ, guitar, bells, flute, 808... | In a [full arrangement](#a-full-arrangement), the layer they fit gets a sound of that name from your [sound index](#your-sounds) ("Grand Piano" for a piano). |
+| **Leaving out**: no drums, no melody | That part is left out. Ambient has no drums anyway. |
+
+**Let the AI read it** (off at first): with an AI connection set up in Options › AI, the AI reads the
+description instead. It answers in the same terms, choosing from the same genres, and Spinus checks its
+answer. If the AI isn't reachable or answers something unusable, Spinus's own reading stays, and the page
+says so. This sends your description, and nothing else, to your AI provider.
+
+Then go on to [Sounds for each part](#sounds-for-each-part) (it chooses by the parts' roles and ranges,
+since there are no songs to compare with) or straight to [Write a song](#write-a-song), which says
+"From your description" at the top. The pages work from whichever you did last: reading a description, or
+your songs being summed up. Spinus remembers the description and what it understood, like your list of
+songs.
 
 ## Your sounds
 
@@ -319,7 +355,8 @@ These are a program's songs, made from measurements: a sketch to change by ear, 
 
 The Track creator was built in four steps: the summary of your songs' style, the
 [sound index](#your-sounds), [sounds for each part](#sounds-for-each-part), and [writing a
-song](#write-a-song).
+song](#write-a-song). Then came [full arrangements](#a-full-arrangement) and
+[describing a song](#describe-a-song) in words.
 
 Only the style is used: the references' melodies, words and sound are never copied into your song.
 

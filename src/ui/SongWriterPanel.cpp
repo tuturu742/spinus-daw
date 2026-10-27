@@ -83,9 +83,22 @@ const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
         target.high = layer.high;
         target.chords = layer.id == "pad" || layer.id == "chords";
         target.voices = target.chords ? 3.0 : 1.0;
-        const auto found = parts::choose (target, {}, index, 1);
-        if (! found.empty() && found.front().kind == parts::Choice::Kind::preset && found.front().role == layer.role)
-            layerChoices[layer.id] = found.front();
+        // A described song names instruments to look for ("piano"): the closest sound whose name says it.
+        const auto lookFor = context.summary["described"]["sounds"][juce::Identifier (layer.id)].toString();
+        const auto found = parts::choose (target, {}, index, lookFor.isEmpty() ? 1 : 40);
+        const parts::Choice* best = nullptr;
+        for (const auto& c : found)
+            if (c.kind == parts::Choice::Kind::preset && c.role == layer.role && best == nullptr)
+                best = &c;
+        if (lookFor.isNotEmpty())
+            for (const auto& c : found)
+                if (c.kind == parts::Choice::Kind::preset && (c.name + " " + c.category).containsIgnoreCase (lookFor))
+                {
+                    best = &c;
+                    break;
+                }
+        if (best != nullptr)
+            layerChoices[layer.id] = *best;
     }
     return layerChoices;
 }
@@ -496,6 +509,8 @@ void SongWriterPanel::showRedoMenu()
 void SongWriterPanel::show()
 {
     juce::StringArray lines;
+    if (const auto& described = context.summary["described"]; described.isObject())
+        lines.add ("From your description. " + described["understood"].toString() + ".");
     lines.add (song::describe (song));
     const auto& checks = song["checks"];
     if (checks.isObject())

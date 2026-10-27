@@ -13,6 +13,7 @@
 #include "ui/Automixer.h"
 #include "ui/SoundIndexView.h"
 #include "ui/Theme.h"
+#include "session/SongWriter.h"
 #include "ui/TrackCreator.h"
 
 using namespace spinus;
@@ -386,6 +387,87 @@ TEST_CASE ("Track creator: the songs and the summary are remembered, without sta
     CHECK (next.getState() != ai::AiService::State::running);
     CHECK (next.getState() != ai::AiService::State::starting);
     CHECK (creator.getMethodsRun().isEmpty());
+}
+
+TEST_CASE ("Track creator: a song described in words is read, written from and remembered", "[ui][ai][trackcreator]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    const auto text = juce::String ("A slow, dark depressive black metal song in D minor at 72 BPM, with a piano");
+    {
+        TrackCreator creator (a.session, &a.service);
+        creator.setSize (720, 720);
+        creator.showPage (TrackCreator::Page::describe);
+        auto& describer = creator.getDescriber();
+        CHECK (describer.isVisible());
+        describer.setText (text);
+        // AI off: the page says what to do, and nothing starts.
+        CHECK_FALSE (describer.read());
+        CHECK (describer.getStatusText().contains ("Options > AI"));
+
+        a.service.setEnabled (true);
+        REQUIRE (describer.read());
+        REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
+        INFO (describer.getStatusText());
+        CHECK (describer.getUnderstoodText() ==
+               "Understood: 72 BPM, D minor, slow, dark; genre: depressive black metal; sounds: piano.");
+        CHECK (describer.getDetailsText().contains ("As depressive black metal usually is"));
+        REQUIRE (creator.isFromDescription());
+        CHECK (creator.getActiveSummary()["described"]["genre"].toString() == "dsbm");
+
+        // The song is written from it, in a full arrangement.
+        auto& writer = creator.getSongWriter();
+        writer.setSeed (1);
+        writer.setArrangement ("full");
+        creator.showPage (TrackCreator::Page::song);
+        REQUIRE (writer.write());
+        REQUIRE (waitFor ([&] { return ! writer.isBusy(); }, 120000));
+        INFO (writer.getStatusText());
+        CHECK (writer.getText().startsWith ("From your description. Understood: 72 BPM"));
+        CHECK ((double)writer.getSong()["tempo"] == 72.0);
+        CHECK (song::isFull (writer.getSong()));
+        const auto channels = a.session.getProject().channels.size();
+        REQUIRE (writer.apply());
+        CHECK (a.session.getProject().channels.size() > channels + 8);
+        CHECK (a.session.getHistory().getUndoDescriptions().size() == 1);
+    }
+
+    // The next start: the description and what was understood come back, and the pages still work from it.
+    ai::AiService next (a.t.root, a.models);
+    TrackCreator creator (a.session, nullptr);
+    creator.setService (&next);
+    CHECK (creator.isFromDescription());
+    CHECK (creator.getDescriber().getText() == text);
+    CHECK (creator.getDescriber().getUnderstoodText().startsWith ("Understood: 72 BPM, D minor"));
+    CHECK ((double)creator.getActiveSummary()["tempo"]["median"] == 72.0);
+    CHECK (next.getState() != ai::AiService::State::running);
+}
+
+TEST_CASE ("Track creator describe a song screenshot for the manual", "[.screenshot][manual]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    a.service.setEnabled (true);
+    SpinusLookAndFeel look (Theme::dark());
+    TrackCreator creator (a.session, &a.service);
+    creator.setLookAndFeel (&look);
+    creator.setSize (720, 720);
+    creator.showPage (TrackCreator::Page::describe);
+    auto& describer = creator.getDescriber();
+    describer.setText ("A slow, dark depressive black metal song in D minor at 72 BPM, with a piano and a choir");
+    REQUIRE (describer.read());
+    REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+    const auto file = juce::File (SPINUS_TEST_FILES_DIR)
+                          .getParentDirectory()
+                          .getChildFile ("docs/user/images/track-creator-describe.png");
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    REQUIRE (
+        juce::PNGImageFormat().writeImageToStream (creator.createComponentSnapshot (creator.getLocalBounds()), stream));
+    creator.setLookAndFeel (nullptr);
 }
 
 TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is found twice", "[ui][ai][trackcreator]")
