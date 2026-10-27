@@ -25,6 +25,9 @@ struct Proposal
     juce::String error;    // why it cannot be applied (empty: it can)
     juce::String undoName; // the undo step's name; "Assistant: <summary>" when empty
     uint64_t checkedAgainst = 0;
+    /** The project as it would be with the steps done (the copy prepare() checked them on), to listen to before
+        applying; the project as it was when the proposal cannot be applied. */
+    model::Project preview;
 
     bool canApply() const noexcept { return error.isEmpty() && ! steps.empty(); }
 

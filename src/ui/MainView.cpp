@@ -589,6 +589,13 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
             if (aiService != nullptr)
                 AiSettingsDialog::showAnalysisEngineIfOpen();
         };
+        creator->onOpenAutomixer = [this] (const juce::File& reference)
+        {
+            workspace.showPanel ("automixer");
+            if (auto* automixer = dynamic_cast<Automixer*> (workspace.getPanel ("automixer")))
+                if (reference.existsAsFile())
+                    automixer->setReference (reference);
+        };
         workspace.addPanel (std::move (creator));
         workspace.setPanelAvailable ("trackCreator", false); // experimental, as the Analyzer
     }

@@ -37,8 +37,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   in common: tempo, key and mode, the chords they use and their favourite progressions, the drum groove
   step by step, which parts play and how high or low, how long the sections are, and how loud the songs
   are. Each song is analyzed once and remembered, so adding it again is instant. The summary is shown in
-  plain words and can be saved as a file. Your list of songs and the summary are remembered. Making a new
-  song in that style comes in later versions. See [the Track creator](docs/user/track-creator.md).
+  plain words and can be saved as a file. Your list of songs and the summary are remembered. See
+  [the Track creator](docs/user/track-creator.md).
 - **Saved analyses** (Analyzer and Track creator): what Spinus finds about a song (tempo, key, stems,
   notes, style) is kept and shared by both, so a song is never split or analyzed twice. Dropping a song
   the Analyzer has seen before offers **Continue from the existing analysis** or **Analyze anew**.
@@ -66,6 +66,17 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   cannot take Spinus down). **Listen** and **The songs'** let you compare, the list beside each part swaps
   it, and **Add these sounds to the project** makes the channels, effects and a pattern with a short phrase
   on each, as one undo step. See [Sounds for each part](docs/user/track-creator.md#sounds-for-each-part).
+- **Track creator, write a song:** on its new **Write a song** page, **Write** writes a new song in the style
+  of your songs: sections as long as theirs, chord loops from the chords they use (new combinations, not a
+  copy of one song), the drums on the steps they play with a fill at each section's end, a bass on the
+  chords' roots, a chords part and a lead melody in the songs' ranges and about as busy. Rules on your
+  computer write it; no AI connection is needed. **Listen** plays it through your instruments before
+  anything changes, **Another version** writes another, **Redo part...** writes one part or one section
+  again and keeps the rest, and **Apply** puts it in the project (tempo, key, channels, a pattern per
+  section, a Playlist track and markers) as one undo step. **Mix it...** opens the Automixer toward your
+  first song. With **Let the AI vary the plan** and an AI connection, the AI may change the sections, the
+  chord loops and the melody's shape, checked against the style. See
+  [Write a song](docs/user/track-creator.md#write-a-song).
 - **Track creator, your sounds:** the sound index now measures Spinus's own instruments and the free
   downloads; your other plugins only when you tick them under **Your plugins...**. The role of a preset
   whose name does not say it is learnt from your presets that do (on Surge XT's presets: right for 57 %
