@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -440,14 +441,19 @@ class Service:
         return {"models": self.weights.describe()}
 
     async def stems_download(self, params: dict[str, Any], notify: Notify) -> Any:
-        """Downloads a separation model (the user agreed to its size); progress in bytes."""
+        """Downloads a separation model (the user agreed to its size); progress in bytes. `link`: an address
+        the user pasted (one the model's authors gave), used instead of the known ones; the files must still
+        match the model's checksums."""
         model = self.stem_model(params)
+        link = str(params.get("link") or "").strip()
+        if link and urlsplit(link).scheme not in ("http", "https"):
+            raise RpcError(-32602, "Paste a web link (starting with https://).")
 
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
             async def progress(done: int, total: int) -> None:
                 await say({"kind": "progress", "done": done, "total": total})
 
-            await self.weights.download(self.client, model, progress)
+            await self.weights.download(self.client, model, progress, link)
             return {"models": self.weights.describe()}
 
         return {"job": self.job(notify, work)}

@@ -1,4 +1,5 @@
 #include "Analyzer.h"
+#include "AskForName.h"
 #include "AnalysisLibraryView.h"
 #include "session/SoundIndex.h"
 #include "ai/AnalysisJobs.h"
@@ -13,6 +14,7 @@
 #include "model/ModelJson.h"
 #include "plugins/sandbox/SandboxPluginFormat.h"
 
+#include <algorithm>
 #include <set>
 
 namespace spinus::ui
@@ -600,6 +602,26 @@ void Analyzer::showSources()
                           [page = source.page] { juce::URL (page).launchInDefaultBrowser(); });
         if (allSources.empty())
             menu.addItem ("Turn on AI in Options > AI to see the list", false, false, [] {});
+        // When a model's server is down or has moved: a link its authors give (Spinus keeps no copies).
+        juce::PopupMenu links;
+        for (const auto& source : allSources)
+            if (! source.downloaded)
+                links.addItem (source.name + "...",
+                               [this, a = alive, id = source.id, name = source.name]
+                               {
+                                   if (*a)
+                                       askForName ("Paste the link " + name + "'s authors give for it", {},
+                                                   [this, a, id] (const juce::String& link)
+                                                   {
+                                                       if (*a)
+                                                           downloadFromLink (id, link);
+                                                   });
+                               });
+        if (links.getNumItems() > 0)
+        {
+            menu.addSeparator();
+            menu.addSubMenu ("Download from another link", links, ! isBusy());
+        }
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&sourcesButton));
     };
     if (service == nullptr || ! service->isEnabled())
@@ -651,6 +673,33 @@ void Analyzer::downloadModels()
                     return asked();
                 }
                 setStep (Step::done, "Downloaded.");
+            });
+}
+
+void Analyzer::downloadFromLink (const juce::String& modelId, const juce::String& link)
+{
+    if (service == nullptr || isBusy())
+        return;
+    setStep (Step::downloading, "Downloading from that link...");
+    runJob ("ai.v1.stems.download", object ({ { "model", modelId }, { "link", link } }), "Downloading",
+            [this, modelId] (const juce::var&)
+            {
+                missingModels.erase (std::remove (missingModels.begin(), missingModels.end(), modelId),
+                                     missingModels.end());
+                for (auto& m : allSources)
+                    if (m.id == modelId)
+                        m.downloaded = true;
+                step = Step::idle;
+                showNeeds();
+                if (! missingModels.empty())
+                    return setStep (Step::idle, "Downloaded from that link. The choices made need more.");
+                if (auto asked = std::move (resume))
+                {
+                    resume = nullptr;
+                    setStep (Step::done, "Downloaded from that link.");
+                    return asked();
+                }
+                setStep (Step::done, "Downloaded from that link.");
             });
 }
 
