@@ -37,10 +37,11 @@ public:
     {
         juce::var summary;
         ai::AiService* service = nullptr;
-        juce::File workFolder;         // for the preview's rendering
-        juce::Array<juce::File> songs; // the reference songs (the automixer's reference)
-        parts::Plan sounds;            // the sounds chosen on the Sounds page (none: Spinus's own)
-        juce::File indexFolder;        // the sound index, for a full arrangement's other layers
+        juce::File workFolder;              // for the preview's rendering
+        juce::Array<juce::File> songs;      // the reference songs (the automixer's reference)
+        parts::Plan sounds;                 // the sounds chosen on the Sounds page (none: Spinus's own)
+        juce::File indexFolder;             // the sound index, for the parts the Sounds page has no sound for
+        std::vector<parts::SongPart> parts; // the Sounds page's list: the parts to write (none: the arrangement's)
     };
 
     SongWriterPanel (Session&, std::function<Context()> context);
@@ -57,7 +58,9 @@ public:
     /** Renders the project as it would be after Apply, and plays it (Stop stops). */
     bool listen();
     void stop();
-    /** Puts the song (or what was written again) into the project: one undo step. */
+    /** Puts the song (or what was written again) into the project: one undo step. When the project has a song
+        the Track creator wrote, it first asks whether to replace it (in its place; its channels, patterns and
+        tracks go) or keep both. */
     bool apply();
     /** Opens the automixer with the first reference song as its reference (onMix). */
     bool mix();
@@ -81,6 +84,13 @@ public:
     const song::Applied& getApplied() const noexcept { return applied; }
     /** What Apply would do now: the whole song, or only what was written again; void when nothing. */
     juce::var makeProposal (juce::String* error = nullptr);
+    /** The same, replacing the project's song `replace` ("Song 1"), as Apply does when the user says so. */
+    juce::var makeProposal (juce::String* error, const juce::String& replace);
+    /** Called when the arrangement changes (the Sounds page then starts its list again from it). */
+    std::function<void (const juce::String& arrangement)> onArrangementChanged;
+    /** Asks "Replace Song 1?" (Replace, Keep both, Cancel: 0, 1, 2); tests answer it themselves. */
+    using MessageBoxHandler = std::function<void (const juce::MessageBoxOptions&, std::function<void (int)>)>;
+    void setMessageBoxHandler (MessageBoxHandler h) { messageBox = std::move (h); }
     juce::File getLastPreview() const { return lastPreview; }
 
     void resized() override;
@@ -92,7 +102,9 @@ private:
     void updateButtons();
     void showRedoMenu();
     bool aiReady() const;
-    song::Options optionsFor (const model::Project&);
+    song::Options optionsFor (const model::Project&, const juce::String& replace = {});
+    bool applyNow (const juce::String& replace);
+    const parts::Plan::Part* pagePartFor (const song::Layer&) const;
     /** The chosen sound of a full arrangement's layer: the Sounds page's for its part, or the index's. */
     std::optional<parts::Plan::Part> chosenForLayer (const song::Layer&);
 
@@ -113,6 +125,7 @@ private:
 
     juce::Label intro;
     MessageLabel status;
+    MessageBoxHandler messageBox;
     juce::Label sizeLabel;
     juce::ComboBox sizeBox;
     juce::ToggleButton refineButton { "Let the AI vary the plan (uses your AI connection)" };

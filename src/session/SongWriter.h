@@ -63,27 +63,42 @@ Sound defaultSound (const juce::String& part);
 /** A layer of a full arrangement (the song's `layers`). */
 struct Layer
 {
-    juce::String id, name, family, part, role; // part: the song part it is made from ("fx" for the effects)
-    bool drums = false;                        // its notes name drums
-    int low = 0, middle = 0, high = 0;         // the notes it plays (0: unknown)
+    juce::String id, name, family;     // a part of the user's list (parts::SongPart): its id and name
+    juce::String part;                 // the song part it is made from ("fx" for the effects)
+    juce::String role;                 // what it plays: parts::songRoles()
+    juce::String soundRole;            // the role of sound it wants (the sound index's roles)
+    bool drums = false;                // its notes name drums
+    int instance = 0;                  // how many parts of its role come before it
+    int low = 0, middle = 0, high = 0; // the notes it plays (0: unknown)
 };
-/** Whether the song is a full arrangement. */
+/** Whether the song has its parts as layers (spinus_ai.songwriter writes them so). */
 bool isFull (const juce::var& song);
-/** A full arrangement's layers, in order (none for a sketch). */
+/** The song's layers (its parts), in order (none for a song of the four fixed parts). */
 std::vector<Layer> layersOf (const juce::var& song);
 /** The colour of a family's channels, inserts and tracks (#AARRGGBB), as the demo songs have them. */
 juce::String familyColour (const juce::String& family);
 /** Spinus's own sound for a layer: the Drum Machine for drums, 3x Osc with a preset of its role otherwise
     ("Sub Bass", "Warm Pad", "Pluck", "Bell", "Noise Riser"...). */
 Sound defaultSound (const Layer&);
+/** The channels the Sounds page added for the layers ("<name> (Track creator)", or milestone 3's names for the
+    first drums, bass, chords and lead), by layer id: the song writes into them. */
+std::map<juce::String, model::ChannelId> findLayerChannels (const model::Project&, const std::vector<Layer>&);
+/** The newest song the Track creator put into the project ("Song 2"), or empty. */
+juce::String lastSongName (const model::Project&);
+/** The steps that take song `name` out of the project: its patterns (and their clips), its Playlist tracks and
+    markers, and the channels only it plays (with their inserts and its family buses); the Sounds page's
+    channels stay. `start` gets where it started on the Playlist (-1: nowhere). */
+juce::Array<juce::var> removeSongSteps (const model::Project&, const juce::String& name, model::Ticks& start);
 
 struct Options
 {
-    std::map<juce::String, model::ChannelId> channels; // channels to write into (findChannels)
+    std::map<juce::String, model::ChannelId> channels; // channels to write into (findChannels; by layer id:
+                                                       // findLayerChannels)
     std::map<juce::String, Sound> sounds;              // for the parts without one (defaultSound otherwise)
     std::map<juce::String, Sound> layerSounds;         // full arrangement: per layer id (defaultSound otherwise)
     std::map<juce::String, int> drums;                 // the drum channel's notes per drum, when known
     juce::String name = "Song 1";                      // names the patterns ("Song 1: Verse") and the track
+    juce::String replace; // a song of the project the new one replaces, in its place ("Song 1"), or none
 };
 
 /** A name for the next song in the project: "Song 1", or "Song 2" when patterns of Song 1 are there, ... */

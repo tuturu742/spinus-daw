@@ -12,9 +12,10 @@
 namespace spinus::ui
 {
 
-/** The Track creator's sounds per part (experimental, milestone 3), shown in its panel: for each part of the
-    style summary, the closest sounds of the sound index, with the reasons, to hear, swap and add to the
-    project.
+/** The Track creator's sounds per part (experimental, milestone 3), shown in its panel: the song's parts (the
+    user's list: Add part, remove, a role each; the Write page's arrangement proposes the first list, and it
+    starts again on a new description or summary), each with the closest sounds of the sound index and the
+    reasons, to hear, swap and add to the project. The song writer writes exactly these parts with these sounds.
 
     Choose sounds:
     1. measures the reference songs' stems (kept in the analysis library) over their notes and drum hits, and
@@ -45,6 +46,7 @@ public:
         };
         std::vector<Song> songs;
         AnalysisLibrary library { juce::File() };
+        juce::String arrangement = "sketch"; // which parts the list starts from (parts::defaultParts)
         juce::File indexFolder, workFolder;
         SoundIndexer::Options helper;
         ai::AiService* service = nullptr;
@@ -55,7 +57,8 @@ public:
 
     struct Row
     {
-        parts::Target target;
+        parts::SongPart part; // the user's part: its name and role
+        parts::Target target; // what it needs (parts::targetFor)
         std::vector<parts::Choice> choices;
         int selected = 0;
         std::optional<SynthMatchResult> tuned;
@@ -73,6 +76,15 @@ public:
     //==============================================================================
     // For the buttons and for tests. Results arrive asynchronously.
     bool chooseSounds();
+
+    /** The song's parts (the user's list, which the song writer writes exactly). */
+    std::vector<parts::SongPart> getParts() const;
+    /** Starts the list again from the arrangement's parts (a new description or summary, or the arrangement
+        changed), saying `why`; the sounds chosen go with it. */
+    void resetParts (const juce::String& why = {});
+    bool addPart (const juce::String& role);
+    bool removePart (int row);
+    bool setRole (int row, const juce::String& role);
     void stop();
     bool isBusy() const noexcept { return busy; }
     /** Picks another of a part's choices (its tuning and effects are then dropped: Set effects again). */
@@ -122,6 +134,7 @@ private:
                           bool tuned, const juce::File& output) const;
     void updateRows();
     void updateButtons();
+    void showAddMenu();
 
     Session& session;
     std::function<Context()> getContext;
@@ -142,7 +155,7 @@ private:
     MessageLabel status;
     juce::ToggleButton closerButton { "Listen closer (AI)" }, tuneButton { "Tune the synths (slow)" },
         effectsButton { "Effects and mix (AI)" };
-    juce::TextButton chooseButton { "Choose sounds" }, stopButton { "Stop" },
+    juce::TextButton chooseButton { "Choose sounds" }, addPartButton { "Add part..." }, stopButton { "Stop" },
         effectsAgainButton { "Set effects again" }, addButton { "Add these sounds to the project" };
     juce::Viewport viewport;
     juce::Component list;

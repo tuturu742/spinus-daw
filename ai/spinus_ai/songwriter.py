@@ -32,15 +32,18 @@ What is written, from the summary:
   steps with few leaps, in a contour per section (rise, fall, arch, wave). Only the style is used: no
   melody of the reference songs is reproduced (they are not even read: the summary has no melodies).
 
-**The arrangement's size** (the plan's "size"): "sketch" is the four parts above. "full" arranges them as a
-producer would, in about a dozen layers (song["layers"], their notes in song["layerParts"]): the drums split
-into kick, snare and hats; the bass, and a sub bass an octave below in the choruses when the bass sits high
-enough to leave room for one; the chords, a pad holding them and an arpeggio of them; the lead and a
-counter-melody answering it in its rests; and two effects placed on the Playlist (song["fx"]): a riser over
-the two bars before each chorus and an impact where each chorus and bridge starts. The sections set who
-plays: thin verses (drums, bass, chords, lead), full choruses (everything), a bridge that breaks down and
-builds again, an intro of pad and chords. The extra layers follow from the four parts' notes, chords and
-seeds, so redoing a part redoes the layers made from it.
+**The parts** (song["layers"], their notes in song["layerParts"]): the user's list, each part with a role
+(ROLES), written exactly: "drums", "bass", "chords", "lead" take the four parts above; "pad" holds the chords,
+"arp" plays them one note after another, "counter" is a slower line under the lead, "sub" holds the roots low
+in the choruses; "riser" (a held note over the two bars before each chorus) and "impact" (a kick and a crash
+where each chorus and bridge starts) are effects placed on the Playlist (song["fx"]). Two parts of one role
+get complementary material: a second chords part breaks the chords into an arpeggio an octave up, a third
+plays off-beat stabs; a second lead harmonises the first a third below; a second bass, pad, arp or
+counter-melody plays an octave higher with a rhythm of its own; a second drums part plays percussion. The
+sections set who plays: thin verses, full choruses, a bridge that breaks down and builds again. Without a
+list, the plan's "size" proposes one: "sketch" the four parts, "full" about ten (with a sub bass when the bass
+sits high enough to leave room for one). Parts of the four roles' first instances follow those parts' seeds,
+the others their own (seeds["layers"]), so redoing a part redoes what is made from it.
 
 Each part and each section has its own seed (song["seeds"]), so redoing one part (a new seed for it) or
 one section keeps everything else as it was; the same seeds always write the same song.
@@ -109,24 +112,23 @@ FORMS: tuple[tuple[str, ...], ...] = (
 )
 
 SIZES = ("sketch", "full")
-# The full arrangement's layers: id, name, family (the Channel Rack group), the part it is made from, the
-# role of the sound it wants (as the sound index's roles), and whether it plays drums.
-LAYERS: tuple[tuple[str, str, str, str, str, bool], ...] = (
-    ("kick", "Kick", "Drums", "drums", "drums", True),
-    ("snare", "Snare", "Drums", "drums", "drums", True),
-    ("hats", "Hats & Cymbals", "Drums", "drums", "drums", True),
-    ("bass", "Bass", "Bass", "bass", "bass", False),
-    ("sub", "Sub Bass", "Bass", "bass", "bass", False),
-    ("chords", "Chords", "Synths", "chords", "keys", False),
-    ("pad", "Pad", "Synths", "chords", "pad", False),
-    ("arp", "Arp", "Synths", "chords", "pluck", False),
-    ("lead", "Lead", "Leads", "lead", "lead", False),
-    ("counter", "Counter-melody", "Leads", "lead", "lead", False),
-    ("riser", "Riser", "FX", "fx", "fx", False),
-    ("impact", "Impacts", "FX", "fx", "drums", True),
-)
-DRUM_LAYER = {"kick": "kick", "snare": "snare", "tomLow": "snare", "tomMid": "snare", "tomHigh": "snare",
-              "hat": "hats", "openHat": "hats", "crash": "hats"}  # fmt: skip
+# The roles a part can play: its default name, family (the Channel Rack group), the part of the four it is made
+# from ("fx": an effect), the role of the sound it wants (as the sound index's roles) and whether it plays drums.
+ROLES: dict[str, tuple[str, str, str, str, bool]] = {
+    "drums": ("Drums", "Drums", "drums", "drums", True),
+    "bass": ("Bass", "Bass", "bass", "bass", False),
+    "sub": ("Sub Bass", "Bass", "bass", "bass", False),
+    "chords": ("Chords", "Synths", "chords", "keys", False),
+    "pad": ("Pad", "Synths", "chords", "pad", False),
+    "arp": ("Arp", "Synths", "chords", "pluck", False),
+    "lead": ("Lead", "Leads", "lead", "lead", False),
+    "counter": ("Counter-melody", "Leads", "lead", "lead", False),
+    "riser": ("Riser", "FX", "fx", "fx", False),
+    "impact": ("Impacts", "FX", "fx", "drums", True),
+}
+SKETCH = ("drums", "bass", "chords", "lead")
+FULL = ("drums", "bass", "sub", "chords", "pad", "arp", "lead", "counter", "riser", "impact")
+MOST_PARTS = 16
 SUB_RANGE = (24, 40)  # a sub bass's notes
 SUB_ROOM = 40  # the bass's middle note from which a sub bass fits below it
 
@@ -452,9 +454,34 @@ def vocabularies(summary: dict[str, Any]) -> dict[str, Vocabulary]:
 # The plan: tempo, key, sections
 
 
-def make_plan(style: Style, seed: int, size: str = "sketch") -> dict[str, Any]:
+def default_parts(style: Style, size: str) -> list[dict[str, str]]:
+    """The parts a size proposes: the sketch's four, or the full arrangement's (a sub bass only when there is
+    room for one)."""
+    roles = SKETCH if size == "sketch" else tuple(r for r in FULL if r != "sub" or has_sub(style))
+    return [{"id": r, "name": ROLES[r][0], "role": r} for r in roles]
+
+
+def check_parts(parts: Any) -> list[dict[str, str]]:
+    """The user's list of parts, checked: 1 to MOST_PARTS, each with a known role and an id of its own."""
+    if not isinstance(parts, list) or not 1 <= len(parts) <= MOST_PARTS:
+        raise ValueError(f"The song needs 1 to {MOST_PARTS} parts.")
+    checked: list[dict[str, str]] = []
+    for p in parts:
+        if not isinstance(p, dict) or p.get("role") not in ROLES:
+            raise ValueError(f"A part's role is one of {', '.join(ROLES)}.")
+        pid, name = str(p.get("id") or "").strip(), str(p.get("name") or "").strip()
+        if not pid or len(pid) > 40 or any(c["id"] == pid for c in checked):
+            raise ValueError("Each part needs an id of its own.")
+        checked.append({"id": pid, "name": (name or ROLES[str(p["role"])][0])[:60], "role": str(p["role"])})
+    return checked
+
+
+def make_plan(
+    style: Style, seed: int, size: str = "sketch", parts: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
     if size not in SIZES:
         raise ValueError(f"The arrangement is {' or '.join(SIZES)}, not '{size}'.")
+    chosen = check_parts(parts) if parts is not None else default_parts(style, size)
     rng = rng_for(seed, "plan")
     # Tempo: the median moved by up to 3 %, inside the songs' range.
     low = max(style.tempo_low, style.tempo * 0.97)
@@ -528,6 +555,7 @@ def make_plan(style: Style, seed: int, size: str = "sketch") -> dict[str, Any]:
         "sections": sections,
         "order": list(form),
         "size": size,
+        "parts": chosen,
     }
 
 
@@ -535,6 +563,7 @@ def new_seeds(seed: int, plan: dict[str, Any]) -> dict[str, Any]:
     return {
         "song": seed,
         "parts": {part: mix_seed(seed, "part", part) for part in PARTS},
+        "layers": {p["id"]: mix_seed(seed, "layer", p["id"]) for p in plan.get("parts", [])},
         "sections": {s["id"]: mix_seed(seed, "section", s["id"]) for s in plan["sections"]},
     }
 
@@ -1083,9 +1112,12 @@ WRITERS = {"drums": write_drums, "bass": write_bass, "chords": write_chords, "le
 # The full arrangement's layers
 
 
-def layer_plays(layer: str, kind: str, bar: int, bars: int) -> bool:
+def layer_plays(layer: str, kind: str, bar: int, bars: int, instance: int = 0) -> bool:
     """Which extra layers play in which sections: the choruses have them all, the verses none (they stay thin),
-    the bridge breaks down to the pad and builds again with the arpeggio, the intro and outro have the pad."""
+    the bridge breaks down to the pad and builds again with the arpeggio, the intro and outro have the pad. A
+    second part of the four roles (another chords part, a harmony) plays in the choruses and the bridge."""
+    if instance > 0 and layer in ("drums", "bass", "chords", "lead"):
+        return kind == "chorus" or (kind == "bridge" and bar >= bars // 2)
     if layer == "pad":
         return kind in ("intro", "chorus", "bridge", "outro")
     if layer == "arp":
@@ -1112,9 +1144,9 @@ def pad_register(style: Style) -> tuple[int, int, int]:
     return middle - 9, middle, middle + 12
 
 
-def write_pad(ctx: Context) -> list[dict[str, Any]]:
+def write_pad(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
     """The chords held: a voicing of 3 or 4 notes for each run of one chord, moving as little as it can."""
-    low, middle, high = pad_register(ctx.style)
+    low, middle, high = (n + 12 * octave for n in pad_register(ctx.style))
     kind = str(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     previous: list[int] | None = None
@@ -1147,18 +1179,19 @@ def write_pad(ctx: Context) -> list[dict[str, Any]]:
     return notes
 
 
-def write_arp(ctx: Context) -> list[dict[str, Any]]:
+def write_arp(ctx: Context, octave: int = 0, slower: bool = False, plays: str = "arp") -> list[dict[str, Any]]:
     """The chord's notes one after another, up and down over about an octave and a half above the chords: in
-    sixteenths when the songs' other instruments are busy (and the tempo leaves room), else in eighths."""
+    sixteenths when the songs' other instruments are busy (and the tempo leaves room), else in eighths;
+    `slower` halves that (a second arpeggio, or chords broken into one)."""
     other = ctx.style.parts["other"]
-    every = 1 if other.per_bar >= 8 and ctx.plan["tempo"] < 140 else 2
-    low = max(52, min(72, other.median + 5))
+    every = (1 if other.per_bar >= 8 and ctx.plan["tempo"] < 140 else 2) * (2 if slower else 1)
+    low = max(52, min(72, other.median + 5)) + 12 * octave
     shape = ctx.rng.choice(("up", "updown", "down"))
     kind = str(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         tones = ctx.chords[bar]["tones"]
-        if not tones or not layer_plays("arp", kind, bar, ctx.bars):
+        if not tones or not layer_plays(plays, kind, bar, ctx.bars, 1 if plays != "arp" else 0):
             continue
         ladder = sorted(p for p in range(low, low + 19) if p % 12 in tones)
         if shape == "down":
@@ -1177,12 +1210,12 @@ def write_arp(ctx: Context) -> list[dict[str, Any]]:
     return notes
 
 
-def write_counter(ctx: Context, lead: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def write_counter(ctx: Context, lead: list[dict[str, Any]], octave: int = 0) -> list[dict[str, Any]]:
     """A slower line under the lead: a held chord note each half bar (the chord's third first, then its fifth), a
     fifth or so below the lead's middle, moving as little as it can and never rubbing a semitone (or doubling
     the note) against the lead note sounding with it."""
     vocals = ctx.style.parts["vocals"]
-    centre = max(52, vocals.median - 7)
+    centre = max(52, vocals.median - 7) + 12 * octave
     half = ctx.steps // 2 * TICKS_PER_STEP
     kind = str(ctx.section["kind"])
 
@@ -1246,6 +1279,62 @@ def has_sub(style: Style) -> bool:
     return style.parts["bass"].median >= SUB_ROOM
 
 
+def write_stabs(ctx: Context) -> list[dict[str, Any]]:
+    """Short chords on the off-beat eighths (a third chords part), an octave over the chords part."""
+    low, middle, high = (n + 12 for n in pad_register(ctx.style))
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        tones = ctx.chords[bar]["tones"]
+        if not tones or not layer_plays("chords", kind, bar, ctx.bars, 1):
+            continue
+        options = voicing_options(tones, 3, low, high) or voicing_options(tones, 3, low - 12, high)
+        if not options:
+            continue
+        chord = min(options, key=lambda v: abs(sum(v) / len(v) - middle))
+        for step in range(2, ctx.steps, 4):
+            for pitch in chord:
+                notes.append({"start": ctx.at(bar, step), "length": TICKS_PER_STEP, "pitch": pitch, "velocity": 0.55})
+    return notes
+
+
+def write_harmony(ctx: Context, lead: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A second lead: the first a third (or so) below, on the chord's or the key's notes, in the choruses and
+    the bridge's second half."""
+    kind = str(ctx.section["kind"])
+    bar_ticks = ctx.steps * TICKS_PER_STEP
+    notes: list[dict[str, Any]] = []
+    for n in lead:
+        bar = min(ctx.bars - 1, int(n["start"]) // bar_ticks)
+        if not layer_plays("lead", kind, bar, ctx.bars, 1):
+            continue
+        tones = ctx.chords[bar]["tones"]
+        fits = allowed_pitch_classes(tones, ctx.scale) & (ctx.scale | set(tones)) if tones else ctx.scale
+        below = [p for p in range(int(n["pitch"]) - 5, int(n["pitch"]) - 2) if p % 12 in fits]
+        if below:
+            notes.append({**n, "pitch": max(below), "velocity": round(float(n["velocity"]) * 0.85, 3)})
+    return notes
+
+
+def write_percussion(ctx: Context) -> list[dict[str, Any]]:
+    """A second drums part: hats on the off-beat sixteenths (some by chance) and a low tom at each bar's end."""
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        if not layer_plays("drums", kind, bar, ctx.bars, 1):
+            continue
+        for step in range(1, ctx.steps, 2):
+            if step % 4 == 3 or ctx.rng.random() < 0.5:
+                notes.append(drum_note(ctx, bar, step, "hat", 0.35 + 0.2 * ctx.rng.random()))
+        if bar % 2 == 1:
+            notes.append(drum_note(ctx, bar, ctx.steps - 2, "tomLow", 0.6))
+    return notes
+
+
+def shifted(notes: list[dict[str, Any]], semitones: int) -> list[dict[str, Any]]:
+    return [{**n, "pitch": min(127, int(n["pitch"]) + semitones)} for n in notes]
+
+
 def make_layers(
     style: Style,
     plan: dict[str, Any],
@@ -1253,34 +1342,76 @@ def make_layers(
     sections: list[dict[str, Any]],
     parts: dict[str, dict[str, list[dict[str, Any]]]],
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, list[dict[str, Any]]]], dict[str, Any]]:
-    """The full arrangement from the song's four parts: its layers, each layer's notes per section, and the
-    effects with where they play (bars from the song's start)."""
+    """The plan's parts (the user's list) from the song's four parts: each part's notes per section by its role
+    and how many of that role came before it, and the effects with where they play (bars from the song's
+    start)."""
     shares = playing_shares(plan)
     last_id = plan["order"][-1]
-    wanted = [layer for layer in LAYERS if layer[0] != "sub" or has_sub(style)]
-    notes: dict[str, dict[str, list[dict[str, Any]]]] = {layer[0]: {} for layer in wanted}
-    for section in sections:
-        sid = section["id"]
-        for drum_note_ in parts["drums"].get(sid, []):
-            layer = DRUM_LAYER.get(str(drum_note_["drum"]))
-            if layer:
-                notes[layer].setdefault(sid, []).append(drum_note_)
-        notes["bass"][sid] = parts["bass"].get(sid, [])
-        notes["chords"][sid] = parts["chords"].get(sid, [])
-        notes["lead"][sid] = parts["lead"].get(sid, [])
-        for layer, part in (("pad", "chords"), ("arp", "chords"), ("counter", "lead"), ("sub", "bass")):
-            if layer not in notes or part in style.without:
+    wanted = plan.get("parts") or default_parts(style, str(plan.get("size", "sketch")))
+    instances: dict[str, int] = {}
+    notes: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    layers: list[dict[str, Any]] = []
+    for part in wanted:
+        role = part["role"]
+        k = instances.get(role, 0)
+        instances[role] = k + 1
+        base = ROLES[role][2]
+        layer = {
+            "id": part["id"],
+            "name": part["name"],
+            "role": role,
+            "family": ROLES[role][1],
+            "part": base,
+            "soundRole": ROLES[role][3],
+            "drums": ROLES[role][4],
+            "instance": k,
+        }
+        register = layer_register(style, role, k)
+        if register:
+            layer["register"] = register
+        layers.append(layer)
+        if base in style.without or (role == "impact" and "drums" in style.without):
+            continue
+        by_section: dict[str, list[dict[str, Any]]] = {}
+        for section in sections:
+            sid = section["id"]
+            if role in ("riser", "impact"):
+                break
+            if k == 0 and role in PARTS:
+                by_section[sid] = parts[role].get(sid, [])
                 continue
-            rng = rng_for(seeds["parts"][part], seeds["sections"][sid], layer, sid)
-            ctx = Context(style, plan, section, section["chords"], rng, sid == last_id, shares)
-            if layer == "pad":
-                notes[layer][sid] = write_pad(ctx)
-            elif layer == "arp":
-                notes[layer][sid] = write_arp(ctx)
-            elif layer == "counter":
-                notes[layer][sid] = write_counter(ctx, parts["lead"].get(sid, []))
+            # The first pad, arp... follows its part's seed (redoing the chords redoes them); others their own.
+            if k == 0 or base == "fx":
+                rng = rng_for(seeds["parts"].get(base, seeds["song"]), seeds["sections"][sid], role, sid)
             else:
-                notes[layer][sid] = write_sub(ctx)
+                own = seeds.get("layers", {}).get(part["id"], mix_seed(seeds["song"], "layer", part["id"]))
+                rng = rng_for(own, seeds["sections"][sid], part["id"], sid)
+            ctx = Context(style, plan, section, section["chords"], rng, sid == last_id, shares)
+            octave = 1 if k % 2 == 1 else 0
+            if role == "drums":
+                by_section[sid] = write_percussion(ctx)
+            elif role == "bass":
+                by_section[sid] = [
+                    n
+                    for n in shifted(write_bass(ctx), 12)
+                    if layer_plays(
+                        "bass", str(section["kind"]), int(n["start"]) // (ctx.steps * TICKS_PER_STEP), ctx.bars, 1
+                    )
+                ]
+            elif role == "chords":
+                by_section[sid] = write_arp(ctx, 1, True, "chords") if k == 1 else write_stabs(ctx)
+            elif role == "lead":
+                by_section[sid] = write_harmony(ctx, parts["lead"].get(sid, []))
+            elif role == "pad":
+                by_section[sid] = write_pad(ctx, octave)
+            elif role == "arp":
+                by_section[sid] = write_arp(ctx, octave, k > 0)
+            elif role == "counter":
+                by_section[sid] = write_counter(ctx, parts["lead"].get(sid, []), octave)
+            elif role == "sub":
+                by_section[sid] = write_sub(ctx)
+        if any(by_section.values()):
+            notes[part["id"]] = by_section
 
     # The effects: a riser over the two bars before each chorus, an impact where a chorus or the bridge starts.
     by_id = {s["id"]: s for s in sections}
@@ -1293,52 +1424,46 @@ def make_layers(
         if kind in ("chorus", "bridge") and i > 0:
             impacts.append(entry["bar"])
     tonic = int(plan["key"]["tonic"])
-    fx = {
-        "riser": {
-            "bars": 2,
-            "at": risers,
-            "notes": [{"start": 0, "length": 2 * bar_ticks - TICKS_PER_STEP, "pitch": 60 + tonic, "velocity": 0.8}],
-        },
-        "impact": {
-            "bars": 1,
-            "at": impacts,
-            "notes": [
-                {"start": 0, "length": TICKS_PER_STEP // 2, "drum": "kick", "velocity": 1.0},
-                {"start": 0, "length": TICKS_PER_STEP // 2, "drum": "crash", "velocity": 1.0},
-            ],
-        },
-    }
-    if "drums" in style.without:
-        fx.pop("impact")
-    layers = []
-    for layer_id, name, family, part, role, drums in wanted:
-        if (layer_id in fx and not fx[layer_id]["at"]) or (layer_id not in fx and not any(notes[layer_id].values())):
-            continue
-        layers.append({"id": layer_id, "name": name, "family": family, "part": part, "role": role, "drums": drums})
-        register = layer_register(style, layer_id)
-        if register:
-            layers[-1]["register"] = register
-    return layers, {k: v for k, v in notes.items() if any(v.values())}, {k: v for k, v in fx.items() if v["at"]}
+    fx: dict[str, Any] = {}
+    for layer in layers:
+        if layer["role"] == "riser" and risers:
+            fx[layer["id"]] = {
+                "bars": 2,
+                "at": risers,
+                "notes": [{"start": 0, "length": 2 * bar_ticks - TICKS_PER_STEP, "pitch": 60 + tonic, "velocity": 0.8}],
+            }
+        elif layer["role"] == "impact" and impacts and "drums" not in style.without:
+            fx[layer["id"]] = {
+                "bars": 1,
+                "at": impacts,
+                "notes": [
+                    {"start": 0, "length": TICKS_PER_STEP // 2, "drum": "kick", "velocity": 1.0},
+                    {"start": 0, "length": TICKS_PER_STEP // 2, "drum": "crash", "velocity": 1.0},
+                ],
+            }
+    layers = [layer for layer in layers if layer["id"] in notes or layer["id"] in fx]
+    return layers, notes, fx
 
 
-def layer_register(style: Style, layer: str) -> list[int] | None:
-    """The notes a layer plays (low, middle, high), for choosing its sound."""
-    if layer == "pad":
-        return list(pad_register(style))
-    if layer == "arp":
-        low = max(52, min(72, style.parts["other"].median + 5))
+def layer_register(style: Style, role: str, instance: int = 0) -> list[int] | None:
+    """The notes a part of a role plays (low, middle, high), for choosing its sound."""
+    up = 12 if instance % 2 == 1 and role not in ("lead", "sub") else 0
+    if role == "pad":
+        return [n + up for n in pad_register(style)]
+    if role == "arp" or (role == "chords" and instance == 1):
+        low = max(52, min(72, style.parts["other"].median + 5)) + (12 if instance else 0)
         return [low, low + 9, low + 18]
-    if layer == "counter":
-        centre = max(52, style.parts["vocals"].median - 7)
+    if role == "counter":
+        centre = max(52, style.parts["vocals"].median - 7) + up
         return [centre - 7, centre, centre + 7]
-    if layer == "sub":
+    if role == "sub":
         return [SUB_RANGE[0], 31, SUB_RANGE[1]]
-    if layer == "riser":
+    if role == "riser":
         return [60, 66, 71]
-    found = {"bass": "bass", "chords": "other", "lead": "vocals"}.get(layer)
+    found = {"bass": "bass", "chords": "other", "lead": "vocals"}.get(role)
     if found:
         p = style.parts[found]
-        return [p.low, p.median, p.high]
+        return [p.low + up, p.median + up, p.high + up]
     return None
 
 
@@ -1469,16 +1594,17 @@ def build(
         "note": "",
         "size": str(plan.get("size", "sketch")),
     }
-    if song["size"] == "full":
-        song["layers"], song["layerParts"], song["fx"] = make_layers(style, plan, seeds, out_sections, patterns)
+    song["layers"], song["layerParts"], song["fx"] = make_layers(style, plan, seeds, out_sections, patterns)
     return song
 
 
-def write(summary: dict[str, Any], seed: int, size: str = "sketch") -> dict[str, Any]:
-    """A new song in the summary's style, the same for the same seed. Rules only. `size`: "sketch" (four parts)
-    or "full" (about a dozen layers)."""
+def write(
+    summary: dict[str, Any], seed: int, size: str = "sketch", parts: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """A new song in the summary's style, the same for the same seed. Rules only. `parts`: the user's list
+    ({id, name, role}); without one, `size` proposes it: "sketch" (four parts) or "full" (about ten)."""
     style = Style.from_summary(summary)
-    plan = make_plan(style, seed, size)
+    plan = make_plan(style, seed, size, parts)
     song = build(style, plan, new_seeds(seed, plan))
     return finish(song, summary, style)
 
@@ -1493,6 +1619,20 @@ def redo(
     plan = json.loads(json.dumps(song["plan"]))
     seeds = json.loads(json.dumps(song["seeds"]))
     if part is not None:
+        # A part of the list: the first of the four roles is that part (and what is made from it); another
+        # gets a seed of its own.
+        layer = next((p for p in plan.get("parts", []) if p["id"] == part), None)
+        if (
+            layer is not None
+            and layer["role"] in PARTS
+            and part == next(p["id"] for p in plan["parts"] if p["role"] == layer["role"])
+        ):
+            part = layer["role"]
+        elif layer is not None:
+            seeds.setdefault("layers", {})[part] = mix_seed(seed, "layer", part)
+            again = build(style, plan, seeds, keep=song)
+            again["refinedBy"] = song.get("refinedBy", "")
+            return finish(again, summary, style)
         if part not in PARTS:
             raise ValueError(f"There is no part '{part}' to write again.")
         seeds["parts"][part] = mix_seed(seed, "part", part)
@@ -1688,9 +1828,9 @@ def describe(song: dict[str, Any]) -> list[str]:
         )
     if song.get("layers"):
         lines.append(
-            f"A full arrangement, {len(song['layers'])} channels: "
+            f"{len(song['layers'])} parts, a channel each: "
             + ", ".join(str(layer["name"]) for layer in song["layers"])
-            + ". Thin verses, full choruses; a riser before each chorus and an impact where it starts."
+            + ". Thin verses, full choruses."
         )
     if song.get("refinedBy"):
         lines.append(f"Varied by the AI ({song['refinedBy']}); every note written by the rules.")

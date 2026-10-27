@@ -4,7 +4,9 @@
 #include "FakeProvider.h"
 #include "dsp/sampler/SampleStorage.h"
 #include "engine/EngineHost.h"
+#include "session/PartSounds.h"
 #include "session/ProjectDocument.h"
+#include "session/SongWriter.h"
 #include "ui/MainView.h"
 #include "ui/Playlist.h"
 #include "ui/SongWriterPanel.h"
@@ -198,8 +200,8 @@ TEST_CASE ("Track creator: a full arrangement is written, heard and applied as o
     INFO (panel.getStatusText());
     REQUIRE (song::isFull (panel.getSong()));
     const auto layers = song::layersOf (panel.getSong());
-    CHECK (layers.size() >= 10);
-    CHECK (panel.getText().contains ("full arrangement"));
+    CHECK (layers.size() >= 8);
+    CHECK (panel.getText().contains ("parts, a channel each"));
     CHECK (panel.getText().contains ("Drums, Bass, Synths, Leads, FX"));
 
     REQUIRE (panel.listen());
@@ -226,6 +228,90 @@ TEST_CASE ("Track creator: a full arrangement is written, heard and applied as o
     REQUIRE (session.getHistory().undo());
     REQUIRE (session.getHistory().undo());
     CHECK (session.getProject().channels == before.channels);
+}
+
+TEST_CASE ("Track creator: the user's parts are written with the Sounds page's sounds, and a new song replaces the "
+           "last after asking",
+           "[ui][trackcreator][song]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    TempFolder t;
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine(), makeDevices (host.getEngine()) };
+    ai::AiService service { t.root, t.root.getChildFile ("models") };
+    service.setEnabled (true);
+    SongWriterPanel::Context context;
+    context.summary = testSummary();
+    context.service = &service;
+    // Three parts, as the owner's example: the Drum Machine, a guitar (here 3x Osc) and a synth lead.
+    context.parts = { { "kit", "Drum Machine", "drums" },
+                      { "guitar", "Guitar", "chords" },
+                      { "synth", "Synth", "lead" } };
+    // The Sounds page chose the Drum Machine for the drums.
+    parts::Plan::Part drums;
+    drums.target.id = "kit";
+    drums.target.part = "drums";
+    drums.choice.kind = parts::Choice::Kind::kit;
+    drums.choice.source.stockType = "spinus.drum-machine";
+    drums.choice.source.name = "Drum Machine";
+    drums.choice.drumNotes = { { "kick", 60 }, { "snare", 61 }, { "hat", 63 }, { "crash", 70 } };
+    context.sounds.parts.push_back (drums);
+    SongWriterPanel panel (session, [&context] { return context; });
+    panel.setSize (700, 560);
+    panel.setSeed (21);
+    juce::StringArray asked;
+    int answer = 0;
+    panel.setMessageBoxHandler (
+        [&] (const juce::MessageBoxOptions& o, const std::function<void (int)>& done)
+        {
+            asked.add (o.getMessage());
+            done (answer);
+        });
+
+    REQUIRE (panel.write());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    const auto layers = song::layersOf (panel.getSong());
+    REQUIRE (layers.size() == 3);
+    CHECK (layers[1].name == "Guitar");
+    const auto before = session.getProject().channels.size();
+    REQUIRE (panel.apply());
+    CHECK (asked.isEmpty()); // nothing to replace yet
+    const auto& project = session.getProject();
+    REQUIRE (project.channels.size() == before + 3);
+    const model::Channel* kit = nullptr;
+    for (const auto& c : project.channels)
+        if (c.name == "Drum Machine")
+            kit = &c;
+    REQUIRE (kit != nullptr);
+    REQUIRE (kit->instrument.has_value());
+    CHECK (kit->instrument.value().stockType == "spinus.drum-machine"); // the Sounds page's choice
+    const auto first = session.getProject();
+
+    // Another version, applied: it asks, and replaces Song 1 in its place (one more undo step).
+    REQUIRE (panel.anotherVersion());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    REQUIRE (panel.apply());
+    REQUIRE (asked.size() == 1);
+    CHECK (asked[0] == "Replace Song 1? It will be overwritten (Ctrl+Z brings it back).");
+    CHECK (session.getProject().channels.size() == first.channels.size());
+    CHECK (session.getProject().patterns.size() == first.patterns.size());
+    CHECK (song::lastSongName (session.getProject()) == "Song 1");
+    CHECK (session.getHistory().getUndoDescriptions().size() == 2);
+    REQUIRE (session.getHistory().undo());
+    CHECK (session.getProject().patterns == first.patterns);
+
+    // Keep both: Song 2 beside it.
+    answer = 1;
+    REQUIRE (panel.apply());
+    CHECK (song::lastSongName (session.getProject()) == "Song 2");
+    // Cancel: nothing.
+    answer = 2;
+    const auto steps = session.getHistory().getUndoDescriptions().size();
+    REQUIRE (panel.anotherVersion());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    panel.apply();
+    CHECK (session.getHistory().getUndoDescriptions().size() == steps);
 }
 
 TEST_CASE ("Track creator: without the AI service, the song page says so", "[ui][trackcreator][song]")

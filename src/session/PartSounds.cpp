@@ -96,6 +96,130 @@ juce::String displayName (const juce::String& part)
     return part.substring (0, 1).toUpperCase() + part.substring (1);
 }
 
+const juce::StringArray& songRoles()
+{
+    static const juce::StringArray roles { "drums", "bass", "sub",     "chords", "pad",
+                                           "arp",   "lead", "counter", "riser",  "impact" };
+    return roles;
+}
+
+juce::String roleName (const juce::String& role)
+{
+    static const std::map<juce::String, juce::String> names { { "drums", "Drums" },
+                                                              { "bass", "Bass" },
+                                                              { "sub", "Sub bass" },
+                                                              { "chords", "Chords (rhythm)" },
+                                                              { "pad", "Pad" },
+                                                              { "arp", "Arpeggio" },
+                                                              { "lead", "Lead" },
+                                                              { "counter", "Counter-melody" },
+                                                              { "riser", "Riser (effect)" },
+                                                              { "impact", "Impacts (effect)" } };
+    const auto found = names.find (role);
+    return found != names.end() ? found->second : role;
+}
+
+namespace
+{
+juce::String defaultName (const juce::String& role)
+{
+    return role == "chords"   ? juce::String ("Chords")
+           : role == "riser"  ? juce::String ("Riser")
+           : role == "impact" ? juce::String ("Impacts")
+                              : roleName (role);
+}
+} // namespace
+
+std::vector<SongPart> defaultParts (const juce::String& arrangement, const juce::var& summary)
+{
+    std::vector<SongPart> list;
+    juce::StringArray roles { "drums", "bass", "chords", "lead" };
+    if (arrangement == "full")
+    {
+        roles = { "drums", "bass", "chords", "pad", "arp", "lead", "counter", "riser", "impact" };
+        // A sub bass when the bass sits high enough to leave room under it (as spinus_ai.songwriter.has_sub).
+        if ((int)summary["parts"]["bass"]["median"] >= 40)
+            roles.insert (2, "sub");
+    }
+    for (const auto& role : roles)
+        list.push_back (newPart (list, role));
+    return list;
+}
+
+SongPart newPart (const std::vector<SongPart>& list, const juce::String& role)
+{
+    auto taken = [&list] (const juce::String& id, const juce::String& name)
+    {
+        return std::any_of (list.begin(), list.end(), [&] (const SongPart& p) { return p.id == id || p.name == name; });
+    };
+    SongPart part { role, defaultName (role), role };
+    for (int n = 2; taken (part.id, part.name); ++n)
+        part = { role + "-" + juce::String (n), defaultName (role) + " " + juce::String (n), role };
+    return part;
+}
+
+Target targetFor (const SongPart& part, int instance, const juce::var& summary)
+{
+    const auto& role = part.role;
+    const auto stem = role == "drums" || role == "impact"                  ? juce::String ("drums")
+                      : role == "bass" || role == "sub"                    ? juce::String ("bass")
+                      : role == "chords" || role == "pad" || role == "arp" ? juce::String ("other")
+                      : role == "lead" || role == "counter"                ? juce::String ("vocals")
+                                                                           : juce::String ("fx");
+    Target t;
+    for (auto& found : targetsFromSummary (summary))
+        if (found.part == stem)
+            t = found;
+    if (t.part.isEmpty()) // the summary has no such part: a usual one
+    {
+        t.part = stem;
+        t.tempo = (double)summary["tempo"]["median"];
+        t.low = stem == "bass" ? 28 : stem == "vocals" ? 55 : 48;
+        t.median = stem == "bass" ? 38 : stem == "vocals" ? 64 : 60;
+        t.high = stem == "bass" ? 50 : stem == "vocals" ? 76 : 72;
+        t.notesPerBar = 4.0;
+        t.roles = { stem == "drums" ? "drums" : stem == "bass" ? "bass" : stem == "vocals" ? "lead" : "keys" };
+    }
+    t.id = part.id;
+    t.name = part.name;
+    t.role = role;
+    t.measure = instance == 0 && (role == "drums" || role == "bass" || role == "chords" || role == "lead");
+    const auto up = instance % 2 == 1 && role != "drums" && role != "impact" && role != "sub" ? 12 : 0;
+    if (role == "sub")
+    {
+        t.low = 24, t.median = 31, t.high = 40;
+        t.roles = { "bass" };
+    }
+    else if (role == "pad")
+    {
+        t.median = juce::jlimit (55, 67, t.median + 3);
+        t.low = t.median - 9, t.high = t.median + 12;
+        t.roles = { "pad", "keys" };
+        t.chords = true, t.voices = 3.0;
+    }
+    else if (role == "arp")
+    {
+        t.low = juce::jlimit (52, 72, t.median + 5), t.median = t.low + 9, t.high = t.low + 18;
+        t.roles = { "pluck", "keys", "lead" };
+        t.chords = false, t.voices = 1.0;
+    }
+    else if (role == "counter")
+    {
+        t.median = juce::jmax (52, t.median - 7), t.low = t.median - 7, t.high = t.median + 7;
+        t.roles = { "lead", "keys", "pad" };
+    }
+    else if (role == "riser")
+    {
+        t.low = 60, t.median = 66, t.high = 71;
+        t.roles = { "fx", "pad" };
+        t.measure = false;
+    }
+    else if (role == "impact")
+        t.roles = { "drums" };
+    t.low += up, t.median += up, t.high += up;
+    return t;
+}
+
 std::vector<Target> targetsFromSummary (const juce::var& summary)
 {
     std::vector<Target> targets;
@@ -108,6 +232,9 @@ std::vector<Target> targetsFromSummary (const juce::var& summary)
             continue;
         Target t;
         t.part = name;
+        t.id = name;
+        t.name = displayName (name);
+        t.role = juce::String (name) == "other" ? "chords" : juce::String (name) == "vocals" ? "lead" : name;
         t.songs = (int)p["songs"];
         t.low = (int)p["low"];
         t.median = (int)p["median"];
@@ -656,6 +783,25 @@ std::vector<Choice> chooseDrums (const Target& target, const Reference& referenc
             break; // one kit per instrument
         }
 
+    // Spinus's own Drum Machine with its own kit, always there (unless the index has a kit of it already).
+    if (std::none_of (result.begin(), result.end(),
+                      [] (const Choice& c) { return c.source.stockType == "spinus.drum-machine"; }))
+    {
+        Choice c;
+        c.kind = Choice::Kind::kit;
+        c.instrument = "stock-spinus.drum-machine";
+        c.source.key = c.instrument;
+        c.source.name = "Drum Machine";
+        c.source.format = "Spinus";
+        c.source.stockType = "spinus.drum-machine";
+        c.role = "drums";
+        c.drumNotes = { { "kick", 60 },   { "snare", 61 },  { "hat", 63 },     { "openHat", 64 },
+                        { "tomLow", 65 }, { "tomMid", 66 }, { "tomHigh", 67 }, { "crash", 70 } };
+        c.why.add ("Spinus's own Drum Machine, with its own kit");
+        c.distance = reference.hits.empty() ? -1.0 : 1.0; // first when there are no songs' drums to compare
+        result.push_back (std::move (c));
+    }
+
     // Drum loops near the songs' tempo (or twice or half of it).
     for (const auto& sample : index.samples)
     {
@@ -686,9 +832,20 @@ std::vector<Choice> chooseDrums (const Target& target, const Reference& referenc
 
     std::stable_sort (result.begin(), result.end(),
                       [] (const Choice& a, const Choice& b) { return a.distance < b.distance; });
-    if ((int)result.size() > most)
-        result.resize ((size_t)most);
-    return result;
+    // Each kind there is among the first (a sample set, a kit, a loop), so the user can pick any of them.
+    std::vector<Choice> kept;
+    for (const auto& c : result)
+        if (std::none_of (kept.begin(), kept.end(), [&] (const Choice& k) { return k.kind == c.kind; }))
+            kept.push_back (c);
+    for (const auto& c : result)
+        if ((int)kept.size() < most && std::none_of (kept.begin(), kept.end(), [&] (const Choice& k)
+                                                     { return k.title() == c.title() && k.kind == c.kind; }))
+            kept.push_back (c);
+    std::stable_sort (kept.begin(), kept.end(),
+                      [] (const Choice& a, const Choice& b) { return a.distance < b.distance; });
+    if ((int)kept.size() > most)
+        kept.resize ((size_t)most);
+    return kept;
 }
 } // namespace
 
@@ -863,8 +1020,9 @@ juce::var makeProposal (const Plan& plan)
     for (const auto& part : plan.parts)
     {
         const auto& c = part.choice;
-        const auto name =
-            displayName (part.target.part).upToFirstOccurrenceOf (" (", false, false) + " (Track creator)";
+        const auto name = (part.target.name.isNotEmpty() ? part.target.name : displayName (part.target.part))
+                              .upToFirstOccurrenceOf (" (", false, false) +
+                          " (Track creator)";
         if (c.kind == Choice::Kind::loop)
         {
             const auto lane = step ("lane.add", object ({ { "name", name } }));
@@ -1052,7 +1210,8 @@ juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<m
         if (result.wasOk() && part.tuned)
             SynthMatcher::apply (session, channel, *part.tuned);
         if (result.failed())
-            problems.add (displayName (part.target.part) + ": " + result.getErrorMessage());
+            problems.add ((part.target.name.isNotEmpty() ? part.target.name : displayName (part.target.part)) + ": " +
+                          result.getErrorMessage());
     }
     return problems.isEmpty() ? juce::Result::ok() : juce::Result::fail (problems.joinIntoString (" "));
 }

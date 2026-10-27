@@ -35,8 +35,8 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
     textBox.setMultiLine (true, true);
     textBox.setReturnKeyStartsNewLine (true);
     textBox.setScrollbarsShown (true);
-    textBox.setTextToShowWhenEmpty ("e.g. A slow, dark depressive black metal song in D minor at 72 BPM, with a "
-                                    "piano and a choir",
+    textBox.setTextToShowWhenEmpty ("e.g. A sunny, upbeat indie pop song at 118 BPM in G major, with acoustic "
+                                    "guitar, handclaps and a catchy whistled lead",
                                     juce::Colours::grey);
     textBox.onTextChange = [this] { updateButtons(); };
     aiButton.setTooltip ("Ask your AI connection (Options > AI) to read the description; Spinus checks its reading "

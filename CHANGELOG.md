@@ -100,22 +100,34 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   first song. With **Let the AI vary the plan** and an AI connection, the AI may change the sections, the
   chord loops and the melody's shape, checked against the style. See
   [Write a song](docs/user/track-creator.md#write-a-song).
-- **Track creator, a full arrangement:** **Arrangement** on the Write a song page (remembered) chooses a
-  **Sketch** of four parts, as before, or a **Full** arrangement of about a dozen channels, laid out like the
-  demo songs: the drums split into kick, snare and hats; a sub bass when the bass leaves room for one; a pad,
-  an arpeggio and a counter-melody; a riser before each chorus and an impact where it starts. Verses stay
-  thin and choruses get everything. Each channel is coloured and grouped by family (Drums, Bass, Synths,
-  Leads, FX) with its own mixer insert, a family's inserts play into a bus of its name, and each layer has
-  its own Playlist track under its family's, so you can see the layers come and go. Layers the Sounds page
-  did not choose for get the closest sound of their role from your sound index. Still one undo step.
 - **Track creator, describe a song:** a new page, **Describe a song**, is a second way in besides songs you
-  like. Write what you want ("a slow, dark depressive black metal song in D minor at 72 BPM, with a piano")
-  and **Read**: Spinus says what it understood ("Understood: 72 BPM, D minor, slow, dark; genre: depressive
-  black metal; sounds: piano"), and Sounds for each part and Write a song work from it with the sounds you
-  have. It knows eleven genres (DSBM, black metal, synthwave, lo-fi, house, techno, trap, ambient, pop, rock,
-  drum and bass) and words for tempo, key, pace, mood, energy, length, instruments and what to leave out.
-  It reads on your computer; with **Let the AI read it** and an AI connection, the AI reads it instead,
-  checked. See [Describe a song](docs/user/track-creator.md#describe-a-song).
+  like. Write what you want ("a sunny, upbeat indie pop song at 118 BPM in G major, with acoustic guitar")
+  and **Read**: Spinus says what it understood ("Understood: 118 BPM, G major, sunny, upbeat; genre: indie
+  pop; sounds: acoustic guitar"), and Sounds for each part and Write a song work from it with the sounds you
+  have. It knows about seventy genres by their usual names (darkwave, shoegaze, city pop, trip-hop, bossa
+  nova, phonk, chiptune...) with each one's tempo, chords, groove and sound palette, and words for tempo,
+  key, pace, mood and energy (slowburn, brooding, euphoric, laid-back...), length, instruments and what to
+  leave out. A genre it doesn't know is said ("not recognized: a neutral style"), and the moods decide. It
+  reads on your computer; with **Let the AI read it** and an AI connection, the AI reads it instead, checked.
+  See [Describe a song](docs/user/track-creator.md#describe-a-song).
+- **Track creator, your parts:** the **Sounds for each part** page now holds the song's parts, and they are
+  yours: **Add part...** (drums, bass, sub bass, chords, pad, arpeggio, lead, counter-melody, riser or
+  impacts), change a part's role, remove one. Three parts (the Drum Machine, a guitar and a synth) are as
+  fine as a dozen, and two parts of one role play different things (a second guitar arpeggiates an octave
+  up, a second lead harmonises). The song is written with exactly these parts and the sounds chosen for
+  them: what you choose there wins over a description's words and the sound index. Drums can be Spinus's
+  Drum Machine, another drum instrument or a set of your samples (or the starter pack's); the list starts
+  again, saying so, on a new description, a new summary or another arrangement.
+- **Track creator, a full arrangement:** **Arrangement** on the Write a song page (remembered) proposes the
+  parts: a **Sketch** of four, or a **Full** arrangement of about ten laid out like the demo songs: the drums
+  (kick, snare and hats on one drum instrument), a sub bass when the bass leaves room for one, a pad, an
+  arpeggio and a counter-melody, a riser before each chorus and an impact where it starts. Verses stay thin
+  and choruses get everything. Each part's channel is coloured and grouped by family (Drums, Bass, Synths,
+  Leads, FX) with its own mixer insert, a family's inserts play into a bus of its name, and each part has its
+  own Playlist track under its family's, so you can see the parts come and go. Still one undo step.
+- **Track creator, writing again replaces the song:** Apply asks "Replace Song 1? It will be overwritten
+  (Ctrl+Z brings it back)" and puts the new song in the old one's place (its channels, patterns, tracks and
+  markers go; the Sounds page's channels stay), as one undo step; or keeps both.
 - **Track creator, your sounds:** the sound index now measures Spinus's own instruments and the free
   downloads; your other plugins only when you tick them under **Your plugins...**. The role of a preset
   whose name does not say it is learnt from your presets that do (on Surge XT's presets: right for 57 %

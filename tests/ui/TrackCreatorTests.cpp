@@ -6,6 +6,7 @@
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
 #include "session/PartSounds.h"
+#include "ui/PartSoundsPanel.h"
 #include "session/SongPreparation.h"
 #include "session/SoundDescriptors.h"
 #include "ui/AnalysisLibraryView.h"
@@ -444,6 +445,54 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
     CHECK (next.getState() != ai::AiService::State::running);
 }
 
+TEST_CASE ("Track creator: the parts are the user's list, and start again on a new description", "[ui][trackcreator]")
+{
+    Analysis a;
+    auto arrangement = juce::String ("sketch");
+    PartSoundsPanel::Context context;
+    context.summary = juce::JSON::parse (R"({"kind": "spinus.style-summary", "tempo": {"median": 108},
+        "parts": {"bass": {"songs": 3, "low": 28, "median": 38, "high": 50, "notesPerBar": 8},
+                  "other": {"songs": 3, "low": 52, "median": 62, "high": 76, "notesPerBar": 6, "voices": 3},
+                  "vocals": {"songs": 3, "low": 55, "median": 64, "high": 74, "notesPerBar": 3},
+                  "drums": {"songs": 3, "notesPerBar": 13}}})");
+    PartSoundsPanel panel (a.session,
+                           [&]
+                           {
+                               auto c = context;
+                               c.arrangement = arrangement;
+                               return c;
+                           });
+    panel.setSize (700, 600);
+    panel.resetParts();
+    auto roles = [&]
+    {
+        juce::StringArray r;
+        for (const auto& p : panel.getParts())
+            r.add (p.role);
+        return r.joinIntoString (" ");
+    };
+    CHECK (roles() == "drums bass chords lead");
+
+    // The full arrangement proposes more; the user adds a second chords part, changes a role, removes one.
+    arrangement = "full";
+    panel.resetParts ("The arrangement changed.");
+    CHECK (roles() == "drums bass chords pad arp lead counter riser impact");
+    CHECK (panel.getStatusText().startsWith ("The arrangement changed."));
+    REQUIRE (panel.addPart ("chords"));
+    CHECK (panel.getParts().back().name == "Chords 2");
+    CHECK (panel.getParts().back().id == "chords-2");
+    REQUIRE (panel.setRole (3, "arp"));
+    CHECK (panel.getParts()[3].role == "arp");
+    REQUIRE (panel.removePart (8)); // the impacts
+    CHECK (panel.getParts().size() == 9);
+    CHECK_FALSE (panel.addPart ("kazoo"));
+    // Each part gets what it needs: a second chords part an octave up.
+    const auto first = parts::targetFor (panel.getParts()[2], 0, context.summary);
+    const auto second = parts::targetFor (panel.getParts()[8], 1, context.summary);
+    CHECK (second.median == first.median + 12);
+    CHECK_FALSE (second.measure);
+}
+
 TEST_CASE ("Track creator describe a song screenshot for the manual", "[.screenshot][manual]")
 {
     if (ai::AiService::findInstallation().python == juce::File())
@@ -456,7 +505,8 @@ TEST_CASE ("Track creator describe a song screenshot for the manual", "[.screens
     creator.setSize (720, 720);
     creator.showPage (TrackCreator::Page::describe);
     auto& describer = creator.getDescriber();
-    describer.setText ("A slow, dark depressive black metal song in D minor at 72 BPM, with a piano and a choir");
+    describer.setText ("A sunny, upbeat indie pop song at 118 BPM in G major, with acoustic guitar, handclaps and a "
+                       "catchy whistled lead");
     REQUIRE (describer.read());
     REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
@@ -887,22 +937,27 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     REQUIRE (rows.size() == 4);
     for (const auto& row : rows)
         CHECK_FALSE (row.choices.empty());
-    CHECK (rows[0].target.part == "bass");
-    CHECK (rows[0].measured >= 10);
-    REQUIRE (rows[0].chosen() != nullptr);
-    for (const auto& c : rows[0].choices)
+    // The sketch's parts, in its order: drums, bass, chords, lead.
+    CHECK (rows[0].part.role == "drums");
+    CHECK (rows[1].target.part == "bass");
+    CHECK (rows[1].measured >= 10);
+    REQUIRE (rows[1].chosen() != nullptr);
+    for (const auto& c : rows[1].choices)
         UNSCOPED_INFO (c.title() << " " << c.distance << ": " << c.reasons());
-    CHECK (rows[0].chosen()->name == "Dark Square"); // its own sound, measured back
-    CHECK (rows[3].chosen()->kind == parts::Choice::Kind::drumSamples);
-    CHECK (rows[3].chosen()->drums.at ("kick").endsWith ("Kick 1.wav"));
-    CHECK (panel.describe (0).contains ("attack"));
-    CHECK (rows[0].effects.isEmpty());
+    CHECK (rows[1].chosen()->name == "Dark Square"); // its own sound, measured back
+    CHECK (rows[0].chosen()->kind == parts::Choice::Kind::drumSamples);
+    CHECK (rows[0].chosen()->drums.at ("kick").endsWith ("Kick 1.wav"));
+    // Every kind of drum source there is can be picked: the sample set, Spinus's Drum Machine.
+    CHECK (std::any_of (rows[0].choices.begin(), rows[0].choices.end(),
+                        [] (const parts::Choice& c) { return c.source.stockType == "spinus.drum-machine"; }));
+    CHECK (panel.describe (1).contains ("attack"));
+    CHECK (rows[1].effects.isEmpty());
 
     // Heard: the chosen sound playing a phrase, and the song's part.
-    REQUIRE (panel.listen (0));
+    REQUIRE (panel.listen (1));
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 60000));
     CHECK (panel.getLastPlayed().existsAsFile());
-    REQUIRE (panel.listenToSongs (3));
+    REQUIRE (panel.listenToSongs (0));
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 60000));
     CHECK (panel.getLastPlayed().getFileName() == "drums-song.wav");
 
@@ -916,8 +971,8 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 240000));
     INFO (panel.getStatusText());
     CHECK (panel.getStatusText().contains ("CLAP model"));
-    REQUIRE (rows[0].tuned.has_value());
-    CHECK (rows[0].note.contains ("Tuned toward the song"));
+    REQUIRE (rows[1].tuned.has_value());
+    CHECK (rows[1].note.contains ("Tuned toward the song"));
     const auto plan = panel.makePlan();
     REQUIRE (plan.parts.size() == 4);
     CHECK_FALSE (plan.master.isEmpty());
@@ -926,11 +981,11 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
         std::any_of (plan.parts.begin(), plan.parts.end(), [] (const auto& p) { return std::abs (p.volumeDb) > 0.0; }));
 
     // Swapped: its tuning and effects are dropped.
-    if (rows[1].choices.size() > 1)
+    if (rows[2].choices.size() > 1)
     {
-        REQUIRE (panel.select (1, 1));
-        CHECK (rows[1].effects.isEmpty());
-        CHECK_FALSE (rows[1].tuned.has_value());
+        REQUIRE (panel.select (2, 1));
+        CHECK (rows[2].effects.isEmpty());
+        CHECK_FALSE (rows[2].tuned.has_value());
     }
 
     // Added as one undo step.
@@ -944,7 +999,7 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     CHECK (session.getHistory().getUndoDescriptions().size() == steps + 1);
     CHECK (session.getHistory().getUndoDescriptions().strings.getLast() == "Track creator: sounds for 4 parts");
     REQUIRE (panel.getAddedChannels().size() == 4);
-    const auto* bassChannel = session.getProject().findChannel (panel.getAddedChannels()[0]);
+    const auto* bassChannel = session.getProject().findChannel (panel.getAddedChannels()[1]);
     REQUIRE (bassChannel != nullptr);
     CHECK (bassChannel->name == "Bass (Track creator)");
     CHECK_FALSE (bassChannel->instrument.value().parameters.empty()); // the tuned settings

@@ -56,6 +56,15 @@ void SongWriterPanel::setArrangement (const juce::String& size)
 
 juce::String SongWriterPanel::getArrangement() const { return sizeBox.getSelectedId() == 2 ? "full" : "sketch"; }
 
+const parts::Plan::Part* SongWriterPanel::pagePartFor (const song::Layer& layer) const
+{
+    // The Sounds page's part of the same id: its choice decides the sound.
+    for (const auto& p : context.sounds.parts)
+        if (p.target.id == layer.id)
+            return &p;
+    return nullptr;
+}
+
 const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
 {
     if (layerChoicesKnown)
@@ -71,24 +80,24 @@ const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
         return layerChoices;
     for (const auto& layer : layers)
     {
-        // The drums keep the Sounds page's kit or Spinus's Drum Machine; the parts the Sounds page chose for keep
-        // that sound.
-        if (layer.drums || (chosenFor (context.sounds, layer.part) != nullptr && layer.id == layer.part))
+        // What the Sounds page chose stays; the drums without a choice there get Spinus's Drum Machine.
+        if (layer.drums || pagePartFor (layer) != nullptr)
             continue;
         parts::Target target;
-        target.part = layer.part;
-        target.roles = { layer.role };
+        target.part = layer.part == "fx" ? juce::String ("fx") : song::summaryPart (layer.part);
+        target.roles = { layer.soundRole };
         target.low = layer.low;
         target.median = layer.middle;
         target.high = layer.high;
-        target.chords = layer.id == "pad" || layer.id == "chords";
+        target.chords = layer.role == "pad" || (layer.role == "chords" && layer.instance == 0);
         target.voices = target.chords ? 3.0 : 1.0;
-        // A described song names instruments to look for ("piano"): the closest sound whose name says it.
-        const auto lookFor = context.summary["described"]["sounds"][juce::Identifier (layer.id)].toString();
+        // A described song names instruments to look for ("piano", or its genre's palette): the closest sound
+        // whose name says it.
+        const auto lookFor = context.summary["described"]["sounds"][juce::Identifier (layer.role)].toString();
         const auto found = parts::choose (target, {}, index, lookFor.isEmpty() ? 1 : 40);
         const parts::Choice* best = nullptr;
         for (const auto& c : found)
-            if (c.kind == parts::Choice::Kind::preset && c.role == layer.role && best == nullptr)
+            if (c.kind == parts::Choice::Kind::preset && c.role == layer.soundRole && best == nullptr)
                 best = &c;
         if (lookFor.isNotEmpty())
             for (const auto& c : found)
@@ -105,16 +114,17 @@ const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
 
 std::optional<parts::Plan::Part> SongWriterPanel::chosenForLayer (const song::Layer& layer)
 {
-    if (layer.id == layer.part || layer.drums)
-        if (const auto* chosen = chosenFor (context.sounds, layer.drums ? juce::String ("drums") : layer.part))
-            if (layer.part != "fx")
-                return *chosen;
+    if (const auto* chosen = pagePartFor (layer))
+        return *chosen;
     const auto& choices = getLayerChoices();
     if (const auto found = choices.find (layer.id); found != choices.end())
     {
         parts::Plan::Part part;
         part.target.part = layer.part;
-        part.target.roles = { layer.role };
+        part.target.id = layer.id;
+        part.target.name = layer.name;
+        part.target.role = layer.role;
+        part.target.roles = { layer.soundRole };
         part.choice = found->second;
         return part;
     }
@@ -140,8 +150,23 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     {
         auto* settings = &session.getEdit().engine.getPropertyStorage().getPropertiesFile();
         sizeBox.setSelectedId (settings->getValue (sizeSetting) == "full" ? 2 : 1, juce::dontSendNotification);
-        sizeBox.onChange = [this, settings] { settings->setValue (sizeSetting, getArrangement()); };
+        sizeBox.onChange = [this, settings]
+        {
+            settings->setValue (sizeSetting, getArrangement());
+            if (onArrangementChanged)
+                onArrangementChanged (getArrangement());
+        };
     }
+    messageBox = [this] (const juce::MessageBoxOptions& options, std::function<void (int)> done)
+    {
+        const auto n = options.getNumButtons();
+        juce::AlertWindow::showAsync (options.withAssociatedComponent (this),
+                                      [n, done = std::move (done)] (int result)
+                                      {
+                                          if (done)
+                                              done ((result + n - 1) % juce::jmax (1, n));
+                                      });
+    };
     refineButton.setTooltip ("Ask your AI connection (Options > AI) to vary the sections, the chord loops and the "
                              "melody's shape; Spinus checks what it says against the style and writes every note "
                              "itself. Off: rules only, nothing is sent anywhere");
@@ -221,11 +246,17 @@ bool SongWriterPanel::write()
     }
     const auto seed = fixedSeed >= 0 ? fixedSeed++ : juce::Random::getSystemRandom().nextInt (0x7fffffff);
     const bool refine = refineButton.getToggleState();
-    run (object ({ { "summary", context.summary },
-                   { "seed", seed },
-                   { "refine", refine },
-                   { "arrangement", getArrangement() } }),
-         refine ? "Writing a song (the AI may vary its plan)..." : "Writing a song...",
+    // The Sounds page's parts, as the user made the list (or the arrangement's when it has none yet).
+    juce::Array<juce::var> list;
+    for (const auto& p : context.parts)
+        list.add (object ({ { "id", p.id }, { "name", p.name }, { "role", p.role } }));
+    auto params = object ({ { "summary", context.summary },
+                            { "seed", seed },
+                            { "refine", refine },
+                            { "arrangement", getArrangement() } });
+    if (! list.isEmpty())
+        params.getDynamicObject()->setProperty ("parts", list);
+    run (params, refine ? "Writing a song (the AI may vary its plan)..." : "Writing a song...",
          [this] (const juce::var& result)
          {
              song = result;
@@ -252,7 +283,11 @@ bool SongWriterPanel::redo (const juce::String& part, const juce::String& sectio
     }
     const auto seed = fixedSeed >= 0 ? fixedSeed++ : juce::Random::getSystemRandom().nextInt (0x7fffffff);
     auto redoWhat = part.isNotEmpty() ? object ({ { "part", part } }) : object ({ { "section", section } });
-    const auto what = part.isNotEmpty() ? "the " + song::displayName (part).toLowerCase() : "the " + section;
+    juce::String partName = song::displayName (part);
+    for (const auto& layer : song::layersOf (song))
+        if (layer.id == part)
+            partName = layer.name;
+    const auto what = part.isNotEmpty() ? "the " + partName.toLowerCase() : "the " + section;
     run (object ({ { "summary", context.summary }, { "seed", seed }, { "song", song }, { "redo", redoWhat } }),
          "Writing " + what + " again...",
          [this, part, section, what] (const juce::var& result)
@@ -275,11 +310,13 @@ bool SongWriterPanel::redo (const juce::String& part, const juce::String& sectio
     return true;
 }
 
-song::Options SongWriterPanel::optionsFor (const model::Project& project)
+song::Options SongWriterPanel::optionsFor (const model::Project& project, const juce::String& replace)
 {
     song::Options options;
-    options.channels = song::findChannels (project);
-    options.name = song::nextSongName (project);
+    options.channels =
+        song::isFull (song) ? song::findLayerChannels (project, song::layersOf (song)) : song::findChannels (project);
+    options.replace = replace;
+    options.name = replace.isNotEmpty() ? replace : song::nextSongName (project);
     for (const auto& layer : song::layersOf (song))
         if (const auto chosen = chosenForLayer (layer))
             if (auto sound = soundOf (chosen->choice))
@@ -296,7 +333,9 @@ song::Options SongWriterPanel::optionsFor (const model::Project& project)
     return options;
 }
 
-juce::var SongWriterPanel::makeProposal (juce::String* error)
+juce::var SongWriterPanel::makeProposal (juce::String* error) { return makeProposal (error, {}); }
+
+juce::var SongWriterPanel::makeProposal (juce::String* error, const juce::String& replace)
 {
     auto fail = [error] (const juce::String& why)
     {
@@ -308,7 +347,7 @@ juce::var SongWriterPanel::makeProposal (juce::String* error)
         return fail ("Write a song first.");
     const auto& project = session.getProject();
     if (whole || ! applied.isIn (project))
-        return song::makeProposal (song, project, optionsFor (project), error);
+        return song::makeProposal (song, project, optionsFor (project, replace), error);
     if (redoneParts.isEmpty() && redoneSections.isEmpty())
         return fail ("The song is in the project as it is: write another version or redo a part first.");
     juce::Array<juce::var> steps;
@@ -337,8 +376,36 @@ bool SongWriterPanel::apply()
     if (busy)
         return false;
     context = getContext();
+    // Writing again replaces the song written before, once the user says so; or both stay.
+    const auto& project = session.getProject();
+    const auto previous = song::lastSongName (project);
+    if (song.isObject() && (whole || ! applied.isIn (project)) && previous.isNotEmpty())
+    {
+        messageBox (juce::MessageBoxOptions()
+                        .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                        .withTitle ("Replace " + previous + "?")
+                        .withMessage ("Replace " + previous + "? It will be overwritten (Ctrl+Z brings it back).")
+                        .withButton ("Replace")
+                        .withButton ("Keep both")
+                        .withButton ("Cancel"),
+                    [safe = juce::Component::SafePointer (this), previous] (int choice)
+                    {
+                        if (safe != nullptr && choice == 0)
+                            safe->applyNow (previous);
+                        else if (safe != nullptr && choice == 1)
+                            safe->applyNow ({});
+                    });
+        return true;
+    }
+    return applyNow ({});
+}
+
+bool SongWriterPanel::applyNow (const juce::String& replace)
+{
+    if (busy)
+        return false;
     juce::String error;
-    const auto json = makeProposal (&error);
+    const auto json = makeProposal (&error, replace);
     if (! json.isObject())
     {
         status.setText (error, juce::dontSendNotification);
@@ -346,7 +413,7 @@ bool SongWriterPanel::apply()
     }
     auto& project = session.getProject();
     const bool wholeSong = whole || ! applied.isIn (project);
-    const auto options = optionsFor (project);
+    const auto options = optionsFor (project, replace);
     auto proposal = ai::Proposal::prepare (json, session.getHistory());
     proposal.undoName = "Track creator: " + proposal.summary;
     if (const auto result = proposal.apply (session.getHistory()); result.failed())
@@ -403,7 +470,10 @@ bool SongWriterPanel::listen()
         return false;
     context = getContext();
     juce::String error;
-    const auto json = makeProposal (&error);
+    // Heard as it would be after Apply replacing the last song, so only the new one plays.
+    const auto& project = session.getProject();
+    const auto json =
+        makeProposal (&error, whole || ! applied.isIn (project) ? song::lastSongName (project) : juce::String());
     if (! json.isObject())
     {
         status.setText (error, juce::dontSendNotification);
@@ -496,8 +566,13 @@ void SongWriterPanel::showRedoMenu()
         return;
     juce::PopupMenu menu;
     menu.addSectionHeader ("A part, in every section");
-    for (const auto& part : song::partNames())
-        menu.addItem ("New " + song::displayName (part).toLowerCase(), [this, part] { redo (part); });
+    const auto layers = song::layersOf (song);
+    if (layers.empty())
+        for (const auto& part : song::partNames())
+            menu.addItem ("New " + song::displayName (part).toLowerCase(), [this, part] { redo (part); });
+    for (const auto& layer : layers)
+        if (layer.part != "fx")
+            menu.addItem ("New " + layer.name.toLowerCase(), [this, id = layer.id] { redo (id); });
     menu.addSectionHeader ("A section, every part (and its chords)");
     if (const auto* sections = song["sections"].getArray())
         for (const auto& s : *sections)
@@ -547,12 +622,14 @@ void SongWriterPanel::show()
         juce::StringArray chosen;
         for (const auto& [layer, choice] : getLayerChoices())
             chosen.add (layer + ": " + choice.title());
-        lines.add ("Apply adds it as " + song::nextSongName (project) +
-                   ": a channel per layer, coloured and grouped "
-                   "by family (Drums, Bass, Synths, Leads, FX) with a bus each in the mixer, a pattern per layer "
-                   "and section, a Playlist track per layer under its family's, markers, the tempo and key." +
-                   (chosen.isEmpty() ? juce::String (" Layers get Spinus's own instruments (or the Sounds page's).")
-                                     : " From your sound index: " + chosen.joinIntoString ("; ") + "."));
+        const auto previous = song::lastSongName (project);
+        lines.add ((previous.isNotEmpty() ? "Apply asks whether to replace " + previous + " (or keep both), and adds it"
+                                          : "Apply adds it as " + song::nextSongName (project)) +
+                   ": a channel per part, coloured and grouped by family (Drums, Bass, Synths, Leads, FX) with a bus "
+                   "each in the mixer, a pattern per part and section, a Playlist track per part under its family's, "
+                   "markers, the tempo and key. The sounds chosen on Sounds for each part are used." +
+                   (chosen.isEmpty() ? juce::String (" Other parts get Spinus's own instruments.")
+                                     : " Other parts, from your sound index: " + chosen.joinIntoString ("; ") + "."));
     }
     else if (whole || ! applied.isIn (project))
         lines.add ("Apply adds it as " + song::nextSongName (project) +

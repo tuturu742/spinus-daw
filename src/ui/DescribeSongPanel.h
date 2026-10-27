@@ -9,15 +9,15 @@
 namespace spinus::ui
 {
 
-/** The Track creator's second way in (experimental): a song described in words ("a slow, dark depressive black
-    metal song in D minor, 72 BPM, with a piano") instead of songs you like.
+/** The Track creator's second way in (experimental): a song described in words ("a sunny, upbeat indie pop song
+    at 118 BPM in G major, with acoustic guitar") instead of songs you like.
 
     Read asks the AI service (ai.v1.song.describe, spinus_ai/describe.py) to read the words into a style summary,
     the same kind the songs you like give: rules on this computer by default, from a table of genres and the
     words for tempo, key, mood, instruments and what to leave out. With "Let the AI read it" and an AI connection,
     the AI reads it instead (checked; the rules' reading stands when it fails, and the page says so). What was
-    understood is shown in plain words ("Understood: 72 BPM, D minor, slow, dark; genre: depressive black
-    metal"); the Sounds for each part and Write a song pages then work from it, with the sounds you have.
+    understood is shown in plain words ("Understood: 118 BPM, G major, sunny, upbeat; genre: indie pop"); the
+    Sounds for each part and Write a song pages then work from it, with the sounds you have.
 
     Nothing changes the project. Without the AI service the page says so. Message thread only. */
 class DescribeSongPanel final : public juce::Component

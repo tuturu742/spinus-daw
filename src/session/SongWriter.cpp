@@ -3,6 +3,7 @@
 #include "PartSounds.h"
 
 #include <optional>
+#include <set>
 
 namespace spinus::song
 {
@@ -148,7 +149,7 @@ std::map<juce::String, int> drumNotesFor (const model::Channel& channel)
              { "tomLow", 45 }, { "tomMid", 47 }, { "tomHigh", 50 }, { "crash", 49 } };
 }
 
-bool isFull (const juce::var& song) { return song["size"].toString() == "full" && song["layers"].isArray(); }
+bool isFull (const juce::var& song) { return song["layers"].isArray() && ! arrayOf (song["layers"]).isEmpty(); }
 
 std::vector<Layer> layersOf (const juce::var& song)
 {
@@ -157,8 +158,15 @@ std::vector<Layer> layersOf (const juce::var& song)
         return layers;
     for (const auto& l : arrayOf (song["layers"]))
     {
-        Layer layer { l["id"].toString(),   l["name"].toString(), l["family"].toString(),
-                      l["part"].toString(), l["role"].toString(), (bool)l["drums"] };
+        Layer layer;
+        layer.id = l["id"].toString();
+        layer.name = l["name"].toString();
+        layer.family = l["family"].toString();
+        layer.part = l["part"].toString();
+        layer.role = l["role"].toString();
+        layer.soundRole = l["soundRole"].toString();
+        layer.drums = (bool)l["drums"];
+        layer.instance = (int)l["instance"];
         if (const auto* r = l["register"].getArray(); r != nullptr && r->size() == 3)
         {
             layer.low = (int)(*r)[0];
@@ -190,9 +198,15 @@ Sound defaultSound (const Layer& layer)
                                                                 { "chords", "Soft Keys" }, { "pad", "Warm Pad" },
                                                                 { "arp", "Pluck" },        { "lead", "Saw Lead" },
                                                                 { "counter", "Bell" },     { "riser", "Noise Riser" } };
+    // A second part of a role sounds unlike the first.
+    static const std::map<juce::String, juce::String> second {
+        { "bass", "Square Bass" }, { "chords", "Pluck" },    { "pad", "String Pad" },
+        { "arp", "Bell" },         { "lead", "Flute Lead" }, { "counter", "Synth Brass" }
+    };
+    const auto& table = layer.instance > 0 && second.contains (layer.role) ? second : presets;
     auto sound = defaultSound ("lead");
-    const auto found = presets.find (layer.id);
-    sound.preset = found != presets.end() ? found->second : juce::String ("Soft Keys");
+    const auto found = table.find (layer.role);
+    sound.preset = found != table.end() ? found->second : juce::String ("Soft Keys");
     return sound;
 }
 
@@ -204,6 +218,119 @@ std::map<juce::String, model::ChannelId> findChannels (const model::Project& pro
             if (! channel.audioTrack && channel.name == channelName (part))
                 found[part] = channel.id;
     return found;
+}
+
+std::map<juce::String, model::ChannelId> findLayerChannels (const model::Project& project,
+                                                            const std::vector<Layer>& layers)
+{
+    std::map<juce::String, model::ChannelId> found;
+    const auto legacy = findChannels (project);
+    for (const auto& layer : layers)
+    {
+        if (layer.part == "fx")
+            continue;
+        for (const auto& channel : project.channels) // the newest of the name
+            if (! channel.audioTrack && channel.name == layer.name + " (Track creator)")
+                found[layer.id] = channel.id;
+        if (! found.contains (layer.id) && layer.instance == 0 && layer.role == layer.part)
+            if (const auto l = legacy.find (layer.part); l != legacy.end())
+                found[layer.id] = l->second;
+    }
+    return found;
+}
+
+juce::String lastSongName (const model::Project& project)
+{
+    int newest = 0;
+    for (const auto& p : project.patterns)
+        if (p.name.startsWith ("Song ") && p.name.contains (": "))
+        {
+            const auto number = p.name.substring (5).upToFirstOccurrenceOf (":", false, false);
+            if (number.isNotEmpty() && number.containsOnly ("0123456789"))
+                newest = juce::jmax (newest, number.getIntValue());
+        }
+    return newest > 0 ? "Song " + juce::String (newest) : juce::String();
+}
+
+juce::Array<juce::var> removeSongSteps (const model::Project& project, const juce::String& name, model::Ticks& start)
+{
+    juce::Array<juce::var> steps;
+    auto add = [&steps] (const char* command, const juce::var& parameters)
+    { steps.add (object ({ { "command", command }, { "parameters", parameters } })); };
+    start = -1;
+    std::set<model::PatternId> patterns;
+    for (const auto& p : project.patterns)
+        if (p.name.startsWith (name + ": "))
+            patterns.insert (p.id);
+    if (patterns.empty())
+        return steps;
+    model::Ticks end = 0;
+    for (const auto& clip : project.playlist.clips)
+        if (const auto* pc = std::get_if<model::PatternClip> (&clip.content);
+            pc != nullptr && patterns.contains (pc->pattern))
+        {
+            start = start < 0 ? clip.start : std::min (start, clip.start);
+            end = std::max (end, clip.start + clip.length);
+        }
+
+    // The channels only its patterns play, and their inserts; the Sounds page's channels stay.
+    std::set<model::ChannelId> channels;
+    for (const auto& c : project.channels)
+    {
+        if (c.audioTrack || c.name.endsWith ("(Track creator)"))
+            continue;
+        bool inSong = false, elsewhere = false;
+        for (const auto& p : project.patterns)
+            if (p.notes.contains (c.id))
+                (patterns.contains (p.id) ? inSong : elsewhere) = true;
+        if (inSong && ! elsewhere)
+            channels.insert (c.id);
+    }
+    std::set<model::InsertId> inserts;
+    for (const auto& id : channels)
+        if (const auto* c = project.findChannel (id); c != nullptr && c->targetInsert != model::masterInsertId)
+            if (std::none_of (project.channels.begin(), project.channels.end(), [&] (const model::Channel& o)
+                              { return o.targetInsert == c->targetInsert && ! channels.contains (o.id); }))
+                inserts.insert (c->targetInsert);
+    // Its buses: inserts only its inserts play into.
+    std::set<model::InsertId> buses;
+    for (const auto& bus : project.mixer.inserts)
+    {
+        bool fed = false, other = false;
+        for (const auto& i : project.mixer.inserts)
+            if (i.output == bus.id && i.id != bus.id)
+                (inserts.contains (i.id) ? fed : other) = true;
+        const bool played = std::any_of (project.channels.begin(), project.channels.end(),
+                                         [&] (const model::Channel& c) { return c.targetInsert == bus.id; });
+        if (fed && ! other && ! played && ! inserts.contains (bus.id))
+            buses.insert (bus.id);
+    }
+    for (const auto& id : channels)
+        add ("channel.remove", object ({ { "channel", (int)id.value } }));
+    for (const auto& id : inserts)
+        add ("insert.remove", object ({ { "insert", (int)id.value } }));
+    for (const auto& id : buses)
+        add ("insert.remove", object ({ { "insert", (int)id.value } }));
+    for (const auto& id : patterns)
+        add ("pattern.remove", object ({ { "pattern", (int)id.value } }));
+
+    // Its Playlist tracks (the tracks grouped under a family's folder before the folder), and its markers.
+    std::vector<model::LaneId> folders, lanes;
+    for (const auto& lane : project.playlist.lanes)
+        if (lane.name == "Track creator: " + name || lane.name.startsWith (name + ": "))
+            folders.push_back (lane.id);
+    for (const auto& lane : project.playlist.lanes)
+        if (std::find (folders.begin(), folders.end(), lane.group) != folders.end())
+            lanes.push_back (lane.id);
+    for (const auto& id : lanes)
+        add ("lane.remove", object ({ { "lane", (int)id.value } }));
+    for (const auto& id : folders)
+        add ("lane.remove", object ({ { "lane", (int)id.value } }));
+    if (start >= 0)
+        for (const auto& marker : project.playlist.markers)
+            if (marker.at >= start && marker.at < end)
+                add ("marker.remove", object ({ { "marker", (int)marker.id.value } }));
+    return steps;
 }
 
 Sound defaultSound (const juce::String& part)
@@ -232,6 +359,10 @@ namespace
 juce::var makeFullProposal (const juce::var& song, const model::Project& project, const Options& options,
                             juce::Array<juce::var> steps, juce::String* error)
 {
+    // The song it replaces goes first (its channels, patterns, tracks and markers), in the same undo step.
+    model::Ticks replacedAt = -1;
+    if (options.replace.isNotEmpty())
+        steps.addArray (removeSongSteps (project, options.replace, replacedAt));
     auto step = [&steps] (const char* command, const juce::var& parameters)
     {
         steps.add (object ({ { "command", command }, { "parameters", parameters } }));
@@ -251,10 +382,9 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
     for (const auto& layer : layers)
     {
         families.addIfNotAlreadyThere (layer.family);
-        const auto partChannel = isEffect (layer) ? options.channels.end() : options.channels.find (layer.part);
-        const auto* existing = partChannel != options.channels.end() && (layer.id == layer.part || layer.drums)
-                                   ? project.findChannel (partChannel->second)
-                                   : nullptr;
+        const auto partChannel = isEffect (layer) ? options.channels.end() : options.channels.find (layer.id);
+        const auto* existing =
+            partChannel != options.channels.end() ? project.findChannel (partChannel->second) : nullptr;
         if (existing != nullptr)
         {
             channels[layer.id] = (int)existing->id.value;
@@ -328,7 +458,8 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
     model::Ticks end = 0;
     for (const auto& clip : project.playlist.clips)
         end = std::max (end, clip.start + clip.length);
-    const auto offset = (end + barTicks - 1) / barTicks * barTicks;
+    // After what the song has, or where the song it replaces was.
+    const auto offset = replacedAt >= 0 ? replacedAt / barTicks * barTicks : (end + barTicks - 1) / barTicks * barTicks;
     for (const auto& existing : project.playlist.lanes)
         if (existing.name == channelName ("drums") && ! existing.muted)
             step ("lane.set", object ({ { "lane", (int)existing.id.value }, { "muted", true } }));
@@ -379,10 +510,12 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
         }
 
     const auto tempo = juce::jlimit (20.0, 999.0, (double)song["tempo"]);
-    return object ({ { "summary", "a new song, " + juce::String ((int)song["bars"]) + " bars at " +
-                                      juce::String (tempo, 0) + " BPM in " + song["key"]["name"].toString() + ", " +
-                                      juce::String ((int)layers.size()) + " channels" },
-                     { "steps", steps } });
+    return object (
+        { { "summary", "a new song, " + juce::String ((int)song["bars"]) + " bars at " + juce::String (tempo, 0) +
+                           " BPM in " + song["key"]["name"].toString() + ", " + juce::String ((int)layers.size()) +
+                           " channels" +
+                           (options.replace.isNotEmpty() ? ", replacing " + options.replace : juce::String()) },
+          { "steps", steps } });
 }
 } // namespace
 
@@ -618,9 +751,19 @@ juce::var makeFullRedo (const juce::var& song, const Applied& applied, const juc
             continue;
         sectionName = s["name"].toString();
         const auto length = std::max<juce::int64> (1, (juce::int64)s["bars"]) * barTicks;
+        // A part of the list: the first drums, bass, chords or lead stands for that part (and what is made from
+        // it); another part only for itself.
+        juce::String group = part, only;
+        for (const auto& layer : layersOf (song))
+            if (layer.id == part)
+            {
+                group = layer.instance == 0 && layer.role == layer.part ? layer.part : juce::String();
+                only = group.isEmpty() ? layer.id : juce::String();
+            }
         for (const auto& layer : layersOf (song))
         {
-            if (isEffect (layer) || (part.isNotEmpty() && layer.part != part))
+            if (isEffect (layer) || (only.isNotEmpty() && layer.id != only) ||
+                (only.isEmpty() && part.isNotEmpty() && layer.part != group))
                 continue;
             const auto drums = applied.layerDrums.contains (layer.id) ? applied.layerDrums.at (layer.id)
                                                                       : std::map<juce::String, int>();

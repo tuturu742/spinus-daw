@@ -254,6 +254,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
             c.workFolder = workRoot.getChildFile ("sounds");
             c.helper = soundOptions;
             c.service = service;
+            c.arrangement = songWriter != nullptr ? songWriter->getArrangement() : juce::String ("sketch");
             return c;
         });
     addChildComponent (*partSounds);
@@ -269,6 +270,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
                                                                 c.songs.add (r.file);
                                                         c.sounds = partSounds->makePlan();
                                                         c.indexFolder = soundIndexFolder;
+                                                        c.parts = partSounds->getParts();
                                                         return c;
                                                     });
     songWriter->onMix = [this] (const juce::File& reference)
@@ -283,7 +285,11 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
         described = read;
         fromDescription = true;
         remember();
+        partSounds->resetParts ("A new description was read, so the parts start again from the arrangement.");
     };
+    songWriter->onArrangementChanged = [this] (const juce::String&)
+    { partSounds->resetParts ("The arrangement changed, so the parts start again from it."); };
+    partSounds->resetParts();
     addChildComponent (*describer);
     addAndMakeVisible (styleTab);
     addAndMakeVisible (describeTab);
@@ -1163,7 +1169,11 @@ void TrackCreator::summarize()
                     summarized = key; // not asked again for the same songs
                     summary = error.isEmpty() ? result : juce::var();
                     if (summary.isObject())
+                    {
                         fromDescription = false; // the songs, newer than the description
+                        partSounds->resetParts ("The songs' summary is new, so the parts start again from the "
+                                                "arrangement.");
+                    }
                     remember();
                     status.setText (error.isEmpty() ? juce::String ("Done.")
                                                     : "The summary could not be made: " + error,

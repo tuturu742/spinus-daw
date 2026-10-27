@@ -280,7 +280,7 @@ TEST_CASE ("Song writer: one part or one section written again, the rest kept, o
 
 namespace
 {
-/** makeSong as a full arrangement: drums split into three layers, a pad in the chorus only, a riser before the
+/** makeSong with its parts as layers: the drums on one channel, a pad in the chorus only, a riser before the
     chorus and an impact where it starts. `bassPitch` makes another bass. */
 juce::var makeFullSong (int bassPitch = 45)
 {
@@ -288,22 +288,24 @@ juce::var makeFullSong (int bassPitch = 45)
     const auto extra = juce::JSON::parse (juce::String (R"({
         "size": "full",
         "layers": [
-            {"id": "kick", "name": "Kick", "family": "Drums", "part": "drums", "role": "drums", "drums": true},
-            {"id": "snare", "name": "Snare", "family": "Drums", "part": "drums", "role": "drums", "drums": true},
-            {"id": "hats", "name": "Hats & Cymbals", "family": "Drums", "part": "drums", "role": "drums", "drums": true},
-            {"id": "bass", "name": "Bass", "family": "Bass", "part": "bass", "role": "bass", "drums": false,
-             "register": [31, 38, 47]},
-            {"id": "pad", "name": "Pad", "family": "Synths", "part": "chords", "role": "pad", "drums": false,
-             "register": [52, 61, 73]},
-            {"id": "lead", "name": "Lead", "family": "Leads", "part": "lead", "role": "lead", "drums": false},
-            {"id": "riser", "name": "Riser", "family": "FX", "part": "fx", "role": "fx", "drums": false},
-            {"id": "impact", "name": "Impacts", "family": "FX", "part": "fx", "role": "drums", "drums": true}],
+            {"id": "drums", "name": "Drums", "family": "Drums", "part": "drums", "role": "drums",
+             "soundRole": "drums", "drums": true, "instance": 0},
+            {"id": "bass", "name": "Bass", "family": "Bass", "part": "bass", "role": "bass", "soundRole": "bass",
+             "drums": false, "instance": 0, "register": [31, 38, 47]},
+            {"id": "pad", "name": "Pad", "family": "Synths", "part": "chords", "role": "pad", "soundRole": "pad",
+             "drums": false, "instance": 0, "register": [52, 61, 73]},
+            {"id": "lead", "name": "Lead", "family": "Leads", "part": "lead", "role": "lead", "soundRole": "lead",
+             "drums": false, "instance": 0},
+            {"id": "riser", "name": "Riser", "family": "FX", "part": "fx", "role": "riser", "soundRole": "fx",
+             "drums": false, "instance": 0},
+            {"id": "impact", "name": "Impacts", "family": "FX", "part": "fx", "role": "impact", "soundRole": "drums",
+             "drums": true, "instance": 0}],
         "layerParts": {
-            "kick": {"verse": [{"start": 0, "length": 120, "drum": "kick", "velocity": 0.9}],
-                     "chorus": [{"start": 0, "length": 120, "drum": "kick", "velocity": 0.9}]},
-            "snare": {"verse": [{"start": 960, "length": 120, "drum": "snare", "velocity": 0.8}]},
-            "hats": {"verse": [{"start": 480, "length": 120, "drum": "hat", "velocity": 0.5}],
-                     "chorus": [{"start": 0, "length": 120, "drum": "crash", "velocity": 0.8}]},
+            "drums": {"verse": [{"start": 0, "length": 120, "drum": "kick", "velocity": 0.9},
+                                {"start": 960, "length": 120, "drum": "snare", "velocity": 0.8},
+                                {"start": 480, "length": 120, "drum": "hat", "velocity": 0.5}],
+                      "chorus": [{"start": 0, "length": 120, "drum": "kick", "velocity": 0.9},
+                                 {"start": 0, "length": 120, "drum": "crash", "velocity": 0.8}]},
             "bass": {"verse": [{"start": 0, "length": 900, "pitch": BASS, "velocity": 0.8}],
                      "chorus": [{"start": 0, "length": 1800, "pitch": 48, "velocity": 0.8}]},
             "pad": {"chorus": [{"start": 0, "length": 7000, "pitch": 60, "velocity": 0.5},
@@ -354,7 +356,7 @@ TEST_CASE ("Song writer: a full arrangement is laid out by family, its layers co
     const auto before = history.getProject();
     const auto song = makeFullSong();
     REQUIRE (song::isFull (song));
-    REQUIRE (song::layersOf (song).size() == 8);
+    REQUIRE (song::layersOf (song).size() == 6);
     song::Options options;
     options.name = song::nextSongName (history.getProject());
     juce::String error;
@@ -370,7 +372,7 @@ TEST_CASE ("Song writer: a full arrangement is laid out by family, its layers co
     const auto& project = history.getProject();
 
     // A channel per layer, coloured and grouped by family, on an insert of its own named and coloured alike.
-    CHECK (project.channels.size() == before.channels.size() + 8);
+    CHECK (project.channels.size() == before.channels.size() + 6);
     for (const auto& layer : song::layersOf (song))
     {
         const auto* c = channelNamed (project, layer.name);
@@ -384,36 +386,35 @@ TEST_CASE ("Song writer: a full arrangement is laid out by family, its layers co
         REQUIRE (c->instrument.has_value());
         CHECK (c->instrument.value().stockType == (layer.drums ? "spinus.drum-machine" : "spinus.3x-osc"));
     }
-    // A bus for each family of two or more channels (Drums, FX), which their inserts play into.
+    // A bus for each family of two or more channels (FX), which their inserts play into.
     juce::StringArray buses;
     for (const auto& insert : project.mixer.inserts)
         if (std::none_of (project.channels.begin(), project.channels.end(),
                           [&] (const model::Channel& c) { return c.targetInsert == insert.id; }))
             buses.add (insert.name);
     buses.removeString ("Master");
-    CHECK (buses == juce::StringArray { "Drums", "FX" });
-    const auto* kickInsert = project.findInsert (channelNamed (project, "Kick")->targetInsert);
-    REQUIRE (kickInsert != nullptr);
-    const auto* drumsBus = project.findInsert (kickInsert->output);
-    REQUIRE (drumsBus != nullptr);
-    CHECK (drumsBus->name == "Drums");
+    CHECK (buses == juce::StringArray { "FX" });
+    const auto* riserInsert = project.findInsert (channelNamed (project, "Riser")->targetInsert);
+    REQUIRE (riserInsert != nullptr);
+    const auto* fxBus = project.findInsert (riserInsert->output);
+    REQUIRE (fxBus != nullptr);
+    CHECK (fxBus->name == "FX");
 
     // Patterns only where a layer plays: the pad in the chorus, not the verse; one pattern per effect.
-    CHECK (patternNamed (project, "Song 1: Verse - Kick") != nullptr);
+    CHECK (patternNamed (project, "Song 1: Verse - Drums") != nullptr);
     CHECK (patternNamed (project, "Song 1: Chorus - Pad") != nullptr);
     CHECK (patternNamed (project, "Song 1: Verse - Pad") == nullptr);
     CHECK (patternNamed (project, "Song 1: Verse - Lead") == nullptr);
     const auto* riser = patternNamed (project, "Song 1: Riser");
     REQUIRE (riser != nullptr);
     CHECK (riser->length == 2 * 3840);
-    const auto* kickVerse = patternNamed (project, "Song 1: Verse - Kick");
-    CHECK (pitchesOf (*kickVerse, channelNamed (project, "Kick")->id) == std::vector<int> { 60 });
-    CHECK (pitchesOf (*patternNamed (project, "Song 1: Chorus - Hats & Cymbals"),
-                      channelNamed (project, "Hats & Cymbals")->id) == std::vector<int> { 70 });
+    // Kick, snare and hats on the one drums channel (the Drum Machine's pads).
+    const auto* drumsVerse = patternNamed (project, "Song 1: Verse - Drums");
+    CHECK (pitchesOf (*drumsVerse, channelNamed (project, "Drums")->id) == std::vector<int> { 60, 61, 63 });
 
     // A folder track per family, a track per layer under it, the clips where the layer plays.
     const auto* drums = laneNamed (project, "Song 1: Drums");
-    const auto* kick = laneNamed (project, "Kick");
+    const auto* kick = laneNamed (project, "Drums");
     const auto* pad = laneNamed (project, "Pad");
     const auto* riserLane = laneNamed (project, "Riser");
     const auto* impacts = laneNamed (project, "Impacts");
@@ -432,15 +433,15 @@ TEST_CASE ("Song writer: a full arrangement is laid out by family, its layers co
     CHECK (project.playlist.markers.size() == 3);
 
     CHECK (history.getUndoDescriptions().size() == 1);
-    CHECK (history.getUndoDescriptions()[0].contains ("8 channels"));
+    CHECK (history.getUndoDescriptions()[0].contains ("6 channels"));
 
     // What it made is found again, and a new bass is written into the bass layer only.
     const auto applied = song::findApplied (song, project, "Song 1");
     REQUIRE (applied.full);
     REQUIRE (applied.isIn (project));
-    CHECK (applied.layerPatterns.at ("kick").size() == 2);
+    CHECK (applied.layerPatterns.at ("drums").size() == 2);
     CHECK (applied.layerPatterns.at ("pad").size() == 1);
-    CHECK (applied.layerChannels.at ("kick") == channelNamed (project, "Kick")->id);
+    CHECK (applied.layerChannels.at ("drums") == channelNamed (project, "Drums")->id);
     const auto after = history.getProject();
     const auto redo = song::makeRedoProposal (makeFullSong (40), applied, "bass", {}, &error);
     INFO (error);
@@ -450,12 +451,87 @@ TEST_CASE ("Song writer: a full arrangement is laid out by family, its layers co
     REQUIRE (bass.apply (history).wasOk());
     CHECK (pitchesOf (*history.getProject().findPattern (applied.layerPatterns.at ("bass").at ("verse")),
                       applied.layerChannels.at ("bass")) == std::vector<int> { 40 });
-    CHECK (*history.getProject().findPattern (applied.layerPatterns.at ("kick").at ("verse")) ==
-           *after.findPattern (applied.layerPatterns.at ("kick").at ("verse")));
+    CHECK (*history.getProject().findPattern (applied.layerPatterns.at ("drums").at ("verse")) ==
+           *after.findPattern (applied.layerPatterns.at ("drums").at ("verse")));
     CHECK (history.getProject().playlist == after.playlist);
 
     REQUIRE (history.undo());
     REQUIRE (history.undo());
     CHECK (sameContent (history.getProject(), before));
     CHECK_FALSE (applied.isIn (history.getProject()));
+}
+
+TEST_CASE ("Song writer: writing again replaces the song before, in its place, as one undo step", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    const auto before = history.getProject();
+    song::Options options;
+    options.name = "Song 1";
+    REQUIRE (ai::Proposal::prepare (song::makeProposal (makeFullSong(), history.getProject(), options), history)
+                 .apply (history)
+                 .wasOk());
+    const auto first = history.getProject();
+    CHECK (song::lastSongName (first) == "Song 1");
+
+    // Replaced: its channels, inserts, bus, patterns, tracks and markers go; the new one takes its place.
+    song::Options again;
+    again.name = "Song 1";
+    again.replace = "Song 1";
+    model::Ticks start = 0;
+    CHECK_FALSE (song::removeSongSteps (first, "Song 1", start).isEmpty());
+    CHECK (start == 0);
+    juce::String error;
+    const auto json = song::makeProposal (makeFullSong (40), first, again, &error);
+    INFO (error);
+    auto proposal = ai::Proposal::prepare (json, history);
+    INFO (proposal.error);
+    REQUIRE (proposal.canApply());
+    CHECK (proposal.summary.contains ("replacing Song 1"));
+    REQUIRE (proposal.apply (history).wasOk());
+    const auto& project = history.getProject();
+    CHECK (project.channels.size() == first.channels.size());
+    CHECK (project.patterns.size() == first.patterns.size());
+    CHECK (project.playlist.lanes.size() == first.playlist.lanes.size());
+    CHECK (project.playlist.markers.size() == first.playlist.markers.size());
+    CHECK (project.mixer.inserts.size() == first.mixer.inserts.size());
+    CHECK (clipStartsOn (project, *laneNamed (project, "Drums")) == std::vector<model::Ticks> { 0, 7680, 15360 });
+    const auto applied = song::findApplied (makeFullSong (40), project, "Song 1");
+    CHECK (pitchesOf (*project.findPattern (applied.layerPatterns.at ("bass").at ("verse")),
+                      applied.layerChannels.at ("bass")) == std::vector<int> { 40 });
+    CHECK (history.getUndoDescriptions().size() == 2);
+    REQUIRE (history.undo());
+    CHECK (sameContent (history.getProject(), first)); // Ctrl+Z brings it back
+    REQUIRE (history.undo());
+    CHECK (sameContent (history.getProject(), before));
+}
+
+TEST_CASE ("Song writer: the Sounds page's channels are written into, by the part's name", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    // As the Sounds page adds them: "<part> (Track creator)".
+    auto add = ai::Proposal::prepare (juce::JSON::parse (R"json({"summary": "x", "steps": [
+            {"command": "channel.add", "parameters": {"name": "Bass (Track creator)",
+             "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}},
+            {"command": "channel.add", "parameters": {"name": "Drums (Track creator)",
+             "instrument": {"kind": "stock", "stockType": "spinus.drum-machine"}}}]})json"),
+                                      history);
+    REQUIRE (add.apply (history).wasOk());
+    const auto written = makeFullSong();
+    const auto channels = song::findLayerChannels (history.getProject(), song::layersOf (written));
+    REQUIRE (channels.size() == 2);
+    song::Options options;
+    options.channels = channels;
+    auto proposal = ai::Proposal::prepare (song::makeProposal (written, history.getProject(), options), history);
+    REQUIRE (proposal.apply (history).wasOk());
+    const auto& project = history.getProject();
+    CHECK (project.channels.size() == 2 + 4); // pad, lead, riser and impacts are new
+    const auto* bass = channelNamed (project, "Bass (Track creator)");
+    REQUIRE (bass != nullptr);
+    CHECK (pitchesOf (*patternNamed (project, "Song 1: Verse - Bass"), bass->id) == std::vector<int> { 45 });
+    // Replacing the song keeps them: they are the user's choice.
+    model::Ticks start = 0;
+    const auto steps = song::removeSongSteps (project, "Song 1", start);
+    for (const auto& step : steps)
+        if (step["command"].toString() == "channel.remove")
+            CHECK ((int)step["parameters"]["channel"] != (int)bass->id.value);
 }
