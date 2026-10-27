@@ -447,6 +447,10 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
         REQUIRE (waitFor ([&] { return ! writer.isBusy(); }, 120000));
         INFO (writer.getStatusText());
         CHECK (writer.getText().startsWith ("From your description. Understood: 72 BPM"));
+        // A description's style, not songs: said as such; parts without a chosen sound named as Spinus's own.
+        CHECK (writer.getText().contains ("Compared with the style of your description:"));
+        CHECK_FALSE (writer.getText().contains ("Compared with the songs"));
+        CHECK (writer.getText().contains ("Spinus's own instruments for: Drums"));
         CHECK ((int)writer.getSong()["tempo"] == 72);
         CHECK (song::isFull (writer.getSong()));
         const auto channels = a.session.getProject().channels.size();
@@ -562,6 +566,21 @@ TEST_CASE ("Track creator: the parts are the user's list: none at first, what th
     REQUIRE (panel.markInstrument (mystery.key, {}));
     kept.load();
     CHECK (kept.get (mystery.key).isEmpty());
+
+    // An effect part may play any sound: no "change the role" for impacts on a drum instrument.
+    REQUIRE (panel.suggestParts ("full"));
+    SoundSource drumMachine;
+    drumMachine.key = "stock-spinus.drum-machine";
+    drumMachine.name = "Drum Machine";
+    drumMachine.stockType = "spinus.drum-machine";
+    parts::Choice kitChoice;
+    kitChoice.source = drumMachine;
+    kitChoice.instrument = drumMachine.key;
+    kitChoice.name = "Default sound";
+    const auto impacts = (int)panel.getParts().size() - 1;
+    REQUIRE (panel.getParts()[(size_t)impacts].role == "impact");
+    REQUIRE (panel.pickSound (impacts, kitChoice));
+    CHECK_FALSE (panel.getRows()[(size_t)impacts].note.contains ("change the role"));
 
     CHECK (parts::roleFromName ("Fingered Bass") == "bass");
     CHECK (parts::roleFromName ("Electric Guitar") == "rhythm-guitar");

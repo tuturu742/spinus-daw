@@ -504,14 +504,19 @@ void SongWriterPanel::show()
     if (checks.isObject())
     {
         const auto& chords = checks["chords"];
+        // Reference songs, or only a description's style (its genre's numbers): said as what it is.
+        const bool songs = (int)context.summary["songs"] > 0;
+        const juce::String theirs = songs ? "the songs'" : "the style's";
         lines.add ({});
-        lines.add ("Compared with the songs:");
-        lines.add ("- tempo " + checks["tempo"]["song"].toString() + " BPM (theirs " +
+        lines.add (songs ? "Compared with the songs:" : "Compared with the style of your description:");
+        lines.add ("- tempo " + checks["tempo"]["song"].toString() + " BPM (" + (songs ? "theirs " : "the style's ") +
                    checks["tempo"]["range"][0].toString() + " to " + checks["tempo"]["range"][1].toString() +
                    ", typically " + checks["tempo"]["style"].toString() + ")");
         lines.add ("- chords: " + juce::String (juce::roundToInt (100.0 * (double)chords["inVocabulary"])) +
-                   " % from the songs' own chords; " + juce::String ((int)chords["loopsOfOneReference"]) +
-                   " chord loop(s) as one of the songs plays it, the others new");
+                   " % from " + theirs + " own chords" +
+                   (songs ? "; " + juce::String ((int)chords["loopsOfOneReference"]) +
+                                " chord loop(s) as one of the songs plays it, the others new"
+                          : juce::String()));
         juce::StringArray groove, reference;
         if (auto* o = checks["groove"].getDynamicObject())
             for (const auto& p : o->getProperties())
@@ -520,7 +525,7 @@ void SongWriterPanel::show()
             for (const auto& p : o->getProperties())
                 reference.add (p.name.toString() + " " + juce::String (juce::roundToInt (100.0 * (double)p.value)) +
                                " %");
-        lines.add ("- drums alike the songs' groove: " + groove.joinIntoString (", ") +
+        lines.add ("- drums alike " + theirs + " groove: " + groove.joinIntoString (", ") +
                    (reference.isEmpty()
                         ? juce::String()
                         : " (each song alike its own average: " + reference.joinIntoString (", ") + ")"));
@@ -532,17 +537,30 @@ void SongWriterPanel::show()
     const auto& project = session.getProject();
     if ((whole || ! applied.isIn (project)) && song::isFull (song))
     {
-        juce::StringArray chosen;
-        for (const auto& [layer, choice] : getLayerChoices())
-            chosen.add (layer + ": " + choice.title());
+        // Each part's sound: chosen in step 3, else from the sound index, else Spinus's own; said only for the
+        // parts it applies to.
+        juce::StringArray fromIndex, own, families;
+        const auto& choices = getLayerChoices();
+        for (const auto& layer : song::layersOf (song))
+        {
+            families.addIfNotAlreadyThere (layer.family);
+            if (pagePartFor (layer) != nullptr)
+                continue;
+            if (const auto found = choices.find (layer.id); found != choices.end())
+                fromIndex.add (layer.name + ": " + found->second.title());
+            else
+                own.add (layer.name);
+        }
         const auto previous = song::lastSongName (project);
-        lines.add ((previous.isNotEmpty() ? "Apply asks whether to replace " + previous + " (or keep both), and adds it"
-                                          : "Apply adds it as " + song::nextSongName (project)) +
-                   ": a channel per part, coloured and grouped by family (Drums, Bass, Synths, Leads, FX) with a bus "
-                   "each in the mixer, a pattern per part and section, a Playlist track per part under its family's, "
-                   "markers, the tempo and key. The sounds chosen in step 3, Parts, are used." +
-                   (chosen.isEmpty() ? juce::String (" Other parts get Spinus's own instruments.")
-                                     : " Other parts, from your sound index: " + chosen.joinIntoString ("; ") + "."));
+        lines.add (
+            (previous.isNotEmpty() ? "Apply asks whether to replace " + previous + " (or keep both), and adds it"
+                                   : "Apply adds it as " + song::nextSongName (project)) +
+            ": a channel per part, coloured and grouped by family (" + families.joinIntoString (", ") +
+            ") with a bus each in the mixer, a pattern per part and section, a Playlist track per part under "
+            "its family's, markers, the tempo and key. The sounds chosen in step 3, Parts, are used." +
+            (fromIndex.isEmpty() ? juce::String()
+                                 : " From your sound index: " + fromIndex.joinIntoString ("; ") + ".") +
+            (own.isEmpty() ? juce::String() : " Spinus's own instruments for: " + own.joinIntoString (", ") + "."));
     }
     else if (whole || ! applied.isIn (project))
         lines.add ("Apply adds it as " + song::nextSongName (project) +

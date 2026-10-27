@@ -1241,6 +1241,17 @@ void PartSoundsPanel::showOtherMenu (int index)
         juce::isPositiveAndBelow (index, (int)views.size()) ? (juce::Component*)views[(size_t)index].get() : this));
 }
 
+namespace
+{
+/** Whether a sound of role `says` fits a part of role `role` anyway: an effect part (a riser, impacts) plays
+    whatever sound the user picks, and drums, percussion and impacts all play drum sounds. */
+bool sameKind (const juce::String& says, const juce::String& role)
+{
+    static const juce::StringArray drums { "drums", "percussion", "impact" };
+    return role == "riser" || role == "impact" || (drums.contains (says) && drums.contains (role));
+}
+} // namespace
+
 bool PartSoundsPanel::pickSound (int index, const parts::Choice& choice)
 {
     if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()))
@@ -1259,7 +1270,7 @@ bool PartSoundsPanel::pickSound (int index, const parts::Choice& choice)
     row.volumeDb = 0.0;
     const auto says = roleOf (c);
     row.note = "Your choice: the song plays " + c.title() + "." +
-               (says.isNotEmpty() && says != row.part.role
+               (says.isNotEmpty() && says != row.part.role && ! sameKind (says, row.part.role)
                     ? " It is marked or named as " + parts::roleName (says).toLowerCase() + ": change the role if so."
                     : juce::String());
     updateRows();
