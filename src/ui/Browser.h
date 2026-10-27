@@ -16,7 +16,9 @@ namespace spinus::ui
     insert (MainView decides, through onUse). Or drag it onto the Channel Rack or a mixer strip or slot.
     "Scan plugins" looks for installed plugins, each file in a separate process.
 
-    Samples: folders the user adds ("+ Add a folder of samples"), remembered in the settings. Folders
+    Samples: the Spinus Starter Pack first (installed with Spinus, read-only: it cannot be removed, only
+    hidden; dsp/drums/StarterPack.h), then folders the user adds ("+ Add a folder of samples"), remembered in
+    the settings. Folders
     open to their subfolders and audio files; the search finds files in them too. Click a sample to
     hear it (Session::getSamplePreview), double-click to add it to the Channel Rack (onUseSample), or
     drag it onto the Channel Rack, the Playlist or Audio tracks (sampleFromDrag reads the drag).
@@ -59,6 +61,14 @@ public:
     /** Where the sample folders are remembered (one path a line); loads it. Without it they are not kept. */
     void setSampleFoldersFile (const juce::File&);
     const juce::Array<juce::File>& getSampleFolders() const noexcept { return sampleFolders; }
+    /** The starter pack's installed folder, listed first (none: not installed). Never written to. */
+    void setStarterPack (const juce::File&);
+    const juce::File& getStarterPack() const noexcept { return starterPack; }
+    /** Hides or shows the starter pack in the list (remembered with the sample folders). */
+    void setStarterPackHidden (bool);
+    bool isStarterPackHidden() const noexcept { return starterHidden; }
+    /** Every folder the Browser lists and searches: the starter pack (unless hidden), then the user's. */
+    juce::Array<juce::File> getAllSampleFolders() const;
     bool addSampleFolder (const juce::File&);
     void removeSampleFolder (const juce::File&);
     /** Opens or closes a folder in the list. */
@@ -97,7 +107,7 @@ public:
         device,
         problem,
         message,
-        folder, // a sample folder (`path`), indented by `depth`
+        folder, // a sample folder (`path`), indented by `depth`; the starter pack's has key "starter"
         sample, // an audio file (`path`)
         action, // "+ Add a folder of samples" (key "addSamples"), "+ Add a folder of projects" ("addProjects")
         project // a project folder (`path`); a demo song (its shipped folder) has key "demo"
@@ -132,7 +142,7 @@ private:
     void addSampleRows (const juce::String& query);
     void addProjectRows (const juce::String& query);
     void chooseProjectFolder();
-    void addFolderRows (const juce::File& folder, int depth);
+    void addFolderRows (const juce::File& folder, int depth, const juce::String& key = {});
     void saveSampleFolders() const;
     void chooseSampleFolder();
     const std::vector<juce::File>& getSampleIndex();
@@ -160,6 +170,8 @@ private:
     std::set<juce::String> closed { "problems" };
     juce::Array<juce::File> sampleFolders;
     juce::File sampleFoldersFile;
+    juce::File starterPack;
+    bool starterHidden = false;
     std::set<juce::String> openFolders;
     std::vector<juce::File> sampleIndex;
     bool sampleIndexValid = false;

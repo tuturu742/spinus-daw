@@ -38,6 +38,7 @@
 #include "commands/CommandRegistry.h"
 #include "core/Log.h"
 #include "model/StockDevices.h"
+#include "dsp/drums/StarterPack.h"
 #include "session/DemoSong.h"
 #include "session/ProblemReport.h"
 #include "session/SystemInfo.h"
@@ -534,6 +535,7 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     };
     if (document != nullptr)
         browser->setDemos (getDemoSongs());
+    browser->setStarterPack (dsp::starter::findPack());
     assistant = std::make_unique<Dock> (
         "Assistant", "Assistant: ask about your project",
         "The assistant needs Spinus's AI service, which is not running. It can only propose changes; you decide.");
@@ -582,7 +584,7 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     workspace.setPanelAvailable ("analyzer", false); // experimental: until Options > AI says otherwise
     {
         auto creator = std::make_unique<TrackCreator> (session, nullptr);
-        creator->getSampleFolders = [this] { return browser->getSampleFolders(); }; // what the sound index measures
+        creator->getSampleFolders = [this] { return browser->getAllSampleFolders(); }; // what the sound index measures
         creator->onSetUpEngine = [this]
         {
             showAiSettings();

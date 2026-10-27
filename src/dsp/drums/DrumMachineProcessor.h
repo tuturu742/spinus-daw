@@ -2,6 +2,7 @@
 
 #include "../sampler/SampleStorage.h"
 #include "../sampler/SamplerEngine.h"
+#include "StarterPack.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -15,8 +16,14 @@ namespace spinus::dsp
 
     Kits (all pads and their settings, with the samples) save to and load from .spinuskit files. Like
     the Sampler, the saved state holds the samples themselves.
+
+    The kit's name (the Synth Kit, a factory kit, or the .spinuskit file last loaded or saved) is kept in the
+    state and shown on the window's Kit button, with " *" once a pad is changed: its sample, note or choke
+    group, or a setting turned in a window (a parameter gesture; automation does not count).
 */
-class DrumMachineProcessor final : public juce::AudioPluginInstance, public juce::ChangeBroadcaster
+class DrumMachineProcessor final : public juce::AudioPluginInstance,
+                                   public juce::ChangeBroadcaster,
+                                   private juce::AudioProcessorParameter::Listener
 {
 public:
     static constexpr const char* pluginName = "Spinus Drum Machine";
@@ -45,6 +52,8 @@ public:
     juce::Result loadPadFile (int pad, const juce::File&);
     void setPadAudio (int pad, juce::AudioBuffer<float>, double sampleRate, const juce::String& name);
     void clearPad (int pad);
+    /** Empties every pad: a new kit, without a name. */
+    void clearAllPads();
     void setPadNote (int pad, int note);
     void setPadChoke (int pad, int group);
 
@@ -52,6 +61,18 @@ public:
     void loadSynthKit();
     juce::Result saveKit (const juce::File&);
     juce::Result loadKit (const juce::File&);
+
+    /** The kit's name: empty for a new kit (all pads cleared). */
+    const juce::String& getKitName() const noexcept { return kitName; }
+    /** True once a pad has been changed since the kit was loaded or saved. */
+    bool isKitModified() const noexcept { return kitModified.load(); }
+    /** What the Kit button shows: "Spinus Synth Kit", "Magpie *" (changed), "New kit". */
+    juce::String getKitDisplayName() const;
+
+    /** Replaces every pad with a factory kit from the starter pack (`pack`, its folder: starter::findPack) and
+        resets the pad settings. A pad whose file is missing or unreadable is left empty and named in the
+        result's message; the others are loaded. */
+    juce::Result loadFactoryKit (const starter::Kit&, const juce::File& pack);
 
     /** Plays or stops a pad from the window (clicking it). Real-time safe hand-over to the audio thread. */
     void audition (int pad, bool on);
@@ -91,6 +112,10 @@ public:
 
 private:
     void publish();
+    void markModified();
+    void setKit (const juce::String& name);
+    void parameterValueChanged (int, float) override {}
+    void parameterGestureChanged (int, bool starting) override;
     void resetPadParameters();
 
     struct PadParameters
@@ -107,6 +132,9 @@ private:
     SamplerEngine engine;
     SampleSetHolder sets;
     std::atomic<int> activeVoices { 0 };
+
+    juce::String kitName;                    // message thread
+    std::atomic<bool> kitModified { false }; // set from parameter gestures too
 
     // Pad clicks from the window: (note, velocity; 0 = off), read by the audio thread.
     juce::AbstractFifo auditionFifo { 64 };

@@ -64,5 +64,5 @@ if (SPINUS_BUILD_TESTS)
     add_subdirectory (tools/demo-synthwave) # the synthwave demo song, "Neon Coast" (not part of CI)
     add_subdirectory (tools/demo-dnb) # the liquid drum & bass demo song, made the same way (not part of CI)
     add_subdirectory (tools/demo-lofi) # the lo-fi demo song "Rainy Window" (not part of CI)
-
+    add_subdirectory (tools/starter-pack) # measures samples for the starter sample pack (not part of CI)
 endif()

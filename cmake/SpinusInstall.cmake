@@ -9,6 +9,9 @@
 #   <prefix>/share/metainfo                   the software centre listing (AppStream)
 #   <prefix>/share/spinus/demo/<Name>         the demo songs (CC BY 4.0), read-only: the Browser's Projects
 #                                             copy one to the Music folder to open it (src/session/DemoSong.h)
+#   <prefix>/share/spinus/samples/Spinus Starter Pack   the starter sample pack (Signature Sounds, CC0 1.0
+#                                             and the like) with the Drum Machine's factory kits, read-only
+#                                             (src/dsp/drums/StarterPack.h)
 #
 # The free open-source plugins (Surge XT, LSP Plugins, Dragonfly Reverb) are not installed: Spinus
 # downloads them from their projects on request, or uses the system's copies.
@@ -53,6 +56,9 @@ install (FILES "${PROJECT_SOURCE_DIR}/packaging/share/spinus.svg"
 # The demo songs: every project folder in demo/ (demo/README.md, which is not installed).
 install (DIRECTORY "${PROJECT_SOURCE_DIR}/demo/" DESTINATION "${CMAKE_INSTALL_DATADIR}/spinus/demo"
          PATTERN "README.md" EXCLUDE PATTERN ".autosave" EXCLUDE PATTERN ".session.lock" EXCLUDE)
+
+# The starter sample pack (tools/starter-pack makes it).
+install (DIRECTORY "${PROJECT_SOURCE_DIR}/samples/" DESTINATION "${CMAKE_INSTALL_DATADIR}/spinus/samples")
 
 # The AI service: run by the system's Python (python-httpx, python-keyring), only when AI is turned on.
 install (DIRECTORY "${PROJECT_SOURCE_DIR}/ai/spinus_ai" DESTINATION "${spinusLibDir}/ai" PATTERN "__pycache__" EXCLUDE)

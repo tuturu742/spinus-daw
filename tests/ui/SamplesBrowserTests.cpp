@@ -153,6 +153,98 @@ TEST_CASE ("Sample folders: added, listed, searched, remembered and removed", "[
     CHECK (again.getSampleFolders().isEmpty());
 }
 
+TEST_CASE ("The starter pack is listed first, read-only, and can be hidden", "[ui][samples][starter-pack]")
+{
+    Temp t;
+    const auto pack = t.root.getChildFile ("share/Spinus Starter Pack");
+    writeTone (pack.getChildFile ("Drums/Kicks/Kick Deep.wav"), 0.1);
+    writeTone (pack.getChildFile ("Loops/Trap Beat 115 BPM.wav"), 0.1);
+    pack.getChildFile ("kits.json").replaceWithText ("{\"kits\": []}");
+    const auto library = t.root.getChildFile ("My Samples");
+    writeTone (library.getChildFile ("Kick 02.wav"), 0.1);
+
+    auto listing = [] (const juce::File& folder)
+    {
+        juce::StringArray files;
+        for (const auto& e : juce::RangedDirectoryIterator (folder, true, "*", juce::File::findFilesAndDirectories))
+            files.add (e.getFile().getRelativePathFrom (folder) + ":" + juce::String (e.getFileSize()));
+        files.sort (true);
+        return files;
+    };
+    const auto before = listing (pack);
+
+    EngineHost host { { .openAudioDevice = false } };
+    Session session (host.getEngine());
+    Browser browser (session);
+    browser.setSize (300, 600);
+    const auto settings = t.root.getChildFile ("settings/sample-folders.txt");
+    browser.setSampleFoldersFile (settings);
+    browser.setStarterPack (pack);
+    REQUIRE (browser.addSampleFolder (library));
+
+    auto samples = [&]
+    {
+        std::vector<Browser::Row> result;
+        bool inSamples = false;
+        for (auto& r : browser.getRows())
+        {
+            if (r.kind == Browser::RowKind::section)
+                inSamples = r.key == "samples";
+            else if (inSamples)
+                result.push_back (r);
+        }
+        return result;
+    };
+    auto texts = [&]
+    {
+        juce::StringArray result;
+        for (auto& r : samples())
+            result.add (juce::String (r.depth) + ":" + r.text);
+        return result;
+    };
+
+    // First, marked as coming with Spinus; the user's folders after it.
+    CHECK (texts() == juce::StringArray { "0:Spinus Starter Pack", "0:My Samples", "1:Kick 02",
+                                          "0:+ Add a folder of samples..." });
+    CHECK (samples()[0].key == "starter");
+    CHECK (samples()[0].note == "included");
+    CHECK (browser.getAllSampleFolders() == juce::Array<juce::File> { pack, library });
+    CHECK (browser.getSampleFolders() == juce::Array<juce::File> { library }); // the user's own
+    browser.toggleFolder (pack);
+    browser.toggleFolder (pack.getChildFile ("Drums"));
+    browser.toggleFolder (pack.getChildFile ("Drums/Kicks"));
+    CHECK (texts() == juce::StringArray { "0:Spinus Starter Pack", "1:Drums", "2:Kicks", "3:Kick Deep", "1:Loops",
+                                          "0:My Samples", "1:Kick 02", "0:+ Add a folder of samples..." });
+
+    // Searched like the others.
+    browser.setSearchText ("kick");
+    CHECK (texts() == juce::StringArray { "0:Kick 02", "0:Kick Deep" });
+    browser.setSearchText ({});
+
+    // Not added again as a user folder (nor a folder inside it), and never saved as one.
+    CHECK (! browser.addSampleFolder (pack));
+    CHECK (! browser.addSampleFolder (pack.getChildFile ("Drums")));
+    CHECK (! settings.loadFileAsString().contains (pack.getFullPathName()));
+
+    // Hidden (not removed): remembered in the settings, and shown again.
+    browser.setStarterPackHidden (true);
+    CHECK (texts() == juce::StringArray { "0:My Samples", "1:Kick 02", "0:+ Add a folder of samples..." });
+    CHECK (browser.getAllSampleFolders() == juce::Array<juce::File> { library });
+    {
+        Browser again (session);
+        again.setStarterPack (pack);
+        again.setSampleFoldersFile (settings);
+        CHECK (again.isStarterPackHidden());
+        CHECK (again.getSampleFolders() == juce::Array<juce::File> { library });
+    }
+    CHECK (! browser.addSampleFolder (pack)); // choosing it again shows it
+    CHECK (! browser.isStarterPackHidden());
+    CHECK (texts()[0] == "0:Spinus Starter Pack");
+
+    // Nothing was written into the pack.
+    CHECK (listing (pack) == before);
+}
+
 TEST_CASE ("A preview is heard on the engine's output, after the song", "[samples][audio]")
 {
     Temp t;
