@@ -3,8 +3,9 @@
 Give the Track creator a few songs you like, or a whole album, and it tells you what they have in common:
 their **tempo**, **key**, **chords**, **drum groove**, which **parts** play and how high or low, how long
 their **sections** are, and how **loud** they are. Later versions will use this to make a new song in
-that style, with the instruments you have installed. For now it does the first two steps: listening and
-summing up, and [getting to know your sounds](#your-sounds).
+that style, with the instruments you have installed. For now it does the first three steps: listening and
+summing up, [getting to know your sounds](#your-sounds), and [choosing a sound for each
+part](#sounds-for-each-part).
 
 ![The Track creator](images/track-creator.png)
 
@@ -14,7 +15,12 @@ experimental features**. **View › Track creator (experimental)** then opens it
 it again and the Track creator closes and disappears from the menus; a saved
 [window layout](main-window.md#layouts) doesn't bring it back while it's off.
 
-It never changes your song: nothing is added to the project, so there is nothing to undo.
+It changes your song only when you click **Add these sounds to the project** (in
+[Sounds for each part](#sounds-for-each-part)), and that is one step you can undo. Everything else only
+listens and measures.
+
+The panel has two pages: **Songs and style** (your songs and what they have in common) and **Sounds for
+each part**. The [sound index](#your-sounds) controls are under both.
 
 ## What it needs
 
@@ -120,10 +126,12 @@ file is what the Track creator's next steps will start from.
 To pick sounds for a new song later, the Track creator first gets to know the sounds you have. Under
 **Sounds you have**, click **Update sound index**. Spinus then listens to:
 
-- **Your instruments' presets**: 3x Osc and the Drum Machine, the free instruments you downloaded through
-  Spinus (Surge XT, Odin 2, OB-Xf, Six Sines), and the instrument plugins on your computer that the
-  Browser lists (CLAP, VST3, LV2, VST2, and Windows plugins added through Spinus). Each preset plays a few
-  short test notes, which nobody hears.
+- **Your instruments' presets**: 3x Osc and the Drum Machine, and the free instruments you downloaded
+  through Spinus (Surge XT, Odin 2, OB-Xf, Six Sines). Your other instrument plugins (CLAP, VST3, LV2,
+  VST2, and Windows plugins added through Spinus) are listened to only if you tick them: click **Your
+  plugins...** and tick the ones you want (click again to untick). This keeps the first update quick, and
+  Spinus loads none of your own plugins unless you ask. Each preset plays a few short test notes, which
+  nobody hears.
 - **Your samples**: the files in the folders you added in the **Browser › Samples** list ("Add a folder of
   samples"), and the folders inside them. Nothing else on your disk is looked at.
 
@@ -151,8 +159,64 @@ extension (an AIFF called .wav) is still read.
   Spinus's settings folder (`~/.config/Spinus DAW/ai/sounds`) and can be deleted in
   [Saved analyses](#saved-analyses).
 
+**How Spinus guesses a role.** When a preset's name or category says its role, that decides. For the others,
+Spinus learns from your own presets: the ones whose names say "bass", "pad" and so on show it how each role
+sounds, and a preset without such a name gets the role of the presets it sounds most like. (With fewer than
+about 60 named presets, simple rules decide instead.) On Surge XT's own presets, each guessed without its
+name, this gets the role right for 57 % of them, against 44 % with the rules alone; for basses 69 % instead
+of 14 %. Plucks are still often taken for keys or pads.
+
 The guesses are a program's, made from a few test notes: a bass preset that sounds bright can be called a
 lead, and an unusual drum sample "perc" or "other". The next step uses them only as a first sorting.
+
+## Sounds for each part
+
+Once your songs are summed up and the sound index is made, open the **Sounds for each part** page and click
+**Choose sounds**. For each part of the songs (the **bass**, the **chords and melody** played by the other
+instruments, the **lead** that follows the vocals' tune, and the **drums**) Spinus picks the closest sounds
+you have:
+
+![Sounds for each part](images/track-creator-sounds.png)
+
+1. **Which sounds fit**: a preset of the right role (a bass for the bass; for the other instruments a pad or
+   keys when they play chords, otherwise a lead, a pluck or keys), that plays the notes the part needs, and
+   that plays chords when the part does. For the drums: a kick, a snare and a hat from your samples on the
+   Drum Machine, a drum kit, or a drum loop near the songs' tempo.
+2. **Which is closest**: Spinus measures the songs' own parts (their stems, kept in your
+   [saved analyses](#saved-analyses)) note by note, the same way it measured your presets: how fast a note
+   starts, whether it holds or fades, how bright it is at the part's own notes, how noisy. The closest
+   come first.
+3. **Listen closer** (needs AI turned on, the analysis engine and its CLAP model, which the Analyzer's
+   closest preset downloads): the first five presets are also compared with the songs by listening, as
+   closest preset does, and put in order again.
+4. **Tune the synths** (slow: a minute or more per part): the chosen preset is tuned toward the song's
+   part, as the Analyzer's tuned synths are. It runs in a separate program, so a synth that crashes only
+   stops its own tuning; **Stop** keeps what was found.
+5. **Effects and mix** (needs AI turned on, but no AI connection): each chosen sound plays a few seconds of
+   the part, and Spinus compares it with the songs' part: an EQ moves its tone toward theirs, a compressor
+   evens it out when it is much peakier, its fader makes the parts as loud as each other as in the songs,
+   and a limiter on the master aims at the songs' loudness. These are estimates until the song has notes;
+   the [Automixer](automixer.md) can balance it again later.
+
+Each part's line says what was chosen and **why**, in plain words and numbers, for example "a bass (its
+name says); plays C1-C6 (the part: F#1-A#2); attack 6 ms (the songs' 10 ms); brightness 2.1 harmonics at
+D2 (the songs' 2.4)". Compare the numbers: the closer they are, the closer the sound.
+
+- **Listen** plays the chosen sound playing a short phrase in the songs' key. **The songs'** plays a few
+  seconds of that part in one of your songs (its stem), to compare.
+- The list beside each part holds the **alternatives**, closest first: pick another to swap. Its tuning
+  and effects are dropped; **Set effects again** sets them for the sounds chosen now.
+- **Add these sounds to the project** makes, for each part, a channel named "Bass (Track creator)" and so on
+  (in the Channel Rack group **Track creator**) with its instrument, preset, tuning, effects and fader, and
+  a pattern **Track creator: sounds** with a short phrase on each, so you can hear them together. A drum
+  loop goes on a Playlist track of its own. It is all **one undo step**: Ctrl+Z takes it away.
+
+Without AI turned on, the sounds are still chosen, by their measurements alone, and can be added; the line
+at the bottom says what the AI would add. Nothing is sent anywhere: all of this runs on your computer.
+
+These are a program's choices, made from measurements: treat them as a starting point and change them by
+ear. A part played by several instruments at once (a guitar and a piano in the "other" stem) is matched as
+one sound.
 
 ## What comes next
 
@@ -161,9 +225,8 @@ The Track creator is being built in steps:
 1. **References and their style** (this version): the summary above.
 2. **Your sounds** (this version): the [sound index](#your-sounds) of your instruments' presets and your
    samples.
-3. **The instruments for each part**: for each part (bass, chords, lead, drums) it picks the instrument
-   and preset closest to the references, then tunes it (as the Analyzer's closest preset and tuned synths
-   do), chooses effects, and lets the [Automixer](automixer.md) balance the mix.
+3. **The instruments for each part** (this version): [sounds for each part](#sounds-for-each-part), tuned,
+   with effects and a first mix.
 4. **A new song**: sections, chords, bass, drums and a melody written from the summary by rules that work
    without any AI connection; with a connection set up, the [assistant](assistant.md) can vary or refine
    it. It comes as one proposal you apply or reject (one undo step), and you can redo one part at a time

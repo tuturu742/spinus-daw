@@ -110,3 +110,43 @@ def test_a_reference_asks_for_gentle_master_eq_before_the_limiter() -> None:
     assert all(abs(b["gain"]) <= 4.0 for b in eq["bands"]) and eq["bands"][0]["gain"] > 0
     assert "more" in eq["reason"] and check(eq, {"Master"}) is not None
     assert not any(i["kind"] == "eq" for i in rules({"inserts": {}, "masking": []}, master, "none", master))
+
+
+def test_effects_and_levels_move_the_chosen_sounds_toward_the_references() -> None:
+    from spinus_ai.mixplan import toward_references
+
+    mix = {
+        "inserts": {
+            # The chosen bass is darker than the songs' and much peakier; the drums match in tone.
+            "bass": measured(-20.0, -2.0, sub=-2.0, bass=0.0, mids=-20.0),
+            "bass reference": measured(-12.0, -4.0, sub=-8.0, bass=0.0, mids=-6.0),
+            "drums": measured(-16.0, -4.0),
+            "drums reference": measured(-10.0, 0.0),
+            "other": measured(-25.0, -15.0),  # no reference stem: kept 6 dB under the loudest
+        },
+        "masking": [{"a": "bass", "b": "bass reference", "band": "bass", "amount": 0.9}],
+    }
+    result = toward_references(mix, ["bass", "drums", "other", "missing"], -9.0)
+    items = {(i["kind"], i["insert"]): i for i in result["items"]}
+    eq = items[("eq", "bass")]
+    bands = {b["freq"]: b for b in eq["bands"]}
+    assert any(b["type"] == "Lo-shelf" and b["gain"] < 0 for b in eq["bands"])  # less sub
+    assert any(b["type"] == "Bell" and b["gain"] > 0 for b in eq["bands"])  # more mids
+    assert "more" in eq["reason"] and "less" in eq["reason"]
+    assert ("eq", "drums") not in items  # its tone matches already
+    assert len(bands) == len(eq["bands"])
+    comp = items[("compressor", "bass")]
+    assert comp["ratio"] > 1.5 and "18 dB" in comp["reason"]
+    # Levels: the drums are the songs' loudest part (-18 LUFS here), the bass 2 dB under it.
+    assert items[("volume", "drums")]["db"] == -2.0
+    assert items[("volume", "bass")]["db"] == 0.0 if ("volume", "bass") in items else True
+    assert items[("volume", "other")]["db"] == 1.0  # -25 to -24 (6 dB under the loudest)
+    limiter = items[("limiter", "Master")]
+    assert limiter["gain"] > 0 and result["estimate"]["target"] == -9.0
+    assert "missing" not in {i["insert"] for i in result["items"]}
+    # The masking with a reference stem is not the chosen sounds' business.
+    assert not any("masks" in i["reason"] for i in result["items"])
+
+    # No references: levels only, no tone or loudness to aim for.
+    alone = toward_references({"inserts": {"bass": measured(-20.0, -2.0)}, "masking": []}, ["bass"], None)
+    assert [i["kind"] for i in alone["items"]] == ["volume"]

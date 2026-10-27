@@ -150,6 +150,119 @@ def rules(
     return items[:MOST_ITEMS]
 
 
+REFERENCE = " reference"  # an insert named "<part> reference" is that part's stem in the reference songs
+PART_LEVEL = -18.0  # LUFS the loudest part is set to, leaving the master room before its limiter
+
+
+def _tone_bands(mine: dict[str, float], wanted: dict[str, float], most: int = 3) -> list[dict[str, Any]]:
+    """EQ bands moving a sound's tonal balance toward another's: where they differ by more than 3 dB (relative
+    to each one's loudest band), the biggest differences first, at most `most`, 0.7 of the difference and at
+    most 6 dB each; shelves at the ends, bells between."""
+    differences = []
+    for name, _, _ in BANDS:
+        if name in mine and name in wanted:
+            d = float(wanted[name]) - float(mine[name])
+            if abs(d) > 3.0:
+                differences.append((abs(d), name, d))
+    bands = []
+    for _, name, d in sorted(differences, reverse=True)[:most]:
+        gain = round(max(-6.0, min(6.0, 0.7 * d)), 1)
+        if name == "sub":
+            bands.append({"type": "Lo-shelf", "freq": 60, "gain": gain, "q": 0.7})
+        elif name == "air":
+            bands.append({"type": "Hi-shelf", "freq": 8000, "gain": gain, "q": 0.7})
+        else:
+            bands.append({"type": "Bell", "freq": round(BAND_CENTRES[name]), "gain": gain, "q": 0.9})
+    return sorted(bands, key=lambda b: float(b["freq"]))
+
+
+def _sentence(parts: list[str]) -> str:
+    text = "; ".join(p for p in parts if p)
+    return text[:1].upper() + text[1:] + "."
+
+
+def toward_references(mix: dict[str, Any], parts: list[str], reference_lufs: float | None) -> dict[str, Any]:
+    """Effects and a mix that move the Track creator's chosen sounds toward the reference songs.
+
+    `mix` is spinus_ai.mixing.analyze_mix's result for each part's chosen sound playing the part's notes
+    (insert "<part>") and the part's stem in a reference song ("<part> reference"); `reference_lufs` is the
+    references' loudness. Per part: an EQ toward the stem's tonal balance (plus the masking cuts the rules
+    find between the chosen sounds), a compressor when the sound is much more uneven than the stem (its crest
+    over 4 dB higher), and its fader so the parts are as loud as each other as in the references (the loudest
+    at -18 LUFS). On the master, a limiter bringing the estimated mix (the parts' loudness added up) to the
+    references' loudness, peaks held at -1 dB. Items as rules() makes them (title and reason each), checked.
+    -> {items, estimate: {mix (LUFS), target}}."""
+    inserts: dict[str, dict[str, Any]] = mix.get("inserts", {})
+    present = [p for p in parts if p in inserts and inserts[p]["loudness"] > -70]
+    items: list[dict[str, Any]] = []
+
+    # Masking between the chosen sounds (not with the references): the rules' cuts; and their high-pass on
+    # parts with nothing low (never the bass or the drums, whose low end a short phrase may not show).
+    masking = [m for m in mix.get("masking", []) if m["a"] in present and m["b"] in present]
+    found = rules({"inserts": {p: inserts[p] for p in present}, "masking": masking}, None, "none")
+    cuts = {i["insert"]: i for i in found
+            if i["kind"] == "eq" and ("masks" in i["reason"] or i["insert"] not in ("bass", "drums"))}  # fmt: skip
+
+    references = {}
+    for p in present:
+        if float(inserts.get(p + REFERENCE, {}).get("loudness", -99.0)) > -70:
+            references[p] = inserts[p + REFERENCE]
+    for p in present:
+        mine, wanted = inserts[p], references.get(p)
+        bands, reasons = [], []
+        if wanted is not None:
+            bands = _tone_bands(mine["bands"], wanted["bands"])
+            change = {n: float(wanted["bands"][n]) - float(mine["bands"][n]) for n, _, _ in BANDS}
+            more = [n for n, _, _ in BANDS if change[n] > 3.0]
+            less = [n for n, _, _ in BANDS if change[n] < -3.0]
+            told = " and ".join(x for x in (f"more {_and(more)}" if more else "", f"less {_and(less)}" if less else "")
+                                if x)  # fmt: skip
+            if bands:
+                reasons.append(f"next to the songs' {p}, it needs {told}")
+        if p in cuts:
+            taken = {round(float(b["freq"])) for b in bands}
+            bands += [b for b in cuts[p]["bands"] if round(float(b["freq"])) not in taken][: max(0, 4 - len(bands))]
+            reasons.append(str(cuts[p]["reason"]).rstrip("."))
+        if bands:
+            items.append({"kind": "eq", "insert": p, "title": f"EQ {p} toward the songs",
+                          "bands": sorted(bands, key=lambda b: float(b["freq"]))[:4],
+                          "reason": _sentence(reasons)})  # fmt: skip
+        if wanted is not None and mine["crest"] - wanted["crest"] > 4.0:
+            ratio = round(max(1.5, min(6.0, 1.0 + (mine["crest"] - wanted["crest"]) / 4.0)), 1)
+            threshold = round(max(-60.0, mine["loudness"] + wanted["crest"] - 3.0), 1)
+            items.append({"kind": "compressor", "insert": p, "title": f"Compress {p} like the songs",
+                          "threshold": threshold, "ratio": ratio, "attack": 20.0 if p == "drums" else 10.0,
+                          "release": 120.0, "makeup": 0.0,
+                          "reason": f"Its peaks are {mine['crest']:.0f} dB over its average, the songs' {p} "
+                                    f"{wanted['crest']:.0f} dB: a {ratio}:1 compressor evens it out."})  # fmt: skip
+
+    # The balance: each part as much quieter than the loudest as in the references.
+    loudest = max((float(r["loudness"]) for r in references.values()), default=0.0)
+    levels = []
+    for p in present:
+        under = loudest - float(references[p]["loudness"]) if p in references else 6.0
+        db = round(max(-24.0, min(12.0, PART_LEVEL - under - float(inserts[p]["loudness"]))), 1)
+        levels.append(float(inserts[p]["loudness"]) + db)
+        if abs(db) >= 0.5:
+            where = "is the songs' loudest part" if under < 0.5 else f"sits {under:.0f} dB under the songs' loudest"
+            items.append({"kind": "volume", "insert": p, "db": db, "newChannel": True,
+                          "title": f"{p.capitalize()} level",
+                          "reason": f"The {p} {where}; {db:+.1f} dB on its fader does the same here."})  # fmt: skip
+
+    estimate = 10 * math.log10(sum(10 ** (level / 10) for level in levels)) if levels else -70.0
+    if reference_lufs is not None and levels:
+        gain = round(max(-6.0, min(12.0, float(reference_lufs) - estimate)), 1)
+        items.append({"kind": "limiter", "insert": "Master", "threshold": -1.0, "gain": gain,
+                      "title": f"Master to {reference_lufs:.0f} LUFS like the songs",
+                      "reason": f"The parts add up to about {estimate:.0f} LUFS and the songs measure "
+                                f"{reference_lufs:.1f} LUFS: a limiter with {gain:+.1f} dB in, peaks held at -1 dB, "
+                                "brings the mix there (an estimate until the song has notes)."})  # fmt: skip
+
+    names = set(present) | {"Master"}
+    checked = [c for i in items if (c := check(i, names)) is not None]
+    return {"items": checked, "estimate": {"mix": round(estimate, 1), "target": reference_lufs}}
+
+
 def _number(value: Any, low: float, high: float) -> float | None:
     try:
         v = float(value)
@@ -171,7 +284,7 @@ def check(item: dict[str, Any], names: set[str]) -> dict[str, Any] | None:
     if not clean["title"] or not clean["reason"]:
         return None
     if kind == "volume":
-        db = _number(item.get("db"), -12.0, 6.0)
+        db = _number(item.get("db"), -24.0, 12.0) if item.get("newChannel") else _number(item.get("db"), -12.0, 6.0)
         return None if db is None else {**clean, "db": round(db, 1)}
     if kind == "pan":
         pan = _number(item.get("pan"), -1.0, 1.0)

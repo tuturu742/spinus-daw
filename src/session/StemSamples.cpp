@@ -22,7 +22,11 @@ template <typename Processor> Processor* instrumentOf (Session& session, model::
 
 std::unique_ptr<juce::AudioFormatReader> openStem (const juce::File& stem)
 {
-    return std::unique_ptr<juce::AudioFormatReader> (dsp::getAudioFormats().createReaderFor (stem));
+    std::unique_ptr<juce::AudioFormatReader> reader (dsp::getAudioFormats().createReaderFor (stem));
+    if (reader == nullptr) // named for another format than it is (an AIFF file named .wav): by its contents
+        if (auto in = stem.createInputStream())
+            reader.reset (dsp::getAudioFormats().createReaderFor (std::move (in)));
+    return reader;
 }
 } // namespace
 
@@ -125,6 +129,29 @@ juce::Result loadSamplerPieces (Session& session, model::ChannelId channel, cons
         zones.push_back (std::move (zone));
     }
     sampler->setZones (std::move (zones));
+    return juce::Result::ok();
+}
+
+juce::Result loadSamplerFile (Session& session, model::ChannelId channel, const juce::File& file, int rootNote)
+{
+    auto* sampler = instrumentOf<dsp::SamplerProcessor> (session, channel);
+    if (sampler == nullptr)
+        return juce::Result::fail ("The channel has no Sampler.");
+    auto reader = openStem (file);
+    if (reader == nullptr)
+        return juce::Result::fail ("Spinus could not read " + file.getFileName() + ".");
+    auto audio = cutPiece (*reader, 0.0, juce::jmin (30.0, (double)reader->lengthInSamples / reader->sampleRate));
+    if (audio.getNumSamples() == 0)
+        return juce::Result::fail (file.getFileName() + " holds no sound.");
+    dsp::SampleZone zone;
+    zone.name = file.getFileNameWithoutExtension();
+    zone.end = audio.getNumSamples();
+    zone.audio = std::make_shared<const juce::AudioBuffer<float>> (std::move (audio));
+    zone.sampleRate = reader->sampleRate;
+    zone.rootNote = juce::jlimit (0, 127, rootNote);
+    zone.lowKey = 0;
+    zone.highKey = 127;
+    sampler->setZones ({ std::move (zone) });
     return juce::Result::ok();
 }
 

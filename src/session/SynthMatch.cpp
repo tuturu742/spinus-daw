@@ -264,34 +264,14 @@ SynthMatcher::SynthMatcher (Session& session, const model::Device& device, std::
     if (p)
         profile = std::move (*p);
     else if (auto* instance = instrument.getInstance())
-    {
-        // None of its own: one made from the names of the plugin's parameters.
-        std::vector<SynthProfile::Parameter> described;
-        for (auto* parameter : instance->getParameters())
-            described.push_back (SynthProfile::describe (*parameter));
-        const auto name = device.kind == model::Device::Kind::plugin ? device.plugin.name : instance->getName();
-        profile = SynthProfile::makeAutomatic (name, described).value_or (SynthProfile {});
-        profile.name = name;
-        profile.automatic = true;
-    }
+        profile = SynthSearch::profileFor (*instance, device);
     findSettings();
 }
 
 void SynthMatcher::findSettings()
 {
-    auto* instance = instrument.getInstance();
-    if (instance == nullptr)
-        return;
-    const engine::ParameterFinder finder (*instance);
-    for (auto& setting : profile.settings)
-    {
-        auto* found = setting.id.isNotEmpty() ? finder.findSaved (setting.id) : nullptr;
-        for (auto* parameter : instance->getParameters())
-            if (found == nullptr && setting.name.isNotEmpty() && parameter->getName (200) == setting.name)
-                found = parameter;
-        if (found != nullptr)
-            parameters.emplace_back (found, setting);
-    }
+    if (auto* instance = instrument.getInstance())
+        parameters = SynthSearch::findSettings (*instance, profile);
 }
 
 SynthMatcher::~SynthMatcher()
@@ -311,31 +291,89 @@ void SynthMatcher::start (juce::AudioBuffer<float> wanted, std::vector<HiddenIns
     startThread();
 }
 
-std::vector<float> SynthMatcher::toValues (const std::vector<double>& point) const
-{
-    std::vector<float> values;
-    for (size_t i = 0; i < parameters.size(); ++i)
-    {
-        const auto& s = parameters[i].second;
-        auto v = s.min + (s.max - s.min) * (float)Cmaes::fold (point[i]);
-        if (s.steps > 1)
-            v = std::round (v * (float)(s.steps - 1)) / (float)(s.steps - 1);
-        values.push_back (v);
-    }
-    return values;
-}
-
-double SynthMatcher::tryValues (const std::vector<float>& values)
-{
-    // Spinus's own instruments keep their settings up to date through the parameters' listeners, so they
-    // must be told (CLAP plugins take the change on their next block either way).
-    for (size_t i = 0; i < parameters.size(); ++i)
-        parameters[i].first->setValueNotifyingHost (values[i]);
-    return spectralDistance (instrument.render (notes, 0.2), target);
-}
-
 void SynthMatcher::run()
 {
+    result = SynthSearch::run (
+        parameters, [this] { return instrument.render (notes, 0.2); }, target, budget,
+        [this] { return threadShouldExit(); },
+        [this] (int tries, double best)
+        {
+            triesDone = tries;
+            bestSoFar = best;
+            triggerAsyncUpdate();
+        });
+    triesDone = result.tries;
+    bestSoFar = result.distance;
+    isFinished = true;
+    triggerAsyncUpdate();
+}
+
+//==============================================================================
+SynthProfile SynthSearch::profileFor (juce::AudioPluginInstance& instance, const model::Device& device)
+{
+    if (auto own = SynthProfile::find (device))
+        return *own;
+    // None of its own: one made from the names of the plugin's parameters.
+    std::vector<SynthProfile::Parameter> described;
+    for (auto* parameter : instance.getParameters())
+        described.push_back (SynthProfile::describe (*parameter));
+    const auto name = device.kind == model::Device::Kind::plugin ? device.plugin.name : instance.getName();
+    auto profile = SynthProfile::makeAutomatic (name, described).value_or (SynthProfile {});
+    profile.name = name;
+    profile.automatic = true;
+    return profile;
+}
+
+SynthSearch::Settings SynthSearch::findSettings (juce::AudioPluginInstance& instance, const SynthProfile& profile)
+{
+    Settings parameters;
+    const engine::ParameterFinder finder (instance);
+    for (auto& setting : profile.settings)
+    {
+        auto* found = setting.id.isNotEmpty() ? finder.findSaved (setting.id) : nullptr;
+        for (auto* parameter : instance.getParameters())
+            if (found == nullptr && setting.name.isNotEmpty() && parameter->getName (200) == setting.name)
+                found = parameter;
+        if (found != nullptr)
+            parameters.emplace_back (found, setting);
+    }
+    return parameters;
+}
+
+SynthMatchResult SynthSearch::run (const Settings& parameters, const std::function<juce::AudioBuffer<float>()>& render,
+                                   const juce::AudioBuffer<float>& target, int budget,
+                                   const std::function<bool()>& shouldStop,
+                                   const std::function<void (int, double)>& progress)
+{
+    const auto stop = [&] { return shouldStop && shouldStop(); };
+    const auto toValues = [&] (const std::vector<double>& point)
+    {
+        std::vector<float> values;
+        for (size_t i = 0; i < parameters.size(); ++i)
+        {
+            const auto& s = parameters[i].second;
+            auto v = s.min + (s.max - s.min) * (float)Cmaes::fold (point[i]);
+            if (s.steps > 1)
+                v = std::round (v * (float)(s.steps - 1)) / (float)(s.steps - 1);
+            values.push_back (v);
+        }
+        return values;
+    };
+    const auto tryValues = [&] (const std::vector<float>& values)
+    {
+        // Spinus's own instruments keep their settings up to date through the parameters' listeners, so they
+        // must be told (CLAP plugins take the change on their next block either way).
+        for (size_t i = 0; i < parameters.size(); ++i)
+            parameters[i].first->setValueNotifyingHost (values[i]);
+        return spectralDistance (render(), target);
+    };
+    const auto report = [&] (int tries, double best)
+    {
+        if (progress)
+            progress (tries, best);
+    };
+
+    SynthMatchResult result;
     // Start where the synth is now (its default or the preset), in the profile's ranges.
     std::vector<double> start;
     start.reserve (parameters.size());
@@ -351,11 +389,11 @@ void SynthMatcher::run()
     // First each setting on its own at a few values, keeping what helps (catches one big difference, such as
     // a slow attack, quickly); then all together with CMA-ES, from there, in small steps.
     auto point = start;
-    for (size_t i = 0; i < parameters.size() && tries < budget && ! threadShouldExit(); ++i)
+    for (size_t i = 0; i < parameters.size() && tries < budget && ! stop(); ++i)
     {
         const auto steps = parameters[i].second.steps;
         const auto count = steps > 1 && steps <= 8 ? steps : 5;
-        for (int k = 0; k < count && tries < budget && ! threadShouldExit(); ++k)
+        for (int k = 0; k < count && tries < budget && ! stop(); ++k)
         {
             auto candidate = point;
             candidate[i] = (double)k / (double)(count - 1);
@@ -369,21 +407,19 @@ void SynthMatcher::run()
                 point = candidate;
             }
         }
-        triesDone = tries;
-        bestSoFar = bestDistance;
-        triggerAsyncUpdate();
+        report (tries, bestDistance);
     }
 
     if (! parameters.empty())
     {
         Cmaes search (point, 0.1);
-        while (tries < budget && ! threadShouldExit())
+        while (tries < budget && ! stop())
         {
             const auto points = search.ask();
             std::vector<double> losses;
             for (auto& candidate : points)
             {
-                if (threadShouldExit())
+                if (stop())
                     break;
                 const auto values = toValues (candidate);
                 const auto distance = tryValues (values);
@@ -398,21 +434,19 @@ void SynthMatcher::run()
             if (losses.size() < points.size())
                 break;
             search.tell (points, losses);
-            triesDone = tries;
-            bestSoFar = bestDistance;
-            triggerAsyncUpdate();
+            report (tries, bestDistance);
         }
     }
 
-    result.settings.clear();
+    // The best settings, set on the synth (it then sounds like the match).
     for (size_t i = 0; i < parameters.size(); ++i)
-        result.settings.emplace_back (getParameterId (*parameters[i].first), bestValues[i]);
+    {
+        parameters[i].first->setValueNotifyingHost (bestValues[i]);
+        result.settings.emplace_back (engine::getParameterId (*parameters[i].first), bestValues[i]);
+    }
     result.distance = bestDistance;
     result.tries = tries;
-    triesDone = tries;
-    bestSoFar = bestDistance;
-    isFinished = true;
-    triggerAsyncUpdate();
+    return result;
 }
 
 void SynthMatcher::handleAsyncUpdate()

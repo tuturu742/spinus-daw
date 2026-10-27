@@ -115,6 +115,11 @@ SampleZone zoneFromState (const juce::ValueTree& zone)
 juce::Result readAudioFile (const juce::File& file, SampleZone& zone, double maxSeconds)
 {
     std::unique_ptr<juce::AudioFormatReader> reader (getAudioFormats().createReaderFor (file));
+    // A file whose extension is not its format (sample packs have AIFF files named .wav): every format is
+    // tried on its contents, as the sound index reads them.
+    if (reader == nullptr)
+        if (auto in = file.createInputStream())
+            reader.reset (getAudioFormats().createReaderFor (std::move (in)));
     if (reader == nullptr)
         return juce::Result::fail (file.getFileName() + " is not an audio file Spinus can read");
     if (reader->sampleRate <= 0 || (double)reader->lengthInSamples > maxSeconds * reader->sampleRate)
