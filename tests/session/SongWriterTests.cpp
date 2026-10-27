@@ -382,7 +382,7 @@ TEST_CASE ("Song writer: a full arrangement is laid out by family, its layers co
         REQUIRE (insert != nullptr);
         CHECK (insert->name == layer.name);
         REQUIRE (c->instrument.has_value());
-        CHECK (c->instrument->stockType == (layer.drums ? "spinus.drum-machine" : "spinus.3x-osc"));
+        CHECK (c->instrument.value().stockType == (layer.drums ? "spinus.drum-machine" : "spinus.3x-osc"));
     }
     // A bus for each family of two or more channels (Drums, FX), which their inserts play into.
     juce::StringArray buses;
