@@ -23,6 +23,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- **Track creator's sound index and big sample instruments:** instruments that load their samples in the
+  background after opening (Ample's guitars and basses, for example) were measured before they made a sound,
+  filed as silent and never suggested; Spinus now waits for them (up to 40 seconds). One that crashes while
+  its presets are listed (BFD Player did) is tried again with only its sound as it opens, so it can still
+  be chosen.
 - **Spinus froze, and every program crackled, when a webcam microphone was chosen to record from:** Spinus
   kept the microphone open all the time, and through PipeWire a webcam's microphone can become the clock
   of the whole system's sound, with small buffers for every program. Spinus now opens the microphone only

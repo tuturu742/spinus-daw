@@ -11,10 +11,12 @@ namespace spinus
 
     `request` is a JSON file:
     - `{"mode": "instrument", "format", "file", "name", "uniqueId", "stockType", "known": {presetId: version},
-      "skip": [presetId]}`: loads the instrument (format "Spinus": one of Spinus's own, by identifier), finds
-      its presets (InstrumentPresets), and plays the test notes with each preset not known at that version
-      and not skipped (sounds::describeInstrument). An instrument without presets is measured as it is,
-      as the preset "" (named "Default sound").
+      "skip": [presetId], "defaultOnly"}`: loads the instrument (format "Spinus": one of Spinus's own, by
+      identifier), finds its presets (InstrumentPresets; not with "defaultOnly"), and plays the test notes
+      with each preset not known at that version and not skipped (sounds::describeInstrument). An instrument
+      without presets is measured as it is, as the preset "" (named "Default sound"). A sound that comes out
+      silent is measured again once the instrument sounds, for instruments that load their samples late
+      (up to 40 s for the first, 10 s after; `{"waiting": ...}` lines meanwhile).
     - `{"mode": "samples", "files": [path]}`: reads each audio file and measures it (sounds::describeSample).
 
     Two more modes play and tune instruments for the Track creator (out of Spinus for the same reason): `{"mode":

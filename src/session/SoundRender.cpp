@@ -9,6 +9,7 @@
 #include "plugins/PluginCatalog.h"
 
 #include <set>
+#include <utility>
 
 namespace spinus
 {
@@ -107,6 +108,24 @@ model::Device deviceOf (const juce::var& request)
     return device;
 }
 
+/** Some instruments load their samples in the background after opening (Ample's guitars and basses, big
+    drum libraries), silent until then: the test notes are played again, a second apart, until something
+    sounds or `seconds` pass (each wait is a line, so Spinus doesn't take the helper for hung). */
+bool waitUntilAudible (OfflineInstrument& player, Lines& out, double seconds)
+{
+    const auto until = juce::Time::getMillisecondCounterHiRes() + seconds * 1000.0;
+    for (;;)
+    {
+        const auto audio = player.render ({ { 48, 0.0, 0.4, 0.8f }, { 60, 0.0, 0.4, 0.8f } }, 0.3);
+        if (audio.getMagnitude (0, audio.getNumSamples()) > 1.0e-4f)
+            return true;
+        if (juce::Time::getMillisecondCounterHiRes() > until)
+            return false;
+        out.write ("waiting", "its sounds to load");
+        juce::Thread::sleep (1000);
+    }
+}
+
 int runInstrument (const juce::var& request, Lines& out)
 {
     juce::String error;
@@ -118,7 +137,10 @@ int runInstrument (const juce::var& request, Lines& out)
         return 0;
     }
     OfflineInstrument player (*instance);
-    auto presets = InstrumentPresets::find (*instance, deviceOf (request));
+    // "defaultOnly": a second try for an instrument that crashed after loading (while its presets were
+    // found or right after): only its sound as it opens.
+    auto presets = (bool)request["defaultOnly"] ? std::vector<InstrumentPreset> {}
+                                                : InstrumentPresets::find (*instance, deviceOf (request));
     const bool hasPresets = ! presets.empty();
     if (! hasPresets)
     {
@@ -159,6 +181,7 @@ int runInstrument (const juce::var& request, Lines& out)
         return player.renderStereo (converted, tail); // the width is measured too
     };
 
+    double firstWait = 40.0; // seconds an instrument may take to load its sounds, then for each preset
     for (const auto& preset : presets)
     {
         if (skip.contains (preset.id))
@@ -173,8 +196,15 @@ int runInstrument (const juce::var& request, Lines& out)
             if (const auto loaded = player.loadPreset (preset); loaded.failed())
                 problem = loaded.getErrorMessage();
         if (problem.isEmpty())
-            sound = sounds::toVar (
-                sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category));
+        {
+            auto described =
+                sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
+            // Silent: perhaps still loading (the first sound, or a preset that loads other samples).
+            if (described.silent && waitUntilAudible (player, out, std::exchange (firstWait, 10.0)))
+                described =
+                    sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
+            sound = sounds::toVar (described);
+        }
         else
         {
             sound = juce::var (new juce::DynamicObject());

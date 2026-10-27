@@ -376,6 +376,25 @@ TEST_CASE ("Sound index: presets that crash or hang the helper are left out", "[
     CHECK (again.instruments.at (source.key).problemPresets.size() == 2);
 }
 
+TEST_CASE ("Sound index: an instrument that crashes listing its presets and loads its sounds late is still measured",
+           "[sounds][index][helper]")
+{
+    // As some big sample instruments do (BFD Player crashed listing its presets; Ample's are silent until their
+    // samples are loaded): its sound as it opens is measured, once it sounds.
+    TempFolder temp;
+    SoundIndex index (temp.folder);
+    const auto source = testSynth ("difficult-synth.clap", "Spinus Difficult Synth");
+    const auto result = SoundIndexer::update (index, helperOptions(), { source }, {}, {}, {});
+    const auto& entry = index.instruments.at (source.key);
+    CHECK (entry.problem.isEmpty());
+    CHECK (entry.complete);
+    CHECK (result.problems == 0);
+    REQUIRE (entry.sounds.size() == 1);
+    CHECK (entry.sounds[0]["name"].toString() == "Default sound");
+    CHECK_FALSE ((bool)entry.sounds[0]["silent"]);
+    CHECK (entry.sounds[0]["role"].toString() != "none");
+}
+
 TEST_CASE ("Sound index: an instrument that crashes or hangs while loading is a problem", "[sounds][index][helper]")
 {
     TempFolder temp;
