@@ -225,7 +225,13 @@ drums, a bass line, a chords part and a lead melody, as notes in patterns you ca
 
 ![Write a song](images/track-creator-song.png)
 
-1. Click **Write**. In a moment the page says what it wrote: how long the song is, its tempo and key, its
+1. Choose the **Arrangement** (Spinus remembers it):
+   - **Sketch**: four parts (drums, bass, chords and lead), a channel each and one pattern per section,
+     to build on yourself.
+   - **Full**: about a dozen channels, laid out as the [demo songs](getting-started.md#listen-to-the-demo-songs-first) are (see
+     [A full arrangement](#a-full-arrangement) below).
+
+   Then click **Write**. In a moment the page says what it wrote: how long the song is, its tempo and key, its
    sections ("Intro 8, Verse 16, Chorus 16, ...") and each section's chords, which notes each part plays and
    how busy it is, and how all this compares with your songs in numbers.
 2. **Listen** plays the song as it would be in your project (through the instruments, the ones the
@@ -263,6 +269,36 @@ anywhere and no AI connection is needed.
 - **Lead**: short phrases that answer each other, in your songs' vocal range and about as many notes a bar,
   with the chord's own notes on the strong beats and in the key in between. Only the style is used: your
   songs' melodies are never read (the summary has none).
+
+### A full arrangement
+
+With **Arrangement: Full**, the same song is arranged as a producer would lay it out:
+
+![A full arrangement on the Playlist](images/track-creator-full.png)
+
+| Family (colour) | Channels |
+|---|---|
+| **Drums** (pink) | **Kick**, **Snare** (with the fills' toms), **Hats & Cymbals** |
+| **Bass** (cyan) | **Bass**; **Sub Bass**, the chords' roots held low in the choruses, when your songs' bass sits high enough to leave room for it |
+| **Synths** (purple) | **Chords**; **Pad**, the chords held; **Arp**, the chords' notes one after another (in sixteenths when your songs' other instruments are busy) |
+| **Leads** (orange) | **Lead**; **Counter-melody**, a slower line under the lead that never clashes with it |
+| **FX** (grey) | **Riser** over the two bars before each chorus; **Impacts** (a kick and a crash) where each chorus and the bridge start |
+
+- **Who plays when**: verses stay thin (drums, bass, chords, lead); choruses have everything; the bridge
+  breaks down to the pad and builds up again with the arpeggio; the intro starts with the pad and chords.
+- **The layout**: each channel is coloured by its family and in the Channel Rack group of it, on a mixer
+  insert of its own with the same name and colour, and a family's inserts play into a bus named after it
+  (Drums, FX...), so one fader sets the family's level. There is a pattern per layer and section
+  ("Song 1: Chorus - Pad", only where the layer plays) and one per effect ("Song 1: Riser"). On the
+  Playlist, a track per family ("Song 1: Drums") holds a track per layer, so you see the layers come and
+  go; fold a family to hide its tracks.
+- **Sounds**: the parts you chose sounds for on the [Sounds for each part](#sounds-for-each-part) page keep
+  them (the three drum channels share the drums' kit). Every other layer gets the closest sound of its role
+  (a pad for the pad, a pluck for the arpeggio...) from your [sound index](#your-sounds); without one,
+  Spinus's own (3x Osc's "Warm Pad", "Pluck", "Sub Bass", "Bell", "Noise Riser", the Drum Machine). The page
+  lists which.
+- **Redo part...** works as for a sketch: **New chords** writes the chords again and with them the pad and
+  the arpeggio, **New lead** the lead and the counter-melody, **New bass** the bass and sub bass.
 
 **Let the AI vary the plan** (off at first): with an AI connection set up in Options › AI, the AI may
 change the order and length of the sections, the chord loops and the shape of the melody. Spinus checks

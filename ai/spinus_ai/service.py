@@ -918,7 +918,8 @@ class Service:
 
     async def song_write(self, params: dict[str, Any], notify: Notify) -> Any:
         """A new song in the style of a summary (spinus_ai.songwriter): {summary (ai.v1.style.summarize's
-        result), seed, refine (let the AI vary the plan; default false), song and redo ({part} or {section}):
+        result), seed, arrangement ("sketch", the default: four parts; "full": about a dozen layers), refine
+        (let the AI vary the plan; default false), song and redo ({part} or {section}):
         that song with one part or section written anew from the seed} -> the song. Rules only, with no model
         and no AI connection; with refine and a connection, the AI may vary the plan (checked), the rules still
         write every note, and without one (or when it fails) the rules' song stands, with a note saying so."""
@@ -931,6 +932,9 @@ class Service:
             seed = int(params.get("seed", 0)) & 0x7FFFFFFF
         except (TypeError, ValueError) as error:
             raise RpcError(-32602, "seed must be a number.") from error
+        size = str(params.get("arrangement") or "sketch")
+        if size not in songwriter.SIZES:
+            raise RpcError(-32602, "arrangement is sketch or full.")
         redo = params.get("redo")
         if redo is not None and (not isinstance(redo, dict) or not (redo.get("part") or redo.get("section"))):
             raise RpcError(-32602, "redo names a part or a section.")
@@ -945,7 +949,7 @@ class Service:
                 part, section = redo.get("part"), redo.get("section")
                 return songwriter.redo(dict(params["song"]), summary, seed,
                                        str(part) if part else None, str(section) if section else None)  # fmt: skip
-            song = songwriter.write(summary, seed)
+            song = songwriter.write(summary, seed, size)
             if not params.get("refine"):
                 return song
             try:

@@ -265,6 +265,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
                                                             if (r.status == Status::done)
                                                                 c.songs.add (r.file);
                                                         c.sounds = partSounds->makePlan();
+                                                        c.indexFolder = soundIndexFolder;
                                                         return c;
                                                     });
     songWriter->onMix = [this] (const juce::File& reference)

@@ -3,6 +3,7 @@
 #include "ai/AnalysisJobs.h"
 #include "ai/Proposal.h"
 #include "dsp/sampler/SampleStorage.h"
+#include "session/SoundIndex.h"
 
 namespace spinus::ui
 {
@@ -44,7 +45,68 @@ const parts::Plan::Part* chosenFor (const parts::Plan& plan, const juce::String&
             return &p;
     return nullptr;
 }
+
+constexpr const char* sizeSetting = "trackCreatorArrangement";
 } // namespace
+
+void SongWriterPanel::setArrangement (const juce::String& size)
+{
+    sizeBox.setSelectedId (size == "full" ? 2 : 1, juce::sendNotificationSync);
+}
+
+juce::String SongWriterPanel::getArrangement() const { return sizeBox.getSelectedId() == 2 ? "full" : "sketch"; }
+
+const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
+{
+    if (layerChoicesKnown)
+        return layerChoices;
+    layerChoicesKnown = true;
+    layerChoices.clear();
+    const auto layers = song::layersOf (song);
+    if (layers.empty() || context.indexFolder == juce::File())
+        return layerChoices;
+    SoundIndex index (context.indexFolder);
+    index.load();
+    if (index.instruments.empty())
+        return layerChoices;
+    for (const auto& layer : layers)
+    {
+        // The drums keep the Sounds page's kit or Spinus's Drum Machine; the parts the Sounds page chose for keep
+        // that sound.
+        if (layer.drums || (chosenFor (context.sounds, layer.part) != nullptr && layer.id == layer.part))
+            continue;
+        parts::Target target;
+        target.part = layer.part;
+        target.roles = { layer.role };
+        target.low = layer.low;
+        target.median = layer.middle;
+        target.high = layer.high;
+        target.chords = layer.id == "pad" || layer.id == "chords";
+        target.voices = target.chords ? 3.0 : 1.0;
+        const auto found = parts::choose (target, {}, index, 1);
+        if (! found.empty() && found.front().kind == parts::Choice::Kind::preset && found.front().role == layer.role)
+            layerChoices[layer.id] = found.front();
+    }
+    return layerChoices;
+}
+
+std::optional<parts::Plan::Part> SongWriterPanel::chosenForLayer (const song::Layer& layer)
+{
+    if (layer.id == layer.part || layer.drums)
+        if (const auto* chosen = chosenFor (context.sounds, layer.drums ? juce::String ("drums") : layer.part))
+            if (layer.part != "fx")
+                return *chosen;
+    const auto& choices = getLayerChoices();
+    if (const auto found = choices.find (layer.id); found != choices.end())
+    {
+        parts::Plan::Part part;
+        part.target.part = layer.part;
+        part.target.roles = { layer.role };
+        part.choice = found->second;
+        return part;
+    }
+    return std::nullopt;
+}
 
 SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : session (s), getContext (std::move (c))
 {
@@ -55,6 +117,18 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     intro.setJustificationType (juce::Justification::topLeft);
     status.setJustificationType (juce::Justification::topLeft);
     status.setMinimumHorizontalScale (1.0f);
+    sizeLabel.setText ("Arrangement", juce::dontSendNotification);
+    sizeBox.addItem ("Sketch: 4 parts (drums, bass, chords, lead)", 1);
+    sizeBox.addItem ("Full: about a dozen channels, grouped and coloured", 2);
+    sizeBox.setTooltip ("Sketch: four channels and a pattern per section, to build on. Full: the drums split into "
+                        "kick, snare and hats, a pad, an arpeggio, a counter-melody, a sub bass when there is room, "
+                        "a riser and impacts; thin verses and full choruses, each layer on a Playlist track of its "
+                        "own under its family (Drums, Bass, Synths, Leads, FX)");
+    {
+        auto* settings = &session.getEdit().engine.getPropertyStorage().getPropertiesFile();
+        sizeBox.setSelectedId (settings->getValue (sizeSetting) == "full" ? 2 : 1, juce::dontSendNotification);
+        sizeBox.onChange = [this, settings] { settings->setValue (sizeSetting, getArrangement()); };
+    }
     refineButton.setTooltip ("Ask your AI connection (Options > AI) to vary the sections, the chord loops and the "
                              "melody's shape; Spinus checks what it says against the style and writes every note "
                              "itself. Off: rules only, nothing is sent anywhere");
@@ -76,9 +150,9 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     text.setReadOnly (true);
     text.setScrollbarsShown (true);
     text.setCaretVisible (false);
-    for (auto* component :
-         std::initializer_list<juce::Component*> { &intro, &refineButton, &writeButton, &againButton, &redoButton,
-                                                   &listenButton, &applyButton, &mixButton, &status, &text })
+    for (auto* component : std::initializer_list<juce::Component*> {
+             &intro, &sizeLabel, &sizeBox, &refineButton, &writeButton, &againButton, &redoButton, &listenButton,
+             &applyButton, &mixButton, &status, &text })
         addAndMakeVisible (component);
     addChildComponent (stopButton);
     updateButtons();
@@ -134,11 +208,15 @@ bool SongWriterPanel::write()
     }
     const auto seed = fixedSeed >= 0 ? fixedSeed++ : juce::Random::getSystemRandom().nextInt (0x7fffffff);
     const bool refine = refineButton.getToggleState();
-    run (object ({ { "summary", context.summary }, { "seed", seed }, { "refine", refine } }),
+    run (object ({ { "summary", context.summary },
+                   { "seed", seed },
+                   { "refine", refine },
+                   { "arrangement", getArrangement() } }),
          refine ? "Writing a song (the AI may vary its plan)..." : "Writing a song...",
          [this] (const juce::var& result)
          {
              song = result;
+             layerChoicesKnown = false;
              whole = true;
              redoneParts.clear();
              redoneSections.clear();
@@ -184,11 +262,15 @@ bool SongWriterPanel::redo (const juce::String& part, const juce::String& sectio
     return true;
 }
 
-song::Options SongWriterPanel::optionsFor (const model::Project& project) const
+song::Options SongWriterPanel::optionsFor (const model::Project& project)
 {
     song::Options options;
     options.channels = song::findChannels (project);
     options.name = song::nextSongName (project);
+    for (const auto& layer : song::layersOf (song))
+        if (const auto chosen = chosenForLayer (layer))
+            if (auto sound = soundOf (chosen->choice))
+                options.layerSounds[layer.id] = *sound;
     for (const auto& part : song::partNames())
         if (const auto* chosen = chosenFor (context.sounds, part))
             if (auto sound = soundOf (chosen->choice))
@@ -201,7 +283,7 @@ song::Options SongWriterPanel::optionsFor (const model::Project& project) const
     return options;
 }
 
-juce::var SongWriterPanel::makeProposal (juce::String* error) const
+juce::var SongWriterPanel::makeProposal (juce::String* error)
 {
     auto fail = [error] (const juce::String& why)
     {
@@ -263,16 +345,28 @@ bool SongWriterPanel::apply()
     if (wholeSong)
     {
         applied = song::findApplied (song, session.getProject(), options.name);
-        // The sounds chosen on the Sounds page, into the channels the song made for them (as the Sounds page
-        // loads them: a plugin's own presets, samples onto pads or keys, tuned settings on top).
+        // The sounds chosen on the Sounds page (or, for a full arrangement's other layers, from the sound
+        // index), into the channels the song made for them (as the Sounds page loads them: a plugin's own presets,
+        // samples onto pads or keys, tuned settings on top).
         parts::Plan chosen;
         std::vector<model::ChannelId> channels;
-        for (const auto& [part, sound] : options.sounds)
-            if (const auto* p = chosenFor (context.sounds, part); p != nullptr && applied.channels.contains (part))
-            {
-                chosen.parts.push_back (*p);
-                channels.push_back (applied.channels.at (part));
-            }
+        if (applied.full)
+        {
+            for (const auto& layer : song::layersOf (song))
+                if (options.layerSounds.contains (layer.id) && applied.layerChannels.contains (layer.id))
+                    if (const auto p = chosenForLayer (layer))
+                    {
+                        chosen.parts.push_back (*p);
+                        channels.push_back (applied.layerChannels.at (layer.id));
+                    }
+        }
+        else
+            for (const auto& [part, sound] : options.sounds)
+                if (const auto* p = chosenFor (context.sounds, part); p != nullptr && applied.channels.contains (part))
+                {
+                    chosen.parts.push_back (*p);
+                    channels.push_back (applied.channels.at (part));
+                }
         if (! chosen.parts.empty())
             if (const auto r = parts::loadSounds (session, chosen, channels); r.failed())
                 loaded = " Not every chosen sound loaded: " + r.getErrorMessage();
@@ -433,7 +527,19 @@ void SongWriterPanel::show()
     }
     lines.add ({});
     const auto& project = session.getProject();
-    if (whole || ! applied.isIn (project))
+    if ((whole || ! applied.isIn (project)) && song::isFull (song))
+    {
+        juce::StringArray chosen;
+        for (const auto& [layer, choice] : getLayerChoices())
+            chosen.add (layer + ": " + choice.title());
+        lines.add ("Apply adds it as " + song::nextSongName (project) +
+                   ": a channel per layer, coloured and grouped "
+                   "by family (Drums, Bass, Synths, Leads, FX) with a bus each in the mixer, a pattern per layer "
+                   "and section, a Playlist track per layer under its family's, markers, the tempo and key." +
+                   (chosen.isEmpty() ? juce::String (" Layers get Spinus's own instruments (or the Sounds page's).")
+                                     : " From your sound index: " + chosen.joinIntoString ("; ") + "."));
+    }
+    else if (whole || ! applied.isIn (project))
         lines.add ("Apply adds it as " + song::nextSongName (project) +
                    ": a pattern per section, a Playlist track, markers, the tempo and key; parts without a channel "
                    "of the Sounds page get Spinus's own instruments or the sounds chosen there.");
@@ -454,6 +560,7 @@ void SongWriterPanel::updateButtons()
     applyButton.setEnabled (! busy && has);
     mixButton.setEnabled (! busy && applied.isIn (session.getProject()));
     refineButton.setEnabled (! busy);
+    sizeBox.setEnabled (! busy);
     stopButton.setVisible (busy || session.getSamplePreview().isPlaying());
     resized();
 }
@@ -462,6 +569,12 @@ void SongWriterPanel::resized()
 {
     auto area = getLocalBounds();
     intro.setBounds (area.removeFromTop (36));
+    {
+        auto r = area.removeFromTop (26);
+        sizeLabel.setBounds (r.removeFromLeft (90));
+        sizeBox.setBounds (r.removeFromLeft (360).reduced (0, 1));
+    }
+    area.removeFromTop (2);
     refineButton.setBounds (area.removeFromTop (26).removeFromLeft (420));
     area.removeFromTop (4);
     {
