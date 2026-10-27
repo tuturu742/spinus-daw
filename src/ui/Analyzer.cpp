@@ -611,7 +611,7 @@ void Analyzer::showSources()
                                {
                                    if (*a)
                                        askForName ("Paste the link " + name + "'s authors give for it", {},
-                                                   [this, a, id] (juce::String link)
+                                                   [this, a, id] (const juce::String& link)
                                                    {
                                                        if (*a)
                                                            downloadFromLink (id, link);
