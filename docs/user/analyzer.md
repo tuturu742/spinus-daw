@@ -37,7 +37,8 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
 ## Analyzing a song
 
 1. Drag a song file onto the Analyzer, or click **Choose a song...**. It reads WAV, FLAC, Ogg, AIFF, MP3
-   and Opus, and with ffmpeg installed (`sudo pacman -S ffmpeg`) also M4A/AAC, WebM, WMA and more.
+   and Opus, and with ffmpeg installed (`sudo pacman -S ffmpeg`; on Windows `winget install ffmpeg`)
+   also M4A/AAC, WebM, WMA and more.
 2. Spinus prepares the song, then finds the beat and the key. Each step shows its progress; **Cancel**
    stops it.
 3. **Tempo**: for example "98.0 BPM, 4 beats per bar". **Use for the song** sets your song's tempo (and

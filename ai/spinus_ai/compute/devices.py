@@ -3,6 +3,8 @@
 AMD GPUs come from the kernel's compute topology (/sys/class/kfd), which gives each GPU's target
 (for example gfx1151); Nvidia GPUs from nvidia-smi (or the driver's version file);
 Intel GPUs from the display cards in /sys/class/drm. Names come from the PCI ID database.
+On Windows the display adapters come from Windows itself (Win32_VideoController), Nvidia's details from
+nvidia-smi as on Linux; AMD's GPU targets cannot be read there, so AMD cards are listed but not used.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -133,7 +136,53 @@ def intel_gpus(root: Path = Path("/")) -> list[Gpu]:
     return found
 
 
+AMD_ON_WINDOWS = "On Windows, Spinus cannot use AMD graphics cards for this yet."
+
+
+def nvidia_driver_from_windows(version: str) -> str:
+    """Windows' driver version (32.0.15.6094) as Nvidia's own (560.94): the last five digits."""
+    digits = re.sub(r"\D", "", version.split(".", 2)[-1]) if version.count(".") >= 3 else ""
+    return f"{int(digits[-5:-2])}.{digits[-2:]}" if len(digits) >= 5 else ""
+
+
+def windows_adapters() -> list[tuple[str, str, str]]:
+    """(name, PNP device id, driver version) of each display adapter, from Windows."""
+    script = (
+        "Get-CimInstance Win32_VideoController | ForEach-Object "
+        "{ $_.Name + '|' + $_.PNPDeviceID + '|' + $_.DriverVersion }"
+    )
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, timeout=20, check=True,
+        ).stdout  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [tuple(line.strip().split("|", 2)) for line in out.splitlines() if line.count("|") == 2]  # type: ignore[misc]
+
+
+def windows_gpus(adapters: list[tuple[str, str, str]], smi: str | None = None) -> list[Gpu]:
+    found = nvidia_gpus(Path("/nonexistent"), smi)
+    for name, device_id, driver in adapters:
+        ids = re.search(r"VEN_([0-9A-Fa-f]{4})&DEV_([0-9A-Fa-f]{4})", device_id)
+        if ids is None:
+            continue
+        vendor, device = ids[1].lower(), ids[2].lower()
+        if vendor == "10de" and not any(g.vendor == "nvidia" for g in found):
+            found.append(Gpu("nvidia", name, "", nvidia_driver_from_windows(driver)))
+        elif vendor == "1002":
+            found.append(Gpu("amd", name, notes=[AMD_ON_WINDOWS]))
+        elif vendor == "8086":
+            gpu = Gpu("intel", name, device)
+            if not device.startswith(INTEL_XPU_PREFIXES):
+                gpu.notes.append("PyTorch does not support this Intel GPU (it needs Arc or Core Ultra graphics).")
+            found.append(gpu)
+    return found
+
+
 def detect(root: Path = Path("/")) -> list[Gpu]:
+    if sys.platform == "win32" and root == Path("/"):
+        return windows_gpus(windows_adapters())
     return amd_gpus(root) + nvidia_gpus(root, smi="" if root != Path("/") else None) + intel_gpus(root)
 
 

@@ -1,6 +1,7 @@
 """Installs and removes the analysis engine's Python environments.
 
-Each build gets its own environment in ~/.local/share/spinus/python/<build>/, made by uv with its own
+Each build gets its own environment in ~/.local/share/spinus/python/<build>/ (on Windows too: in the
+user's folder), made by uv with its own
 Python 3.12 (in python/interpreters/, so the system's Python version does not matter) and the build's
 lock file, every package checked against its pinned hash. An environment counts as installed only once
 its marker file is written, after everything else; a half-finished one is wiped on the next install.
@@ -15,6 +16,8 @@ import json
 import os
 import shutil
 import signal
+import subprocess
+import sys
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
@@ -28,9 +31,18 @@ Progress = Callable[[float, str], Awaitable[None]]
 # A little more than the build needs, for uv's own files and Python itself.
 SPARE_BYTES = 500_000_000
 
+WINDOWS = sys.platform == "win32"
+
 
 class InstallError(Exception):
     pass
+
+
+UV_HINT = (
+    "Install it from https://docs.astral.sh/uv/ (Spinus's installer brings it along: try installing Spinus again)."
+    if WINDOWS
+    else "Install it with: sudo pacman -S uv"
+)
 
 
 def lock_hash(build: Build) -> str:
@@ -41,9 +53,10 @@ def find_uv() -> str | None:
     found = shutil.which("uv")
     if found:
         return found
-    # The one a package brings along (AppImage, Flatpak: <ai>/bin/uv), then the usual user installs.
-    bundled = Path(__file__).resolve().parents[2] / "bin" / "uv"
-    for candidate in (bundled, Path.home() / ".local/bin/uv", Path.home() / ".cargo/bin/uv"):
+    # The one a package brings along (AppImage, Flatpak, Windows: <ai>/bin/uv), then the usual user installs.
+    program = "uv.exe" if WINDOWS else "uv"
+    bundled = Path(__file__).resolve().parents[2] / "bin" / program
+    for candidate in (bundled, Path.home() / ".local/bin" / program, Path.home() / ".cargo/bin" / program):
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     return None
@@ -62,7 +75,8 @@ def folder_size(folders: list[Path]) -> int:
                     continue
                 if (info.st_dev, info.st_ino) not in seen:
                     seen.add((info.st_dev, info.st_ino))
-                    total += info.st_blocks * 512
+                    # Windows has no block count: the file's size.
+                    total += info.st_blocks * 512 if hasattr(info, "st_blocks") else info.st_size
     return total
 
 
@@ -76,6 +90,8 @@ class Environments:
         return self.root / build.id
 
     def python(self, build: Build) -> Path:
+        if WINDOWS:
+            return self.folder(build) / "Scripts" / "python.exe"
         return self.folder(build) / "bin" / "python"
 
     def marker(self, build: Build) -> dict[str, Any] | None:
@@ -111,7 +127,7 @@ class Environments:
     async def install(self, build: Build, progress: Progress, uv: str | None = None) -> None:
         uv = uv or find_uv()
         if uv is None:
-            raise InstallError("Installing the analysis engine needs uv. Install it with: sudo pacman -S uv")
+            raise InstallError("Installing the analysis engine needs uv. " + UV_HINT)
         if self.installing:
             raise InstallError("Another build is being installed.")
         self.root.mkdir(parents=True, exist_ok=True)
@@ -176,12 +192,10 @@ class Environments:
         try:
             code = await process.wait()
         except asyncio.CancelledError:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGTERM)
+            stop(process.pid, force=False)
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(process.wait(), 10)
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
+            stop(process.pid, force=True)
             raise
         finally:
             if watcher:
@@ -198,6 +212,17 @@ class Environments:
             (self.root / f"{build.id}.log").unlink()
         if not self.installed():
             await asyncio.to_thread(shutil.rmtree, self.root / "interpreters", True)
+
+
+def stop(pid: int, force: bool) -> None:
+    """Ends a process uv started and what it started in turn (its process group; on Windows its tree)."""
+    if WINDOWS:
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            command = ["taskkill", "/T", "/PID", str(pid)] + (["/F"] if force else [])
+            subprocess.run(command, capture_output=True, timeout=10, check=False)
+        return
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pid, signal.SIGKILL if force else signal.SIGTERM)
 
 
 def gigabytes(size: int) -> str:

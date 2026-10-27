@@ -16,6 +16,13 @@ namespace spinus::project
 inline constexpr const char* ownAudioFormats = "wav;aif;aiff;flac;ogg;mp3;opus";
 inline constexpr const char* ffmpegAudioFormats = "m4a;aac;mp4;webm;mka;wma;alac;ape;wv";
 
+/** How to get ffmpeg, for messages that need it. */
+#if JUCE_WINDOWS
+inline constexpr const char* installFfmpeg = "Install ffmpeg (in a terminal: winget install ffmpeg)";
+#else
+inline constexpr const char* installFfmpeg = "Install ffmpeg (sudo pacman -S ffmpeg)";
+#endif
+
 /** Whether the file looks like audio Spinus can bring in (by its extension). */
 bool isImportableAudio (const juce::File&);
 

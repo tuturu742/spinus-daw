@@ -40,9 +40,8 @@ what happened, and attach the project if you can.
   Spinus never runs other programs' installers. A project that uses Odin 2 opens on Windows with it
   shown as missing, like LSP's effects above. You can still install Odin 2 yourself from its website:
   Spinus then finds it as an ordinary plugin.
-- **The analysis engine isn't available on Windows yet**, so the [Analyzer](analyzer.md)'s stems, tempo
-  and key, and the features built on it, work on Linux only for now. The Assistant, generating notes and
-  everything else work.
+- **The [analysis engine](analysis-engine.md) doesn't use AMD graphics cards on Windows yet**: on a
+  computer with one it runs on the CPU, which works but takes longer. Nvidia and Intel Arc cards are used.
 - A plugin running in a separate process doesn't show its own window on Windows yet.
 
 ## Recording

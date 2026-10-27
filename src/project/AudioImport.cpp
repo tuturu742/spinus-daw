@@ -53,7 +53,7 @@ juce::Result decodeWithFfmpeg (const juce::File& source, const juce::File& flac)
                                             "flac", flac.getFullPathName() },
                         core::ChildProcess::wantStdErr))
         return juce::Result::fail ("Spinus cannot read " + source.getFileName() +
-                                   " by itself. Install ffmpeg (sudo pacman -S ffmpeg) to use it.");
+                                   " by itself. " + installFfmpeg + " to use it.");
     const auto output = ffmpeg.readAllProcessOutput();
     ffmpeg.waitForProcessToFinish (-1);
     if (ffmpeg.getExitCode() != 0 || ! flac.existsAsFile())

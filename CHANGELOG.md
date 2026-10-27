@@ -101,6 +101,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   from it or hangs on after it ends; "all sound off" now silences it at once.
 - **Analyzer:** the tempo it finds is more precise (it could be off by a few BPM, jumping between values
   such as 130.4, 136.4 and 142.9).
+- **On Windows too:** the analysis engine now installs and runs on Windows (CPU, Nvidia and Intel Arc;
+  AMD cards use the CPU there for now), so the Analyzer's stems, tempo and key, and the Track creator,
+  work on Windows. The Windows installer brings the `uv` tool it needs. See
+  [the analysis engine](docs/user/analysis-engine.md#on-windows).
 
 ## 0.1.0-alpha.2 (2026-10-26)
 

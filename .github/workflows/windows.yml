@@ -17,6 +17,23 @@ permissions:
   contents: write # attaching the installer to a release
 
 jobs:
+  ai:
+    # The AI service on Windows: its tests, and the Track creator's whole path on the real analysis engine
+    # (PyTorch for the CPU installed with uv, the models downloaded; tests/test_real_engine.py).
+    name: Windows AI service
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Tests
+        working-directory: ai
+        env:
+          SPINUS_TEST_REAL_ENGINE: "1"
+        run: uv run --frozen --python 3.12 --extra listening --extra notes pytest -q -rs
+
   windows:
     name: Windows x64 (MSVC)
     runs-on: windows-latest

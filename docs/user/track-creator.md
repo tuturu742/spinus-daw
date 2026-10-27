@@ -40,8 +40,8 @@ computer; nothing is sent anywhere.
 - **Add songs...** picks one or more audio files. **Add a folder...** adds every song in a folder, such as
   an album, and in the folders inside it (CD 1, CD 2), but not deeper. You can also drag files or folders
   onto the Track creator.
-- It reads WAV, FLAC, Ogg, AIFF, MP3 and Opus, and with ffmpeg installed (`sudo pacman -S ffmpeg`) also
-  M4A/AAC, WebM, WMA and more. Other files in the folder (covers, text) are left out, and a song already in
+- It reads WAV, FLAC, Ogg, AIFF, MP3 and Opus, and with ffmpeg installed (`sudo pacman -S ffmpeg`; on
+  Windows `winget install ffmpeg`) also M4A/AAC, WebM, WMA and more. Other files in the folder (covers, text) are left out, and a song already in
   the list isn't added twice.
 - **Remove** takes out the song you selected; **Clear** empties the list.
 

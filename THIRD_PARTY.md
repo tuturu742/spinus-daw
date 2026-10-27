@@ -107,7 +107,7 @@ against that a desktop may lack (linuxdeploy's choice; glibc, ALSA, X and GL sta
 |---|---|---|---|
 | [Python](https://www.python.org) 3.12 (python-build-standalone) | PSF-2.0 | AppImage, Flatpak | Runs the AI service |
 | httpx, httpcore, h11, anyio, idna, certifi, keyring, SecretStorage, jeepney, jaraco.\*, more-itertools, cryptography, cffi, pycparser, typing-extensions, NumPy, ONNX Runtime, flatbuffers, protobuf, packaging | BSD-3-Clause, MIT, Apache-2.0, MPL-2.0 (certifi), PSF-2.0 | AppImage, Flatpak, Windows | The AI service's packages, as in the table above (ONNX Runtime and its dependencies for turning parts into notes) |
-| [uv](https://github.com/astral-sh/uv) | MIT or Apache-2.0 | AppImage, Flatpak | Installs the analysis engine on request |
+| [uv](https://github.com/astral-sh/uv) | MIT or Apache-2.0 | AppImage, Flatpak, Windows | Installs the analysis engine on request |
 | [Rubber Band Library](https://breakfastquay.com/rubberband/) 4.0.0 | GPL-2.0-or-later | Flatpak (built), AppImage (Ubuntu's 3.3) | See above |
 | libcurl, libarchive and the libraries they use (OpenSSL: Apache-2.0; GnuTLS: LGPL-2.1-or-later; nghttp2, zstd, lz4, xz, krb5, libxml2: MIT/BSD; ICU: Unicode-3.0) | as listed | AppImage | From Ubuntu 24.04 |
 | FFTW 3 (GPL-2.0-or-later) and libsamplerate (BSD-2-Clause) | as listed | AppImage | What Ubuntu's Rubber Band uses |
@@ -116,7 +116,8 @@ against that a desktop may lack (linuxdeploy's choice; glibc, ALSA, X and GL sta
 ## Analysis engine (downloaded on request, not distributed by Spinus)
 
 Options › AI › Analysis engine installs one PyTorch build with `uv` into `~/.local/share/spinus/python/`,
-each package pinned by version and SHA-256 in `ai/spinus_ai/compute/locks/`. Spinus runs it as a
+each package pinned by version and SHA-256 in `ai/spinus_ai/compute/locks/` (Windows: the same folder in the
+user's own folder, with the CPU, Nvidia and Intel builds from `locks/windows/`). Spinus runs it as a
 separate process (`spinus_ai.compute.worker`). The user's computer downloads it from the sources below
 after a question that states the size; Spinus ships none of it.
 

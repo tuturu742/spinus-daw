@@ -22,7 +22,7 @@ juce::Result decodeWithFfmpeg (const juce::File& source, const juce::File& wav, 
                                             "wav", wav.getFullPathName() },
                         core::ChildProcess::wantStdErr))
         return juce::Result::fail ("Spinus cannot read " + source.getFileName() +
-                                   " by itself. Install ffmpeg (sudo pacman -S ffmpeg) to read it.");
+                                   " by itself. " + project::installFfmpeg + " to read it.");
     while (! ffmpeg.waitForProcessToFinish (200))
         if (shouldStop())
         {
