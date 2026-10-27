@@ -260,11 +260,10 @@ class WeightStore:
                     try:
                         async with client.stream("GET", url, follow_redirects=True) as response:
                             if response.status_code != 200:
-                                busy = response.status_code >= 500 or response.status_code == 429
-                                if busy and wait is None:
-                                    raise RuntimeError(unreachable(model, url, f"server error {response.status_code}"))
-                                if not busy:
+                                if not (response.status_code >= 500 or response.status_code == 429):
                                     raise RuntimeError(f"Could not download {f.path} ({response.status_code}).")
+                                if wait is None:
+                                    raise RuntimeError(unreachable(model, url, f"server error {response.status_code}"))
                                 await asyncio.sleep(wait)
                                 continue
                             with (folder / f.path).open("wb") as out:
