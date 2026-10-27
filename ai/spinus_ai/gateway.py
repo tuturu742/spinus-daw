@@ -3,6 +3,7 @@ chat API used by OpenRouter, other services and local servers (Ollama, llama.cpp
 
 from __future__ import annotations
 
+import contextlib
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -226,7 +227,9 @@ async def complete_anthropic(
 # OpenAI-compatible (OpenRouter, other services, local servers)
 
 
-def openai_body(request: Request, connection: Connection) -> dict[str, Any]:
+def openai_body(request: Request, connection: Connection, limit: str = "max_tokens") -> dict[str, Any]:
+    """`limit` names the answer-length cap: OpenAI's newer models only take "max_completion_tokens", while
+    many other services only know the older "max_tokens"."""
     messages: list[dict[str, Any]] = [{"role": "system", "content": request.system}]
     for m in request.messages:
         texts = "".join(b.text for b in m.blocks if isinstance(b, Text))
@@ -247,7 +250,7 @@ def openai_body(request: Request, connection: Connection) -> dict[str, Any]:
     body: dict[str, Any] = {
         "model": request.model,
         "messages": messages,
-        "max_tokens": request.max_tokens,
+        limit: request.max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
     }
@@ -277,11 +280,26 @@ async def complete_openai(
     usage = Usage()
     stop_reason = ""
     model = request.model
-    async with client.stream(
-        "POST", f"{connection.base_url}/chat/completions", headers=headers, json=openai_body(request, connection)
-    ) as response:
-        if response.status_code != 200:
-            raise error_for_status(response.status_code, (await response.aread()).decode(errors="replace"))
+    limits = ["max_tokens", "max_completion_tokens"]
+    if "api.openai.com" in connection.base_url:
+        limits.reverse()
+    async with contextlib.AsyncExitStack() as stack:
+        for limit in limits:
+            response = await stack.enter_async_context(
+                client.stream(
+                    "POST",
+                    f"{connection.base_url}/chat/completions",
+                    headers=headers,
+                    json=openai_body(request, connection, limit),
+                )
+            )
+            if response.status_code == 200:
+                break
+            body = (await response.aread()).decode(errors="replace")
+            other = limits[1] if limit == limits[0] else ""
+            if not (response.status_code == 400 and other and f"'{limit}'" in body and other in body):
+                raise error_for_status(response.status_code, body)
+            # The service named the other length cap: ask again with it.
         async for _, data in sse_events(response):
             if data == "[DONE]":
                 break
