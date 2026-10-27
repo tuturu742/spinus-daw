@@ -389,6 +389,18 @@ def serve(worker: Worker, requests: BinaryIO, replies: BinaryIO) -> None:
             send({"id": number, "error": str(error) or type(error).__name__})
 
 
+def lower_priority() -> None:
+    if sys.platform == "win32":
+        import ctypes
+
+        below_normal = 0x00004000
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined,unused-ignore]
+        kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), below_normal)
+        return
+    with contextlib.suppress(OSError):
+        os.nice(10)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="spinus-compute-worker")
     parser.add_argument("--device", choices=("auto", "cpu"), default="auto")
@@ -399,8 +411,7 @@ def main() -> None:
     replies = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)
     sys.stdout = sys.stderr
-    with contextlib.suppress(OSError):
-        os.nice(10)  # below the audio engine and the user interface
+    lower_priority()  # below the audio engine and the user interface
     try:
         worker = Worker(args.device, args.threads)
     except Exception as error:

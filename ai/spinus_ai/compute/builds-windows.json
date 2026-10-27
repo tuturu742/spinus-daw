@@ -1,0 +1,50 @@
+{
+ "python": "3.12",
+ "pypi": "https://pypi.org/simple",
+ "builds": [
+  {
+   "id": "cpu",
+   "vendor": "cpu",
+   "label": "CPU only",
+   "torch": "torch==2.14.0+cpu",
+   "index": "https://download.pytorch.org/whl/cpu",
+   "download": 173023831,
+   "disk": 649900638,
+   "tested": true,
+   "locks": "locks/windows"
+  },
+  {
+   "id": "cuda-13",
+   "vendor": "nvidia",
+   "label": "Nvidia (CUDA 13)",
+   "torch": "torch==2.14.0+cu130",
+   "index": "https://download.pytorch.org/whl/cu130",
+   "download": 2041028532,
+   "disk": 3200349561,
+   "tested": false,
+   "locks": "locks/windows"
+  },
+  {
+   "id": "cuda-12",
+   "vendor": "nvidia",
+   "label": "Nvidia (CUDA 12, older cards and drivers)",
+   "torch": "torch==2.14.0+cu126",
+   "index": "https://download.pytorch.org/whl/cu126",
+   "download": 2652992536,
+   "disk": 4371944880,
+   "tested": false,
+   "locks": "locks/windows"
+  },
+  {
+   "id": "xpu",
+   "vendor": "intel",
+   "label": "Intel (XPU)",
+   "torch": "torch==2.14.0+xpu",
+   "index": "https://download.pytorch.org/whl/xpu",
+   "download": 1512258438,
+   "disk": 4115970992,
+   "tested": false,
+   "locks": "locks/windows"
+  }
+ ]
+}

@@ -1,20 +1,23 @@
 """The PyTorch builds the analysis engine can install, and which one suits this computer.
 
 builds.json and locks/ are written by tools/compute-locks.py: every build pins torch and its other
-packages by hash, for Python 3.12 on x86-64 Linux.
+packages by hash, for Python 3.12 on x86-64 Linux; builds-windows.json and locks/windows/ the same for
+Windows (without AMD's builds).
 """
 
 from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .devices import INTEL_XPU_PREFIXES, Gpu
+from .devices import AMD_ON_WINDOWS, INTEL_XPU_PREFIXES, Gpu
 
 HERE = Path(__file__).resolve().parent
+CATALOG = HERE / ("builds-windows.json" if sys.platform == "win32" else "builds.json")
 
 # Nvidia: CUDA 13 needs driver 580 and a Turing or newer card (compute capability 7.5); CUDA 12.6 runs
 # on driver 525 and cards from Maxwell (5.0) to Hopper, but not on Blackwell (12.0).
@@ -32,10 +35,11 @@ class Build:
     disk: int  # bytes once installed
     tested: bool
     target: str = ""  # AMD: the GPU target the build is for
+    locks: str = "locks"  # the lock's folder in compute/
 
     @property
     def lock(self) -> Path:
-        return HERE / "locks" / f"{self.id}.txt"
+        return HERE / self.locks / f"{self.id}.txt"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -55,7 +59,7 @@ class Catalog:
     builds: tuple[Build, ...]
 
     @staticmethod
-    def load(file: Path = HERE / "builds.json") -> Catalog:
+    def load(file: Path = CATALOG) -> Catalog:
         data = json.loads(file.read_text(encoding="utf-8"))
         fields = Build.__dataclass_fields__
         return Catalog(
@@ -110,8 +114,8 @@ def gpu_build(gpu: Gpu, catalog: Catalog) -> tuple[str, str]:
     if gpu.vendor == "nvidia":
         build, reason = nvidia_build(gpu)
     elif gpu.vendor == "amd":
-        build = f"rocm-{gpu.target}"
-        reason = f"AMD's PyTorch has no build for this GPU ({gpu.target})."
+        build = f"rocm-{gpu.target}" if gpu.target else ""
+        reason = f"AMD's PyTorch has no build for this GPU ({gpu.target})." if gpu.target else AMD_ON_WINDOWS
     else:
         supported = gpu.target.startswith(INTEL_XPU_PREFIXES)
         build, reason = ("xpu", "") if supported else ("", "PyTorch does not support this Intel GPU.")

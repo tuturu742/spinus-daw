@@ -223,7 +223,12 @@ void AnalysisEnginePage::show (const juce::var& status)
     folderText.setText ("Kept in " + status["folder"].toString() + ", shared by all projects.",
                         juce::dontSendNotification);
     if (! hasUv)
+#if JUCE_WINDOWS
+        statusText.setText ("Installing needs the uv tool, which comes with Spinus: try installing Spinus again.",
+                            juce::dontSendNotification);
+#else
         statusText.setText ("Installing needs the uv tool: sudo pacman -S uv", juce::dontSendNotification);
+#endif
 
     // Reopened while an installation goes on: follow it.
     if (job.isEmpty() && status["installJob"].toString().isNotEmpty())

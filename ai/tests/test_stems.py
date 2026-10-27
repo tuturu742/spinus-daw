@@ -96,6 +96,39 @@ async def test_model_files_are_downloaded_checked_and_removed(tmp_path: Path) ->
     assert not store.folder(model).exists()
 
 
+async def test_a_server_error_or_dropped_connection_is_tried_again(tmp_path: Path) -> None:
+    contents = {"x.safetensors": b"\x00" * 3000}
+    model = small_model(contents)
+    answers = ["500", "drop", "ok"]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        answer = answers.pop(0) if answers else "404"
+        if answer == "drop":
+            raise httpx.ReadError("connection reset")
+        return httpx.Response(200 if answer == "ok" else int(answer), content=contents["x.safetensors"])
+
+    store = WeightStore(tmp_path / "analysis", retry_waits=(0, 0, 0))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await store.download(client, model, _no_progress)
+        assert store.is_ready(model)
+
+        # Not found is not tried again; nor is a server that keeps failing, after the last wait.
+        store.remove(model)
+        with pytest.raises(RuntimeError, match=r"\(404\)"):
+            await store.download(client, model, _no_progress)
+        answers[:] = ["503"] * 4
+        with pytest.raises(
+            RuntimeError, match=r"its authors' server \(huggingface.co\) isn't answering \(server error 503\)"
+        ):
+            await store.download(client, model, _no_progress)
+        assert answers == []
+    assert not store.folder(model).exists()
+
+
+async def _no_progress(done: int, total: int) -> None:
+    pass
+
+
 def test_the_demucs_models_are_pinned() -> None:
     for model in weights.MODELS:
         assert model.license in ("MIT", "Apache-2.0")  # AGPLv3-compatible, not non-commercial (AGENTS rule 5)

@@ -5,12 +5,15 @@ For every build (CPU, Nvidia CUDA 13 and 12, Intel XPU, AMD TheRock per GPU targ
 ai/compute/requirements.in plus that build's torch with `uv pip compile --generate-hashes` into
 ai/spinus_ai/compute/locks/<build>.txt, and records in ai/spinus_ai/compute/builds.json how much each
 build downloads and takes on disk (read from the wheels' zip directories, without downloading them).
+With --windows it does the same for Windows into locks/windows/ and builds-windows.json: the CPU, Nvidia
+and Intel builds (AMD's Windows builds are left out: Spinus cannot tell there which one a card needs).
 
 Run it after changing a version below or requirements.in, then re-run the owner checks
 (tools/owner-checks/gpu.sh). Needs uv and internet:
 
     tools/compute-locks.py            # every build
     tools/compute-locks.py cpu rocm-gfx1151
+    tools/compute-locks.py --windows
 """
 
 from __future__ import annotations
@@ -34,7 +37,13 @@ ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = ROOT / "ai" / "compute" / "requirements.in"
 OUT = ROOT / "ai" / "spinus_ai" / "compute"
 PYTHON = "3.12"
-PLATFORM = "x86_64-manylinux_2_28"
+# Per system: uv's platform, the wheels' platform tag, and where the catalog and the locks go.
+SYSTEMS: dict[str, dict[str, Any]] = {
+    "linux": {"platform": "x86_64-manylinux_2_28", "wheel": "x86_64", "catalog": "builds.json", "locks": "locks"},
+    "windows": {"platform": "x86_64-pc-windows-msvc", "wheel": "win_amd64", "catalog": "builds-windows.json",
+                "locks": "locks/windows", "only": {"cpu", "cuda-13", "cuda-12", "xpu"}},
+}  # fmt: skip
+SYSTEM = SYSTEMS["linux"]
 PYPI = "https://pypi.org/simple"
 
 TORCH = "2.14.0"
@@ -72,7 +81,7 @@ def builds() -> list[dict[str, str]]:
             {"id": f"rocm-{target}", "vendor": "amd", "label": f"AMD ({target})",
              "torch": f"torch[device-{target}]=={TORCH}+{ROCM}", "index": THEROCK, "target": target}
         )  # fmt: skip
-    return found
+    return [b for b in found if b["id"] in SYSTEM.get("only", {b["id"]})]
 
 
 def compile_lock(build: dict[str, str], lock: Path, cache: Path) -> None:
@@ -80,8 +89,9 @@ def compile_lock(build: dict[str, str], lock: Path, cache: Path) -> None:
         wanted = Path(tmp) / "requirements.in"
         wanted.write_text(build["torch"] + "\n" + REQUIREMENTS.read_text(encoding="utf-8"), encoding="utf-8")
         subprocess.run(
-            ["uv", "pip", "compile", "-q", str(wanted), "--python-version", PYTHON, "--python-platform", PLATFORM,
-             "--generate-hashes", "--no-header", "--no-annotate", "--index-url", PYPI,
+            ["uv", "pip", "compile", "-q", str(wanted), "--python-version", PYTHON,
+             "--python-platform", SYSTEM["platform"], "--generate-hashes", "--no-header", "--no-annotate",
+             "--index-url", PYPI,
              "--extra-index-url", build["index"], "-o", str(lock)],
             check=True, env={**os.environ, "UV_CACHE_DIR": str(cache)},
         )  # fmt: skip
@@ -184,7 +194,9 @@ def compatible(filename: str) -> bool:
     if not filename.endswith(".whl"):
         return False
     tags = filename[:-4].split("-")[-3:]
-    return (tags[0] in ("py3", "py2.py3", "cp312") or tags[1] == "abi3") and (tags[2] == "any" or "x86_64" in tags[2])
+    return (tags[0] in ("py3", "py2.py3", "cp312") or tags[1] == "abi3") and (
+        tags[2] == "any" or SYSTEM["wheel"] in tags[2]
+    )
 
 
 def of_version(filename: str, name: str, version: str) -> bool:
@@ -222,13 +234,17 @@ def sizes(build: dict[str, str], lock: Path) -> tuple[int, int]:
 
 
 def main() -> None:
+    global SYSTEM
     # Stopped (kill): leave through SystemExit, so the temporary download cache is deleted.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))
     chosen = set(sys.argv[1:])
-    catalog_file = OUT / "builds.json"
+    if "--windows" in chosen:
+        chosen.discard("--windows")
+        SYSTEM = SYSTEMS["windows"]
+    catalog_file = OUT / SYSTEM["catalog"]
     old = json.loads(catalog_file.read_text(encoding="utf-8"))["builds"] if catalog_file.exists() else []
     known: dict[str, Any] = {b["id"]: b for b in old}
-    (OUT / "locks").mkdir(parents=True, exist_ok=True)
+    (OUT / SYSTEM["locks"]).mkdir(parents=True, exist_ok=True)
     # uv downloads every TheRock wheel to hash it (that index lists no hashes): keep those gigabytes out
     # of the user's uv cache.
     with tempfile.TemporaryDirectory(prefix="spinus-locks-") as cache:
@@ -238,16 +254,18 @@ def main() -> None:
             make(build, Path(cache), known, catalog_file)
     for stale in set(known) - {b["id"] for b in builds()}:
         del known[stale]
-        (OUT / "locks" / f"{stale}.txt").unlink(missing_ok=True)
+        (OUT / SYSTEM["locks"] / f"{stale}.txt").unlink(missing_ok=True)
     save(catalog_file, known)
 
 
 def make(build: dict[str, str], cache: Path, known: dict[str, Any], catalog_file: Path) -> None:
     print(f"{build['id']}:", file=sys.stderr)
-    lock = OUT / "locks" / f"{build['id']}.txt"
+    lock = OUT / SYSTEM["locks"] / f"{build['id']}.txt"
     compile_lock(build, lock, cache)
     download, disk = sizes(build, lock)
     known[build["id"]] = {**build, "download": download, "disk": disk, "tested": build["id"] in TESTED}
+    if SYSTEM["locks"] != "locks":
+        known[build["id"]]["locks"] = SYSTEM["locks"]
     save(catalog_file, known)
 
 

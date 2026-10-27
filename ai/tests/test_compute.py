@@ -20,14 +20,16 @@ from typing import Any
 import pytest
 
 from spinus_ai.compute import devices
-from spinus_ai.compute.builds import Catalog, choose
+from spinus_ai.compute.builds import HERE, Catalog, choose
 from spinus_ai.compute.devices import Gpu, gfx_name
 from spinus_ai.compute.engine import Engine, EngineError
 from spinus_ai.compute.environments import MARKER, Environments, InstallError, lock_hash
 from spinus_ai.connections import MemoryKeyStore
 from spinus_ai.service import Service
 
-CATALOG = Catalog.load()
+CATALOG = Catalog.load(HERE / "builds.json")  # Linux's builds, on any system
+WINDOWS_CATALOG = Catalog.load(HERE / "builds-windows.json")
+POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="the stand-ins are POSIX shell scripts")
 FAKES = Path(__file__).resolve().parent / "fakes"  # a stand-in uv, and a stand-in torch (NumPy underneath)
 PCI_IDS = """\
 1002  Advanced Micro Devices, Inc. [AMD/ATI]
@@ -97,12 +99,41 @@ def test_amd_and_intel_gpus_are_found_and_named(tmp_path: Path) -> None:
     assert not found[1].notes and "does not support" in found[2].notes[0]
 
 
+@POSIX_ONLY
 def test_nvidia_gpus_come_from_nvidia_smi_or_the_driver(tmp_path: Path) -> None:
     smi = executable(tmp_path / "nvidia-smi", "#!/bin/sh\necho 'NVIDIA GeForce RTX 4090, 8.9, 590.44.01'\n")
     assert devices.nvidia_gpus(tmp_path, str(smi)) == [Gpu("nvidia", "NVIDIA GeForce RTX 4090", "8.9", "590.44.01")]
     write(tmp_path / "proc/driver/nvidia/version", "NVRM version: NVIDIA UNIX x86_64 Kernel Module  550.120  Sat\n")
     write(tmp_path / "proc/driver/nvidia/gpus/0000:01:00.0/information", "Model: \t\t NVIDIA GeForce GTX 1080\n")
     assert devices.nvidia_gpus(tmp_path, "") == [Gpu("nvidia", "NVIDIA GeForce GTX 1080", "", "550.120")]
+
+
+def test_windows_lists_its_display_adapters() -> None:
+    adapters = [
+        ("NVIDIA GeForce RTX 4070 Laptop GPU", "PCI\\VEN_10DE&DEV_2820&SUBSYS_3A3C17AA&REV_A1\\4&1", "32.0.15.6094"),
+        ("AMD Radeon 780M Graphics", "PCI\\VEN_1002&DEV_15BF&SUBSYS_3A3C17AA&REV_C4\\4&2", "31.0.24027.1012"),
+        ("Intel(R) Arc(TM) Graphics", "PCI\\VEN_8086&DEV_7D55&SUBSYS_0B341028&REV_08\\3&1", "32.0.101.5972"),
+        ("Intel(R) Iris(R) Xe Graphics", "PCI\\VEN_8086&DEV_9A49&SUBSYS_0A8A1028&REV_01\\3&2", "31.0.101.4502"),
+        ("Microsoft Basic Display Adapter", "ROOT\\BASICDISPLAY\\0000", "10.0.22621.1"),
+    ]
+    found = devices.windows_gpus(adapters, smi="")
+    assert [(g.vendor, g.name, g.target, g.driver) for g in found] == [
+        ("nvidia", "NVIDIA GeForce RTX 4070 Laptop GPU", "", "560.94"),
+        ("amd", "AMD Radeon 780M Graphics", "", ""),
+        ("intel", "Intel(R) Arc(TM) Graphics", "7d55", ""),
+        ("intel", "Intel(R) Iris(R) Xe Graphics", "9a49", ""),
+    ]
+    assert found[1].notes == [devices.AMD_ON_WINDOWS] and not found[2].notes and found[3].notes
+    # Its driver's version is enough to pick the build; AMD's cards are not used there.
+    assert choose(found, WINDOWS_CATALOG).build == "cuda-12"  # no compute capability: CUDA 13 needs it known
+    assert choose(found[1:2], WINDOWS_CATALOG).reason == devices.AMD_ON_WINDOWS
+    assert choose(found[2:3], WINDOWS_CATALOG).build == "xpu"
+
+
+def test_windows_driver_versions_become_nvidias() -> None:
+    assert devices.nvidia_driver_from_windows("32.0.15.6094") == "560.94"
+    assert devices.nvidia_driver_from_windows("31.0.15.3623") == "536.23"
+    assert devices.nvidia_driver_from_windows("") == ""
 
 
 def test_physical_cores_count_each_core_once(tmp_path: Path) -> None:
@@ -114,18 +145,32 @@ def test_physical_cores_count_each_core_once(tmp_path: Path) -> None:
 # ---- choosing a build ------------------------------------------------------------------------------
 
 
-def test_every_build_has_a_hash_pinned_lock_with_its_torch() -> None:
-    assert CATALOG.python == "3.12"
-    ids = [b.id for b in CATALOG.builds]
-    assert {"cpu", "cuda-13", "cuda-12", "xpu", "rocm-gfx1151", "rocm-gfx1100", "rocm-gfx1201"} <= set(ids)
-    for build in CATALOG.builds:
+def check_locks(catalog: Catalog) -> None:
+    for build in catalog.builds:
         lock = build.lock.read_text(encoding="utf-8")
         version = re.search(r"==(\S+)$", build.torch)
         assert version and f"torch=={version[1]} \\" in lock, build.id
         packages = [block for block in re.split(r"\n(?=\S)", lock.strip()) if not block.startswith("#")]
         assert all("--hash=sha256:" in block for block in packages), build.id
         assert build.download > 0 and build.disk > build.download, build.id
+
+
+def test_every_build_has_a_hash_pinned_lock_with_its_torch() -> None:
+    assert CATALOG.python == "3.12"
+    ids = [b.id for b in CATALOG.builds]
+    assert {"cpu", "cuda-13", "cuda-12", "xpu", "rocm-gfx1151", "rocm-gfx1100", "rocm-gfx1201"} <= set(ids)
+    check_locks(CATALOG)
     assert {b.id for b in CATALOG.builds if b.tested} == {"cpu", "rocm-gfx1151"}
+
+
+def test_windows_has_its_own_locks_without_amds_builds() -> None:
+    assert WINDOWS_CATALOG.python == CATALOG.python
+    assert [b.id for b in WINDOWS_CATALOG.builds] == ["cpu", "cuda-13", "cuda-12", "xpu"]
+    check_locks(WINDOWS_CATALOG)
+    assert all(b.lock.parent.name == "windows" for b in WINDOWS_CATALOG.builds)
+    for build in WINDOWS_CATALOG.builds:  # the same torch as on Linux
+        linux = CATALOG.find(build.id)
+        assert linux is not None and linux.torch == build.torch, build.id
 
 
 @pytest.mark.parametrize(
@@ -161,6 +206,8 @@ def test_the_build_suits_the_gpu(gpus: list[Gpu], build: str, reason: str) -> No
 
 @pytest.fixture
 def fakes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    if sys.platform == "win32":
+        pytest.skip("the stand-in uv and python are POSIX shell scripts")
     monkeypatch.setenv("FAKE_TORCH", str(FAKES))
     monkeypatch.setenv("REAL_PYTHON", sys.executable)
     monkeypatch.setenv("FAKE_PID", str(tmp_path / "uv.pid"))
