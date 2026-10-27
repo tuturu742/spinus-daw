@@ -43,6 +43,10 @@ class AnalysisModel:
     url: str = ""  # where the files are, when not on Hugging Face
     architecture: str = "demucs"  # for stems: how the analysis engine runs it ("demucs" or "bs_roformer")
     homepage: str = ""  # where people can read about it and check its license (default: its Hugging Face page)
+    # Other addresses the authors themselves give for the same files, tried in order when the first one
+    # fails ("{name}" is the file's name). Never copies kept by anyone else: Spinus doesn't redistribute
+    # other people's models.
+    alternatives: tuple[str, ...] = ()
 
     @property
     def page(self) -> str:
@@ -53,6 +57,17 @@ class AnalysisModel:
         if self.url:
             return f"{self.url}/{name}"
         return f"https://huggingface.co/{self.repo}/resolve/{self.revision}/{name}"
+
+    def file_urls(self, f: WeightFile, link: str = "") -> list[str]:
+        """Where to fetch a file from, in order. `link` is one the user pasted (the authors gave a new one):
+        the file itself for a one-file model, or the folder its files are in."""
+        if link:
+            link = link.strip()
+            name = f.remote or f.path
+            if len(self.files) == 1 and not link.endswith("/"):
+                return [link]
+            return [f"{link.rstrip('/')}/{name}"]
+        return [self.file_url(f), *(a.format(name=f.remote or f.path) for a in self.alternatives)]
 
     @property
     def size(self) -> int:
@@ -157,6 +172,9 @@ MODELS: tuple[AnalysisModel, ...] = (
         kind="beats",
         url="https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp",
         homepage="https://github.com/CPJKU/beat_this",
+        # One of the authors (Jan Schlüter, JKU Linz) keeps the checkpoints on his own site too, given in
+        # github.com/CPJKU/beat_this/issues/20 while the university's server was down.
+        alternatives=("https://f0k.de/pubs/2024_ismir/beat_this-{name}",),
     ),
     AnalysisModel(
         "beat_this_small0",
@@ -169,6 +187,9 @@ MODELS: tuple[AnalysisModel, ...] = (
         kind="beats",
         url="https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp",
         homepage="https://github.com/CPJKU/beat_this",
+        # One of the authors (Jan Schlüter, JKU Linz) keeps the checkpoints on his own site too, given in
+        # github.com/CPJKU/beat_this/issues/20 while the university's server was down.
+        alternatives=("https://f0k.de/pubs/2024_ismir/beat_this-{name}",),
     ),
     # Basic Pitch (Spotify; Apache-2.0), the ONNX model of release 0.4.0, run by the AI service itself with
     # ONNX Runtime (spinus_ai/transcribe.py); no PyTorch needed.
@@ -218,12 +239,17 @@ def find_model(model_id: str) -> AnalysisModel | None:
 RETRY_WAITS = (2.0, 5.0, 15.0)
 
 
-def unreachable(model: AnalysisModel, url: str, why: str) -> str:
-    """Spinus doesn't keep copies of other people's models: each comes from its authors' own server, and
-    when that one is down, the user is told whose it is and to try later."""
+ANOTHER_LINK = (
+    " If its authors give another link for it, use Download from another link... (in the Analyzer, under Sources)."
+)
+
+
+def unreachable(model: AnalysisModel, hosts: str, why: str) -> str:
+    """Spinus doesn't keep copies of other people's models: each comes from its authors' own servers, and
+    when those are down, the user is told whose they are and to try later (or a link the authors give)."""
     return (
-        f"{model.name} can't be downloaded right now: its authors' server ({urlsplit(url).hostname}) isn't "
-        f"answering ({why}). This is on their side, not Spinus's; please try again later."
+        f"{model.name} can't be downloaded right now: its authors' server ({hosts}) isn't answering ({why})."
+        " This is on their side, not Spinus's; please try again later." + ANOTHER_LINK
     )
 
 
@@ -244,45 +270,88 @@ class WeightStore:
     def describe(self) -> list[dict[str, Any]]:
         return [{**m.to_json(), "downloaded": self.is_ready(m), "folder": str(self.folder(m))} for m in MODELS]
 
-    async def download(self, client: httpx.AsyncClient, model: AnalysisModel, progress: Progress) -> None:
-        """Every file, checked by SHA-256; nothing is kept if it fails or is stopped."""
+    async def download(
+        self, client: httpx.AsyncClient, model: AnalysisModel, progress: Progress, link: str = ""
+    ) -> None:
+        """Every file, checked by SHA-256, from the first of its addresses that gives it (`link`: only the one
+        the user pasted); nothing is kept if it fails or is stopped."""
         folder = self.folder(model)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / ".partial").touch()
         done = 0
         try:
             for f in model.files:
-                url = model.file_url(f)
                 start = done
-                for wait in (*self.retry_waits, None):
-                    digest = hashlib.sha256()
-                    done = start
-                    try:
-                        async with client.stream("GET", url, follow_redirects=True) as response:
-                            if response.status_code != 200:
-                                if not (response.status_code >= 500 or response.status_code == 429):
-                                    raise RuntimeError(f"Could not download {f.path} ({response.status_code}).")
-                                if wait is None:
-                                    raise RuntimeError(unreachable(model, url, f"server error {response.status_code}"))
-                                await asyncio.sleep(wait)
-                                continue
-                            with (folder / f.path).open("wb") as out:
-                                async for chunk in response.aiter_bytes(1 << 20):
-                                    out.write(chunk)
-                                    digest.update(chunk)
-                                    done += len(chunk)
-                                    await progress(done, max(model.size, done))
+                urls = model.file_urls(f, link)
+                failures: list[str] = []
+                for url in urls:
+                    failure = await self.fetch(client, model, f, url, folder, start, progress)
+                    if failure is None:
                         break
-                    except httpx.TransportError as error:
-                        if wait is None:
-                            raise RuntimeError(unreachable(model, url, type(error).__name__)) from error
-                        await asyncio.sleep(wait)
-                if digest.hexdigest() != f.sha256:
-                    raise RuntimeError(f"{f.path} did not match its checksum: download it again.")
+                    failures.append(failure)
+                else:
+                    raise RuntimeError(self.explain(model, f, urls, failures, link))
+                done = start + f.size
             (folder / ".partial").unlink()
         except BaseException:
             shutil.rmtree(folder, ignore_errors=True)
             raise
+
+    async def fetch(
+        self,
+        client: httpx.AsyncClient,
+        model: AnalysisModel,
+        f: WeightFile,
+        url: str,
+        folder: Path,
+        start: int,
+        progress: Progress,
+    ) -> str | None:
+        """One file from one address, tried again after a server error or a dropped connection. None when
+        it arrived whole; else why not: "busy: ...", "missing: <status>" or "checksum"."""
+        why = ""
+        for wait in (*self.retry_waits, None):
+            digest = hashlib.sha256()
+            done = start
+            try:
+                async with client.stream("GET", url, follow_redirects=True) as response:
+                    if response.status_code != 200:
+                        if not (response.status_code >= 500 or response.status_code == 429):
+                            return f"missing: {response.status_code}"
+                        why = f"busy: server error {response.status_code}"
+                    else:
+                        with (folder / f.path).open("wb") as out:
+                            async for chunk in response.aiter_bytes(1 << 20):
+                                out.write(chunk)
+                                digest.update(chunk)
+                                done += len(chunk)
+                                await progress(done, max(model.size, done))
+                        return None if digest.hexdigest() == f.sha256 else "checksum"
+            except httpx.TransportError as error:
+                why = f"busy: {type(error).__name__}"
+            if wait is not None:
+                await asyncio.sleep(wait)
+        return why
+
+    @staticmethod
+    def explain(model: AnalysisModel, f: WeightFile, urls: list[str], failures: list[str], link: str) -> str:
+        if link:
+            failure = failures[-1]
+            if failure == "checksum":
+                return (
+                    f"The file at that link isn't {model.name}: it doesn't match the model's checksum, so "
+                    "Spinus didn't keep it."
+                )
+            if failure.startswith("missing"):
+                return f"There is no {f.remote or f.path} at that link ({failure.split(': ')[1]})."
+            return f"That link isn't answering ({failure.split(': ', 1)[1]}). Please try again later."
+        if all(x.startswith("busy") for x in failures):
+            hosts = ", ".join(dict.fromkeys(urlsplit(u).hostname or u for u in urls))
+            return unreachable(model, hosts, failures[0].split(": ", 1)[1])
+        if "checksum" in failures:
+            return f"{f.path} did not match its checksum: download it again."
+        status = next(x for x in failures if x.startswith("missing")).split(": ")[1]
+        return f"Could not download {f.path} ({status})." + ANOTHER_LINK
 
     def remove(self, model: AnalysisModel) -> None:
         shutil.rmtree(self.folder(model), ignore_errors=True)
