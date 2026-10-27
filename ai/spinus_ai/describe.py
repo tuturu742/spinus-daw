@@ -31,6 +31,7 @@ from .assistant import NoConnection, Say, complete_with_fallback
 from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
 from .routing import Routing
+from .songwriter import ROLES
 from .style import SUMMARY_VERSION
 from .usage import UsageLog
 
@@ -992,6 +993,20 @@ READ_DESCRIPTION = Tool(
                 "additionalProperties": {"type": "string"},
             },
             "without": {"type": "array", "items": {"type": "string", "enum": ["drums", "lead"]}},
+            "parts": {
+                "type": "array",
+                "description": "Every part the description asks for, in the order written (the drums as one part); "
+                "none it says to leave out",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "role": {"type": "string", "enum": list(ROLES)},
+                        "name": {"type": "string", "description": "A short name, e.g. 'Fuzz guitar'"},
+                        "sound": {"type": "string", "description": "A word to look for in a sound's name"},
+                    },
+                    "required": ["role"],
+                },
+            },
         },
         "required": ["genre"],
     },
@@ -1029,7 +1044,31 @@ def check_reading(answer: Any) -> Reading | None:
         reading.without = [p for p in ("drums", "lead") if p in without]
     if not genre_of(reading).drums and "drums" not in reading.without:
         reading.without.append("drums")
+    reading.parts = checked_parts(answer.get("parts"), reading.without)
+    for part in reading.parts:
+        if part["sound"]:
+            reading.sounds.setdefault(part["role"], part["sound"])
     return reading
+
+
+def checked_parts(parts: Any, without: list[str]) -> list[dict[str, str]]:
+    """The AI's parts that are songwriter roles, each name once, none of the parts left out (no lead: no lead or
+    counter-melody either)."""
+    left_out = {"drums": ("drums", "percussion"), "lead": ("lead", "counter")}
+    checked: list[dict[str, str]] = []
+    for part in parts[:16] if isinstance(parts, list) else []:
+        if not isinstance(part, dict) or part.get("role") not in ROLES:
+            continue
+        role = str(part["role"])
+        if any(role in left_out[w] for w in without if w in left_out):
+            continue
+        name = str(part.get("name") or "").strip()[:32] or ROLES[role][0]
+        if any(c["name"].lower() == name.lower() for c in checked):
+            continue
+        sound = str(part.get("sound") or "").strip().lower()
+        sound = sound if len(sound) <= 24 else ""
+        checked.append({"role": role, "name": name, "sound": sound})
+    return checked
 
 
 async def read_with_ai(
@@ -1064,6 +1103,8 @@ async def read_with_ai(
     usage_log.add(routes[index].connection.id, "patterns", completion.usage)
     for use in completion.tool_uses:
         if use.name == "read_description" and (reading := check_reading(use.input)) is not None:
+            if not reading.parts:  # the parts the words name, as Spinus's own reading finds them
+                reading.parts = checked_parts(read(text).parts, reading.without)
             if base is not None:
                 return with_references(reading, text, generated, base, completion.model)
             return to_summary(reading, text, completion.model)

@@ -220,6 +220,40 @@ async def test_the_service_reads_offline_by_default_and_with_the_ai_when_asked(t
             await service.handle("ai.v1.song.describe", bad, no_notify)
 
 
+def test_the_ai_names_the_parts() -> None:
+    reading = describe.check_reading(
+        {
+            "genre": "shoegaze",
+            "without": ["lead"],
+            "parts": [
+                {"role": "rhythm-guitar", "name": "Fuzz guitar", "sound": "Fuzz"},
+                {"role": "rhythm-guitar", "name": "fuzz guitar"},  # the same name: once
+                {"role": "bass"},
+                {"role": "lead", "name": "Synth lead"},  # left out
+                {"role": "kazoo"},
+                "drums",
+            ],
+        }
+    )
+    assert reading is not None
+    assert reading.parts == [
+        {"role": "rhythm-guitar", "name": "Fuzz guitar", "sound": "fuzz"},
+        {"role": "bass", "name": "Bass", "sound": ""},
+    ]
+    assert reading.sounds["rhythm-guitar"] == "fuzz"
+
+
+async def test_without_parts_from_the_ai_the_words_name_them(tmp_path: Path) -> None:
+    sent: list[dict[str, Any]] = []
+    service = ai_service(tmp_path, {"genre": "shoegaze"}, sent)
+    await service.handle(
+        "ai.v1.connections.save", {"name": "Claude", "provider": "anthropic", "key": "sk-test"}, no_notify
+    )
+    read = await run_job(service, "ai.v1.song.describe", {"text": "dreamy guitars and bass", "ai": True})
+    assert [p["role"] for p in read["described"]["parts"]] == ["rhythm-guitar", "bass"]
+    assert "parts" in sent[0]["tools"][0]["input_schema"]["properties"]
+
+
 async def test_an_unusable_ai_answer_leaves_the_rules_reading(tmp_path: Path) -> None:
     sent: list[dict[str, Any]] = []
     service = ai_service(tmp_path, {"genre": "polka"}, sent)

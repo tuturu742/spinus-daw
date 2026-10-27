@@ -169,7 +169,9 @@ If something is missing or wrong, change the words and **Read** again. What it u
 
 **Let the AI read it** (off at first): with an AI connection set up in Options › AI, the AI reads the
 description instead. It answers in the same terms, choosing from the same genres, and Spinus checks its
-answer. If the AI isn't reachable or answers something unusable, Spinus's own reading stays, and the page
+answer. It also names the parts the description asks for ("a wall of fuzzy guitars" becomes a Fuzz guitar
+part), which start step 3; when it names none, the parts come from the instruments your words name. If the
+AI isn't reachable or answers something unusable, Spinus's own reading stays, and the page
 says so. This sends your description, and nothing else, to your AI provider.
 
 Then go on to step 3, [Parts](#sounds-for-each-part), and step 4, [Write a song](#write-a-song), which
