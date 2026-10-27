@@ -12,7 +12,6 @@ import asyncio
 import math
 import os
 import random
-import re
 import struct
 from pathlib import Path
 from typing import Any
@@ -104,7 +103,7 @@ async def test_the_track_creator_runs_on_the_real_engine(tmp_path: Path) -> None
             except AssertionError as error:
                 # The models come from their authors' servers (Beat This! from its university's): when one
                 # keeps answering with a server error, that is their outage, not Spinus's.
-                if re.search(r"Could not download .* \(5\d\d\)", str(error)):
+                if "its authors' server" in str(error):
                     pytest.skip(f"{model}'s server is down: {error}")
                 raise
 

@@ -109,7 +109,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   work on Windows. The Windows installer brings the `uv` tool it needs. See
   [the analysis engine](docs/user/analysis-engine.md#on-windows).
 - **Model downloads try again** after a server error or a dropped connection (three more tries, a few
-  seconds apart), instead of failing at the first hiccup.
+  seconds apart), instead of failing at the first hiccup. If the model's own server is still down, Spinus
+  says so ("its authors' server isn't answering... please try again later"): each model comes only from
+  its authors.
 
 ## 0.1.0-alpha.2 (2026-10-26)
 

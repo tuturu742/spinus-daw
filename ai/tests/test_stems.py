@@ -117,7 +117,9 @@ async def test_a_server_error_or_dropped_connection_is_tried_again(tmp_path: Pat
         with pytest.raises(RuntimeError, match=r"\(404\)"):
             await store.download(client, model, _no_progress)
         answers[:] = ["503"] * 4
-        with pytest.raises(RuntimeError, match=r"\(503\)"):
+        with pytest.raises(
+            RuntimeError, match=r"its authors' server \(huggingface.co\) isn't answering \(server error 503\)"
+        ):
             await store.download(client, model, _no_progress)
         assert answers == []
     assert not store.folder(model).exists()
