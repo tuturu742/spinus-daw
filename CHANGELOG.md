@@ -108,6 +108,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   AMD cards use the CPU there for now), so the Analyzer's stems, tempo and key, and the Track creator,
   work on Windows. The Windows installer brings the `uv` tool it needs. See
   [the analysis engine](docs/user/analysis-engine.md#on-windows).
+- **Model downloads try again** after a server error or a dropped connection (three more tries, a few
+  seconds apart), instead of failing at the first hiccup.
 
 ## 0.1.0-alpha.2 (2026-10-26)
 
