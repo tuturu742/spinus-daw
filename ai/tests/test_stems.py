@@ -8,6 +8,7 @@ environment's python with demucs) and SPINUS_TEST_DEMUCS_FOLDER (a folder with h
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import json
 import math
@@ -112,17 +113,53 @@ async def test_a_server_error_or_dropped_connection_is_tried_again(tmp_path: Pat
         await store.download(client, model, _no_progress)
         assert store.is_ready(model)
 
-        # Not found is not tried again; nor is a server that keeps failing, after the last wait.
+        # Not found is not tried again, and the message offers another link; a server that keeps failing
+        # is the authors' outage, after the last wait.
         store.remove(model)
-        with pytest.raises(RuntimeError, match=r"\(404\)"):
+        with pytest.raises(RuntimeError, match=r"\(404\)\. If its authors give another link"):
             await store.download(client, model, _no_progress)
         answers[:] = ["503"] * 4
-        with pytest.raises(
-            RuntimeError, match=r"its authors' server \(huggingface.co\) isn't answering \(server error 503\)"
-        ):
+        with pytest.raises(RuntimeError, match=r"its authors' server \(huggingface.co\) isn't answering"):
             await store.download(client, model, _no_progress)
         assert answers == []
     assert not store.folder(model).exists()
+
+
+async def test_a_link_the_user_pastes(tmp_path: Path) -> None:
+    data = b"\x07" * 2000
+    wrong = b"\x08" * 2000
+    model = dataclasses.replace(small_model({"m.ckpt": data}), url="https://uni.example/share")
+    asked: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        if request.url.host == "uni.example":
+            return httpx.Response(500, text="MaxDelayReached")
+        if request.url.path.endswith("wrong.ckpt"):
+            return httpx.Response(200, content=wrong)
+        if request.url.path.endswith("gone.ckpt"):
+            return httpx.Response(404)
+        return httpx.Response(200, content=data)
+
+    store = WeightStore(tmp_path / "analysis", retry_waits=(0,))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        # The model's own server is down: no other address is guessed; the way to paste one is offered.
+        with pytest.raises(RuntimeError, match=r"server \(uni.example\).*another link"):
+            await store.download(client, model, _no_progress)
+        assert all(url.startswith("https://uni.example/") for url in asked)
+
+        # A link the authors gave: used alone; a file that isn't the model is refused.
+        asked.clear()
+        await store.download(client, model, _no_progress, "https://new.example/m.ckpt")
+        assert store.is_ready(model) and asked == ["https://new.example/m.ckpt"]
+        store.remove(model)
+        with pytest.raises(RuntimeError, match="doesn't match the model's checksum"):
+            await store.download(client, model, _no_progress, "https://new.example/wrong.ckpt")
+        with pytest.raises(RuntimeError, match=r"no m.ckpt at that link \(404\)"):
+            await store.download(client, model, _no_progress, "https://new.example/gone.ckpt")
+        await store.download(client, model, _no_progress, "https://new.example/folder/")  # a folder: + the name
+        assert asked[-1] == "https://new.example/folder/m.ckpt"
+    assert store.is_ready(model)
 
 
 async def _no_progress(done: int, total: int) -> None:

@@ -62,6 +62,9 @@ public:
     bool analyze (const juce::File& song);
     /** Downloads the model files the analysis needs (the user agreed to their size). */
     void downloadModels();
+    /** Downloads one model from a link the user pasted (its authors gave a new one, or its usual server is
+        down); its files must still match the model's checksums. */
+    void downloadFromLink (const juce::String& modelId, const juce::String& link);
     void showSources();
     /** separate()'s choice for many instruments (up to 53 kinds; only those heard are kept). */
     static constexpr int manyInstruments = 53;

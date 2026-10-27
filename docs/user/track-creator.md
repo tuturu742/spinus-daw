@@ -33,7 +33,8 @@ computer; nothing is sent anywhere.
 3. **Model files**, downloaded once: Beat This! (8 MB on the CPU, 81 MB with a graphics card), Demucs for
    4 stems (84 MB) and Basic Pitch (230 KB). The Track creator says what is missing and how big it is;
    click **Download** to agree, and it carries on. The Analyzer's **Sources and licences...** says where
-   each comes from and under which licence.
+   each comes from and under which licence, and can download one from another link its authors give (the
+   models are shared, so the Track creator then has it too).
 
 ## Adding songs
 
