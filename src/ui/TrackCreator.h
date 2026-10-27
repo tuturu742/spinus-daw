@@ -7,6 +7,7 @@
 #include "session/Session.h"
 #include "session/SoundIndex.h"
 #include "MessageLabel.h"
+#include "PartSoundsPanel.h"
 
 #include <memory>
 #include <vector>
@@ -124,7 +125,7 @@ public:
 
     /** The Browser's sample folders (the main window sets this). */
     std::function<juce::Array<juce::File>()> getSampleFolders;
-    /** The instruments to measure: by default the Browser's (findSoundSources). Tests set their own. */
+    /** The instruments to measure: by default getIndexedSoundSources(). Tests set their own. */
     std::function<std::vector<SoundSource>()> getSoundSources;
     /** Where the index is kept (SoundIndex::getDefaultFolder()) and how the helper runs (tests). */
     void setSoundIndexFolder (const juce::File&);
@@ -141,7 +142,26 @@ public:
     /** Opens the list of indexed sounds, with search. */
     void showSounds();
 
-    juce::Rectangle<int> getDefaultBounds() const override { return { 100, 70, 680, 680 }; }
+    /** Which installed plugins (not Spinus's own or the downloaded ones, always measured) the sound index measures
+        too: by their index key, chosen by the user (none at first), remembered beside the index. */
+    juce::StringArray getIncludedPlugins() const;
+    void setIncludedPlugins (const juce::StringArray& keys);
+    /** Every instrument the Browser lists, and those the index measures: Spinus's own, the downloaded ones and
+        the installed plugins the user ticked. */
+    std::vector<SoundSource> getAllSoundSources() const;
+    std::vector<SoundSource> getIndexedSoundSources() const;
+    /** Opens the menu of installed plugins to tick. */
+    void choosePlugins();
+
+    //==============================================================================
+    // Sounds for each part (milestone 3).
+
+    /** Shows the songs and their style (false) or the sounds for each part (true). */
+    void showPartSounds (bool);
+    bool isShowingPartSounds() const noexcept { return showingSounds; }
+    PartSoundsPanel& getPartSounds() noexcept { return *partSounds; }
+
+    juce::Rectangle<int> getDefaultBounds() const override { return { 100, 70, 720, 720 }; }
 
     bool isInterestedInFileDrag (const juce::StringArray&) override;
     void filesDropped (const juce::StringArray&, int x, int y) override;
@@ -227,7 +247,10 @@ private:
     juce::Label soundsTitle;
     MessageLabel soundsStatus;
     juce::TextButton updateSoundsButton { "Update sound index" }, stopSoundsButton { "Stop" },
-        showSoundsButton { "Show sounds..." };
+        showSoundsButton { "Show sounds..." }, pluginsButton { "Your plugins..." };
+    juce::TextButton styleTab { "Songs and style" }, soundsTab { "Sounds for each part" };
+    bool showingSounds = false;
+    std::unique_ptr<PartSoundsPanel> partSounds;
 };
 
 } // namespace spinus::ui

@@ -1,8 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AnalysisFakes.h"
+#include "ai/AnalysisJobs.h"
+#include "ai/Proposal.h"
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
+#include "session/PartSounds.h"
 #include "session/SongPreparation.h"
 #include "session/SoundDescriptors.h"
 #include "ui/AnalysisLibraryView.h"
@@ -301,7 +304,7 @@ TEST_CASE ("Track creator screenshot for the manual", "[.screenshot][manual]")
     SpinusLookAndFeel look (Theme::dark());
     TrackCreator creator (a.session, &a.service);
     creator.setLookAndFeel (&look);
-    creator.setSize (680, 680);
+    creator.setSize (720, 720);
     // A sound index as a computer with Surge XT and a few sample packs might have.
     const auto sounds = a.t.root.getChildFile ("sounds");
     sounds.createDirectory();
@@ -477,7 +480,7 @@ TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATC
     REQUIRE (out.createDirectory().wasOk());
 
     EngineHost host { { .openAudioDevice = false } };
-    Session session (host.getEngine());
+    Session session (host.getEngine(), makeDevices (host.getEngine())); // Spinus's own and the built Surge XT
     ai::AiService service (settings);
     service.setEnabled (true);
     const auto python = ai::AiService::getDefaultModelsFolder().getSiblingFile ("python");
@@ -610,5 +613,417 @@ TEST_CASE ("Track creator: the sound index is updated in the background, listed 
     REQUIRE (saved.deleteSoundIndex());
     CHECK_FALSE (folder.exists());
     CHECK (saved.getSoundIndexText().contains ("none yet"));
+}
+
+namespace
+{
+SoundSource partTestSynth()
+{
+    SoundSource synth;
+    synth.key = "plugin-test-synth";
+    synth.name = synth.pluginName = "Spinus Test Synth";
+    synth.format = "CLAP";
+    synth.badge = "CLAP";
+    synth.file = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("test-synth.clap").getFullPathName();
+    synth.fingerprint = "1";
+    return synth;
+}
+
+void writeMono (const juce::File& file, const juce::AudioBuffer<float>& audio)
+{
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+    std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
+    auto writer = juce::WavAudioFormat().createWriterFor (
+        stream, juce::AudioFormatWriterOptions().withSampleRate (48000).withNumChannels (1).withBitsPerSample (24));
+    REQUIRE (writer != nullptr);
+    writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+}
+
+juce::AudioBuffer<float> drumSound (const juce::String& kind)
+{
+    juce::AudioBuffer<float> b (1, kind == "kick" ? 20000 : 9000);
+    juce::Random random (kind.hashCode());
+    double phase = 0.0;
+    for (int i = 0; i < b.getNumSamples(); ++i)
+    {
+        const auto t = i / 48000.0;
+        float v = 0.0f;
+        if (kind == "kick")
+        {
+            phase += (50.0 + 100.0 * std::exp (-t / 0.03)) / 48000.0;
+            v = (float)(0.9 * std::sin (2.0 * M_PI * phase) * std::exp (-t / 0.12));
+        }
+        else
+            v = (random.nextFloat() * 2.0f - 1.0f) * (float)std::exp (-t / (kind == "snare" ? 0.06 : 0.015)) *
+                (kind == "snare" ? 0.7f : 0.4f);
+        b.setSample (0, i, v);
+    }
+    return b;
+}
+
+juce::var notesJson (const std::vector<std::tuple<int, double, double>>& notes)
+{
+    juce::Array<juce::var> list;
+    for (const auto& [pitch, start, end] : notes)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("pitch", pitch);
+        o->setProperty ("start", start);
+        o->setProperty ("end", end);
+        o->setProperty ("velocity", 0.8);
+        list.add (juce::var (o));
+    }
+    return list;
+}
+} // namespace
+
+namespace
+{
+/** A sound index (the test synth's presets, drum samples) and a reference song in the analysis library whose
+    bass the test synth's Dark Square plays, with its notes and drum hits; the context the panel gets. */
+PartSoundsPanel::Context makePartSoundsContext (Analysis& a)
+{
+    SoundIndexer::Options helper;
+    helper.helper = juce::File (SPINUS_PLUGIN_SCANNER);
+    const auto synth = partTestSynth();
+
+    // The sound index: the test synth's presets and a kick, a snare and two hats.
+    const auto samples = a.t.root.getChildFile ("Samples");
+    writeMono (samples.getChildFile ("Kicks/Kick 1.wav"), drumSound ("kick"));
+    writeMono (samples.getChildFile ("Snares/Snare 1.wav"), drumSound ("snare"));
+    writeMono (samples.getChildFile ("Hats/Hat 1.wav"), drumSound ("hat"));
+    writeMono (samples.getChildFile ("Hats/Hat 2.wav"), drumSound ("hat"));
+    const auto indexFolder = a.t.root.getChildFile ("sounds");
+    SoundIndex index (indexFolder);
+    SoundIndexer::update (index, helper, { synth }, { samples }, {}, {});
+    juce::String dark;
+    for (const auto& s : index.instruments.at (synth.key).sounds)
+        if (s["name"].toString() == "Dark Square")
+            dark = s["id"].toString();
+    REQUIRE (dark.isNotEmpty());
+
+    // A reference song in the analysis library: its bass played by Dark Square, a chord-less other part, a
+    // tune, and drums, with their notes and hits (as Basic Pitch and the drum recogniser keep them).
+    std::vector<std::tuple<int, double, double>> bass, other, vocals;
+    for (int i = 0; i < 24; ++i)
+    {
+        bass.emplace_back (i % 4 == 2 ? 43 : 36, 0.5 + i * 0.5, 0.9 + i * 0.5);
+        other.emplace_back (60 + (i % 3) * 4, 0.5 + i * 0.5, 0.8 + i * 0.5);
+        vocals.emplace_back (67 + (i % 2) * 2, 0.5 + i * 0.5, 0.95 + i * 0.5);
+    }
+    const auto made = a.t.root.getChildFile ("made");
+    auto render = [&] (const juce::String& part, const juce::String& preset,
+                       const std::vector<std::tuple<int, double, double>>& notes)
+    {
+        juce::Array<juce::var> list;
+        for (const auto& [pitch, start, end] : notes)
+        {
+            auto* o = new juce::DynamicObject();
+            o->setProperty ("note", pitch);
+            o->setProperty ("start", start);
+            o->setProperty ("length", end - start);
+            list.add (juce::var (o));
+        }
+        auto* item = new juce::DynamicObject();
+        item->setProperty ("id", part);
+        item->setProperty ("preset", preset);
+        item->setProperty ("notes", list);
+        item->setProperty ("output", made.getChildFile (part + ".wav").getFullPathName());
+        juce::String problem;
+        parts::renderInHelper (helper, synth, { juce::var (item) }, {}, problem);
+        INFO (problem);
+        REQUIRE (made.getChildFile (part + ".wav").existsAsFile());
+        return made.getChildFile (part + ".wav");
+    };
+    std::map<juce::String, juce::File> stems { { "bass", render ("bass", dark, bass) },
+                                               { "other", render ("other", {}, other) },
+                                               { "vocals", render ("vocals", {}, vocals) } };
+    juce::AudioBuffer<float> drums (1, 48000 * 14);
+    drums.clear();
+    juce::Array<juce::var> hits;
+    for (int i = 0; i < 48; ++i)
+    {
+        const auto kind = i % 4 == 0   ? juce::String ("kick")
+                          : i % 4 == 2 ? juce::String ("snare")
+                                       : juce::String ("closed_hat");
+        const auto sound = drumSound (kind == "closed_hat" ? "hat" : kind);
+        const auto at = (int)((0.5 + i * 0.25) * 48000);
+        drums.addFrom (0, at, sound, 0, 0, juce::jmin (sound.getNumSamples(), drums.getNumSamples() - at));
+        auto* h = new juce::DynamicObject();
+        h->setProperty ("time", 0.5 + i * 0.25);
+        h->setProperty ("kind", kind);
+        hits.add (juce::var (h));
+    }
+    writeMono (made.getChildFile ("drums.wav"), drums);
+    stems["drums"] = made.getChildFile ("drums.wav");
+    AnalysisLibrary library (a.t.root.getChildFile ("library"));
+    const juce::String digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    REQUIRE (library.keepStems (digest, "htdemucs", stems, [] { return false; }).wasOk());
+    library.setIn (digest, "Song.wav", "notes", "htdemucs/bass", notesJson (bass));
+    library.setIn (digest, "Song.wav", "notes", "htdemucs/other", notesJson (other));
+    library.setIn (digest, "Song.wav", "notes", "htdemucs/vocals", notesJson (vocals));
+    library.setIn (digest, "Song.wav", "drums", "htdemucs", hits);
+
+    const auto summary = juce::JSON::parse (R"({"kind": "spinus.style-summary", "tempo": {"median": 120.0},
+        "keys": [{"name": "C major", "count": 1}], "loudness": {"lufs": -10.0},
+        "parts": {"bass": {"songs": 1, "low": 36, "median": 36, "high": 43, "notesPerBar": 8, "voices": 1.0},
+                  "other": {"songs": 1, "low": 60, "median": 64, "high": 68, "notesPerBar": 8, "voices": 1.0},
+                  "vocals": {"songs": 1, "low": 67, "median": 68, "high": 69, "notesPerBar": 8, "voices": 1.0},
+                  "drums": {"songs": 1, "notesPerBar": 16}}})");
+    PartSoundsPanel::Context c;
+    c.summary = summary;
+    c.songs.push_back ({ digest, "Song" });
+    c.library = std::move (library);
+    c.indexFolder = indexFolder;
+    c.workFolder = a.t.root.getChildFile ("work");
+    c.helper = std::move (helper);
+    c.service = &a.service;
+    return c;
+}
+} // namespace
+
+TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and added in one undo step",
+           "[ui][trackcreator][sounds][parts]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    auto context = makePartSoundsContext (a);
+    Session session { a.host.getEngine(), makeDevices (a.host.getEngine()) }; // with the Drum Machine
+    PartSoundsPanel panel (session, [context] { return context; });
+    panel.setSize (700, 600);
+
+    // Without AI: chosen by the measurements alone, and it says so.
+    panel.setTune (false);
+    REQUIRE (panel.chooseSounds());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    INFO (panel.getStatusText());
+    CHECK (panel.getStatusText().contains ("AI is off"));
+    const auto& rows = panel.getRows();
+    REQUIRE (rows.size() == 4);
+    for (const auto& row : rows)
+        CHECK_FALSE (row.choices.empty());
+    CHECK (rows[0].target.part == "bass");
+    CHECK (rows[0].measured >= 10);
+    REQUIRE (rows[0].chosen() != nullptr);
+    for (const auto& c : rows[0].choices)
+        UNSCOPED_INFO (c.title() << " " << c.distance << ": " << c.reasons());
+    CHECK (rows[0].chosen()->name == "Dark Square"); // its own sound, measured back
+    CHECK (rows[3].chosen()->kind == parts::Choice::Kind::drumSamples);
+    CHECK (rows[3].chosen()->drums.at ("kick").endsWith ("Kick 1.wav"));
+    CHECK (panel.describe (0).contains ("attack"));
+    CHECK (rows[0].effects.isEmpty());
+
+    // Heard: the chosen sound playing a phrase, and the song's part.
+    REQUIRE (panel.listen (0));
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 60000));
+    CHECK (panel.getLastPlayed().existsAsFile());
+    REQUIRE (panel.listenToSongs (3));
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 60000));
+    CHECK (panel.getLastPlayed().getFileName() == "drums-song.wav");
+
+    // With AI on: tuned (in the helper), then effects and levels toward the songs (the CLAP model is not there:
+    // listening closer is skipped, saying so).
+    a.service.setEnabled (true);
+    REQUIRE (a.installEngine());
+    panel.setTune (true);
+    panel.setTuneTries (30);
+    REQUIRE (panel.chooseSounds());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 240000));
+    INFO (panel.getStatusText());
+    CHECK (panel.getStatusText().contains ("CLAP model"));
+    REQUIRE (rows[0].tuned.has_value());
+    CHECK (rows[0].note.contains ("Tuned toward the song"));
+    const auto plan = panel.makePlan();
+    REQUIRE (plan.parts.size() == 4);
+    CHECK_FALSE (plan.master.isEmpty());
+    CHECK (plan.master[0]["kind"].toString() == "limiter");
+    CHECK (
+        std::any_of (plan.parts.begin(), plan.parts.end(), [] (const auto& p) { return std::abs (p.volumeDb) > 0.0; }));
+
+    // Swapped: its tuning and effects are dropped.
+    if (rows[1].choices.size() > 1)
+    {
+        REQUIRE (panel.select (1, 1));
+        CHECK (rows[1].effects.isEmpty());
+        CHECK_FALSE (rows[1].tuned.has_value());
+    }
+
+    // Added as one undo step.
+    const auto channels = session.getProject().channels.size();
+    const auto steps = session.getHistory().getUndoDescriptions().size();
+    REQUIRE (panel.addToProject());
+    INFO (panel.getStatusText());
+    CHECK (panel.getStatusText().contains ("one undo step"));
+    CHECK_FALSE (panel.getStatusText().contains ("Not every sound loaded"));
+    CHECK (session.getProject().channels.size() == channels + 4);
+    CHECK (session.getHistory().getUndoDescriptions().size() == steps + 1);
+    CHECK (session.getHistory().getUndoDescriptions().strings.getLast() == "Track creator: sounds for 4 parts");
+    REQUIRE (panel.getAddedChannels().size() == 4);
+    const auto* bassChannel = session.getProject().findChannel (panel.getAddedChannels()[0]);
+    REQUIRE (bassChannel != nullptr);
+    CHECK (bassChannel->name == "Bass (Track creator)");
+    CHECK_FALSE (bassChannel->instrument.value().parameters.empty()); // the tuned settings
+    REQUIRE (session.getHistory().undo());
+    CHECK (session.getProject().channels.size() == channels);
+}
+#endif
+
+#if defined(SPINUS_PLUGIN_SCANNER) && defined(SPINUS_BROKEN_PLUGINS_DIR)
+TEST_CASE ("Track creator sounds for each part screenshot for the manual", "[.screenshot][manual]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    auto context = makePartSoundsContext (a);
+    a.service.setEnabled (true);
+    REQUIRE (a.installEngine());
+    SpinusLookAndFeel look (Theme::dark());
+    PartSoundsPanel panel (a.session, [context] { return context; });
+    panel.setLookAndFeel (&look);
+    panel.setSize (700, 560);
+    panel.setTune (true);
+    panel.setTuneTries (30);
+    REQUIRE (panel.chooseSounds());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 240000));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+    const auto file = juce::File (SPINUS_TEST_FILES_DIR)
+                          .getParentDirectory()
+                          .getChildFile ("docs/user/images/track-creator-sounds.png");
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    juce::Image image (juce::Image::RGB, panel.getWidth() + 20, panel.getHeight() + 20, true);
+    {
+        juce::Graphics g (image);
+        g.fillAll (look.findColour (juce::ResizableWindow::backgroundColourId));
+        g.drawImageAt (panel.createComponentSnapshot (panel.getLocalBounds()), 10, 10);
+    }
+    REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
+    panel.setLookAndFeel (nullptr);
+}
+#endif
+
+#if defined(SPINUS_PLUGIN_SCANNER)
+TEST_CASE ("Track creator: sounds for the parts of real songs (SPINUS_REALMUSIC_BATCH)", "[.realsounds]")
+{
+    // A check by hand, not run in CI, after "Track creator on real songs" analyzed the batch (its summary is
+    // <batch>.json in SPINUS_REALMUSIC_OUT, its analyses in SPINUS_REALMUSIC_SETTINGS' library). Builds or
+    // updates the sound index in SPINUS_REALSOUNDS_INDEX from Spinus's 3x Osc and Drum Machine, Surge XT
+    // (SPINUS_SURGE_CLAP) and the sample folder SPINUS_REALSOUNDS_SAMPLES, then chooses, tunes and mixes the
+    // sounds for each part with the AI service on. Writes <batch>-sounds.txt. Only reads the songs.
+    auto env = [] (const char* name) { return juce::SystemStats::getEnvironmentVariable (name, {}); };
+    const juce::File batch (env ("SPINUS_REALMUSIC_BATCH")), out (env ("SPINUS_REALMUSIC_OUT")),
+        settings (env ("SPINUS_REALMUSIC_SETTINGS")), indexFolder (env ("SPINUS_REALSOUNDS_INDEX"));
+    if (! batch.isDirectory() || ! settings.isDirectory() || indexFolder == juce::File())
+        SKIP ("set SPINUS_REALMUSIC_BATCH, _OUT, _SETTINGS and SPINUS_REALSOUNDS_INDEX");
+    const auto summary = juce::JSON::parse (out.getChildFile (batch.getFileName() + ".json"));
+    REQUIRE (summary.isObject());
+
+    SoundIndexer::Options helper;
+    helper.helper = juce::File (SPINUS_PLUGIN_SCANNER);
+    std::vector<SoundSource> sources;
+    for (const auto* own : { "3x-osc", "drum-machine" })
+    {
+        SoundSource s;
+        s.key = juce::String ("stock-spinus.") + own;
+        s.name = juce::String (own) == "3x-osc" ? "3x Osc" : "Drum Machine";
+        s.format = "Spinus";
+        s.file = juce::String ("spinus:") + own;
+        s.stockType = juce::String ("spinus.") + own;
+        s.badge = "Spinus";
+        s.fingerprint = "real check";
+        sources.push_back (s);
+    }
+    if (const juce::File surge (env ("SPINUS_SURGE_CLAP")); surge.exists())
+    {
+        SoundSource s;
+        s.key = "surge-xt";
+        s.name = s.pluginName = "Surge XT";
+        s.format = "CLAP";
+        s.file = surge.getFullPathName();
+        s.stockType = "bundled.surge-xt";
+        s.badge = "CLAP";
+        s.fingerprint = "real check";
+        sources.push_back (s);
+    }
+    juce::Array<juce::File> folders;
+    if (const juce::File samples (env ("SPINUS_REALSOUNDS_SAMPLES")); samples.isDirectory())
+        folders.add (samples);
+    SoundIndex index (indexFolder);
+    index.load();
+    const auto started = juce::Time::getMillisecondCounterHiRes();
+    const auto updated = SoundIndexer::update (index, helper, sources, folders, {}, {});
+    juce::StringArray lines;
+    lines.add ("Sound index: " + juce::String (index.summarize().presets) + " presets, " +
+               juce::String (index.summarize().samples) + " samples (" + juce::String (updated.soundsMeasured) +
+               " sounds and " + juce::String (updated.samplesMeasured) + " samples measured now, " +
+               juce::String ((juce::Time::getMillisecondCounterHiRes() - started) / 1000.0, 0) +
+               " s); roles learnt from " + juce::String (index.roleExamples) + " named presets");
+
+    EngineHost host { { .openAudioDevice = false } };
+    Session session (host.getEngine(), makeDevices (host.getEngine())); // Spinus's own and the built Surge XT
+    ai::AiService service (settings);
+    service.setEnabled (true);
+    const auto library = AnalysisLibrary::inAiFolder (service.getFolder());
+    if (env ("SPINUS_REALSOUNDS_CLAP") == "1")
+    {
+        // Closest preset's CLAP model, downloaded once into the models folder of the HOME this runs with.
+        auto alive = std::make_shared<bool> (true);
+        bool done = false;
+        juce::String error;
+        ai::runJob (service, "ai.v1.stems.download", juce::JSON::parse (R"({"model": "clap_music"})"), alive, {},
+                    [&] (const juce::var&, const juce::String& e)
+                    {
+                        error = e;
+                        done = true;
+                    });
+        REQUIRE (waitFor ([&] { return done; }, 3600000));
+        INFO (error);
+        CHECK (error.isEmpty());
+    }
+    PartSoundsPanel::Context context;
+    context.summary = summary;
+    for (const auto& entry : juce::RangedDirectoryIterator (batch, true, "*.mp3;*.flac;*.wav", juce::File::findFiles))
+        context.songs.push_back ({ contentDigest (entry.getFile()), entry.getFile().getFileNameWithoutExtension() });
+    context.library = library;
+    context.indexFolder = indexFolder;
+    context.workFolder = out.getChildFile (batch.getFileName() + "-work");
+    context.helper = helper;
+    context.service = &service;
+    PartSoundsPanel panel (session, [context] { return context; });
+    panel.setTune (env ("SPINUS_REALSOUNDS_TUNE") != "0");
+    panel.setTuneTries (
+        env ("SPINUS_REALSOUNDS_TRIES").getIntValue() > 0 ? env ("SPINUS_REALSOUNDS_TRIES").getIntValue() : 300);
+    const auto chose = juce::Time::getMillisecondCounterHiRes();
+    REQUIRE (panel.chooseSounds());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 4 * 3600000));
+    lines.add ("Batch " + batch.getFileName() + ": " + juce::String (context.songs.size()) + " songs, " +
+               juce::String ((juce::Time::getMillisecondCounterHiRes() - chose) / 1000.0, 0) + " s");
+    lines.add (panel.getStatusText());
+    for (int i = 0; i < (int)panel.getRows().size(); ++i)
+    {
+        const auto& row = panel.getRows()[(size_t)i];
+        lines.add ({});
+        lines.add (panel.describe (i));
+        lines.add ("  reference song: " + row.songName + ", excerpt at " + juce::String (row.excerpt.start, 1) + " s");
+        for (size_t k = 0; k < row.choices.size(); ++k)
+        {
+            const auto& c = row.choices[k];
+            lines.add ("  " + juce::String ((int)k + 1) + ". " + c.title() + " | role " + c.role + " (" + c.roleFrom +
+                       ") | distance " + juce::String (c.distance, 2) +
+                       (c.clap > -2.0 ? " | CLAP " + juce::String (c.clap, 3) : juce::String()) + " | " + c.reasons());
+        }
+        for (const auto& e : row.effects)
+            lines.add ("  effect: " + e["title"].toString() + ": " + e["reason"].toString());
+        if (std::abs (row.volumeDb) > 0.0)
+            lines.add ("  fader " + juce::String (row.volumeDb, 1) + " dB");
+    }
+    for (const auto& m : panel.makePlan().master)
+        lines.add ("master: " + m["title"].toString() + ": " + m["reason"].toString());
+    REQUIRE (panel.addToProject());
+    lines.add ({});
+    lines.add (panel.getStatusText());
+    out.getChildFile (batch.getFileName() + "-sounds.txt").replaceWithText (lines.joinIntoString ("\n") + "\n");
 }
 #endif

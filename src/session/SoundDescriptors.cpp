@@ -582,10 +582,114 @@ juce::String roleFromSound (const InstrumentSound& s)
     return d.harmonicBrightness > 0.0 && d.harmonicBrightness < 2.5 && d.release < 0.4 ? "bass" : "lead";
 }
 
+//==============================================================================
+std::vector<double> RoleGuess::features (const juce::var& s)
+{
+    const auto& d = s["sound"];
+    auto num = [] (const juce::var& v) { return v.isVoid() ? 0.0 : (double)v; };
+    const auto f0 = num (d["fundamental"]);
+    std::vector<double> f {
+        std::log10 (num (d["attack"]) + 0.003),
+        num (d["onset"]),
+        std::log10 (num (d["decay"]) + 0.01),
+        num (d["sustain"]),
+        std::log10 (num (d["release"]) + 0.01),
+        std::log10 (num (d["length"]) + 0.01),
+        std::log2 (juce::jmax (20.0, num (d["brightness"]))),
+        std::log2 (num (d["harmonicBrightness"]) + 0.5),
+        num (d["noisiness"]),
+        num (d["pitched"]),
+        f0 > 0.0 ? std::log2 (f0 / noteFrequency (TestNotes::held)) : 0.0, // a bass often sounds octaves lower
+        num (d["low"]),
+        num (d["high"]),
+        (bool)s["tracksPitch"] ? 1.0 : 0.0,
+        (bool)s["polyphonic"] ? 1.0 : 0.0,
+        num (s["low"]) / 12.0,
+        num (s["high"]) / 12.0,
+        (double)s["drumMap"].size() / 10.0,
+        num (s["width"]),
+    };
+    // Older entries have no register measurements: as if silent there.
+    const auto* levels = s["registerLevels"].getArray();
+    const auto* brightness = s["registerBrightness"].getArray();
+    auto at = [] (const juce::Array<juce::var>* a, size_t i, double otherwise)
+    { return a != nullptr && (int)i < a->size() ? (double)(*a)[(int)i] : otherwise; };
+    for (size_t i = 0; i < TestNotes::probes.size(); ++i)
+        f.push_back (at (levels, i, -60.0) / 20.0);
+    for (size_t i = 0; i < TestNotes::probes.size(); ++i)
+        f.push_back (std::log2 (at (brightness, i, 0.0) + 0.5));
+    return f;
+}
+
+void RoleGuess::add (const juce::var& sound, const juce::String& role)
+{
+    const auto index = roles().indexOf (role);
+    if (index < 0)
+        return;
+    examples.push_back (features (sound));
+    labels.push_back (index);
+}
+
+bool RoleGuess::canLearn (int fewest) const
+{
+    std::array<int, 7> counts {};
+    for (auto l : labels)
+        ++counts[(size_t)l];
+    return (int)labels.size() >= fewest &&
+           std::count_if (counts.begin(), counts.end(), [] (int c) { return c >= 8; }) >= 4;
+}
+
+void RoleGuess::prepare()
+{
+    const auto n = examples.empty() ? (size_t)0 : examples.front().size();
+    mean.assign (n, 0.0);
+    spread.assign (n, 1.0);
+    if (examples.empty())
+        return;
+    for (const auto& e : examples)
+        for (size_t i = 0; i < n; ++i)
+            mean[i] += e[i] / (double)examples.size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        double sum = 0.0;
+        for (const auto& e : examples)
+            sum += (e[i] - mean[i]) * (e[i] - mean[i]);
+        spread[i] = juce::jmax (1.0e-6, std::sqrt (sum / (double)examples.size()));
+    }
+}
+
+juce::String RoleGuess::guess (const juce::var& sound, int k, int skip) const
+{
+    if (examples.empty() || spread.size() != examples.front().size())
+        return {};
+    const auto f = features (sound);
+    std::vector<std::pair<double, int>> nearest; // squared distance, example
+    nearest.reserve (examples.size());
+    for (size_t e = 0; e < examples.size(); ++e)
+    {
+        if ((int)e == skip)
+            continue;
+        double d = 0.0;
+        for (size_t i = 0; i < f.size() && i < spread.size(); ++i)
+        {
+            const auto x = (f[i] - examples[e][i]) / spread[i];
+            d += x * x;
+        }
+        nearest.emplace_back (d, (int)e);
+    }
+    const auto count = juce::jmin ((size_t)juce::jmax (1, k), nearest.size());
+    std::partial_sort (nearest.begin(), nearest.begin() + (std::ptrdiff_t)count, nearest.end());
+    std::array<double, 7> votes {};
+    for (size_t i = 0; i < count; ++i)
+        votes[(size_t)labels[(size_t)nearest[i].second]] += 1.0 / (std::sqrt (nearest[i].first) + 0.3);
+    return roles()[(int)(std::max_element (votes.begin(), votes.end()) - votes.begin())];
+}
+
 InstrumentSound describeInstrument (const Player& player, double rate, const juce::String& name,
                                     const juce::String& category)
 {
     InstrumentSound result;
+    double lastWidth = 0.0;
     // Invalid samples (a plugin's filter blowing up) are silence here, and noted.
     const auto play = [&] (const std::vector<Note>& notes, double tail)
     {
@@ -600,9 +704,30 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
                     result.invalid = true;
                 }
         }
+        // Stereo (a player may give two channels): the width is measured, the rest in mono.
+        if (audio.getNumChannels() >= 2)
+        {
+            double mid = 0.0, side = 0.0;
+            const auto* l = audio.getReadPointer (0);
+            const auto* r = audio.getReadPointer (1);
+            for (int i = 0; i < audio.getNumSamples(); ++i)
+            {
+                const auto m = 0.5 * ((double)l[i] + (double)r[i]), d = 0.5 * ((double)l[i] - (double)r[i]);
+                mid += m * m;
+                side += d * d;
+            }
+            lastWidth = mid + side > 1.0e-12 ? side / (mid + side) : 0.0;
+            juce::AudioBuffer<float> mono (1, audio.getNumSamples());
+            mono.clear();
+            mono.addFrom (0, 0, audio, 0, 0, audio.getNumSamples(), 0.5f);
+            mono.addFrom (0, 0, audio, 1, 0, audio.getNumSamples(), 0.5f);
+            return mono;
+        }
+        lastWidth = 0.0;
         return audio;
     };
     const auto held = play ({ { TestNotes::held, 0.0, TestNotes::hold, 0.8f } }, TestNotes::ringOut);
+    result.width = round3 (lastWidth);
     result.sound = describe (held.getReadPointer (0), held.getNumSamples(), rate, TestNotes::hold);
     if (result.sound.peakDb < toDb (silentPeak))
     {
@@ -617,6 +742,7 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
         double peak;
         Pitch pitch;
         std::array<double, 12> chroma;
+        double centroid;
     };
     std::vector<Probe> probes;
     double loudest = 0.0; // of the probes (a pad's slow attack makes them quieter than the held note)
@@ -625,10 +751,11 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
         const auto audio = play ({ { note, 0.0, TestNotes::probeHold, 0.8f } }, TestNotes::probeTail);
         const auto* x = audio.getReadPointer (0);
         const auto e = measureEnvelope (x, audio.getNumSamples(), rate, TestNotes::probeHold);
-        Probe p { note, e.peak, {}, {} };
+        Probe p { note, e.peak, {}, {}, 0.0 };
         if (e.peak >= silentPeak)
         {
             p.pitch = detectPitch (x, audio.getNumSamples(), rate, e.start + 0.005, TestNotes::probeHold);
+            p.centroid = measureSpectrum (x, audio.getNumSamples(), rate, e.start, TestNotes::probeHold).centroid;
             if (note == TestNotes::chord[0])
                 p.chroma = chroma (x, audio.getNumSamples(), rate, 0.0, TestNotes::probeHold);
         }
@@ -647,11 +774,18 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
     if (sounding == 0)
     {
         result.silent = true;
-        result.role = result.soundRole = "none";
+        result.role = result.soundRole = result.ruleRole = "none";
         result.roleFrom = "sound";
         return result;
     }
     result.silent = false;
+    for (size_t i = 0; i < probes.size() && i < result.registerLevels.size(); ++i)
+    {
+        const auto& p = probes[i];
+        const bool heard = p.peak >= silentPeak && loudest > 0.0;
+        result.registerLevels[i] = heard ? round3 (juce::jmax (-60.0, toDb (p.peak / loudest))) : -60.0;
+        result.registerBrightness[i] = heard ? round3 (p.centroid / noteFrequency (p.note)) : 0.0;
+    }
     result.tracksPitch = tuned >= 2 && (double)tuned >= 0.6 * (double)sounding;
     result.low = 127;
     result.high = 0;
@@ -708,7 +842,7 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
             result.drumMap.clear(); // one sound on every key, or no drums among them: not a kit
     }
 
-    result.soundRole = roleFromSound (result);
+    result.soundRole = result.ruleRole = roleFromSound (result);
     const auto named = roleFromName (name, category);
     result.role = named.isNotEmpty() ? named : result.soundRole;
     result.roleFrom = named.isNotEmpty() ? "name" : "sound";
@@ -721,6 +855,7 @@ juce::var toVar (const InstrumentSound& s)
     o->setProperty ("role", s.role);
     o->setProperty ("roleFrom", s.roleFrom);
     o->setProperty ("soundRole", s.soundRole);
+    o->setProperty ("ruleRole", s.ruleRole);
     o->setProperty ("silent", s.silent);
     if (s.invalid)
         o->setProperty ("invalid", true);
@@ -729,6 +864,15 @@ juce::var toVar (const InstrumentSound& s)
     o->setProperty ("low", s.low);
     o->setProperty ("high", s.high);
     o->setProperty ("sound", toVar (s.sound));
+    o->setProperty ("width", s.width);
+    juce::Array<juce::var> levels, brightness;
+    for (size_t i = 0; i < s.registerLevels.size(); ++i)
+    {
+        levels.add (s.registerLevels[i]);
+        brightness.add (s.registerBrightness[i]);
+    }
+    o->setProperty ("registerLevels", levels);
+    o->setProperty ("registerBrightness", brightness);
     if (! s.drumMap.empty())
     {
         juce::Array<juce::var> map;

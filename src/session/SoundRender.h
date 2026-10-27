@@ -17,6 +17,9 @@ namespace spinus
       as the preset "" (named "Default sound").
     - `{"mode": "samples", "files": [path]}`: reads each audio file and measures it (sounds::describeSample).
 
+    Two more modes play and tune instruments for the Track creator (out of Spinus for the same reason): `{"mode":
+    "render"}` and `{"mode": "tune"}` (SoundRender.cpp says what they take and write).
+
     `output` gets one JSON object per line, flushed as it goes: `{"presets": [{id, version}], "presetFiles"}`
     once the instrument is loaded and its presets found; `{"begin": id or path}` before each one is
     measured (so a crash names it); `{"sound": {...}}` or `{"sample": {...}}` after; `{"error": text}` when

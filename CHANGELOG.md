@@ -57,6 +57,19 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   is new or changed. **Show sounds...** lists and searches the results, and **Saved analyses...** shows the
   space they take and deletes them. No AI is needed. See
   [Your sounds](docs/user/track-creator.md#your-sounds).
+- **Track creator, sounds for each part:** on its new **Sounds for each part** page, **Choose sounds** picks
+  the closest sounds you have for the songs' bass, chords and melody, lead and drums: the right kind of
+  sound, covering the part's notes, playing chords when the part does, and closest to the songs' own parts,
+  measured note by note; each with the reasons in plain words. With AI on it also compares the closest
+  presets by listening, and sets an EQ, a compressor, the levels and the master's loudness toward the songs;
+  **Tune the synths** tunes the chosen presets toward the songs in a separate program (a crashing synth
+  cannot take Spinus down). **Listen** and **The songs'** let you compare, the list beside each part swaps
+  it, and **Add these sounds to the project** makes the channels, effects and a pattern with a short phrase
+  on each, as one undo step. See [Sounds for each part](docs/user/track-creator.md#sounds-for-each-part).
+- **Track creator, your sounds:** the sound index now measures Spinus's own instruments and the free
+  downloads; your other plugins only when you tick them under **Your plugins...**. The role of a preset
+  whose name does not say it is learnt from your presets that do (on Surge XT's presets: right for 57 %
+  instead of 44 %, basses 69 % instead of 14 %). The index is measured again once after this update.
 - **3x Osc:** in Mono, a key still held when playback stopped is let go, so the next note no longer slides
   from it or hangs on after it ends; "all sound off" now silences it at once.
 - **Analyzer:** the tempo it finds is more precise (it could be off by a few BPM, jumping between values

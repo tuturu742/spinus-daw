@@ -222,7 +222,38 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
     showSoundsButton.onClick = [this] { showSounds(); };
     soundOptions.helper = getHelperProgram ("spinus-plugin-scanner");
     soundOptions.hostLibraries = plugins::getHostLibraries();
-    getSoundSources = [this] { return findSoundSources (session.getDeviceList()); };
+    getSoundSources = [this] { return getIndexedSoundSources(); };
+    pluginsButton.setTooltip ("Spinus's own instruments and the free ones it downloads are always measured; tick "
+                              "which of your other installed plugins the sound index measures too");
+    pluginsButton.onClick = [this] { choosePlugins(); };
+
+    styleTab.setClickingTogglesState (false);
+    soundsTab.setClickingTogglesState (false);
+    styleTab.setTooltip ("The songs you gave and what they share");
+    soundsTab.setTooltip ("The closest sounds you have for each part of the songs, to hear and add to the project");
+    styleTab.onClick = [this] { showPartSounds (false); };
+    soundsTab.onClick = [this] { showPartSounds (true); };
+    styleTab.setToggleState (true, juce::dontSendNotification);
+    partSounds = std::make_unique<PartSoundsPanel> (session,
+                                                    [this]
+                                                    {
+                                                        PartSoundsPanel::Context c;
+                                                        c.summary = summary;
+                                                        for (const auto& r : references)
+                                                            if (r.status == Status::done && r.digest.isNotEmpty())
+                                                                c.songs.push_back (
+                                                                    { r.digest, r.file.getFileNameWithoutExtension() });
+                                                        c.library = getLibrary();
+                                                        c.indexFolder = soundIndexFolder;
+                                                        c.workFolder = workRoot.getChildFile ("sounds");
+                                                        c.helper = soundOptions;
+                                                        c.service = service;
+                                                        return c;
+                                                    });
+    addChildComponent (*partSounds);
+    addAndMakeVisible (styleTab);
+    addAndMakeVisible (soundsTab);
+    addAndMakeVisible (pluginsButton);
 
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &addButton, &folderButton, &removeButton,
                                                              &clearButton, &list, &status, &summaryTitle, &summaryText,
@@ -240,7 +271,8 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
 
 TrackCreator::~TrackCreator()
 {
-    indexer = nullptr; // stops the update (its helper is killed)
+    partSounds = nullptr; // stops what it runs, before its work folder goes
+    indexer = nullptr;    // stops the update (its helper is killed)
     *alive = false;
     *run = false;
     task = nullptr;
@@ -354,6 +386,85 @@ void TrackCreator::cancelSoundIndex()
 }
 
 void TrackCreator::showSounds() { SoundIndexView::show (soundIndexFolder, this); }
+
+juce::StringArray TrackCreator::getIncludedPlugins() const
+{
+    juce::StringArray keys;
+    if (const auto* saved = juce::JSON::parse (soundIndexFolder.getChildFile ("plugins.json"))["include"].getArray())
+        for (const auto& k : *saved)
+            keys.add (k.toString());
+    return keys;
+}
+
+void TrackCreator::setIncludedPlugins (const juce::StringArray& keys)
+{
+    juce::Array<juce::var> chosen;
+    for (const auto& k : keys)
+        chosen.add (k);
+    soundIndexFolder.createDirectory();
+    soundIndexFolder.getChildFile ("plugins.json")
+        .replaceWithText (juce::JSON::toString (object ({ { "include", chosen } })) + "\n");
+}
+
+std::vector<SoundSource> TrackCreator::getAllSoundSources() const { return findSoundSources (session.getDeviceList()); }
+
+std::vector<SoundSource> TrackCreator::getIndexedSoundSources() const
+{
+    // Spinus's own and the downloaded ones (they have a stock type); an installed plugin only when ticked, so
+    // the first update measures what Spinus brings, quickly, and loads none of the user's plugins unasked.
+    const auto included = getIncludedPlugins();
+    auto sources = getAllSoundSources();
+    std::erase_if (sources,
+                   [&] (const SoundSource& s) { return s.stockType.isEmpty() && ! included.contains (s.key); });
+    return sources;
+}
+
+void TrackCreator::choosePlugins()
+{
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("Measure these plugins too (Spinus's own and the downloaded ones always are)");
+    const auto included = getIncludedPlugins();
+    int count = 0;
+    for (const auto& s : getAllSoundSources())
+    {
+        if (s.stockType.isNotEmpty())
+            continue;
+        ++count;
+        menu.addItem (s.name + " (" + s.badge + ")", true, included.contains (s.key),
+                      [safe = juce::Component::SafePointer (this), key = s.key]
+                      {
+                          if (safe == nullptr)
+                              return;
+                          auto keys = safe->getIncludedPlugins();
+                          if (keys.contains (key))
+                              keys.removeString (key);
+                          else
+                              keys.add (key);
+                          safe->setIncludedPlugins (keys);
+                          safe->soundsStatus.setText ("Update sound index measures " + juce::String (keys.size()) +
+                                                          (keys.size() == 1 ? " plugin" : " plugins") +
+                                                          " of yours besides Spinus's own and the downloaded ones.",
+                                                      juce::dontSendNotification);
+                      });
+    }
+    if (count == 0)
+        menu.addItem ("No other instrument plugins are installed", false, false, [] {});
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&pluginsButton));
+}
+
+void TrackCreator::showPartSounds (bool sounds)
+{
+    showingSounds = sounds;
+    for (auto* c : std::initializer_list<juce::Component*> { &intro, &addButton, &folderButton, &removeButton,
+                                                             &clearButton, &list, &status, &summaryTitle, &summaryText,
+                                                             &saveButton, &libraryButton })
+        c->setVisible (! sounds);
+    partSounds->setVisible (sounds);
+    styleTab.setToggleState (! sounds, juce::dontSendNotification);
+    soundsTab.setToggleState (sounds, juce::dontSendNotification);
+    updateButtons();
+    resized();
+}
 
 void TrackCreator::visibilityChanged()
 {
@@ -1082,12 +1193,12 @@ void TrackCreator::updateButtons()
     const bool busy = isBusy();
     removeButton.setEnabled (list.getSelectedRow() >= 0 && ! downloading);
     clearButton.setEnabled (! references.empty() && ! downloading);
-    cancelButton.setVisible (current >= 0);
-    againButton.setVisible (! busy &&
+    cancelButton.setVisible (current >= 0 && ! showingSounds);
+    againButton.setVisible (! busy && ! showingSounds &&
                             std::any_of (references.begin(), references.end(), [] (const Reference& r)
                                          { return r.status == Status::waiting || r.status == Status::failed; }));
     saveButton.setEnabled (summary.isObject());
-    needsText.setVisible (needsText.getText().isNotEmpty());
+    needsText.setVisible (needsText.getText().isNotEmpty() && ! showingSounds);
     downloadButton.setVisible (needsText.isVisible() && ! missing.empty());
     downloadButton.setEnabled (! busy);
     if (! needsText.isVisible())
@@ -1137,11 +1248,25 @@ void TrackCreator::resized()
         r.removeFromLeft (6);
         showSoundsButton.setBounds (r.removeFromLeft (130).reduced (0, 1));
         r.removeFromLeft (6);
+        pluginsButton.setBounds (r.removeFromLeft (120).reduced (0, 1));
+        r.removeFromLeft (6);
         if (stopSoundsButton.isVisible())
             stopSoundsButton.setBounds (r.removeFromLeft (70).reduced (0, 1));
         soundsStatus.setBounds (area.removeFromBottom (40));
         soundsTitle.setBounds (area.removeFromBottom (22));
         area.removeFromBottom (6);
+    }
+    {
+        auto r = area.removeFromTop (26);
+        styleTab.setBounds (r.removeFromLeft (150).reduced (0, 1));
+        r.removeFromLeft (4);
+        soundsTab.setBounds (r.removeFromLeft (170).reduced (0, 1));
+        area.removeFromTop (6);
+    }
+    if (showingSounds && partSounds != nullptr)
+    {
+        partSounds->setBounds (area);
+        return;
     }
     intro.setBounds (area.removeFromTop (40));
     area.removeFromTop (4);

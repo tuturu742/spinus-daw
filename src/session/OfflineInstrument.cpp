@@ -23,7 +23,10 @@ void OfflineInstrument::play (int samples, const juce::MidiBuffer& midi, juce::A
         juce::MidiBuffer events;
         events.addEvents (midi, done, count, -done);
         instance.processBlock (block, events);
-        if (into != nullptr)
+        if (into != nullptr && into->getNumChannels() >= 2)
+            for (int c = 0; c < 2; ++c)
+                into->addFrom (c, done, block, c, 0, count);
+        else if (into != nullptr)
             for (int c = 0; c < 2; ++c)
                 into->addFrom (0, done, block, c, 0, count, 0.5f);
     }
@@ -73,6 +76,16 @@ juce::Result OfflineInstrument::loadPreset (const InstrumentPreset& preset)
 
 juce::AudioBuffer<float> OfflineInstrument::render (const std::vector<Note>& notes, double tail)
 {
+    return renderChannels (notes, tail, 1);
+}
+
+juce::AudioBuffer<float> OfflineInstrument::renderStereo (const std::vector<Note>& notes, double tail)
+{
+    return renderChannels (notes, tail, 2);
+}
+
+juce::AudioBuffer<float> OfflineInstrument::renderChannels (const std::vector<Note>& notes, double tail, int channels)
+{
     silence();
 
     juce::MidiBuffer midi;
@@ -85,10 +98,10 @@ juce::AudioBuffer<float> OfflineInstrument::render (const std::vector<Note>& not
         end = juce::jmax (end, n.start + n.length);
     }
     const auto samples = (int)((end + tail) * sampleRate);
-    juce::AudioBuffer<float> mono (1, juce::jmax (1, samples));
-    mono.clear();
-    play (samples, midi, &mono);
-    return mono;
+    juce::AudioBuffer<float> sound (channels, juce::jmax (1, samples));
+    sound.clear();
+    play (samples, midi, &sound);
+    return sound;
 }
 
 } // namespace spinus

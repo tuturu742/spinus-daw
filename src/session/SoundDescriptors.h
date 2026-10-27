@@ -17,7 +17,7 @@ namespace spinus::sounds
 {
 
 /** Change when what is measured changes: every sound is measured again. */
-inline constexpr int descriptorsVersion = 1;
+inline constexpr int descriptorsVersion = 2;
 
 /** One sound's measurements. Times in seconds; a one-shot (a sample, a drum) has no key held, so no sustain
     or release. */
@@ -93,7 +93,8 @@ struct Note
     double start = 0.0, length = 1.0; // seconds
     float velocity = 0.8f;
 };
-/** Plays notes from silence and returns the sound (mono), `tail` seconds after the last note ends. */
+/** Plays notes from silence and returns the sound (mono, or stereo: its width is measured too), `tail` seconds
+    after the last note ends. */
 using Player = std::function<juce::AudioBuffer<float> (const std::vector<Note>&, double tail)>;
 
 /** The test notes an instrument plays: C3 held a second (with two seconds to ring out), short notes
@@ -117,9 +118,15 @@ struct InstrumentSound
     bool tracksPitch = false; // its notes are in tune with the keys played (an octave off counts)
     bool polyphonic = false;  // plays the chord's three notes
     int low = 0, high = 0;    // the lowest and highest test note that sounds (in tune, when it tracks pitch)
-    juce::String role;        // the guess: one of roles(), or "none" (silent)
-    juce::String soundRole;   // what the sound alone suggests
-    juce::String roleFrom;    // "name" (its name or category says) or "sound"
+    double width = 0.0;       // the held C3's stereo width: the side's share of the power (0 mono, 0.5 unrelated)
+    /** Each test note's (C1 to C7) loudest 10 ms, dB under the loudest of them (-60: silent), and its
+        brightness in harmonics (spectral centroid / the note's frequency; 0 when silent): a bass is made for
+        the low notes, a lead for the high ones. */
+    std::array<double, TestNotes::probes.size()> registerLevels {}, registerBrightness {};
+    juce::String role;      // the guess: one of roles(), or "none" (silent)
+    juce::String soundRole; // what the sound alone suggests (the rules here; the index may learn better)
+    juce::String ruleRole;  // what the rules (roleFromSound) say
+    juce::String roleFrom;  // "name" (its name or category says) or "sound"
     std::vector<std::pair<int, juce::String>> drumMap; // a drum kit: the class of each note that sounds
 };
 
@@ -128,8 +135,40 @@ juce::var toVar (const InstrumentSound&);
 
 /** The role a preset's name or category names ("Basses/Deep Sub" is bass), or empty. */
 juce::String roleFromName (const juce::String& name, const juce::String& category);
-/** The role the measurements suggest. */
+/** The role the measurements suggest, by rules. */
 juce::String roleFromSound (const InstrumentSound&);
+
+/** The role guess learnt from examples: the sound index's presets whose name or category says their role
+    (Surge XT's "Basses", "Pads"...) teach how each role sounds, and a preset the name does not decide gets
+    the role of the most alike of them (k nearest neighbours over a few measurements, each scaled by its
+    spread). No model is shipped or downloaded: what is learnt comes from the sounds on this computer. With
+    too few examples (canLearn()) the rules decide.
+
+    On Surge XT's own factory presets, each guessed from the others (5-fold), this agrees with the preset's
+    category for 57 % of the named ones, the rules for 44 % (basses: 69 % and 14 %). */
+class RoleGuess
+{
+public:
+    /** The measurements compared, from an index entry (toVar (InstrumentSound)'s object). */
+    static std::vector<double> features (const juce::var& sound);
+
+    /** Adds an example (its role from its name). */
+    void add (const juce::var& sound, const juce::String& role);
+    /** Enough examples: at least `fewest` in all, of at least four roles. */
+    bool canLearn (int fewest = 60) const;
+    /** The role of the most alike examples (`k` nearest, closer ones counting more); `skip` leaves one
+        example out (an example guessed from the others). Empty when there are no examples. */
+    juce::String guess (const juce::var& sound, int k = 15, int skip = -1) const;
+    int size() const noexcept { return (int)examples.size(); }
+
+    /** Fixes the scale (each measurement's spread over the examples): call after the last add(). */
+    void prepare();
+
+private:
+    std::vector<std::vector<double>> examples;
+    std::vector<int> labels; // index in roles()
+    std::vector<double> mean, spread;
+};
 
 //==============================================================================
 // Samples.

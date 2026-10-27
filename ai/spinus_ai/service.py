@@ -147,6 +147,7 @@ class Service:
             "ai.v1.presets.match": self.presets_match,
             "ai.v1.mix.analyze": self.mix_analyze,
             "ai.v1.mix.plan": self.mix_plan,
+            "ai.v1.mix.toward": self.mix_toward,
             "ai.v1.style.summarize": self.style_summarize,
         }
         handler = handlers.get(method)
@@ -942,6 +943,21 @@ class Service:
             return {"items": reviewed, "reviewedBy": model, "note": ""}
 
         return {"job": self.job(notify, work)}
+
+    async def mix_toward(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Effects and levels moving the Track creator's chosen sounds toward the reference songs: {mix (from
+        ai.v1.mix.analyze: each part's sound as "<part>" and its stem as "<part> reference"), parts ([part]),
+        referenceLoudness (LUFS, optional)} -> {items, estimate} (spinus_ai.mixplan.toward_references). Rules
+        only: no AI connection is needed."""
+        from .mixplan import toward_references
+
+        mix = params.get("mix")
+        parts = params.get("parts")
+        if not isinstance(mix, dict) or not isinstance(parts, list):
+            raise RpcError(-32602, "mix must be ai.v1.mix.analyze's result and parts a list of names.")
+        loudness = params.get("referenceLoudness")
+        target = float(loudness) if isinstance(loudness, int | float) else None
+        return toward_references(mix, [str(p) for p in parts], target)
 
     # -----------------------------------------------------------------------------------------------
     # Listening: a take's notes or beatbox hits. Results are cached by the take's contents.

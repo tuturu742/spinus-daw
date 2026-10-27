@@ -145,6 +145,22 @@ TEST_CASE ("A drum sample file goes on the pad that plays its note; a pad's soun
     CHECK (drums->getPads()[1].name == "stem");
     CHECK (! loadDrumPadFile (s.session, channel, 20, s.writeStem()).wasOk()); // no pad plays C0
 
+    // An AIFF file named .wav (as some sample packs have): read by its contents.
+    {
+        const auto aiff = s.folder.getChildFile ("Kick Drum.wav");
+        juce::AudioBuffer<float> audio (1, 4410);
+        for (int i = 0; i < audio.getNumSamples(); ++i)
+            audio.setSample (0, i, 0.5f * std::sin (0.05f * (float)i));
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (aiff);
+        auto writer = juce::AiffAudioFormat().createWriterFor (
+            stream,
+            juce::AudioFormatWriterOptions().withSampleRate (44100.0).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+    }
+    REQUIRE (loadDrumPadFile (s.session, channel, 60, s.folder.getChildFile ("Kick Drum.wav")).wasOk());
+    CHECK (drums->getPads()[0].name == "Kick Drum");
+
     REQUIRE (copyDrumPad (s.session, channel, 61, 69, "snare 2").wasOk());
     CHECK (drums->getPads()[9].name == "snare 2");
     REQUIRE (drums->getPads()[9].audio != nullptr);

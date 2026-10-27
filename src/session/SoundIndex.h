@@ -46,12 +46,13 @@ std::vector<SoundSource> findSoundSources (const plugins::DeviceList&);
 
     Kept in `<plugin list folder>/ai/sounds/` (the settings folder; the Flatpak's own, since what it can load
     differs):
-    - `index.json`: `{kind: "spinus.sound-index", version, descriptorsVersion, updated, instruments:
+    - `index.json`: `{kind: "spinus.sound-index", version, descriptorsVersion, updated, roleExamples, instruments:
       [{key, name, format, file, pluginName, uniqueId, stockType, badge, fingerprint, complete, presetFiles,
       problem, problemPresets, sounds (how many), updated}], sampleFolders, summary: {instruments, presets,
       samples, problems}}`;
     - `instruments/<key>.json`: `{version, key, sounds: [{id, version, name, category, role, roleFrom,
-      soundRole, silent, tracksPitch, polyphonic, low, high, sound: {descriptors}, drumMap}]}`;
+      soundRole, soundRoleFrom, ruleRole, silent, tracksPitch, polyphonic, low, high, width, registerLevels,
+      registerBrightness, sound: {descriptors}, drumMap}]}`;
     - `samples.json`: `{version, files: [{path, size, modified, kind, class, classFrom, soundClass, duration,
       sound, tempo, tempoFrom, bars, key, keyFrom}]}`.
     A file of another `version`, or measured with another sounds::descriptorsVersion, is ignored (measured
@@ -90,6 +91,15 @@ public:
     bool saveSamples() const;
     /** Deletes the whole index from disk and memory. */
     bool removeAll();
+
+    /** Guesses again the role of every preset from its sound, learnt from the presets whose name or category
+        says their role (sounds::RoleGuess), when there are enough of them; otherwise the rules' guess
+        (sounds::roleFromSound) stands. A preset its name decides keeps that role, and gets the sound's guess
+        made from the other presets beside it (`soundRole`; `soundRoleFrom` "learnt" or "rules"; `ruleRole`).
+        Saves the instruments that changed. Returns how many sounds changed. */
+    int learnRoles();
+    /** How many examples the last learnRoles() learnt from (0: the rules decided). */
+    int roleExamples = 0;
 
     std::map<juce::String, Instrument> instruments;
     std::vector<Sample> samples; // by path

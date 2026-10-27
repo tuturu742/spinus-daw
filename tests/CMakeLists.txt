@@ -75,6 +75,7 @@ add_executable (spinus_tests
     session/PresetPreviewsTests.cpp
     session/SoundDescriptorsTests.cpp
     session/SoundIndexTests.cpp
+    session/PartSoundsTests.cpp
     session/SuggestionsTests.cpp
     session/TunerTests.cpp
     ui/AnalysisEngineTests.cpp

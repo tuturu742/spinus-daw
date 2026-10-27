@@ -121,6 +121,36 @@ private:
     std::mt19937 random;
 };
 
+/** What synth match found: the settings and how close they came. */
+struct SynthMatchResult
+{
+    std::vector<std::pair<juce::String, float>> settings; // parameter ID, value (0 to 1)
+    double startDistance = 0.0, distance = 0.0;
+    int tries = 0;
+};
+
+/** The search itself, shared by SynthMatcher (a hidden synth inside Spinus) and the sound helper's tune mode
+    (spinus-plugin-scanner --sound-index, session/SoundRender: the synth in a separate process, so one that
+    crashes takes only the helper down). */
+struct SynthSearch
+{
+    using Settings = std::vector<std::pair<juce::AudioProcessorParameter*, SynthProfile::Setting>>;
+
+    /** The profile for this instrument: its own (SynthProfile::find), else one made from its parameters' names
+        (SynthProfile::makeAutomatic; empty settings when too few are found). */
+    static SynthProfile profileFor (juce::AudioPluginInstance&, const model::Device&);
+    /** The profile's settings the plugin really has. */
+    static Settings findSettings (juce::AudioPluginInstance&, const SynthProfile&);
+
+    /** Each setting on its own at a few values, then all together with sep-CMA-ES, from where the synth is
+        now, for up to `budget` renders (`render` plays the notes with the settings as they are set). `progress`
+        gets (tries, best distance) now and then, on the calling thread. */
+    static SynthMatchResult run (const Settings&, const std::function<juce::AudioBuffer<float>()>& render,
+                                 const juce::AudioBuffer<float>& target, int budget,
+                                 const std::function<bool()>& shouldStop,
+                                 const std::function<void (int, double)>& progress);
+};
+
 /** Tunes a hidden copy of a synth on a thread of its own: each try sets the profile's settings, plays the
     notes and compares the sound with the target. Progress and the end are reported on the message thread. */
 class SynthMatcher : private juce::Thread, private juce::AsyncUpdater
@@ -148,12 +178,7 @@ public:
     /** Stops early, keeping the best so far (finished is still called). */
     void stop() { signalThreadShouldExit(); }
 
-    struct Result
-    {
-        std::vector<std::pair<juce::String, float>> settings; // parameter ID, value (0 to 1)
-        double startDistance = 0.0, distance = 0.0;
-        int tries = 0;
-    };
+    using Result = SynthMatchResult;
     /** After finished: the best settings found. */
     const Result& getResult() const noexcept { return result; }
 
@@ -171,12 +196,10 @@ private:
     void findSettings();
     void run() override;
     void handleAsyncUpdate() override;
-    std::vector<float> toValues (const std::vector<double>& point) const;
-    double tryValues (const std::vector<float>& values);
 
     SynthProfile profile;
     HiddenInstrument instrument;
-    std::vector<std::pair<juce::AudioProcessorParameter*, SynthProfile::Setting>> parameters;
+    SynthSearch::Settings parameters;
     juce::AudioBuffer<float> target;
     std::vector<HiddenInstrument::Note> notes;
     int budget = 0;
