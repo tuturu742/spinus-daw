@@ -548,6 +548,21 @@ TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATC
 
 //==============================================================================
 #if defined(SPINUS_PLUGIN_SCANNER) && defined(SPINUS_BROKEN_PLUGINS_DIR)
+TEST_CASE ("Track creator: the plugins ticked for the sound index are read back", "[ui][trackcreator][sounds]")
+{
+    // The list once crashed Spinus when read (Choose plugins...): it pointed into a file read already freed.
+    TempFolder t;
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine() };
+    TrackCreator creator (session, nullptr);
+    creator.setSoundIndexFolder (t.root.getChildFile ("sounds"));
+    CHECK (creator.getIncludedPlugins().isEmpty());
+    const juce::StringArray ticked { "plugin-one-with-a-long-key-name-to-leave-the-small-string-buffer",
+                                     "plugin-two-with-a-long-key-name-to-leave-the-small-string-buffer" };
+    creator.setIncludedPlugins (ticked);
+    CHECK (creator.getIncludedPlugins() == ticked);
+}
+
 TEST_CASE ("Track creator: the sound index is updated in the background, listed and deleted, without AI",
            "[ui][trackcreator][sounds]")
 {

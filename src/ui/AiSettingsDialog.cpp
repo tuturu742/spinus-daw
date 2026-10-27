@@ -178,8 +178,6 @@ AiSettingsDialog::AiSettingsDialog (ai::AiService& s) : service (s)
     {
         addConnection (providers[juce::jlimit (0, 3, providerBox.getSelectedItemIndex())], nameField.getText(),
                        keyField.getText(), urlField.getText());
-        keyField.clear();
-        showAddForm (false);
     };
     cancelButton.onClick = [this] { showAddForm (false); };
 
@@ -341,8 +339,13 @@ void AiSettingsDialog::refresh()
                       connections.push_back (info);
                   }
               list.updateContent();
+              auto row = juce::jmax (0, selected);
+              for (size_t i = 0; i < connections.size(); ++i)
+                  if (connections[i].id == selectAfterRefresh)
+                      row = (int)i;
+              selectAfterRefresh.clear();
               if (! connections.empty())
-                  list.selectRow (juce::jlimit (0, (int)connections.size() - 1, juce::jmax (0, selected)));
+                  list.selectRow (juce::jlimit (0, (int)connections.size() - 1, row));
               list.repaint();
               updateVisibility();
           });
@@ -408,7 +411,12 @@ void AiSettingsDialog::addConnection (const juce::String& provider, const juce::
           object ({ { "provider", provider }, { "name", name }, { "key", key }, { "baseUrl", baseUrl } }),
           [this, name] (const juce::var& result)
           {
+              // Only now: when the service refuses (a key for another provider, say), the form stays open
+              // with its message, to fix the choice.
+              keyField.clear();
+              showAddForm (false);
               const auto id = result["id"].toString();
+              selectAfterRefresh = id;
               status.setText ("Testing " + name + "...", juce::dontSendNotification);
               call ("ai.v1.connections.test", object ({ { "id", id } }),
                     [this, name] (const juce::var& tested)

@@ -23,7 +23,7 @@ from .assistant import NoConnection, ask
 from .compute.engine import Engine, EngineError
 from .compute.environments import InstallError
 from .compute.weights import WeightStore, find_model
-from .connections import DEFAULT_BASE_URLS, ConnectionStore, KeyStore
+from .connections import DEFAULT_BASE_URLS, ConnectionStore, KeyStore, key_mismatch
 from .embeddings import ModelStore, default_models_folder, missing_dependencies, run_blocking
 from .gateway import ProviderError, list_models
 from .manual import Manual
@@ -194,10 +194,14 @@ class Service:
         }
 
     async def save_connection(self, params: dict[str, Any], notify: Notify) -> Any:
+        provider = str(params.get("provider", ""))
+        mismatch = key_mismatch(params.get("baseUrl") or None, provider, params.get("key") or None)
+        if mismatch:
+            raise RpcError(-32602, mismatch)
         try:
             connection = self.connections.upsert(
                 str(params.get("name", "")),
-                str(params.get("provider", "")),
+                provider,
                 params.get("baseUrl") or None,
                 params.get("key") or None,
                 params.get("id") or None,
@@ -223,7 +227,8 @@ class Service:
             log.warning(
                 "Connection test of %s (%s) failed: %s: %s", connection.name, connection.provider, error.kind, error
             )
-            return {"ok": False, "message": str(error)}
+            mismatch = key_mismatch(connection.base_url, connection.provider, key) if error.kind == "auth" else None
+            return {"ok": False, "message": mismatch or str(error)}
         log.info("Connection test of %s (%s): %d models", connection.name, connection.provider, len(models))
         connection.models = sorted(models)
         self.connections.save()
@@ -919,7 +924,8 @@ class Service:
 
     async def song_write(self, params: dict[str, Any], notify: Notify) -> Any:
         """A new song in the style of a summary (spinus_ai.songwriter): {summary (ai.v1.style.summarize's
-        result), seed, refine (let the AI vary the plan; default false), song and redo ({part} or {section}):
+        result), seed, arrangement ("sketch", the default: four parts; "full": about a dozen layers), refine
+        (let the AI vary the plan; default false), song and redo ({part} or {section}):
         that song with one part or section written anew from the seed} -> the song. Rules only, with no model
         and no AI connection; with refine and a connection, the AI may vary the plan (checked), the rules still
         write every note, and without one (or when it fails) the rules' song stands, with a note saying so."""
@@ -932,6 +938,9 @@ class Service:
             seed = int(params.get("seed", 0)) & 0x7FFFFFFF
         except (TypeError, ValueError) as error:
             raise RpcError(-32602, "seed must be a number.") from error
+        size = str(params.get("arrangement") or "sketch")
+        if size not in songwriter.SIZES:
+            raise RpcError(-32602, "arrangement is sketch or full.")
         redo = params.get("redo")
         if redo is not None and (not isinstance(redo, dict) or not (redo.get("part") or redo.get("section"))):
             raise RpcError(-32602, "redo names a part or a section.")
@@ -946,7 +955,7 @@ class Service:
                 part, section = redo.get("part"), redo.get("section")
                 return songwriter.redo(dict(params["song"]), summary, seed,
                                        str(part) if part else None, str(section) if section else None)  # fmt: skip
-            song = songwriter.write(summary, seed)
+            song = songwriter.write(summary, seed, size)
             if not params.get("refine"):
                 return song
             try:

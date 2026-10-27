@@ -31,13 +31,17 @@ Click **Add...**, choose a provider, and **Save and test**. You can add several 
 |---|---|
 | **Anthropic (Claude)** | An API key from console.anthropic.com. |
 | **OpenRouter** | One key from openrouter.ai for many models (Claude, GPT, open models). OpenRouter reports what each answer cost. |
-| **OpenAI-compatible service** | Its address and key. |
+| **OpenAI-compatible service** | Its address and key. Choose this for an OpenAI key (from platform.openai.com). |
 | **Local server** | Nothing leaves your computer and nothing costs money. Needs a model server running on this computer (below). No key. |
 
 - Keys are stored in your system's keyring (the same safe store your desktop uses for Wi-Fi passwords),
   never in projects or settings files. A saved key is not shown again; to change it, add the connection
   again with the new key and remove the old one.
-- **Test** checks the address and the key and lists the provider's models.
+- **Test** checks the address and the key and lists the provider's models. The connection you just added is
+  the one selected, so **Test** tests it.
+- **A key for another provider:** Spinus can tell Anthropic, OpenRouter and OpenAI keys apart by how they
+  start. If you paste one into a connection that sends it elsewhere (an OpenAI key with the Provider left at
+  Anthropic, say), it isn't saved, and Spinus says which Provider to choose.
 - **Assistant model**: choose the connection in the list, pick a model and click **Use for the
   assistant**. If that connection is down, busy or refuses the key, the assistant tries your other
   connections in the order you added them, and each answer says which model gave it.

@@ -187,6 +187,81 @@ def test_a_part_or_a_section_is_written_again_and_the_rest_kept() -> None:
         songwriter.redo({"kind": "other"}, s, 1, part="bass")
 
 
+def test_a_full_arrangement_has_layers_that_come_and_go_by_section() -> None:
+    s = summary()
+    sketch = songwriter.write(s, 3)
+    assert sketch["size"] == "sketch" and "layers" not in sketch
+    full = songwriter.write(s, 3, "full")
+    # The same song underneath: plan, chords and the four parts.
+    assert full["parts"] == sketch["parts"] and full["sections"] == sketch["sections"]
+    layers = {layer["id"]: layer for layer in full["layers"]}
+    assert 10 <= len(layers) <= 15, list(layers)
+    assert {"kick", "snare", "hats", "bass", "chords", "pad", "arp", "lead", "counter", "riser", "impact"} <= set(
+        layers
+    )
+    assert "sub" not in layers  # this bass sits low (its middle note 38): no room for a sub under it
+    assert {layer["family"] for layer in full["layers"]} == {"Drums", "Bass", "Synths", "Leads", "FX"}
+    assert all(layer["role"] in ("drums", "bass", "keys", "pad", "pluck", "lead", "fx") for layer in full["layers"])
+
+    # Every drum note of the sketch is in exactly one drum layer.
+    for sid, notes in full["parts"]["drums"].items():
+        split = [n for layer in ("kick", "snare", "hats") for n in full["layerParts"][layer].get(sid, [])]
+        assert sorted(json.dumps(n, sort_keys=True) for n in split) == sorted(
+            json.dumps(n, sort_keys=True) for n in notes
+        )
+    assert all(n["drum"] == "kick" for notes in full["layerParts"]["kick"].values() for n in notes)
+
+    # Thin verses, full choruses.
+    def playing(sid: str) -> set[str]:
+        return {layer for layer, by in full["layerParts"].items() if by.get(sid)}
+
+    assert {"pad", "arp", "counter"} <= playing("chorus")
+    assert not {"pad", "arp", "counter"} & playing("verse")
+    assert len(playing("chorus")) > len(playing("verse"))
+
+    # The pad and arpeggio play the chords' notes; the counter-melody never rubs against the lead.
+    by_id = {x["id"]: x for x in full["sections"]}
+    bar_ticks = full["barTicks"]
+    for layer in ("pad", "arp", "counter"):
+        for sid, notes in full["layerParts"][layer].items():
+            for n in notes:
+                tones = by_id[sid]["chords"][n["start"] // bar_ticks]["tones"]
+                assert n["pitch"] % 12 in tones, (layer, sid, n)
+    for sid, notes in full["layerParts"]["counter"].items():
+        for n in notes:
+            sounding = [m for m in full["parts"]["lead"][sid] if m["start"] <= n["start"] < m["start"] + m["length"]]
+            assert not any(abs(n["pitch"] - m["pitch"]) % 12 in (0, 1, 11) for m in sounding), (sid, n)
+
+    # A riser over the two bars before each chorus, an impact where each chorus starts.
+    choruses = [e["bar"] for e in full["arrangement"] if by_id[e["section"]]["kind"] == "chorus"]
+    assert full["fx"]["riser"]["at"] == [b - 2 for b in choruses]
+    assert set(choruses) <= set(full["fx"]["impact"]["at"])
+    assert "full arrangement" in " ".join(full["plain"])
+    assert songwriter.write(s, 3, "full") == full
+
+
+def test_a_high_bass_gets_a_sub_and_redoing_a_part_redoes_its_layers() -> None:
+    s = summary()
+    s["parts"]["bass"] = {**s["parts"]["bass"], "low": 38, "median": 45, "high": 57}
+    full = songwriter.write(s, 7, "full")
+    assert any(layer["id"] == "sub" for layer in full["layers"])
+    subs = [n for notes in full["layerParts"]["sub"].values() for n in notes]
+    assert subs and all(songwriter.SUB_RANGE[0] <= n["pitch"] <= songwriter.SUB_RANGE[1] for n in subs)
+
+    chords = songwriter.redo(full, s, 99, part="chords")
+    assert chords["size"] == "full"
+    assert chords["layerParts"]["kick"] == full["layerParts"]["kick"]
+    assert chords["layerParts"]["lead"] == full["layerParts"]["lead"]
+    assert chords["layerParts"]["chords"] != full["layerParts"]["chords"]
+    assert (
+        chords["layerParts"]["arp"] != full["layerParts"]["arp"]
+        or chords["layerParts"]["pad"] != (full["layerParts"]["pad"])
+    )
+
+    with pytest.raises(ValueError):
+        songwriter.write(s, 1, "huge")
+
+
 def test_a_summary_made_by_the_style_measurer_writes_a_song() -> None:
     songs = [
         style.analyze_song(add_drums(song_with(["Am", "F", "C", "G"] * 6, key=(9, "minor")))),
@@ -237,7 +312,11 @@ async def test_without_a_connection_the_rules_song_stands(tmp_path: Path) -> Non
     )
     assert redone["parts"]["drums"] == rules["parts"]["drums"] and redone["parts"]["lead"] != rules["parts"]["lead"]
 
+    full = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "arrangement": "full"})
+    assert full == songwriter.write(s, 4, "full") and full["layers"]
+
     for bad in (
+        {"summary": s, "arrangement": "huge"},
         {"summary": {"kind": "x"}},
         {"summary": s, "seed": "x"},
         {"summary": s, "redo": {}},

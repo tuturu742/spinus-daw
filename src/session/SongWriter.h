@@ -18,8 +18,15 @@
     sounds the user chose); one pattern per section ("Song 1: Verse") with every part's notes and the songs'
     swing; a Playlist track playing the sections in order, and a marker where each starts.
 
+    A full arrangement (the song's `size` "full", spinus_ai.songwriter's layers) is laid out as a producer would:
+    a channel per layer ("Kick", "Pad", "Riser"...), coloured by its family and in the Channel Rack group of it
+    (Drums, Bass, Synths, Leads, FX), each on its own mixer insert of that colour, the inserts of a family
+    playing into a bus of its name; a pattern per layer and section ("Song 1: Chorus - Pad", only where the
+    layer plays) and one per effect ("Song 1: Riser"); and on the Playlist a folder track per family
+    ("Song 1: Drums") with a track per layer under it, so the layers can be seen coming and going.
+
     makeRedoProposal: one part (in every section) or one section (every part) written again, into the patterns
-    the song made: only those notes change.
+    the song made: only those notes change (in a full arrangement, the layers made from that part).
 
     Plain data, no engine: any thread but the audio thread. */
 namespace spinus::song
@@ -53,10 +60,28 @@ struct Sound
 /** Spinus's own: the Drum Machine, 3x Osc with "Pluck Bass", "Soft Keys" and "Saw Lead". */
 Sound defaultSound (const juce::String& part);
 
+/** A layer of a full arrangement (the song's `layers`). */
+struct Layer
+{
+    juce::String id, name, family, part, role; // part: the song part it is made from ("fx" for the effects)
+    bool drums = false;                        // its notes name drums
+    int low = 0, middle = 0, high = 0;         // the notes it plays (0: unknown)
+};
+/** Whether the song is a full arrangement. */
+bool isFull (const juce::var& song);
+/** A full arrangement's layers, in order (none for a sketch). */
+std::vector<Layer> layersOf (const juce::var& song);
+/** The colour of a family's channels, inserts and tracks (#AARRGGBB), as the demo songs have them. */
+juce::String familyColour (const juce::String& family);
+/** Spinus's own sound for a layer: the Drum Machine for drums, 3x Osc with a preset of its role otherwise
+    ("Sub Bass", "Warm Pad", "Pluck", "Bell", "Noise Riser"...). */
+Sound defaultSound (const Layer&);
+
 struct Options
 {
     std::map<juce::String, model::ChannelId> channels; // channels to write into (findChannels)
     std::map<juce::String, Sound> sounds;              // for the parts without one (defaultSound otherwise)
+    std::map<juce::String, Sound> layerSounds;         // full arrangement: per layer id (defaultSound otherwise)
     std::map<juce::String, int> drums;                 // the drum channel's notes per drum, when known
     juce::String name = "Song 1";                      // names the patterns ("Song 1: Verse") and the track
 };
@@ -76,6 +101,13 @@ struct Applied
     std::map<juce::String, model::ChannelId> channels;        // part -> channel
     std::map<juce::String, int> drums;                        // the drum channel's notes per drum
     std::map<juce::String, std::vector<model::ClipId>> clips; // section id -> its clips on the song's track
+
+    // A full arrangement: per layer id.
+    bool full = false;
+    std::map<juce::String, std::map<juce::String, model::PatternId>> layerPatterns;        // -> section -> pattern
+    std::map<juce::String, model::ChannelId> layerChannels;                                // -> its channel
+    std::map<juce::String, std::map<juce::String, int>> layerDrums;                        // -> notes per drum
+    std::map<juce::String, std::map<juce::String, std::vector<model::ClipId>>> layerClips; // -> section -> clips
 
     /** Whether its patterns and channels are all still in the project (not undone or deleted). */
     bool isIn (const model::Project&) const;
