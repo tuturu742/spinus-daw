@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 import pytest
 
-from spinus_ai.connections import ConnectionStore, MemoryKeyStore
+from spinus_ai.connections import ConnectionStore, MemoryKeyStore, key_mismatch
 from spinus_ai.gateway import Message, ProviderError, Request, Text, Tool, complete
 from spinus_ai.manual import Manual
 from spinus_ai.project_tools import Snapshot, note_name
@@ -219,6 +219,54 @@ async def test_openai_compatible_streams_tool_calls_and_cost(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize(
+    ("url", "refused"),
+    [
+        ("https://api.openai.com/v1", None),  # newer OpenAI models: only max_completion_tokens
+        ("https://other.example/v1", None),  # most other services: max_tokens
+        ("https://api.openai.com/v1", "max_completion_tokens"),  # an older model asks for max_tokens
+        ("https://other.example/v1", "max_tokens"),  # a service that wants max_completion_tokens
+    ],
+)
+async def test_openai_compatible_sends_the_length_cap_the_service_takes(
+    tmp_path: Path, url: str, refused: str | None
+) -> None:
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        limit = "max_completion_tokens" if "max_completion_tokens" in body else "max_tokens"
+        assert body[limit] == 4096
+        sent.append(limit)
+        if limit == refused:
+            other = "max_tokens" if limit == "max_completion_tokens" else "max_completion_tokens"
+            message = f"Unsupported parameter: '{limit}' is not supported with this model. Use '{other}' instead."
+            return httpx.Response(400, json={"error": {"message": message, "code": "unsupported_parameter"}})
+        return httpx.Response(200, content=openai_reply("Hi"))
+
+    store = ConnectionStore(tmp_path, MemoryKeyStore())
+    c = store.upsert("O", "openai", url, "k")
+    result = await complete(client_for(handler), c, "k", Request("m", "s", [Message("user", [Text("hi")])]), no_text)
+    assert result.text == "Hi"
+    first = "max_completion_tokens" if "api.openai.com" in url else "max_tokens"
+    assert sent[0] == first and len(sent) == (2 if refused else 1)
+
+
+async def test_openai_compatible_does_not_retry_other_bad_requests(tmp_path: Path) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(400, json={"error": {"message": "The model 'x' does not exist."}})
+
+    store = ConnectionStore(tmp_path, MemoryKeyStore())
+    c = store.upsert("O", "openai", None, "k")
+    with pytest.raises(ProviderError) as caught:
+        await complete(client_for(handler), c, "k", Request("x", "s", [Message("user", [Text("hi")])]), no_text)
+    assert caught.value.kind == "bad_request" and calls == 1
+
+
+@pytest.mark.parametrize(
     ("status", "kind"), [(401, "auth"), (429, "rate_limit"), (503, "outage"), (400, "bad_request")]
 )
 async def test_provider_errors_are_sorted(tmp_path: Path, status: int, kind: str) -> None:
@@ -384,6 +432,49 @@ async def test_no_connection_is_a_plain_message(tmp_path: Path) -> None:
         "kind": "error",
         "message": "No AI connection is set up. Add one in Options > AI.",
     }
+
+
+# Fake keys, spelled in pieces so that no real-looking key prefix appears in the source.
+ANTHROPIC_KEY = "sk-" + "ant-" + "api03-abc"
+OPENROUTER_KEY = "sk-" + "or-" + "v1-abc"
+
+
+@pytest.mark.parametrize(
+    ("url", "provider", "key", "warned"),
+    [
+        (None, "anthropic", "sk-proj-abc", "an OpenAI key, but the connection sends it to Anthropic"),
+        (None, "anthropic", OPENROUTER_KEY, "an OpenRouter key"),
+        (None, "openai", ANTHROPIC_KEY, 'choose the Provider "Anthropic (Claude)"'),
+        (None, "openrouter", "sk-proj-abc", 'choose the Provider "OpenAI-compatible service"'),
+        (None, "anthropic", ANTHROPIC_KEY, None),
+        (None, "openai", "sk-proj-abc", None),
+        (None, "openrouter", OPENROUTER_KEY, None),
+        ("https://api.anthropic.com/v1", "openai", ANTHROPIC_KEY, None),  # Anthropic's OpenAI-style address
+        ("https://openrouter.ai/api/v1", "openai", OPENROUTER_KEY, None),
+        ("https://proxy.example/v1", "openai", ANTHROPIC_KEY, None),  # a proxy may take any key
+        (None, "openai", "gsk_abc", None),  # an unknown key: no guess
+        (None, "anthropic", "sk-test", None),  # too short for an old-style OpenAI key
+        (None, "anthropic", "sk-" + "a" * 48, "an OpenAI key"),  # an old-style OpenAI key
+        (None, "local", None, None),
+    ],
+)
+def test_keys_for_another_provider_are_spotted(
+    url: str | None, provider: str, key: str | None, warned: str | None
+) -> None:
+    message = key_mismatch(url, provider, key)
+    assert (message is None) == (warned is None) and (warned is None or warned in str(message))
+
+
+async def test_a_key_for_another_provider_is_not_saved_and_explains_a_refusal(tmp_path: Path) -> None:
+    service = make_service(tmp_path, lambda r: httpx.Response(401, text="invalid x-api-key"))
+    with pytest.raises(RpcError, match="looks like an OpenAI key"):
+        await collect(service, "ai.v1.connections.save", {"name": "D", "provider": "anthropic", "key": "sk-proj-x"})
+    assert service.connections.connections == []
+
+    # A connection saved before this check (or edited by hand): its failed test says what is wrong.
+    c = service.connections.upsert("D", "anthropic", None, "sk-proj-x")
+    tested, _ = await collect(service, "ai.v1.connections.test", {"id": c.id})
+    assert tested["ok"] is False and 'choose the Provider "OpenAI-compatible service"' in tested["message"]
 
 
 async def test_connection_test_and_local_servers(tmp_path: Path) -> None:

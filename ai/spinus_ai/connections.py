@@ -22,6 +22,43 @@ DEFAULT_BASE_URLS = {
 KEYRING_SERVICE = "Spinus DAW"
 
 
+# Whose key it is, from how it starts, and the Provider choice that goes with it (as the settings name it).
+KEY_OWNERS = (
+    ("Anthropic", "Anthropic (Claude)", "api.anthropic.com"),
+    ("OpenRouter", "OpenRouter", "openrouter.ai"),
+    ("OpenAI", "OpenAI-compatible service", "api.openai.com"),
+)
+
+
+def key_owner(key: str) -> int | None:
+    """Which of KEY_OWNERS a key belongs to, or None when its shape doesn't say."""
+    if key.startswith("sk-ant-"):
+        return 0
+    if key.startswith("sk-or-"):
+        return 1
+    if key.startswith(("sk-proj-", "sk-svcacct-", "sk-admin-")) or (key.startswith("sk-") and len(key) >= 40):
+        return 2
+    return None
+
+
+def key_mismatch(base_url: str | None, provider: str, key: str | None) -> str | None:
+    """A plain-language warning when a key is clearly for another provider than the address it would be sent
+    to (an OpenAI key with the Provider left at Anthropic, say), or None. Only the three services' own
+    addresses are checked: a proxy or another service may take any key."""
+    if not key or provider not in DEFAULT_BASE_URLS:
+        return None
+    url = base_url or DEFAULT_BASE_URLS[provider]
+    owner = key_owner(key.strip())
+    target = next((i for i, o in enumerate(KEY_OWNERS) if o[2] in url), None)
+    if owner is None or target is None or owner == target:
+        return None
+    name, choice, _ = KEY_OWNERS[owner]
+    return (
+        f"This looks like an {name} key, but the connection sends it to {KEY_OWNERS[target][0]}. "
+        f'For an {name} key, choose the Provider "{choice}".'
+    )
+
+
 class KeyStore(Protocol):
     def get(self, connection_id: str) -> str | None: ...
     def set(self, connection_id: str, key: str) -> None: ...

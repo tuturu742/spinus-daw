@@ -35,6 +35,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **3x Osc in Mono no longer hangs on or slides from a key held when playback stopped:** stopping lets go
   of every key, so the next note starts on its own pitch and ends when you let go of it. "All sound off"
   now silences 3x Osc at once.
+- **OpenAI's newer models (GPT-5 and later) work with the assistant and the pattern generator:** they
+  refused every request with "Unsupported parameter: 'max_tokens'" (error 400), because they take the
+  answer-length limit under a new name. Spinus now uses the name each service asks for.
+- **A key for the wrong provider is caught:** an OpenAI key with the Provider left at Anthropic (the first
+  choice) was saved anyway and then refused with a puzzling 401 from Anthropic. Spinus now tells Anthropic,
+  OpenRouter and OpenAI keys apart, doesn't save a mismatched one, and says which Provider to choose. After
+  **Save**, the new connection is the one selected, so **Test** no longer tests an older one by mistake.
 
 ### The Browser
 

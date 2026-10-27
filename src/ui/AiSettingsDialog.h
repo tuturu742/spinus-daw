@@ -73,6 +73,7 @@ public:
         juce::StringArray models;
     };
     const std::vector<ConnectionInfo>& getConnections() const noexcept { return connections; }
+    int getSelectedConnection() const { return list.getSelectedRow(); }
     juce::String getStatusText() const { return status.getText(); }
     juce::String getAssistantRoute() const { return assistantRoute; }
     /** The pattern generator's own model ("connection: model"), or empty when it uses the assistant's. */
@@ -94,6 +95,7 @@ private:
     ai::AiService& service;
     int stateListener = 0;
     std::vector<ConnectionInfo> connections;
+    juce::String selectAfterRefresh; // a connection just added, selected once the list has it
     juce::String assistantRoute, patternsRoute;
     int waiting = 0;
 
