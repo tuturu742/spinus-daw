@@ -125,6 +125,17 @@ ROLES: dict[str, tuple[str, str, str, str, bool]] = {
     "counter": ("Counter-melody", "Leads", "lead", "lead", False),
     "riser": ("Riser", "FX", "fx", "fx", False),
     "impact": ("Impacts", "FX", "fx", "drums", True),
+    "rhythm-guitar": ("Rhythm guitar", "Guitars", "chords", "keys", False),
+    "lead-guitar": ("Lead guitar", "Guitars", "lead", "lead", False),
+    "acoustic-guitar": ("Acoustic guitar", "Guitars", "chords", "pluck", False),
+    "clean-guitar": ("Clean guitar", "Guitars", "chords", "pluck", False),
+    "piano": ("Piano", "Keys", "chords", "keys", False),
+    "organ": ("Organ", "Keys", "chords", "keys", False),
+    "strings": ("Strings", "Orchestra", "chords", "pad", False),
+    "brass": ("Brass", "Orchestra", "chords", "lead", False),
+    "woodwinds": ("Woodwinds", "Orchestra", "lead", "lead", False),
+    "choir": ("Choir", "Orchestra", "chords", "pad", False),
+    "percussion": ("Percussion", "Drums", "drums", "drums", True),
 }
 SKETCH = ("drums", "bass", "chords", "lead")
 FULL = ("drums", "bass", "sub", "chords", "pad", "arp", "lead", "counter", "riser", "impact")
@@ -301,6 +312,8 @@ class Style:
     vocabularies: dict[str, Vocabulary]
     has_drums: bool
     without: frozenset[str] = frozenset()  # parts the song leaves out (a described song: "no drums")
+    double_kick: bool = False  # the drums play a double kick in the choruses (metal)
+    key_fixed: bool = False  # a key the user wrote: not moved a step
 
     @staticmethod
     def from_summary(summary: dict[str, Any]) -> Style:
@@ -372,6 +385,8 @@ class Style:
             vocabularies=vocabularies(summary),
             has_drums=has_drums,
             without=frozenset(str(p) for p in summary.get("without") or [] if p in PARTS),
+            double_kick=bool(drums.get("doubleKick")),
+            key_fixed=bool(summary.get("keyFixed")),
         )
 
     def vocabulary(self, mode: str) -> Vocabulary:
@@ -491,7 +506,7 @@ def make_plan(
     mode = weighted(rng, style.modes)
     keys = [k for k in style.keys if k[1] == mode] or [(k[0], mode, k[2]) for k in style.keys]
     tonic = weighted(rng, {k[0]: float(k[2]) for k in keys})
-    if rng.random() < 0.35:  # a little variation: a step up or down
+    if rng.random() < 0.35 and not style.key_fixed:  # a little variation: a step up or down
         tonic = (tonic + rng.choice((-2, -1, 1, 2))) % 12
 
     count = max(5, min(10, round(style.sections_per_song)))
@@ -777,6 +792,13 @@ def write_drums(ctx: Context) -> list[dict[str, Any]]:
                 if lane == "hats":
                     velocity -= 0.12
                 notes.append(drum_note(ctx, bar, step, drum_of[lane], velocity * (0.8 + 0.2 * energy)))
+        if ctx.style.double_kick and kind == "chorus" and not end:
+            # Metal's double kick: every sixteenth (every eighth when it is very fast), the off-beats softer.
+            every = 1 if float(ctx.plan["tempo"]) <= 170 else 2
+            taken = {n["start"] for n in notes if n["drum"] == "kick"}
+            for step in range(0, steps, every):
+                if ctx.at(bar, step) not in taken:
+                    notes.append(drum_note(ctx, bar, step, "kick", 0.62 if step % 4 else 0.85))
         if bar == 0 and kind != "intro" and plays("drums", kind, 0, ctx.bars):
             notes.append(drum_note(ctx, bar, 0, "crash", 0.8))
         if end:
@@ -1122,8 +1144,18 @@ def layer_plays(layer: str, kind: str, bar: int, bars: int, instance: int = 0) -
         return kind in ("intro", "chorus", "bridge", "outro")
     if layer == "arp":
         return kind == "chorus" or (kind == "bridge" and bar >= bars // 2)
-    if layer in ("counter", "sub"):
+    if layer in ("counter", "sub", "brass"):
         return kind == "chorus"
+    if layer == "lead-guitar":
+        return kind in ("chorus", "bridge") or (kind == "intro" and bar >= bars // 2)
+    if layer in ("organ", "choir"):
+        return kind in ("chorus", "bridge", "outro")
+    if layer == "strings":
+        return kind in ("intro", "chorus", "bridge", "outro")
+    if layer == "woodwinds":
+        return kind == "chorus" or (kind == "verse" and bar >= bars // 2)
+    if layer == "percussion":
+        return kind in ("verse", "chorus", "bridge")
     return True
 
 
@@ -1210,7 +1242,9 @@ def write_arp(ctx: Context, octave: int = 0, slower: bool = False, plays: str = 
     return notes
 
 
-def write_counter(ctx: Context, lead: list[dict[str, Any]], octave: int = 0) -> list[dict[str, Any]]:
+def write_counter(
+    ctx: Context, lead: list[dict[str, Any]], octave: int = 0, plays: str = "counter"
+) -> list[dict[str, Any]]:
     """A slower line under the lead: a held chord note each half bar (the chord's third first, then its fifth), a
     fifth or so below the lead's middle, moving as little as it can and never rubbing a semitone (or doubling
     the note) against the lead note sounding with it."""
@@ -1227,7 +1261,7 @@ def write_counter(ctx: Context, lead: list[dict[str, Any]], octave: int = 0) -> 
     for slot in range(ctx.bars * 2):
         bar = slot // 2
         tones = ctx.chords[bar]["tones"]
-        if not tones or not layer_plays("counter", kind, bar, ctx.bars):
+        if not tones or not layer_plays(plays, kind, bar, ctx.bars):
             continue
         at = slot * half
         above = lead_at(at)
@@ -1335,6 +1369,272 @@ def shifted(notes: list[dict[str, Any]], semitones: int) -> list[dict[str, Any]]
     return [{**n, "pitch": min(127, int(n["pitch"]) + semitones)} for n in notes]
 
 
+# The instruments' own ways of playing (the roles beyond the four parts).
+
+GUITAR = (40, 76)  # a guitar's notes, low E to the twelfth fret of the high strings
+
+
+def moved(voicing: list[int], before: list[int] | None) -> float:
+    """How far a voicing's notes move from the one before (0 for the first)."""
+    return float(sum(min(abs(a - b) for b in before) for a in voicing)) if before else 0.0
+
+
+def is_heavy(style: Style) -> bool:
+    """Rock and metal's chugging: a busy kick or busy other instruments (power chords on every sixteenth)."""
+    return style.double_kick or sum(style.lanes["kick"]) >= 5.5 or style.parts["other"].per_bar >= 12
+
+
+def guitar_voicing(tones: list[int], low: int = 40) -> list[int]:
+    """A chord as a guitar plays it open: the root low, then the fifth, the octave, the third, the fifth and the
+    octave again, up to the high strings."""
+    root = nearest_octave(tones[0], low + 5, low, low + 11)
+    third = tones[1] if len(tones) > 1 else tones[0]
+    fifth = tones[2] if len(tones) > 2 else tones[0] + 7
+    shape = [root, root + (fifth - tones[0]) % 12, root + 12, root + 12 + (third - tones[0]) % 12]
+    shape += [shape[1] + 12, root + 24]
+    return [p for p in shape if p <= GUITAR[1]]
+
+
+def guitar_note(ctx: Context, bar: int, step: float, length: float, pitch: int, velocity: float) -> dict[str, Any]:
+    return {
+        "start": ctx.at(bar, step),
+        "length": max(40, round(length * TICKS_PER_STEP)),
+        "pitch": pitch,
+        "velocity": round(min(1.0, max(0.1, velocity)), 3),
+    }
+
+
+def write_rhythm_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Power chords (root, fifth, octave). Heavy styles chug palm-muted sixteenths (or gallops: an eighth and
+    two sixteenths) on the root, the power chord ringing on the strong beats and where the kick hits; others
+    strike the power chord on the eighths. The intro's first half lets one ring each bar."""
+    heavy = is_heavy(ctx.style)
+    kick = ctx.style.lanes["kick"]
+    gallop = heavy and ctx.rng.random() < 0.4
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        tones = ctx.chords[bar]["tones"]
+        if not tones:
+            continue
+        root = nearest_octave(tones[0], 45 + 12 * octave, 40 + 12 * octave, 52 + 12 * octave)
+        power = [root, root + 7, root + 12]
+        if (kind == "intro" and bar < ctx.bars // 2) or (ctx.last and bar == ctx.bars - 1):
+            notes += [guitar_note(ctx, bar, 0, ctx.steps * 0.95, p, 0.8) for p in power]
+            continue
+        if heavy:
+            steps = [s for s in range(ctx.steps) if not gallop or s % 4 != 1]
+            for s in steps:
+                accent = s % 8 == 0 or kick[s % len(kick)] >= 0.6
+                if accent:
+                    notes += [guitar_note(ctx, bar, s, 1.8, p, 0.9) for p in power]
+                else:  # palm-muted: the root alone, short and softer
+                    notes.append(guitar_note(ctx, bar, s, 0.55, root, 0.62 + ctx.rng.uniform(-0.04, 0.04)))
+        else:
+            for s in range(0, ctx.steps, 2):
+                velocity = 0.82 if s % 4 == 0 else 0.68
+                notes += [guitar_note(ctx, bar, s, 1.8, p, velocity) for p in power]
+    return notes
+
+
+# Down and up strokes of a strum on the eighths: D D U U D U.
+STRUM = ((0, True, 0.75), (4, True, 0.62), (6, False, 0.48), (10, False, 0.48), (12, True, 0.62), (14, False, 0.5))
+
+
+def write_acoustic_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Strummed open chords: D D U U D U, a down stroke from the low string up (a few ticks apart), an up
+    stroke from the high strings down on four of them; each stroke rings until the next."""
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        tones = ctx.chords[bar]["tones"]
+        if not tones:
+            continue
+        shape = guitar_voicing(tones, 40 + 12 * octave)
+        strokes = STRUM if kind not in ("intro", "outro") else ((0, True, 0.7), (8, True, 0.6))
+        for i, (step, down, velocity) in enumerate(strokes):
+            end = strokes[i + 1][0] if i + 1 < len(strokes) else ctx.steps
+            strings = shape if down else shape[::-1][:4]
+            for k, pitch in enumerate(strings):
+                note = guitar_note(
+                    ctx, bar, step, end - step, pitch, velocity - 0.03 * k + ctx.rng.uniform(-0.03, 0.03)
+                )
+                note["start"] += 12 * k  # the strum's spread
+                notes.append(note)
+    return notes
+
+
+def write_clean_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """A fingerpicked chord: the open shape's strings one at a time on the eighths (bass, then the inner and
+    high strings), each ringing."""
+    order = (0, 3, 2, 4, 1, 3, 2, 4)
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        tones = ctx.chords[bar]["tones"]
+        if not tones:
+            continue
+        shape = guitar_voicing(tones, 45 + 12 * octave)
+        for i, step in enumerate(range(0, ctx.steps, 2)):
+            pitch = shape[order[i % len(order)] % len(shape)]
+            notes.append(
+                guitar_note(ctx, bar, step, 5, pitch, (0.68 if i == 0 else 0.55) + ctx.rng.uniform(-0.03, 0.03))
+            )
+    return notes
+
+
+PENTATONIC = {"minor": (0, 3, 5, 7, 10), "major": (0, 2, 4, 7, 9)}
+
+
+def write_lead_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """A riff on the key's pentatonic scale: a one-bar motif (sixteenths in heavy styles, eighths otherwise)
+    repeated, its strong beats moved onto the chord's notes; busier in the bridge (a solo)."""
+    key = ctx.plan["key"]
+    tonic, scale = int(key["tonic"]), str(key["scale"])
+    ladder = [
+        p
+        for p in range(55 + 12 * octave, 80 + 12 * octave)
+        if (p - tonic) % 12 in PENTATONIC.get(scale, PENTATONIC["minor"])
+    ]
+    heavy = is_heavy(ctx.style)
+    kind = str(ctx.section["kind"])
+    every = 1 if heavy or kind == "bridge" else 2
+    count = ctx.rng.randint(5, 8) if every == 2 else ctx.rng.randint(7, 11)
+    onsets = rhythm(ctx.rng, ctx.steps, count, [1.0 if s % every == 0 else 0.0 for s in range(ctx.steps)])
+    walk = [ctx.rng.choice((-2, -1, 1, 2)) for _ in onsets]
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        tones = ctx.chords[bar]["tones"]
+        if not tones or not layer_plays("lead-guitar", kind, bar, ctx.bars):
+            continue
+        index = len(ladder) // 2
+        for i, step in enumerate(onsets):
+            index = max(0, min(len(ladder) - 1, index + walk[i]))
+            pitch = ladder[index]
+            if step % 4 == 0:  # strong beats on the chord
+                pitch = min((p for p in ladder if p % 12 in tones), key=lambda p: abs(p - pitch), default=pitch)
+            end = onsets[i + 1] if i + 1 < len(onsets) else ctx.steps
+            notes.append(guitar_note(ctx, bar, step, (end - step) * 0.9, pitch, 0.78 + (0.1 if step % 4 == 0 else 0.0)))
+    return notes
+
+
+def write_piano(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Two hands: the left the chord's root in octaves, the right a voiced chord near middle C. Verses break it
+    into eighths (root-fifth-third-fifth in the right hand); choruses strike it on the beats."""
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    previous: list[int] | None = None
+    for bar in range(ctx.bars):
+        tones = ctx.chords[bar]["tones"]
+        if not tones:
+            continue
+        root = nearest_octave(tones[0], 40 + 12 * octave, 33 + 12 * octave, 48 + 12 * octave)
+        options = voicing_options(tones, 3, 55 + 12 * octave, 76 + 12 * octave) or [[60, 64, 67]]
+        chord = min(options, key=lambda v: moved(v, previous) + abs(sum(v) / 3 - 64 - 12 * octave))
+        previous = chord
+        if kind == "chorus":
+            for step in range(0, ctx.steps, 4):
+                notes.append(guitar_note(ctx, bar, step, 3.6, root, 0.7))
+                notes.append(guitar_note(ctx, bar, step, 3.6, root + 12, 0.6))
+                notes += [guitar_note(ctx, bar, step, 3.6, p, 0.66 if step else 0.75) for p in chord]
+        else:
+            notes.append(guitar_note(ctx, bar, 0, ctx.steps * 0.95, root, 0.62))
+            broken = (chord[0], chord[2], chord[1], chord[2])
+            for i, step in enumerate(range(0, ctx.steps, 2)):
+                notes.append(guitar_note(ctx, bar, step, 1.9, broken[i % 4], 0.55 + (0.08 if step % 8 == 0 else 0.0)))
+    return notes
+
+
+def held_voicing(
+    ctx: Context, layer: str, low: int, high: int, voices: int, velocity: float, bass: int | None = None
+) -> list[dict[str, Any]]:
+    """A voicing held for each run of one chord (organ, strings, choir), with a low root under it when `bass`."""
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    previous: list[int] | None = None
+    for first, length in chord_spans(ctx):
+        playing = [b for b in range(first, first + length) if layer_plays(layer, kind, b, ctx.bars)]
+        tones = ctx.chords[first]["tones"]
+        if not playing or not tones:
+            continue
+        options = voicing_options(tones, voices, low, high) or voicing_options(tones, voices, low - 12, high + 12)
+        if not options:
+            continue
+        chord = min(options, key=lambda v: moved(v, previous) + ctx.rng.random() * 0.2)
+        previous = chord
+        held = len(playing) * ctx.steps * 0.97
+        if bass is not None:
+            notes.append(
+                guitar_note(ctx, playing[0], 0, held, nearest_octave(tones[0], bass, bass - 6, bass + 6), velocity)
+            )
+        notes += [guitar_note(ctx, playing[0], 0, held, p, velocity * (0.8 + 0.2 * ctx.energy)) for p in chord]
+    return notes
+
+
+def write_organ(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Held four-note chords over the root, as a drawbar organ pads a band."""
+    return held_voicing(ctx, "organ", 53 + 12 * octave, 74 + 12 * octave, 4, 0.6, 40 + 12 * octave)
+
+
+def write_strings(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Sustained, widely spread voicings: the cellos' root low, violins and violas above."""
+    return held_voicing(ctx, "strings", 58 + 12 * octave, 79 + 12 * octave, 3, 0.55, 45 + 12 * octave)
+
+
+def write_choir(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Held three-part chords in the voices' range."""
+    return held_voicing(ctx, "choir", 52 + 12 * octave, 74 + 12 * octave, 3, 0.5)
+
+
+def write_brass(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Stabs: a short three-note chord on the bar's first beat and where the snare hits, in the choruses."""
+    snare = ctx.style.lanes["snare"]
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        tones = ctx.chords[bar]["tones"]
+        if not tones or not layer_plays("brass", kind, bar, ctx.bars):
+            continue
+        options = voicing_options(tones, 3, 55 + 12 * octave, 72 + 12 * octave) or [[60, 64, 67]]
+        chord = min(options, key=lambda v: abs(sum(v) / 3 - 63 - 12 * octave))
+        for step in [0] + [s for s in range(2, ctx.steps) if snare[s % len(snare)] >= 0.6 and s % 4]:
+            notes += [guitar_note(ctx, bar, step, 1.5, p, 0.82) for p in chord]
+        if bar % 2 == 1:
+            notes += [guitar_note(ctx, bar, ctx.steps - 2, 2, p, 0.75) for p in chord]
+    return notes
+
+
+def write_percussion_role(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
+    """Hand percussion: a shaker on the sixteenths (accented on the off-beats), congas on the "and"s and a clap
+    with the backbeat."""
+    kind = str(ctx.section["kind"])
+    notes: list[dict[str, Any]] = []
+    for bar in range(ctx.bars):
+        if not layer_plays("percussion", kind, bar, ctx.bars):
+            continue
+        for step in range(ctx.steps):
+            notes.append(drum_note(ctx, bar, step, "hat", 0.42 if step % 2 else 0.3))
+        for step in (3, 7, 11):
+            notes.append(drum_note(ctx, bar, step, "tomHigh", 0.6))
+        notes.append(drum_note(ctx, bar, 14, "tomMid", 0.65))
+        if ctx.energy >= 0.9:
+            notes += [drum_note(ctx, bar, s, "snare", 0.5) for s in (4, 12)]
+    return notes
+
+
+INSTRUMENT_WRITERS = {
+    "rhythm-guitar": write_rhythm_guitar,
+    "acoustic-guitar": write_acoustic_guitar,
+    "clean-guitar": write_clean_guitar,
+    "lead-guitar": write_lead_guitar,
+    "piano": write_piano,
+    "organ": write_organ,
+    "strings": write_strings,
+    "choir": write_choir,
+    "brass": write_brass,
+    "percussion": write_percussion_role,
+}
+
+
 def make_layers(
     style: Style,
     plan: dict[str, Any],
@@ -1410,6 +1710,10 @@ def make_layers(
                 by_section[sid] = write_counter(ctx, parts["lead"].get(sid, []), octave)
             elif role == "sub":
                 by_section[sid] = write_sub(ctx)
+            elif role in INSTRUMENT_WRITERS:
+                by_section[sid] = INSTRUMENT_WRITERS[role](ctx, octave)
+            elif role == "woodwinds":  # a line over the lead's, an octave above the counter-melody
+                by_section[sid] = write_counter(ctx, parts["lead"].get(sid, []), 1, "woodwinds")
         if any(by_section.values()):
             notes[part["id"]] = by_section
 
@@ -1460,6 +1764,13 @@ def layer_register(style: Style, role: str, instance: int = 0) -> list[int] | No
         return [SUB_RANGE[0], 31, SUB_RANGE[1]]
     if role == "riser":
         return [60, 66, 71]
+    fixed = {
+        "rhythm-guitar": [40, 50, 64], "lead-guitar": [55, 67, 79], "acoustic-guitar": [40, 55, 76],
+        "clean-guitar": [45, 57, 76], "piano": [33, 60, 76], "organ": [40, 62, 74], "strings": [45, 65, 79],
+        "brass": [55, 63, 72], "woodwinds": [60, 72, 84], "choir": [52, 62, 74],
+    }  # fmt: skip
+    if role in fixed:
+        return [n + up for n in fixed[role]]
     found = {"bass": "bass", "chords": "other", "lead": "vocals"}.get(role)
     if found:
         p = style.parts[found]

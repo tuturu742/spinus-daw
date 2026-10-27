@@ -181,11 +181,10 @@ std::vector<Layer> layersOf (const juce::var& song)
 
 juce::String familyColour (const juce::String& family)
 {
-    static const std::map<juce::String, juce::String> colours { { "Drums", "#ffff3fa4" },
-                                                                { "Bass", "#ff2fd5e8" },
-                                                                { "Synths", "#ff6e59d9" },
-                                                                { "Leads", "#ffff9a3c" },
-                                                                { "FX", "#ffa0a8b8" } };
+    static const std::map<juce::String, juce::String> colours {
+        { "Drums", "#ffff3fa4" },  { "Bass", "#ff2fd5e8" },      { "Guitars", "#ffe8663a" }, { "Keys", "#ff57c27a" },
+        { "Synths", "#ff6e59d9" }, { "Orchestra", "#ffd1a94f" }, { "Leads", "#ffff9a3c" },   { "FX", "#ffa0a8b8" }
+    };
     const auto found = colours.find (family);
     return found != colours.end() ? found->second : juce::String ("#ff9b5cff");
 }
@@ -194,14 +193,30 @@ Sound defaultSound (const Layer& layer)
 {
     if (layer.drums)
         return defaultSound ("drums");
-    static const std::map<juce::String, juce::String> presets { { "bass", "Pluck Bass" },  { "sub", "Sub Bass" },
-                                                                { "chords", "Soft Keys" }, { "pad", "Warm Pad" },
-                                                                { "arp", "Pluck" },        { "lead", "Saw Lead" },
-                                                                { "counter", "Bell" },     { "riser", "Noise Riser" } };
+    // 3x Osc's closest presets for each role (it has no guitar: a saw or square lead stands in, a pluck for picked
+    // and strummed guitars).
+    static const std::map<juce::String, juce::String> presets { { "bass", "Pluck Bass" },
+                                                                { "sub", "Sub Bass" },
+                                                                { "chords", "Soft Keys" },
+                                                                { "pad", "Warm Pad" },
+                                                                { "arp", "Pluck" },
+                                                                { "lead", "Saw Lead" },
+                                                                { "counter", "Bell" },
+                                                                { "riser", "Noise Riser" },
+                                                                { "rhythm-guitar", "Square Lead" },
+                                                                { "lead-guitar", "Bright Lead" },
+                                                                { "acoustic-guitar", "Pluck" },
+                                                                { "clean-guitar", "Pluck" },
+                                                                { "piano", "Soft Keys" },
+                                                                { "organ", "Organ" },
+                                                                { "strings", "String Pad" },
+                                                                { "choir", "Choir Pad" },
+                                                                { "brass", "Synth Brass" },
+                                                                { "woodwinds", "Flute Lead" } };
     // A second part of a role sounds unlike the first.
     static const std::map<juce::String, juce::String> second {
-        { "bass", "Square Bass" }, { "chords", "Pluck" },    { "pad", "String Pad" },
-        { "arp", "Bell" },         { "lead", "Flute Lead" }, { "counter", "Synth Brass" }
+        { "bass", "Square Bass" }, { "chords", "Pluck" },        { "pad", "String Pad" },         { "arp", "Bell" },
+        { "lead", "Flute Lead" },  { "counter", "Synth Brass" }, { "rhythm-guitar", "Saw Lead" }, { "piano", "Bell" }
     };
     const auto& table = layer.instance > 0 && second.contains (layer.role) ? second : presets;
     auto sound = defaultSound ("lead");

@@ -2,7 +2,6 @@
 
 #include "ai/AnalysisJobs.h"
 #include "ai/Proposal.h"
-#include "dsp/sampler/SampleStorage.h"
 #include "session/SoundIndex.h"
 
 namespace spinus::ui
@@ -46,15 +45,7 @@ const parts::Plan::Part* chosenFor (const parts::Plan& plan, const juce::String&
     return nullptr;
 }
 
-constexpr const char* sizeSetting = "trackCreatorArrangement";
 } // namespace
-
-void SongWriterPanel::setArrangement (const juce::String& size)
-{
-    sizeBox.setSelectedId (size == "full" ? 2 : 1, juce::sendNotificationSync);
-}
-
-juce::String SongWriterPanel::getArrangement() const { return sizeBox.getSelectedId() == 2 ? "full" : "sketch"; }
 
 const parts::Plan::Part* SongWriterPanel::pagePartFor (const song::Layer& layer) const
 {
@@ -78,6 +69,9 @@ const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
     index.load();
     if (index.instruments.empty())
         return layerChoices;
+    // Varied: each part another instrument when one fits as well, and another song (seed) other ones.
+    std::set<juce::String> used;
+    const auto seed = (juce::uint32)(int)song["seeds"]["song"];
     for (const auto& layer : layers)
     {
         // What the Sounds page chose stays; the drums without a choice there get Spinus's Drum Machine.
@@ -94,7 +88,9 @@ const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
         // A described song names instruments to look for ("piano", or its genre's palette): the closest sound
         // whose name says it.
         const auto lookFor = context.summary["described"]["sounds"][juce::Identifier (layer.role)].toString();
-        const auto found = parts::choose (target, {}, index, lookFor.isEmpty() ? 1 : 40);
+        target.names = parts::targetFor ({ layer.id, layer.name, layer.role }, layer.instance, context.summary).names;
+        const auto found =
+            parts::vary (parts::choose (target, {}, index, 40), used, seed + (juce::uint32)layer.id.hashCode(), 40);
         const parts::Choice* best = nullptr;
         for (const auto& c : found)
             if (c.kind == parts::Choice::Kind::preset && c.role == layer.soundRole && best == nullptr)
@@ -107,7 +103,10 @@ const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
                     break;
                 }
         if (best != nullptr)
+        {
+            used.insert (best->instrument);
             layerChoices[layer.id] = *best;
+        }
     }
     return layerChoices;
 }
@@ -133,30 +132,13 @@ std::optional<parts::Plan::Part> SongWriterPanel::chosenForLayer (const song::La
 
 SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : session (s), getContext (std::move (c))
 {
-    intro.setText ("A new song in the style of the songs: sections, chords, drums, a bass, chords and a lead, "
-                   "written by rules on this computer (no AI connection needed). Experimental: a sketch to change.",
+    intro.setText ("The last step: a new song with the parts of step 3, in the style of step 2, written by rules on "
+                   "this computer (no AI connection needed). Apply puts it in the project to hear.",
                    juce::dontSendNotification);
     intro.setMinimumHorizontalScale (1.0f);
     intro.setJustificationType (juce::Justification::topLeft);
     status.setJustificationType (juce::Justification::topLeft);
     status.setMinimumHorizontalScale (1.0f);
-    sizeLabel.setText ("Arrangement", juce::dontSendNotification);
-    sizeBox.addItem ("Sketch: 4 parts (drums, bass, chords, lead)", 1);
-    sizeBox.addItem ("Full: about a dozen channels, grouped and coloured", 2);
-    sizeBox.setTooltip ("Sketch: four channels and a pattern per section, to build on. Full: the drums split into "
-                        "kick, snare and hats, a pad, an arpeggio, a counter-melody, a sub bass when there is room, "
-                        "a riser and impacts; thin verses and full choruses, each layer on a Playlist track of its "
-                        "own under its family (Drums, Bass, Synths, Leads, FX)");
-    {
-        auto* settings = &session.getEdit().engine.getPropertyStorage().getPropertiesFile();
-        sizeBox.setSelectedId (settings->getValue (sizeSetting) == "full" ? 2 : 1, juce::dontSendNotification);
-        sizeBox.onChange = [this, settings]
-        {
-            settings->setValue (sizeSetting, getArrangement());
-            if (onArrangementChanged)
-                onArrangementChanged (getArrangement());
-        };
-    }
     messageBox = [this] (const juce::MessageBoxOptions& options, std::function<void (int)> done)
     {
         const auto n = options.getNumButtons();
@@ -176,8 +158,6 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     againButton.onClick = [this] { anotherVersion(); };
     redoButton.setTooltip ("Write one part (drums, bass, chords, lead) or one section again, keeping the rest");
     redoButton.onClick = [this] { showRedoMenu(); };
-    listenButton.setTooltip ("Hear the project as it would be with the song, before applying it");
-    listenButton.onClick = [this] { listen(); };
     stopButton.onClick = [this] { stop(); };
     applyButton.setTooltip ("Put the song into the project: patterns, channels, the Playlist, tempo and key. One "
                             "undo step");
@@ -189,8 +169,7 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     text.setScrollbarsShown (true);
     text.setCaretVisible (false);
     for (auto* component : std::initializer_list<juce::Component*> {
-             &intro, &sizeLabel, &sizeBox, &refineButton, &writeButton, &againButton, &redoButton, &listenButton,
-             &applyButton, &mixButton, &status, &text })
+             &intro, &refineButton, &writeButton, &againButton, &redoButton, &applyButton, &mixButton, &status, &text })
         addAndMakeVisible (component);
     addChildComponent (stopButton);
     updateButtons();
@@ -199,7 +178,6 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
 SongWriterPanel::~SongWriterPanel()
 {
     *alive = false;
-    rendering = nullptr;
     if (context.service != nullptr && job.isNotEmpty())
         context.service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
 }
@@ -244,16 +222,20 @@ bool SongWriterPanel::write()
                         juce::dontSendNotification);
         return false;
     }
+    if (context.partsFromPage && context.parts.empty())
+    {
+        status.setText ("The song has no parts yet: add them in step 3, Parts (Add part..., or Suggest parts), "
+                        "then Write.",
+                        juce::dontSendNotification);
+        return false;
+    }
     const auto seed = fixedSeed >= 0 ? fixedSeed++ : juce::Random::getSystemRandom().nextInt (0x7fffffff);
     const bool refine = refineButton.getToggleState();
-    // The Sounds page's parts, as the user made the list (or the arrangement's when it has none yet).
+    // The Sounds page's parts, as the user made the list.
     juce::Array<juce::var> list;
     for (const auto& p : context.parts)
         list.add (object ({ { "id", p.id }, { "name", p.name }, { "role", p.role } }));
-    auto params = object ({ { "summary", context.summary },
-                            { "seed", seed },
-                            { "refine", refine },
-                            { "arrangement", getArrangement() } });
+    auto params = object ({ { "summary", context.summary }, { "seed", seed }, { "refine", refine } });
     if (! list.isEmpty())
         params.getDynamicObject()->setProperty ("parts", list);
     run (params, refine ? "Writing a song (the AI may vary its plan)..." : "Writing a song...",
@@ -265,7 +247,8 @@ bool SongWriterPanel::write()
              redoneParts.clear();
              redoneSections.clear();
              show();
-             status.setText ("Written. Listen to it, write another version or redo a part, then Apply.",
+             status.setText ("Written. Apply puts it in the project to hear (Ctrl+Z takes it away); or write another "
+                             "version or redo a part first.",
                              juce::dontSendNotification);
          });
     return true;
@@ -464,78 +447,8 @@ bool SongWriterPanel::applyNow (const juce::String& replace)
     return true;
 }
 
-bool SongWriterPanel::listen()
-{
-    if (busy)
-        return false;
-    context = getContext();
-    juce::String error;
-    // Heard as it would be after Apply replacing the last song, so only the new one plays.
-    const auto& project = session.getProject();
-    const auto json =
-        makeProposal (&error, whole || ! applied.isIn (project) ? song::lastSongName (project) : juce::String());
-    if (! json.isObject())
-    {
-        status.setText (error, juce::dontSendNotification);
-        return false;
-    }
-    const auto proposal = ai::Proposal::prepare (json, session.getHistory());
-    if (! proposal.canApply())
-    {
-        status.setText ("The song cannot be tried: " + proposal.error, juce::dontSendNotification);
-        return false;
-    }
-    const auto folder = context.workFolder != juce::File()
-                            ? context.workFolder
-                            : juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("spinus-song");
-    folder.createDirectory();
-    const auto file = folder.getChildFile ("song-preview.wav");
-    engine::ExportSettings settings;
-    settings.format = engine::ExportSettings::Format::wav24;
-    settings.tailSeconds = 2.0;
-    settings.tunedAudio = session.getTuner().getRenderedFiles();
-    if (session.getProjectFolder() != juce::File())
-        settings.audioFolder = session.getProjectFolder().getChildFile ("audio");
-    busy = true;
-    status.setText ("Playing the song through the instruments to listen (as an export, not out loud yet)...",
-                    juce::dontSendNotification);
-    updateButtons();
-    rendering = std::make_unique<engine::ExportJob> (
-        session.getEdit().engine, session.getDeviceFactory(), proposal.preview,
-        session.getAdapter().captureDeviceStates(), file, settings,
-        [this, a = alive, file] (const engine::ExportJob::Result& result)
-        {
-            // The job calls back from inside itself: finish on the next turn of the message loop.
-            juce::MessageManager::callAsync (
-                [this, a, file, result]
-                {
-                    if (! *a)
-                        return;
-                    rendering = nullptr;
-                    busy = false;
-                    if (result.ok && file.existsAsFile())
-                    {
-                        lastPreview = file;
-                        session.getSamplePreview().play (file, dsp::getAudioFormats());
-                        status.setText ("Playing the song as it would be after Apply (Stop stops it).",
-                                        juce::dontSendNotification);
-                    }
-                    else if (! result.cancelled)
-                        status.setText ("The song could not be played: " + result.error, juce::dontSendNotification);
-                    updateButtons();
-                });
-        });
-    rendering->start();
-    return true;
-}
-
 void SongWriterPanel::stop()
 {
-    if (rendering != nullptr)
-    {
-        rendering = nullptr; // cancels it
-        busy = false;
-    }
     if (context.service != nullptr && job.isNotEmpty())
         context.service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
     session.getSamplePreview().stop();
@@ -627,14 +540,14 @@ void SongWriterPanel::show()
                                           : "Apply adds it as " + song::nextSongName (project)) +
                    ": a channel per part, coloured and grouped by family (Drums, Bass, Synths, Leads, FX) with a bus "
                    "each in the mixer, a pattern per part and section, a Playlist track per part under its family's, "
-                   "markers, the tempo and key. The sounds chosen on Sounds for each part are used." +
+                   "markers, the tempo and key. The sounds chosen in step 3, Parts, are used." +
                    (chosen.isEmpty() ? juce::String (" Other parts get Spinus's own instruments.")
                                      : " Other parts, from your sound index: " + chosen.joinIntoString ("; ") + "."));
     }
     else if (whole || ! applied.isIn (project))
         lines.add ("Apply adds it as " + song::nextSongName (project) +
                    ": a pattern per section, a Playlist track, markers, the tempo and key; parts without a channel "
-                   "of the Sounds page get Spinus's own instruments or the sounds chosen there.");
+                   "of the Parts step get Spinus's own instruments or the sounds chosen there.");
     else if (! redoneParts.isEmpty() || ! redoneSections.isEmpty())
         lines.add ("Apply writes what was written again into " + applied.name + "; the rest stays.");
     else
@@ -648,11 +561,9 @@ void SongWriterPanel::updateButtons()
     writeButton.setEnabled (! busy);
     againButton.setEnabled (! busy && has);
     redoButton.setEnabled (! busy && has);
-    listenButton.setEnabled (! busy && has);
     applyButton.setEnabled (! busy && has);
     mixButton.setEnabled (! busy && applied.isIn (session.getProject()));
     refineButton.setEnabled (! busy);
-    sizeBox.setEnabled (! busy);
     stopButton.setVisible (busy || session.getSamplePreview().isPlaying());
     resized();
 }
@@ -661,17 +572,11 @@ void SongWriterPanel::resized()
 {
     auto area = getLocalBounds();
     intro.setBounds (area.removeFromTop (36));
-    {
-        auto r = area.removeFromTop (26);
-        sizeLabel.setBounds (r.removeFromLeft (90));
-        sizeBox.setBounds (r.removeFromLeft (360).reduced (0, 1));
-    }
-    area.removeFromTop (2);
     refineButton.setBounds (area.removeFromTop (26).removeFromLeft (420));
     area.removeFromTop (4);
     {
         auto r = area.removeFromTop (28);
-        for (auto* b : { &writeButton, &againButton, &redoButton, &listenButton })
+        for (auto* b : { &writeButton, &againButton, &redoButton })
         {
             b->setBounds (r.removeFromLeft (b == &againButton ? 130 : b == &redoButton ? 110 : 80).reduced (0, 1));
             r.removeFromLeft (6);

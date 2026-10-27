@@ -7,6 +7,7 @@
 #include "session/Session.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace spinus::ui
@@ -46,7 +47,7 @@ public:
         };
         std::vector<Song> songs;
         AnalysisLibrary library { juce::File() };
-        juce::String arrangement = "sketch"; // which parts the list starts from (parts::defaultParts)
+        std::vector<SoundSource> sources; // every instrument the Browser lists (Other sound, From an instrument)
         juce::File indexFolder, workFolder;
         SoundIndexer::Options helper;
         ai::AiService* service = nullptr;
@@ -67,9 +68,11 @@ public:
         double volumeDb = 0.0;
         // The reference: the song whose stem has the most of the part, and the part of it to play.
         juce::String songDigest, songName;
-        juce::File stem;  // the stem's FLAC file in the library
-        Excerpt excerpt;  // its busiest few seconds, with the notes
-        int measured = 0; // notes (or hits) measured over all songs
+        juce::File stem;                     // the stem's FLAC file in the library
+        Excerpt excerpt;                     // its busiest few seconds, with the notes
+        int measured = 0;                    // notes (or hits) measured over all songs
+        std::optional<parts::Choice> picked; // the user's own (Other sound...): kept first, and it wins
+        bool tune = false;                   // tuned toward the references' part (shown only with references)
         const parts::Choice* chosen() const { return choices.empty() ? nullptr : &choices[(size_t)selected]; }
     };
 
@@ -79,10 +82,21 @@ public:
 
     /** The song's parts (the user's list, which the song writer writes exactly). */
     std::vector<parts::SongPart> getParts() const;
-    /** Starts the list again from the arrangement's parts (a new description or summary, or the arrangement
-        changed), saying `why`; the sounds chosen go with it. */
+    /** Starts the list again (a new description or summary), saying `why`: the parts a description names, or
+        none; the sounds chosen go with it. */
     void resetParts (const juce::String& why = {});
+    /** Fills the list with suggested parts: "genre" (the described genre's), "sketch" or "full". */
+    bool suggestParts (const juce::String& which);
+    void setParts (const std::vector<parts::SongPart>&);
     bool addPart (const juce::String& role);
+    /** A part from an instrument (its role from its name), playing it. */
+    bool addPartFrom (const parts::Choice&);
+    /** The user's own sound for a part, any instrument and preset (Other sound...): it wins over suggestions. */
+    bool pickSound (int row, const parts::Choice&);
+    /** Gives an instrument the user's own role (empty: forgets it), kept beside the sound index. */
+    bool markInstrument (const juce::String& instrument, const juce::String& role);
+    /** Every instrument with its presets (or "Default sound"), for picking, and Mark it as. */
+    void fillInstrumentMenu (juce::PopupMenu&, const std::function<void (const parts::Choice&)>& picked);
     bool removePart (int row);
     bool setRole (int row, const juce::String& role);
     void stop();
@@ -97,7 +111,11 @@ public:
     bool addToProject();
 
     void setListenCloser (bool on) { closerButton.setToggleState (on, juce::dontSendNotification); }
-    void setTune (bool on) { tuneButton.setToggleState (on, juce::dontSendNotification); }
+    /** Whether parts are tuned toward the references when sounds are chosen (each part's own toggle, "Tune
+        toward the references", shown only with references; this sets it for every part, for tests). */
+    void setTune (bool on) { tuneByDefault = on; }
+    /** Tunes one part toward the references' part now (on), or not when sounds are chosen (off). */
+    bool setTuneFor (int row, bool on);
     void setEffects (bool on) { effectsButton.setToggleState (on, juce::dontSendNotification); }
     void setTuneTries (int tries) { tuneTries = tries; }
 
@@ -135,6 +153,10 @@ private:
     void updateRows();
     void updateButtons();
     void showAddMenu();
+    void showSuggestMenu();
+    void showOtherMenu (int row);
+    /** The role of a sound: the user's mark, else what its name says. */
+    juce::String roleOf (const parts::Choice&) const;
 
     Session& session;
     std::function<Context()> getContext;
@@ -153,10 +175,12 @@ private:
 
     juce::Label intro;
     MessageLabel status;
-    juce::ToggleButton closerButton { "Listen closer (AI)" }, tuneButton { "Tune the synths (slow)" },
-        effectsButton { "Effects and mix (AI)" };
-    juce::TextButton chooseButton { "Choose sounds" }, addPartButton { "Add part..." }, stopButton { "Stop" },
-        effectsAgainButton { "Set effects again" }, addButton { "Add these sounds to the project" };
+    juce::ToggleButton closerButton { "Listen closer (AI)" }, effectsButton { "Effects and mix (AI)" };
+    bool tuneByDefault = false, tuningOne = false;
+    int chooseCount = 0;
+    juce::TextButton chooseButton { "Choose sounds" }, addPartButton { "Add part..." },
+        suggestButton { "Suggest parts..." }, stopButton { "Stop" }, effectsAgainButton { "Set effects again" },
+        addButton { "Add these sounds to the project" };
     juce::Viewport viewport;
     juce::Component list;
     std::vector<std::unique_ptr<RowView>> views;

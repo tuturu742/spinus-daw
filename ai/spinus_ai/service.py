@@ -151,6 +151,7 @@ class Service:
             "ai.v1.style.summarize": self.style_summarize,
             "ai.v1.song.write": self.song_write,
             "ai.v1.song.describe": self.song_describe,
+            "ai.v1.song.prompt": self.song_prompt,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -974,9 +975,10 @@ class Service:
 
     async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read
-        it; default false)} -> the summary, its `described` saying what was understood. Rules only by default;
-        with ai and a connection the AI reads it (checked), and without one (or when it fails) the rules'
-        reading stands, with a note saying so."""
+        it; default false), summary and generated (the reference songs' summary and the prompt written for it:
+        the description then changes it where it differs)} -> the summary, its `described` saying what was
+        understood. Rules only by default; with ai and a connection the AI reads it (checked), and without one
+        (or when it fails) the rules' reading stands, with a note saying so."""
         from . import describe
 
         text = params.get("text")
@@ -985,20 +987,36 @@ class Service:
         if len(text) > 4000:
             raise RpcError(-32602, "The description is too long: a few sentences are enough.")
 
+        base = params.get("summary") if isinstance(params.get("summary"), dict) else None
+        if base is not None and base.get("kind") != "spinus.style-summary":
+            raise RpcError(-32602, "summary must be the Track creator's style summary.")
+        generated = str(params.get("generated") or "")
+
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
             if not params.get("ai"):
-                return describe.describe(text)
+                return describe.describe(text, base, generated)
             try:
-                return await describe.read_with_ai(self.client, self.connections, self.routing, self.usage, text, say)
+                return await describe.read_with_ai(self.client, self.connections, self.routing, self.usage, text, say,
+                                                   base, generated)  # fmt: skip
             except NoConnection:
                 note = "Read by Spinus's own rules: no AI connection is set up."
             except ProviderError as error:
                 note = f"Read by Spinus's own rules: the AI failed ({error})."
-            summary = describe.describe(text)
+            summary = describe.describe(text, base, generated)
             summary["described"]["note"] = note
             return summary
 
         return {"job": self.job(notify, work)}
+
+    async def song_prompt(self, params: dict[str, Any], notify: Notify) -> Any:
+        """The reference songs' summary as a description to edit (spinus_ai.describe.prompt_from): {summary} ->
+        {text}."""
+        from . import describe
+
+        summary = params.get("summary")
+        if not isinstance(summary, dict) or summary.get("kind") != "spinus.style-summary":
+            raise RpcError(-32602, "summary must be the Track creator's style summary.")
+        return {"text": describe.prompt_from(summary)}
 
     async def mix_plan(self, params: dict[str, Any], notify: Notify) -> Any:
         """Changes to the mix, each with a reason: {mix (from ai.v1.mix.analyze), master (the whole mix's

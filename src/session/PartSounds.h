@@ -6,6 +6,7 @@
 #include "SynthMatch.h"
 
 #include <map>
+#include <set>
 #include <optional>
 #include <vector>
 
@@ -41,8 +42,17 @@ struct SongPart
 
     bool operator== (const SongPart&) const = default;
 };
-/** drums, bass, sub, chords, pad, arp, lead, counter, riser, impact. */
+/** drums, percussion, bass, sub, rhythm-guitar, acoustic-guitar, clean-guitar, lead-guitar, chords, piano, organ,
+    pad, strings, choir, brass, woodwinds, arp, lead, counter, riser, impact (spinus_ai.songwriter.ROLES). */
 const juce::StringArray& songRoles();
+/** The role generic instrument words in an instrument's or preset's name say ("Steel Guitar": acoustic-guitar,
+    "Fingered Bass": bass, "Grand Piano": piano), or empty. No vendor or product names: what the user marked
+    (UserRoles) comes first where roles are used. */
+juce::String roleFromName (const juce::String& name);
+/** The parts a description names (its `described.parts`: "guitar, bass and drums"), none otherwise. */
+std::vector<SongPart> describedParts (const juce::var& summary);
+/** Suggest parts: "genre" (the described genre's usual parts), "sketch" or "full" (defaultParts). */
+std::vector<SongPart> suggestedParts (const juce::String& which, const juce::var& summary);
 /** How the page names a role: "Chords (rhythm)", "Arpeggio", "Riser (effect)"... */
 juce::String roleName (const juce::String& role);
 /** The list an arrangement proposes: "sketch" drums, bass, chords and lead; "full" those and a pad, an arpeggio,
@@ -57,6 +67,7 @@ struct Target
     juce::String part;                 // the stem: "bass", "other", "vocals", "drums" ("fx": an effect)
     juce::String id, name, role;       // the part of the list it is for (targetFor), or the stem's part and name
     bool measure = true;               // compared with the stem (the songs' own parts)
+    juce::StringArray names;           // words a fitting sound's name has (a guitar part: "guitar", "metal"...)
     juce::StringArray roles;           // the roles that fit, the best first
     int low = 0, median = 0, high = 0; // MIDI notes (0: unknown)
     double notesPerBar = 0.0, voices = 1.0;
@@ -181,6 +192,12 @@ struct Reference
 /** The closest sounds of the index for the part, closest first, at most `most`. When nothing fits all the
     rules (no preset of that role covering the register), the closest that fit fewer of them, saying so. */
 std::vector<Choice> choose (const Target&, const Reference&, const SoundIndex&, int most = 5);
+
+/** Varied suggestions: `candidates` (closest first) put in an order whose first few come from different
+    instruments (then different preset families), the instruments in `avoid` (the other parts') later, and
+    near ones shuffled by `seed` (another seed, other suggestions). At most `most`. */
+std::vector<Choice> vary (std::vector<Choice> candidates, const std::set<juce::String>& avoid, juce::uint32 seed,
+                          int most);
 
 /** How far a preset's measurements are from the stem's (scaled so that 1 is "clearly different"), and the
     reasons in words. Exposed for tests. */

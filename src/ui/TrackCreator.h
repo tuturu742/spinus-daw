@@ -181,9 +181,9 @@ public:
     // A song described in words (the second way in).
     DescribeSongPanel& getDescriber() noexcept { return *describer; }
     /** Whether the Sounds and Write pages work from the description (read last) or from the songs. */
-    bool isFromDescription() const noexcept { return fromDescription; }
+    bool isFromDescription() const noexcept { return described.isObject(); }
     /** The summary those pages work from: the description's or the songs'. */
-    const juce::var& getActiveSummary() const noexcept { return fromDescription ? described : summary; }
+    const juce::var& getActiveSummary() const noexcept { return described.isObject() ? described : summary; }
     /** Opens the automixer with this reference song (the main window sets it). */
     std::function<void (const juce::File& reference)> onOpenAutomixer;
 
@@ -274,11 +274,11 @@ private:
     MessageLabel soundsStatus;
     juce::TextButton updateSoundsButton { "Update sound index" }, stopSoundsButton { "Stop" },
         showSoundsButton { "Show sounds..." }, pluginsButton { "Your plugins..." };
-    juce::TextButton styleTab { "From songs you like" }, describeTab { "Describe a song" },
-        soundsTab { "Sounds for each part" }, songTab { "Write a song" };
+    juce::TextButton styleTab { "1. References" }, describeTab { "2. Description" }, soundsTab { "3. Parts" },
+        songTab { "4. Write a song" };
     std::unique_ptr<DescribeSongPanel> describer;
-    juce::var described;          // the last description's summary
-    bool fromDescription = false; // the description was read after the songs' summary
+    juce::var described;       // the last description's summary
+    void describeReferences(); // the songs' summary into the description, read
     Page page = Page::style;
     std::unique_ptr<PartSoundsPanel> partSounds;
     std::unique_ptr<SongWriterPanel> songWriter;

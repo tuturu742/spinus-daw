@@ -9,8 +9,10 @@
 namespace spinus::ui
 {
 
-/** The Track creator's second way in (experimental): a song described in words ("a sunny, upbeat indie pop song
-    at 118 BPM in G major, with acoustic guitar") instead of songs you like.
+/** The Track creator's second step, the description (experimental): the song in words ("a sunny, upbeat indie pop
+    song at 118 BPM in G major, with acoustic guitar"). With reference songs it starts as their summary in words
+    ("Like your songs: about 128 BPM, in A minor, four-on-the-floor drums; with drums, bass...") to edit as a
+    prompt: the words changed win, the songs' detailed style stays underneath for the rest.
 
     Read asks the AI service (ai.v1.song.describe, spinus_ai/describe.py) to read the words into a style summary,
     the same kind the songs you like give: rules on this computer by default, from a table of genres and the
@@ -36,6 +38,12 @@ public:
     void setUseAi (bool on) { aiButton.setToggleState (on, juce::dontSendNotification); }
     /** A summary read before (the Track creator remembers it), shown as if just read. */
     void show (const juce::var& summary);
+    /** The reference songs' summary and the description written from it (ai.v1.song.prompt): Read then changes
+        that summary where the description's words differ, and Your songs again puts that text back. Void: no
+        references (the description stands alone). */
+    void setReferences (const juce::var& summary, const juce::String& generated);
+    bool hasReferences() const noexcept { return references.isObject(); }
+    juce::String getGenerated() const { return generated; }
 
     bool isBusy() const noexcept { return busy; }
     const juce::var& getSummary() const noexcept { return summary; }
@@ -53,12 +61,13 @@ private:
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
     bool busy = false;
     juce::String job;
-    juce::var summary;
+    juce::var summary, references;
+    juce::String generated;
 
     juce::Label intro;
     juce::TextEditor textBox;
     juce::ToggleButton aiButton { "Let the AI read it (uses your AI connection)" };
-    juce::TextButton readButton { "Read" };
+    juce::TextButton readButton { "Read" }, againButton { "Your songs again" };
     MessageLabel understood, status;
     juce::TextEditor details;
 };

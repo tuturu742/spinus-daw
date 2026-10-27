@@ -1,11 +1,19 @@
 # The Track creator
 
-Give the Track creator a few songs you like, or a whole album, and it tells you what they have in common:
-their **tempo**, **key**, **chords**, **drum groove**, which **parts** play and how high or low, how long
-their **sections** are, and how **loud** they are. Then it uses this to make a new song in that style, with
-the instruments you have installed, in four steps: listening and summing up, [getting to know your
-sounds](#your-sounds), [choosing a sound for each part](#sounds-for-each-part), and [writing a
-song](#write-a-song). No songs at hand? [Describe the song](#describe-a-song) you want in words instead.
+The Track creator writes a new song with the instruments you have, in one path of four steps (the tabs at
+the top):
+
+1. **References** (optional): a few songs you like, or a whole album. Spinus studies what they have in
+   common: their **tempo**, **key**, **chords**, **drum groove**, which **parts** play and how high or low,
+   how long their **sections** are, and how **loud** they are. See [Adding songs](#adding-songs).
+2. **Description**: the song in words. With references, it starts as their style in words ("Like your songs:
+   about 128 BPM, in A minor, four-on-the-floor drums; with drums, bass, synth chords and a lead melody"),
+   which you change as you like ("make it 140 BPM", "in D minor", "add a guitar"). Without references, you
+   describe the song yourself. See [Describe a song](#describe-a-song).
+3. **Parts**: the song's parts and the sound each plays, chosen from [your sounds](#your-sounds). See
+   [Sounds for each part](#sounds-for-each-part).
+4. **Write a song**: puts it all together and writes the song, to apply to your project. See
+   [Write a song](#write-a-song).
 
 ![The Track creator](images/track-creator.png)
 
@@ -15,12 +23,9 @@ experimental features**. **View › Track creator (experimental)** then opens it
 it again and the Track creator closes and disappears from the menus; a saved
 [window layout](main-window.md#layouts) doesn't bring it back while it's off.
 
-It changes your song only when you click **Add these sounds to the project** (in
-[Sounds for each part](#sounds-for-each-part)) or **Apply** (in [Write a song](#write-a-song)), and each
-of those is one step you can undo. Everything else only listens, measures and suggests.
-
-The panel has four pages: **From songs you like** (your songs and what they have in common), **Describe a
-song** (the same, from your words), **Sounds for each part** and **Write a song**. The [sound index](#your-sounds) controls are under all of them.
+It changes your song only when you click **Add these sounds to the project** (step 3) or **Apply** (step
+4), and each of those is one step you can undo. Everything else only listens, measures and suggests. The
+[sound index](#your-sounds) controls are under every step.
 
 ## What it needs
 
@@ -36,6 +41,8 @@ computer; nothing is sent anywhere.
    each comes from and under which licence.
 
 ## Adding songs
+
+Step 1, **References**, is optional: songs you like, whose style the description (step 2) starts from.
 
 - **Add songs...** picks one or more audio files. **Add a folder...** adds every song in a folder, such as
   an album, and in the folders inside it (CD 1, CD 2), but not deeper. You can also drag files or folders
@@ -123,8 +130,20 @@ file is what the Track creator's next steps will start from.
 
 ## Describe a song
 
-Instead of songs you like, you can describe the song you want in a few words, and the next pages work
-from that: **Describe a song**, type, and click **Read**.
+Step 2, **Description**, holds the song in words; the next steps work from it. Type, and click **Read**.
+
+**With reference songs**, it starts as their style in words, already read:
+
+> Like your songs: about 128 BPM, in A minor, four-on-the-floor drums; with drums, bass, synth chords and a
+> lead melody.
+
+Change what you want and **Read** again: "make it 140 BPM", "in D minor", "darker", "add a guitar", "make it
+trance". What you change wins; everything you don't change stays as your songs have it (their chords,
+groove, parts and sections, measured in detail). Spinus says what changed: "Understood: like your songs,
+changed: 140 BPM, D minor, darker; parts: drums, bass, synth, melody, guitar". **Your songs again** puts
+their description back.
+
+**Without references**, describe the song yourself:
 
 ![Describe a song](images/track-creator-describe.png)
 
@@ -145,7 +164,7 @@ If something is missing or wrong, change the words and **Read** again. What it u
 | **Mood**: dark, brooding, melancholic, cold... or happy, sunny, euphoric, uplifting... | Minor or major more often (when no key is given). |
 | **Energy**: calm, chill, dreamy... or energetic, aggressive, heavy... | Fewer or more notes and drum hits. |
 | **Length**: short, long, epic | A shorter or longer song. |
-| **Instruments**: piano, guitar, strings, choir, organ, bells, flute, whistle, sax, brass, 808... | The part they fit gets a sound of that name from your [sound index](#your-sounds) ("Grand Piano" for a piano), unless you chose its sound yourself on [Sounds for each part](#sounds-for-each-part). |
+| **Instruments**: guitar, acoustic guitar, lead guitar, bass, drums, piano, organ, strings, brass, flute, choir, handclaps, pad, synth, whistle, 808... | The song's parts: "a song with guitar, bass and drums" gives a rhythm guitar, a bass and drums on [Sounds for each part](#sounds-for-each-part), each looking for a sound of that name in your [sound index](#your-sounds) ("Grand Piano" for a piano). Without instruments, the parts list starts empty: add parts, or **Suggest parts**. |
 | **Leaving out**: no drums, no melody | That part is left out. Ambient has no drums anyway. |
 
 **Let the AI read it** (off at first): with an AI connection set up in Options › AI, the AI reads the
@@ -153,11 +172,9 @@ description instead. It answers in the same terms, choosing from the same genres
 answer. If the AI isn't reachable or answers something unusable, Spinus's own reading stays, and the page
 says so. This sends your description, and nothing else, to your AI provider.
 
-Then go on to [Sounds for each part](#sounds-for-each-part), which chooses by the parts' roles and ranges
-(there are no songs to compare with), or straight to [Write a song](#write-a-song), which says "From your
-description" at the top. The pages work from whichever you did last: reading a description, or your songs
-being summed up. Reading a new description (or a new summary of your songs) starts the parts list on the
-Sounds page again, and the page says so. Spinus remembers the description and what it understood, like
+Then go on to step 3, [Parts](#sounds-for-each-part), and step 4, [Write a song](#write-a-song), which
+says "From your description" at the top. Reading a description (or your songs being summed up again)
+starts the parts list again, and the page says so. Spinus remembers the description and what it understood, like
 your list of songs.
 
 ## Your sounds
@@ -210,30 +227,56 @@ lead, and an unusual drum sample "perc" or "other". The next step uses them only
 
 ## Sounds for each part
 
-The **Sounds for each part** page holds the song's **parts**: what the new song will have, and the sound
+Step 3, **Parts**, holds the song's **parts**: what the new song will have, and the sound
 each plays. The song is written with exactly these parts and these sounds.
 
 ![Sounds for each part](images/track-creator-sounds.png)
 
-**The parts are yours.** The page starts from the [arrangement](#write-a-song) chosen on Write a song
-(Sketch: drums, bass, chords and lead; Full: those and a pad, an arpeggio, a counter-melody, a riser and
-impacts, with a sub bass when there is room). Then:
+**The parts are yours.** The list starts with the parts your description names ("a song with guitar, bass
+and drums": those three), or empty. Then:
 
-- **Add part...** adds one of a role: drums, bass, sub bass, chords (rhythm), pad, arpeggio, lead,
-  counter-melody, a riser or impacts. Two parts may share a role, such as two guitars: the second then
-  plays something else (a second chords part breaks the chords into an arpeggio an octave up, a third plays
-  off-beat stabs; a second lead harmonises the first a third below; a second pad, arpeggio or bass plays an
-  octave up; a second drums part plays percussion).
-- The list beside a part's name changes its **role**; **x** removes it. Three parts are fine (the Drum
-  Machine, a guitar and a synth), and so are a dozen.
-- A new description, a new summary of your songs, or another arrangement starts the list again; the page
-  says so.
+- **Add part...** adds a part of a role:
 
-Then click **Choose sounds**. For each part, Spinus picks the closest sounds you have (a part you already
-chose a sound for keeps it when it is still among them):
+  | Role | How it plays |
+  |---|---|
+  | **Drums** | Kick, snare and hats on one drum instrument, on your songs' (or the genre's) steps; a double kick in metal's choruses |
+  | **Percussion** | A shaker on the sixteenths, congas, a clap with the backbeat |
+  | **Bass**, **Sub bass** | The chords' roots where the kick plays; a sub holds them low in the choruses |
+  | **Rhythm guitar** | Power chords (root, fifth, octave): in rock and metal, palm-muted chugs on the sixteenths or gallops, the chord ringing on the accents; otherwise strummed on the eighths |
+  | **Acoustic guitar** | Open chords strummed down and up (D D U U D U), each string a moment after the last |
+  | **Clean guitar (picked)** | The chord's strings picked one by one on the eighths |
+  | **Lead guitar** | A riff on the key's pentatonic scale, on the chord's notes on the strong beats; busier in the bridge, like a solo |
+  | **Synth chords**, **Piano / keys** | Chords; the piano with two hands, broken into eighths in the verses and struck on the beats in the choruses |
+  | **Organ**, **Strings**, **Choir / vocal pad**, **Pad** | Held chords: the organ over its root, the strings spread wide, the choir in the voices' range |
+  | **Brass** | Short stabs on the bar's first beat and with the snare, in the choruses |
+  | **Woodwinds**, **Counter-melody** | A slower line answering the lead |
+  | **Arpeggio**, **Lead melody** | The chord's notes one after another; the tune |
+  | **Riser**, **Impacts** | Effects before and where each chorus starts |
+
+  Two parts may share a role, such as two guitars: the second then plays something else (a second guitar or
+  synth chords part an octave up or broken into an arpeggio, a second lead harmonises the first).
+- **Add part... › From an instrument** adds a part playing an instrument you pick. Its role is the one you
+  marked it with, or what its name says in plain words ("Steel Guitar" an acoustic guitar, "Fingered Bass" a
+  bass, "Grand Piano" a piano); otherwise a lead, to change.
+- **Your own roles for your sounds.** Spinus guesses each sound's role; you can set it yourself. In the
+  instrument menu (**Other sound...** or **From an instrument**), **Mark it as** gives an instrument a role
+  (for example a plugin whose default sound is a rhythm guitar); in **Show sounds...**, right-click a preset
+  and **Use as** gives that preset one. Your roles come first wherever roles are used (choosing sounds,
+  parts from an instrument), are kept beside the sound index, and stay when the index is updated or deleted.
+- **Suggest parts...** fills the list with the parts a song like this usually has: your genre's (rock: drums,
+  bass, two rhythm guitars and a lead guitar), a **sketch** (drums, bass, chords, lead) or a **full**
+  arrangement (see [A full arrangement](#a-full-arrangement)).
+- The list beside a part's name changes its **role**; **x** removes it. A new description or a new summary
+  of your songs starts the list again; the page says so.
+
+Then click **Choose sounds**. For each part, Spinus suggests sounds you have: the closest first, and as
+alternatives other instruments and other kinds of presets, so the parts don't all get the same synth.
+**Choose sounds** again suggests others. A part you already chose a sound for keeps it:
 
 1. **Which sounds fit**: a preset of the part's role (a bass for the bass, a pad for a pad, a pluck for an
-   arpeggio...) that plays the notes the part needs, and plays chords when the part does.
+   arpeggio...) that plays the notes the part needs, and plays chords when the part does. A guitar, piano,
+   organ, strings, brass, woodwind or choir part first looks for sounds whose name says so ("Guitar",
+   "Metal", "Grand", "Strings"...).
 2. **Drums**, from any of three kinds: Spinus's own **Drum Machine** with its kit (always there); another
    **drum instrument** (a plugin with a kit on its keys); or a **sample set**: a kick, a snare and a hat
    from your samples (or the starter pack) on the Drum Machine's pads. A drum loop near the songs' tempo
@@ -246,9 +289,10 @@ chose a sound for keeps it when it is still among them):
 4. **Listen closer** (needs AI turned on, the analysis engine and its CLAP model, which the Analyzer's
    closest preset downloads): the first five presets are also compared with the songs by listening, as
    closest preset does, and put in order again.
-5. **Tune the synths** (slow: a minute or more per part): the chosen preset is tuned toward the song's
-   part, as the Analyzer's tuned synths are. It runs in a separate program, so a synth that crashes only
-   stops its own tuning; **Stop** keeps what was found.
+5. **Tune toward the references** (only with reference songs: each part whose sound is a synth's preset has
+   it; slow, a minute or more): the part's synth is tuned toward that part in your songs, as the Analyzer's
+   tuned synths are. Tick it before **Choose sounds**, or after to tune that part at once. It runs in a
+   separate program, so a synth that crashes only stops its own tuning; **Stop** keeps what was found.
 6. **Effects and mix** (needs AI turned on, but no AI connection): each chosen sound plays a few seconds of
    the part, and Spinus compares it with the songs' part: an EQ moves its tone toward theirs, a compressor
    evens it out when it is much peakier, its fader makes the parts as loud as each other as in the songs,
@@ -263,6 +307,10 @@ D2 (the songs' 2.4)". Compare the numbers: the closer they are, the closer the s
   seconds of that part in one of your songs (its stem), to compare.
 - The list beside each part holds the **alternatives**, closest first: pick another to swap. Its tuning
   and effects are dropped; **Set effects again** sets them for the sounds chosen now.
+- **Other sound...** (at the end of that list) picks **any** instrument you have, of any format (Windows
+  plugins too), and any of its presets, or its **Default sound** when it has none or lists none. Instruments
+  the sound index hasn't measured (or measured as silent, or couldn't load) are there too, marked "not
+  measured". Your pick stays first on the list, marked "(your choice)", when you choose sounds again.
 - **Add these sounds to the project** makes, for each part, a channel named after it ("Bass (Track
   creator)") in the Channel Rack group **Track creator**, with its instrument, preset, tuning, effects and
   fader, and a pattern **Track creator: sounds** with a short phrase on each, so you can hear them
@@ -270,7 +318,8 @@ D2 (the songs' 2.4)". Compare the numbers: the closer they are, the closer the s
   write later plays on these channels.
 
 **What you choose here wins.** The written song uses each part's sound from this page; a description's
-instrument words and the sound index only fill in the parts you didn't choose a sound for.
+instrument words and the sound index only fill in the parts you didn't choose a sound for (each another
+instrument when one fits as well, and another song other ones).
 
 Without AI turned on, the sounds are still chosen, by their measurements alone, and can be added; the line
 at the bottom says what the AI would add. Nothing is sent anywhere: all of this runs on your computer.
@@ -282,34 +331,27 @@ ear.
 
 The last page, **Write a song**, writes a new song in the style of your songs (or of your description): its
 sections, chords and every part on the [Sounds for each part](#sounds-for-each-part) page, as notes in
-patterns you can edit like any other.
+patterns you can edit like any other. Apply it to hear it.
 
 ![Write a song](images/track-creator-song.png)
 
-1. The **Arrangement** (Spinus remembers it) proposes the parts the Sounds page starts from:
-   - **Sketch**: four parts: drums, bass, chords and lead, to build on yourself.
-   - **Full**: about ten, laid out as the [demo songs](getting-started.md#listen-to-the-demo-songs-first)
-     are (see [A full arrangement](#a-full-arrangement) below).
-
-   Add, remove or change parts on the Sounds page as you like; the song is written with exactly those.
-   Then click **Write**. In a moment the page says what it wrote: how long the song is, its tempo and key,
-   its sections ("Intro 8, Verse 16, Chorus 16, ...") and each section's chords, its parts, and how all this
-   compares with your songs in numbers.
-2. **Listen** plays the song as it would be in your project, through the sounds chosen for its parts,
-   before anything is changed. **Stop** stops it.
-3. Not quite right? **Another version** writes a different song in the same style. **Redo part...** writes
+1. Make the parts on [Sounds for each part](#sounds-for-each-part) (or **Suggest parts** there). Then click
+   **Write**. In a moment the page says what it wrote: how long the song is, its tempo and key, its sections
+   ("Intro 8, Verse 16, Chorus 16, ...") and each section's chords, its parts, and how all this compares with
+   your songs in numbers. Without parts, it says to add some first.
+2. Not quite right? **Another version** writes a different song in the same style. **Redo part...** writes
    one part again (**New drums**, **New guitar**...) or one section again (**The chorus again**, with new
    chords), and keeps everything else exactly as it was.
-4. **Apply** puts the song into your project: the tempo and key, a channel per part (or the one the Sounds
-   page added for it), a pattern per part and section, Playlist tracks and a marker where each section
-   starts. It is **one undo step**: Ctrl+Z takes it all away. After that, **Redo part...** and **Apply**
-   change only that part or section (one more undo step each).
-5. **Writing again replaces the song.** When the project has a song the Track creator wrote, Apply asks
+3. **Apply** puts the song into your project, which is how you hear it: the tempo and key, a channel per
+   part (or the one the Parts step added for it), a pattern per part and section, Playlist tracks and a
+   marker where each section starts. It is **one undo step**: Ctrl+Z takes it all away. After that,
+   **Redo part...** and **Apply** change only that part or section (one more undo step each).
+4. **Writing again replaces the song.** When the project has a song the Track creator wrote, Apply asks
    "Replace Song 1? It will be overwritten (Ctrl+Z brings it back)": **Replace** takes the old song out
-   (its channels, patterns, Playlist tracks and markers; the Sounds page's channels stay) and puts the new
+   (its channels, patterns, Playlist tracks and markers; the Parts step's channels stay) and puts the new
    one in its place, still one undo step; **Keep both** adds it as "Song 2" after the first; **Cancel**
    leaves the project as it is.
-6. **Mix it...** opens the [Automixer](automixer.md) with your first song as its reference: it measures the
+5. **Mix it...** opens the [Automixer](automixer.md) with your first song as its reference: it measures the
    parts now that they play notes, and suggests levels, EQ and compression toward your songs. Tick what you
    want and apply (one undo step).
 
@@ -334,25 +376,25 @@ anywhere and no AI connection is needed.
 - **Lead**: short phrases that answer each other, in your songs' vocal range and about as many notes a bar,
   with the chord's own notes on the strong beats and in the key in between. Only the style is used: your
   songs' melodies are never read (the summary has none).
-- **The other roles**: a pad holds the chords; an arpeggio plays them one note after another; a
-  counter-melody is a slower line under the lead that never clashes with it; a sub bass holds the roots
-  low in the choruses; a riser plays over the two bars before each chorus, and impacts (a kick and a crash)
-  where each chorus and the bridge start. Two parts of one role play different things (see
-  [Sounds for each part](#sounds-for-each-part)).
+- **The other roles** play as their instruments do (see the table on
+  [Sounds for each part](#sounds-for-each-part)): power-chord chugs for a metal rhythm guitar, strummed
+  open chords for an acoustic one, two hands for the piano, held chords for strings and organ, stabs for
+  brass. Two parts of one role play different things.
 
 ### A full arrangement
 
-With **Arrangement: Full**, the song is laid out as a producer would:
+**Suggest parts... › Full** proposes a song laid out as a producer would:
 
 ![A full arrangement on the Playlist](images/track-creator-full.png)
 
 | Family (colour) | Parts |
 |---|---|
-| **Drums** (pink) | **Drums**: kick, snare and hats on one drum instrument |
+| **Drums** (pink) | **Drums**: kick, snare and hats on one drum instrument (percussion beside it) |
 | **Bass** (cyan) | **Bass**; **Sub bass** when your songs' bass sits high enough to leave room for it |
 | **Synths** (purple) | **Chords**, **Pad**, **Arpeggio** |
 | **Leads** (orange) | **Lead**, **Counter-melody** |
 | **FX** (grey) | **Riser**, **Impacts** |
+| **Guitars** (red), **Keys** (green), **Orchestra** (gold) | Guitars, piano and organ, strings, brass, woodwinds and choir, when the list has them |
 
 - **Who plays when**: verses stay thin (drums, bass, chords, lead); choruses have everything; the bridge
   breaks down to the pad and builds up again with the arpeggio; the intro starts with the pad and chords.
@@ -362,7 +404,7 @@ With **Arrangement: Full**, the song is laid out as a producer would:
   section ("Song 1: Chorus - Pad", only where the part plays) and one per effect ("Song 1: Riser"). On the
   Playlist, a track per family ("Song 1: Drums") holds a track per part, so you see the parts come and go;
   fold a family to hide its tracks.
-- **Sounds**: each part plays the sound chosen for it on the Sounds page. A part without one gets the
+- **Sounds**: each part plays the sound chosen for it on the Parts step. A part without one gets the
   closest sound of its role from your [sound index](#your-sounds) (a pad for the pad, a pluck for the
   arpeggio, the instruments a description names); without one, Spinus's own (3x Osc's "Warm Pad",
   "Pluck", "Sub Bass", "Bell", "Noise Riser", the Drum Machine). The page lists which.

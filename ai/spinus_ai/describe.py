@@ -20,6 +20,7 @@ Pure Python: nothing downloaded, no model.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -104,6 +105,8 @@ class Feel:
     sounds: dict[str, str] = field(default_factory=dict)  # layer -> a word to look for in a sound's name
     drums: bool = True
     guitar_keys: bool = False  # keys guitars like (E minor, G major...)
+    suggest: tuple[str, ...] = ("drums", "bass", "chords", "pad", "lead")  # the parts this style usually has
+    double_kick: bool = False  # metal's double kick in the choruses
 
 
 FEELS: dict[str, Feel] = {
@@ -170,7 +173,7 @@ FEELS: dict[str, Feel] = {
                      (57, 66, 76, 2.0), 12.0, {16: 6, 8: 4}, 7, 128, -7.0, "a heavy bass and wide synths"),
     "trap": Feel({"minor": POP_MIN + DARK_MIN, "major": POP_MAJ}, 2.0, lane(0, also={3: 0.5, 7: 0.4, 10: 0.6}),
                  lane(8), SIXTEENTHS, 0.5, (24, 33, 45, 3.0), (55, 67, 79, 4.0, 1.5), (55, 62, 72, 4.0), 20.0,
-                 {8: 6, 16: 4}, 7, 96, -8.0, "an 808 bass, bells and dark keys", {"bass": "808", "arp": "bell"}),
+                 {8: 6, 16: 4}, 7, 96, -8.0, "an 808 bass, bells and dark keys", {"bass": "sub", "arp": "bell"}),
     "boombap": Feel({"minor": SOUL_MIN + DARK_MIN, "major": SOUL_MAJ}, 2.0, lane(0, 10, also={7: 0.5, 3: 0.2}),
                     BACKBEAT, EIGHTHS, 0.6, (28, 38, 48, 3.0), (52, 63, 74, 4.0, 3.0), (55, 62, 70, 6.0), 10.0,
                     {8: 6, 16: 4}, 7, 96, -9.0, "dusty keys, a round bass and a sampled feel", {"chords": "piano"}),
@@ -190,8 +193,8 @@ FEELS: dict[str, Feel] = {
                 "offbeat guitar, horns and a walking bass", {"counter": "brass"}),
     "funk": Feel({"major": FUNK_MAJ, "minor": FUNK_MIN}, 2.0, lane(0, 10, also={3: 0.5, 6: 0.4}),
                  lane(4, 12, also={7: 0.3, 9: 0.3}), SIXTEENTHS, 0.55, (28, 40, 52, 10.0), (55, 64, 74, 8.0, 3.0),
-                 (57, 66, 76, 4.0), 18.0, {8: 6, 16: 4}, 8, 112, -9.0, "a slap bass, clavinet and horns",
-                 {"counter": "brass", "chords": "clav"}),
+                 (57, 66, 76, 4.0), 18.0, {8: 6, 16: 4}, 8, 112, -9.0, "a slap bass, funky keys and horns",
+                 {"counter": "brass", "chords": "keys"}),
     "soul": Feel({"major": SOUL_MAJ, "minor": SOUL_MIN}, 1.0, lane(0, 8, also={10: 0.4}), BACKBEAT, EIGHTHS, 0.58,
                  (31, 40, 50, 5.0), (52, 62, 72, 5.0, 3.5), (57, 66, 77, 4.0), 11.0, {8: 8, 16: 2}, 8, 96, -10.0,
                  "electric piano, organ and a warm bass", {"chords": "piano"}),
@@ -226,6 +229,46 @@ FEELS: dict[str, Feel] = {
                     {16: 6, 32: 2}, 5, 128, -16.0, "long pads, bells and drones", {"pad": "pad", "arp": "bell"},
                     drums=False),
 }  # fmt: skip
+
+
+ROCK_BAND = ("drums", "bass", "rhythm-guitar", "rhythm-guitar", "lead-guitar")
+SUGGEST: dict[str, tuple[str, ...]] = {
+    "rock": ROCK_BAND, "punk": ROCK_BAND, "metal": ROCK_BAND, "blast": ROCK_BAND,
+    "dsbm": ("drums", "bass", "rhythm-guitar", "lead-guitar", "piano"),
+    "indiepop": ("drums", "bass", "acoustic-guitar", "clean-guitar", "piano", "lead"),
+    "folk": ("drums", "bass", "acoustic-guitar", "piano", "lead"),
+    "dream": ("drums", "bass", "clean-guitar", "pad", "lead"),
+    "film": ("percussion", "strings", "brass", "woodwinds", "choir", "piano"),
+    "jazz": ("drums", "bass", "piano", "brass"),
+    "bossa": ("percussion", "bass", "acoustic-guitar", "piano", "woodwinds"),
+    "latin": ("percussion", "bass", "piano", "brass", "acoustic-guitar"),
+    "soul": ("drums", "bass", "piano", "organ", "brass", "lead"),
+    "funk": ("drums", "bass", "clean-guitar", "organ", "brass"),
+    "disco": ("drums", "bass", "strings", "clean-guitar", "piano", "brass"),
+    "onedrop": ("drums", "bass", "organ", "clean-guitar", "lead"),
+    "ska": ("drums", "bass", "clean-guitar", "organ", "brass"),
+    "afro": ("drums", "percussion", "bass", "clean-guitar", "piano", "lead"),
+    "lofi": ("drums", "bass", "piano", "pad"),
+    "boombap": ("drums", "bass", "piano", "pad"),
+    "vapor": ("drums", "bass", "piano", "pad", "woodwinds"),
+    "ambient": ("pad", "strings", "choir", "arp"),
+    "chip": ("drums", "bass", "arp", "lead"),
+    "synth": ("drums", "bass", "chords", "pad", "arp", "lead"),
+    "coldsynth": ("drums", "bass", "chords", "pad", "lead"),
+    "four": ("drums", "bass", "chords", "pad", "arp", "lead", "riser", "impact"),
+    "trance": ("drums", "bass", "chords", "pad", "arp", "lead", "riser", "impact"),
+    "hard": ("drums", "bass", "chords", "lead", "riser", "impact"),
+    "techno": ("drums", "bass", "chords", "arp", "riser"),
+    "breaks": ("drums", "bass", "pad", "arp", "lead"),
+    "garage": ("drums", "bass", "organ", "pad", "lead"),
+    "halftime": ("drums", "bass", "chords", "pad", "lead", "riser", "impact"),
+    "trap": ("drums", "bass", "arp", "pad", "lead"),
+    "dembow": ("drums", "bass", "arp", "pad", "lead"),
+}  # fmt: skip
+for _feel, _parts in SUGGEST.items():
+    FEELS[_feel].suggest = _parts
+for _feel in ("metal", "blast"):
+    FEELS[_feel].double_kick = True
 
 
 @dataclass
@@ -394,30 +437,64 @@ MOODS: dict[str, tuple[float, float, float]] = {
     "heavy": (1.0, 0.5, 1.0), "powerful": (1.0, 0.0, 1.0), "angry": (1.05, 0.7, 1.0), "furious": (1.1, 0.7, 1.0),
     "raw": (1.0, 0.3, 0.5), "punchy": (1.0, 0.0, 0.7), "groovy": (1.0, 0.0, 0.3), "funky": (1.0, -0.3, 0.5),
     "busy": (1.0, 0.0, 0.7), "wild": (1.08, 0.0, 1.0), "hypnotic": (1.0, 0.5, 0.0), "bouncy": (1.03, -0.5, 0.5),
+    "darker": (1.0, 1.0, 0.0), "sadder": (0.95, 1.0, -0.3), "brighter": (1.0, -1.0, 0.0),
+    "happier": (1.03, -1.0, 0.3), "heavier": (1.0, 0.5, 1.0), "calmer": (0.92, 0.0, -1.0),
+    "softer": (0.95, 0.0, -0.7), "busier": (1.0, 0.0, 0.7), "sparser": (0.97, 0.0, -0.8),
+    "more energetic": (1.05, 0.0, 1.0), "more intense": (1.03, 0.3, 1.0),
 }  # fmt: skip
 SHORT = ("short", "brief", "quick sketch", "a sketch")
 LONG = ("long", "extended", "epic")
 
-# Instruments a description may name: the layer whose sound should be one, and the word to look for in the
-# sound's name (a preset called "Grand Piano"). Longer names first.
-INSTRUMENTS: tuple[tuple[str, str, str], ...] = (
-    ("electric piano", "chords", "piano"), ("rhodes", "chords", "rhodes"), ("wurlitzer", "chords", "wurli"),
-    ("piano", "chords", "piano"), ("organ", "chords", "organ"), ("clavinet", "chords", "clav"),
-    ("acoustic guitar", "chords", "guitar"), ("electric guitar", "chords", "guitar"), ("guitars", "chords", "guitar"),
-    ("guitar", "chords", "guitar"), ("ukulele", "chords", "uke"), ("banjo", "chords", "banjo"),
-    ("mandolin", "arp", "mandolin"), ("harp", "arp", "harp"), ("keys", "chords", "keys"),
-    ("strings", "pad", "string"), ("violin", "lead", "violin"), ("fiddle", "lead", "fiddle"),
-    ("cello", "counter", "cello"), ("choir", "pad", "choir"), ("voices", "pad", "choir"), ("pads", "pad", "pad"),
-    ("pad", "pad", "pad"), ("bells", "arp", "bell"), ("bell", "arp", "bell"), ("glockenspiel", "arp", "glock"),
-    ("marimba", "arp", "marimba"), ("vibraphone", "arp", "vibra"), ("music box", "arp", "box"),
-    ("arpeggios", "arp", "arp"), ("arpeggio", "arp", "arp"), ("plucks", "arp", "pluck"), ("pluck", "arp", "pluck"),
-    ("whistled", "lead", "whistle"), ("whistling", "lead", "whistle"), ("whistle", "lead", "whistle"),
-    ("flute", "lead", "flute"), ("recorder", "lead", "flute"), ("saxophone", "lead", "sax"), ("sax", "lead", "sax"),
-    ("trumpet", "lead", "trumpet"), ("horns", "counter", "brass"), ("brass", "counter", "brass"),
-    ("synth lead", "lead", "lead"), ("lead synth", "lead", "lead"), ("supersaw", "chords", "saw"),
-    ("808s", "bass", "808"), ("808", "bass", "808"), ("sub bass", "bass", "sub"), ("reese", "bass", "reese"),
-    ("slap bass", "bass", "slap"), ("upright bass", "bass", "upright"), ("bass guitar", "bass", "bass"),
-    ("synth bass", "bass", "synth"),
+# Instruments a description may name: the part's role, its name, and the word to look for in a sound's name (a
+# preset called "Grand Piano"). Longer names first; a part named once.
+INSTRUMENTS: tuple[tuple[str, str, str, str], ...] = (
+    ("acoustic guitars", "acoustic-guitar", "Acoustic guitar", "acoustic"),
+    ("acoustic guitar", "acoustic-guitar", "Acoustic guitar", "acoustic"),
+    ("nylon guitar", "acoustic-guitar", "Nylon guitar", "nylon"),
+    ("lead guitar", "lead-guitar", "Lead guitar", "guitar"),
+    ("guitar solo", "lead-guitar", "Lead guitar", "guitar"),
+    ("guitar solos", "lead-guitar", "Lead guitar", "guitar"),
+    ("guitar riffs", "lead-guitar", "Lead guitar", "guitar"),
+    ("clean guitar", "clean-guitar", "Clean guitar", "guitar"),
+    ("fingerpicked", "clean-guitar", "Clean guitar", "guitar"),
+    ("arpeggiated guitar", "clean-guitar", "Clean guitar", "guitar"),
+    ("rhythm guitar", "rhythm-guitar", "Rhythm guitar", "guitar"),
+    ("power chords", "rhythm-guitar", "Rhythm guitar", "guitar"),
+    ("electric guitars", "rhythm-guitar", "Guitar", "guitar"),
+    ("electric guitar", "rhythm-guitar", "Guitar", "guitar"),
+    ("distorted guitars", "rhythm-guitar", "Guitar", "guitar"), ("guitars", "rhythm-guitar", "Guitar", "guitar"),
+    ("guitar", "rhythm-guitar", "Guitar", "guitar"), ("ukulele", "acoustic-guitar", "Ukulele", "uke"),
+    ("banjo", "acoustic-guitar", "Banjo", "banjo"), ("mandolin", "clean-guitar", "Mandolin", "mandolin"),
+    ("bass guitar", "bass", "Bass", "bass"), ("slap bass", "bass", "Bass", "slap"),
+    ("upright bass", "bass", "Bass", "upright"), ("synth bass", "bass", "Bass", "synth"),
+    ("808s", "bass", "Bass", "sub"), ("808", "bass", "Bass", "sub"), ("sub bass", "sub", "Sub bass", "sub"),
+    ("reese", "bass", "Bass", "reese"), ("bass", "bass", "Bass", "bass"),
+    ("drum machine", "drums", "Drums", "drum"), ("drums", "drums", "Drums", "drum"),
+    ("drum", "drums", "Drums", "drum"), ("beat", "drums", "Drums", "drum"),
+    ("handclaps", "percussion", "Percussion", "clap"), ("claps", "percussion", "Percussion", "clap"),
+    ("percussion", "percussion", "Percussion", "perc"), ("congas", "percussion", "Percussion", "conga"),
+    ("shaker", "percussion", "Percussion", "shaker"), ("electric piano", "piano", "Electric piano", "piano"),
+
+    ("piano", "piano", "Piano", "piano"), ("keys", "piano", "Keys", "keys"), ("organ", "organ", "Organ", "organ"),
+     ("strings", "strings", "Strings", "string"),
+    ("orchestra", "strings", "Strings", "string"), ("violins", "strings", "Strings", "violin"),
+    ("violin", "strings", "Violin", "violin"), ("cello", "strings", "Cello", "cello"),
+    ("fiddle", "lead", "Fiddle", "fiddle"), ("brass", "brass", "Brass", "brass"),
+    ("horns", "brass", "Horns", "horn"), ("trumpet", "brass", "Trumpet", "trumpet"),
+    ("trombone", "brass", "Trombone", "trombone"), ("woodwinds", "woodwinds", "Woodwinds", "flute"),
+    ("flute", "woodwinds", "Flute", "flute"), ("clarinet", "woodwinds", "Clarinet", "clarinet"),
+    ("saxophone", "woodwinds", "Saxophone", "sax"), ("sax", "woodwinds", "Saxophone", "sax"),
+    ("choir", "choir", "Choir", "choir"), ("vocal pad", "choir", "Choir", "choir"),
+    ("voices", "choir", "Choir", "choir"), ("pads", "pad", "Pad", "pad"), ("pad", "pad", "Pad", "pad"),
+    ("bells", "arp", "Bells", "bell"), ("bell", "arp", "Bells", "bell"),
+    ("glockenspiel", "arp", "Glockenspiel", "glock"), ("marimba", "arp", "Marimba", "marimba"),
+    ("music box", "arp", "Music box", "box"), ("arpeggios", "arp", "Arpeggio", "arp"),
+    ("arpeggio", "arp", "Arpeggio", "arp"), ("plucks", "arp", "Pluck", "pluck"), ("pluck", "arp", "Pluck", "pluck"),
+    ("supersaw", "chords", "Supersaw", "saw"), ("synths", "chords", "Synth", "synth"),
+    ("synth lead", "lead", "Synth lead", "lead"), ("lead synth", "lead", "Synth lead", "lead"),
+    ("synth", "chords", "Synth", "synth"), ("whistled", "lead", "Whistle", "whistle"),
+    ("whistling", "lead", "Whistle", "whistle"), ("whistle", "lead", "Whistle", "whistle"),
+    ("melody", "lead", "Lead", "lead"), ("riser", "riser", "Riser", "riser"),
 )  # fmt: skip
 WITHOUT = {"drums": ("no drums", "without drums", "drumless", "no beat", "without a beat", "beatless", "no percussion"),
            "lead": ("no melody", "without melody", "without a melody", "no lead", "instrumental bed")}  # fmt: skip
@@ -452,6 +529,7 @@ class Reading:
     length: float = 1.0  # song length factor
     sounds: dict[str, str] = field(default_factory=dict)  # layer -> a word to look for in a sound's name
     instruments: list[str] = field(default_factory=list)  # as written
+    parts: list[dict[str, str]] = field(default_factory=list)  # the parts it names: {role, name, sound}
     without: list[str] = field(default_factory=list)  # parts to leave out
 
     @property
@@ -488,11 +566,12 @@ def read(text: str) -> Reading:
     if best is not None:
         reading.genre, named = best[2].id, best[3]
 
-    tempo = TEMPO.search(lower) or TEMPO_BEFORE.search(lower)
-    if tempo and 40 <= float(tempo.group(1)) <= 240:
-        reading.tempo = float(tempo.group(1))
+    # A tempo or key said twice ("about 128 BPM... make it 140 BPM"): the last one.
+    tempos = list(TEMPO.finditer(lower)) or list(TEMPO_BEFORE.finditer(lower))
+    if tempos and 40 <= float(tempos[-1].group(1)) <= 240:
+        reading.tempo = float(tempos[-1].group(1))
 
-    for match in KEY.finditer(text):
+    for match in reversed(list(KEY.finditer(text))):
         letter, accidental, scale = match.group(1).upper(), (match.group(2) or "").lower(), match.group(3).lower()
         tonic = NAMES.index(letter)
         if accidental in ("#", "♯", "sharp"):
@@ -528,12 +607,23 @@ def read(text: str) -> Reading:
     reading.energy = max(-1.0, min(1.0, energy))
     reading.length = 0.7 if words_in(lower, SHORT) else 1.35 if words_in(lower, LONG) else 1.0
 
-    used: set[str] = set()
-    for word, layer, look_for in INSTRUMENTS:
-        if found(lower, word) and layer not in reading.sounds and not any(word in u for u in used):
-            reading.sounds[layer] = look_for
-            reading.instruments.append(word)
-            used.add(word)
+    # Instruments: each named once (a longer name taking its words: "acoustic guitar" is not also "guitar"),
+    # in the order written; "bass" in "bass drum" is the drums'.
+    spans: list[tuple[int, int]] = []
+    mentioned: list[tuple[int, str, dict[str, str]]] = []
+    for word, role, name, look_for in sorted(INSTRUMENTS, key=lambda i: -len(i[0])):
+        for m in re.finditer(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", lower):
+            if any(a < m.end() and m.start() < b for a, b in spans):
+                continue
+            if word == "bass" and lower[m.end() : m.end() + 5] == " drum":
+                continue
+            spans.append((m.start(), m.end()))
+            mentioned.append((m.start(), word, {"role": role, "name": name, "sound": look_for}))
+            reading.sounds.setdefault(role, look_for)
+            break
+    for _, word, named_part in sorted(mentioned, key=lambda x: x[0]):
+        reading.parts.append(named_part)
+        reading.instruments.append(word)
     for part, phrases in WITHOUT.items():
         if words_in(lower, phrases):
             reading.without.append(part)
@@ -634,6 +724,7 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
                 "hats": scaled(feel.hats, busy),
             },
             "swing": feel.swing,
+            "doubleKick": feel.double_kick,
         },
         "parts": {
             "bass": part(bass_low, bass_mid, bass_high, bass_per),
@@ -650,6 +741,7 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
         "loudness": {"lufs": feel.lufs},
         "perSong": [],
         "without": list(reading.without),
+        "keyFixed": reading.tonic is not None and reading.scale is not None,
         "described": {
             "text": text,
             "genre": genre.id,
@@ -657,6 +749,8 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
             "understood": understood(reading, tempo, modes),
             "sounds": sounds,
             "named": dict(reading.sounds),
+            "parts": [dict(p) for p in reading.parts],
+            "suggested": list(feel.suggest),
             "palette": feel.palette,
             "readBy": read_by,
         },
@@ -719,9 +813,155 @@ def plain(summary: dict[str, Any], genre: Genre, reading: Reading) -> list[str]:
     return lines
 
 
-def describe(text: str) -> dict[str, Any]:
-    """The rules' summary of a description."""
+def describe(text: str, base: dict[str, Any] | None = None, generated: str = "") -> dict[str, Any]:
+    """The rules' summary of a description; with `base` (the reference songs' summary) the description changes
+    it where its words differ from `generated` (the text prompt_from wrote for it)."""
+    if base is not None:
+        return with_references(read(text), text, generated, base)
     return to_summary(read(text), text)
+
+
+# ---------------------------------------------------------------------------------------------------
+# With reference songs: their summary as words to edit, and the edits on top of it
+
+
+def prompt_from(summary: dict[str, Any]) -> str:
+    """The reference songs' summary as a description the user can edit: "Like your songs: about 128 BPM, in A
+    minor, four-on-the-floor drums; with drums, bass, synth chords and a lead melody." Only words this module
+    reads back to the same numbers (no mood words), so leaving it as it is changes nothing."""
+    tempo = float((summary.get("tempo") or {}).get("median") or 120.0)
+    keys = summary.get("keys") or []
+    key = str(keys[0]["name"]) if keys else ""
+    drums = summary.get("drums") or {}
+    lanes = drums.get("lanes") or {}
+    kick, snare = lanes.get("kick") or [], lanes.get("snare") or []
+    groove = ""
+    if drums.get("songs") and len(kick) == STEPS and len(snare) == STEPS:
+        if all(kick[s] >= 0.6 for s in (0, 4, 8, 12)):
+            groove = "four-on-the-floor drums"
+        elif snare[8] >= 0.6 and snare[4] < 0.4:
+            groove = "half-time drums"
+        else:
+            groove = "backbeat drums"
+        if float(drums.get("swing") or 0.5) >= 0.56:
+            groove = "swung " + groove
+    parts_found = summary.get("parts") or {}
+
+    def has(part: str) -> bool:
+        return int((parts_found.get(part) or {}).get("songs") or 0) > 0
+
+    named = []
+    if has("drums"):
+        named.append("drums")
+    if has("bass"):
+        named.append("bass")
+    if has("other"):
+        named.append("synth chords" if float(parts_found["other"].get("voices") or 1.0) > 1.3 else "plucks")
+    if has("vocals"):
+        named.append("a lead melody")
+    words = [f"about {tempo:g} BPM"] + ([f"in {key}"] if key else []) + ([groove] if groove else [])
+    text = "Like your songs: " + ", ".join(words)
+    if named:
+        text += "; with " + (", ".join(named[:-1]) + " and " + named[-1] if len(named) > 1 else named[0])
+    return text + "."
+
+
+def with_references(
+    reading: Reading, text: str, generated: str, base: dict[str, Any], read_by: str = ""
+) -> dict[str, Any]:
+    """The reference songs' summary changed where the description's words differ from what prompt_from wrote:
+    a tempo or key written in, mood, pace and energy words added, a genre named (its groove and chords), parts
+    left out. The rest (the songs' chords, groove, parts and sections) stays as measured."""
+    before = read(generated) if generated else Reading()
+    out: dict[str, Any] = json.loads(json.dumps(base))
+    changes: list[str] = []
+
+    new_moods = [m for m in reading.moods if m not in before.moods]
+    pace, lean, energy = 1.0, 0.0, 0.0
+    for m in new_moods:
+        p, mood_lean, e = MOODS.get(m, (1.0, 0.0, 0.0))
+        pace, lean, energy = pace * p, lean + mood_lean, energy + e
+    lean, energy = max(-1.0, min(1.0, lean)), max(-1.0, min(1.0, energy))
+    changes += new_moods
+
+    genre = BY_ID.get(reading.genre) if reading.genre_named and reading.genre != before.genre else None
+    tempo_said = reading.tempo is not None and reading.tempo != before.tempo
+    tempo = dict(out.get("tempo") or {"median": 120.0})
+    median = float(tempo.get("median") or 120.0)
+    if tempo_said:
+        new = float(reading.tempo or median)
+        changes.insert(0, f"{new:g} BPM")
+    elif genre is not None:
+        low, high = genre.tempo_range
+        new = float(round(min(max(median, low), high) * pace))
+    else:
+        new = float(round(median * pace))
+    if tempo_said:  # a tempo written in is the song's
+        out["tempo"] = {"median": new, "min": new, "max": new}
+    elif new != median:
+        factor = new / median
+        out["tempo"] = {k: round(float(v) * factor, 1) for k, v in tempo.items() if isinstance(v, int | float)}
+        out["tempo"]["median"] = new
+
+    if reading.scale is not None and (reading.tonic, reading.scale) != (before.tonic, before.scale):
+        name = f"{NAMES[int(reading.tonic or 0)]} {reading.scale}"
+        out["keys"], out["modes"] = [{"name": name, "count": 3}], {reading.scale: 1.0}
+        out["keyFixed"] = True
+        for song in out.get("perSong") or []:  # the songs' chords, read in the new mode
+            if isinstance(song, dict) and isinstance(song.get("key"), dict):
+                song["key"]["scale"] = reading.scale
+        changes.insert(1 if tempo_said else 0, name)
+    elif lean:
+        modes = out.get("modes") or {"minor": 0.5, "major": 0.5}
+        minor = min(1.0, max(0.0, float(modes.get("minor", 0.5)) + 0.4 * lean))
+        out["modes"] = {m: round(v, 3) for m, v in (("minor", minor), ("major", 1.0 - minor)) if v > 0}
+
+    feel = genre.style if genre is not None else FEELS["pop"]
+    busy = 1.0 + 0.3 * energy
+    if genre is not None:
+        # A genre named: its groove and chords (the songs' own chords would keep it what it was).
+        out["drums"] = {**(out.get("drums") or {}), "songs": 3, "steps": STEPS, "swing": feel.swing,
+                        "doubleKick": feel.double_kick,
+                        "lanes": {"kick": scaled(feel.kick, busy), "snare": scaled(feel.snare, busy),
+                                  "hats": scaled(feel.hats, busy)}}  # fmt: skip
+        out["chords"] = chords_of(feel, list(out.get("modes") or {"minor": 1.0}))
+        out["perSong"] = []
+        changes.append("genre: " + genre.name)
+    elif energy:
+        lanes = (out.get("drums") or {}).get("lanes") or {}
+        for lane in list(lanes):
+            lanes[lane] = scaled([float(v) for v in lanes[lane]], busy)
+    if energy:
+        for part in (out.get("parts") or {}).values():
+            if isinstance(part, dict) and part.get("notesPerBar"):
+                part["notesPerBar"] = round(float(part["notesPerBar"]) * busy, 2)
+
+    without = [p for p in reading.without if p not in before.without]
+    if without:
+        out["without"] = sorted(set(out.get("without") or []) | set(without))
+        changes += ["without " + ("a lead" if p == "lead" else p) for p in without]
+
+    understood = "Understood: like your songs" + (", changed: " + ", ".join(changes) if changes else "")
+    if reading.instruments:
+        understood += "; parts: " + ", ".join(reading.instruments)
+    out["described"] = {
+        "text": text,
+        "genre": genre.id if genre is not None else "",
+        "genreName": genre.name if genre is not None else "",
+        "understood": understood,
+        "sounds": {**(feel.sounds if genre is not None else {}), **reading.sounds},
+        "named": dict(reading.sounds),
+        "parts": [dict(p) for p in reading.parts],
+        "suggested": list(feel.suggest),
+        "palette": feel.palette if genre is not None else "your songs' own",
+        "readBy": read_by,
+        "references": True,
+    }
+    out["plain"] = [
+        understood + ".",
+        "Underneath: your songs' chords, groove, parts and sections, for what the description doesn't change.",
+    ]
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -799,9 +1039,11 @@ async def read_with_ai(
     usage_log: UsageLog,
     text: str,
     say: Say,
+    base: dict[str, Any] | None = None,
+    generated: str = "",
 ) -> dict[str, Any]:
-    """The AI's reading as a summary; NoConnection without one. When the answer is not usable, the rules'
-    reading with a note saying so."""
+    """The AI's reading as a summary (changing `base`, the reference songs' summary, when given); NoConnection
+    without one. When the answer is not usable, the rules' reading with a note saying so."""
     routes = routing.resolve("patterns")
     if not routes:
         raise NoConnection("No AI connection is set up.")
@@ -822,7 +1064,9 @@ async def read_with_ai(
     usage_log.add(routes[index].connection.id, "patterns", completion.usage)
     for use in completion.tool_uses:
         if use.name == "read_description" and (reading := check_reading(use.input)) is not None:
+            if base is not None:
+                return with_references(reading, text, generated, base, completion.model)
             return to_summary(reading, text, completion.model)
-    summary = describe(text)
+    summary = describe(text, base, generated)
     summary["described"]["note"] = "The AI's answer was not usable; Spinus's own reading stands."
     return summary

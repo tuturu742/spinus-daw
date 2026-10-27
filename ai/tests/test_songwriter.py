@@ -239,7 +239,7 @@ def test_the_users_parts_are_written_two_of_a_role_unlike_each_other() -> None:
         {"id": "kit", "name": "Drum Machine", "role": "drums"},
         {"id": "rhythm", "name": "Rhythm guitar", "role": "chords"},
         {"id": "picked", "name": "Picked guitar", "role": "chords"},
-        {"id": "synth", "name": "Surge lead", "role": "lead"},
+        {"id": "synth", "name": "Synth lead", "role": "lead"},
         {"id": "harmony", "name": "Harmony", "role": "lead"},
     ]
     song = songwriter.write(s, 4, parts=parts)

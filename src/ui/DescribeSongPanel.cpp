@@ -27,8 +27,8 @@ juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items
 DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) : getService (std::move (service))
 {
     intro.setText ("Describe the song you want in a few words: its genre, mood, tempo, key, the instruments you "
-                   "hear. Spinus reads it on this computer (no AI connection needed), then Sounds for each part "
-                   "and Write a song work from it with the sounds you have.",
+                   "hear. Spinus reads it on this computer (no AI connection needed), then Parts and Write a song "
+                   "work from it with the sounds you have.",
                    juce::dontSendNotification);
     intro.setJustificationType (juce::Justification::topLeft);
     intro.setMinimumHorizontalScale (1.0f);
@@ -43,6 +43,12 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
                          "and writes every note itself. Off: Spinus's own rules, nothing is sent anywhere");
     readButton.setTooltip ("Read the description into a style to write a song in");
     readButton.onClick = [this] { read(); };
+    againButton.setTooltip ("Put back the description of your reference songs (your changes go)");
+    againButton.onClick = [this]
+    {
+        textBox.setText (generated, false);
+        read();
+    };
     for (auto* l : { &understood, &status })
     {
         l->setJustificationType (juce::Justification::topLeft);
@@ -55,6 +61,7 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &textBox, &aiButton, &readButton, &understood,
                                                              &status, &details })
         addAndMakeVisible (c);
+    addChildComponent (againButton);
     updateButtons();
 }
 
@@ -88,9 +95,14 @@ bool DescribeSongPanel::read()
     status.setText (useAi ? "The AI is reading the description..." : "Reading the description...",
                     juce::dontSendNotification);
     updateButtons();
+    auto params = object ({ { "text", text }, { "ai", useAi } });
+    if (references.isObject())
+    {
+        params.getDynamicObject()->setProperty ("summary", references);
+        params.getDynamicObject()->setProperty ("generated", generated);
+    }
     ai::runJob (
-        *service, "ai.v1.song.describe", object ({ { "text", text }, { "ai", useAi } }), alive,
-        [this] (const juce::String& started) { job = started; },
+        *service, "ai.v1.song.describe", params, alive, [this] (const juce::String& started) { job = started; },
         [this] (const juce::var& result, const juce::String& error)
         {
             job.clear();
@@ -123,12 +135,29 @@ void DescribeSongPanel::show (const juce::var& read)
     status.setText ((described["note"].toString().isNotEmpty() ? described["note"].toString() + " "
                      : by.isNotEmpty()                         ? "Read by the AI (" + by + "). "
                                                                : juce::String()) +
-                        "Next: Sounds for each part, or Write a song.",
+                        "Next: 3. Parts, then 4. Write a song.",
                     juce::dontSendNotification);
+}
+
+void DescribeSongPanel::setReferences (const juce::var& songs, const juce::String& text)
+{
+    references = songs;
+    generated = text;
+    intro.setText (references.isObject()
+                       ? "Your reference songs, in words. Change what you want (\"make it 140 BPM\", \"in D minor\", "
+                         "\"add a guitar\"): what you change wins, and their measured style stays for the rest."
+                       : "Describe the song you want in a few words: its genre, mood, tempo, key, the instruments you "
+                         "hear. Spinus reads it on this computer (no AI connection needed), then Parts and Write a "
+                         "song work from it with the sounds you have.",
+                   juce::dontSendNotification);
+    updateButtons();
+    resized();
 }
 
 void DescribeSongPanel::updateButtons()
 {
+    againButton.setVisible (references.isObject() && generated.isNotEmpty());
+    againButton.setEnabled (! busy);
     readButton.setEnabled (! busy && textBox.getText().trim().isNotEmpty());
     aiButton.setEnabled (! busy);
     textBox.setReadOnly (busy);
@@ -153,6 +182,11 @@ void DescribeSongPanel::resized()
         auto r = area.removeFromTop (28);
         readButton.setBounds (r.removeFromLeft (80).reduced (0, 1));
         r.removeFromLeft (10);
+        if (againButton.isVisible())
+        {
+            againButton.setBounds (r.removeFromLeft (140).reduced (0, 1));
+            r.removeFromLeft (10);
+        }
         aiButton.setBounds (r);
     }
     area.removeFromTop (4);

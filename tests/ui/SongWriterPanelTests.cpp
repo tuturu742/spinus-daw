@@ -55,15 +55,6 @@ juce::var testSummary()
     })");
 }
 
-float peakOf (const juce::File& file)
-{
-    std::unique_ptr<juce::AudioFormatReader> reader (dsp::getAudioFormats().createReaderFor (file));
-    if (reader == nullptr)
-        return 0.0f;
-    juce::AudioBuffer<float> audio ((int)reader->numChannels, (int)reader->lengthInSamples);
-    reader->read (&audio, 0, audio.getNumSamples(), 0, true, true);
-    return audio.getMagnitude (0, audio.getNumSamples());
-}
 } // namespace
 
 TEST_CASE ("Track creator: a song written, heard before Apply, applied and a part redone, each one undo step",
@@ -83,7 +74,6 @@ TEST_CASE ("Track creator: a song written, heard before Apply, applied and a par
     SongWriterPanel panel (session, [&context] { return context; });
     panel.setSize (700, 560);
     panel.setSeed (11);
-    panel.setArrangement ("sketch"); // whatever an earlier test left
 
     // AI off: no service is started, and the panel says what to do.
     CHECK_FALSE (panel.write());
@@ -107,15 +97,6 @@ TEST_CASE ("Track creator: a song written, heard before Apply, applied and a par
     REQUIRE (panel.anotherVersion());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
     CHECK (juce::JSON::toString (panel.getSong()["parts"]) != first);
-
-    // Heard before Apply: the song rendered through the instruments, the project untouched.
-    REQUIRE (panel.listen());
-    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 600000));
-    INFO (panel.getStatusText());
-    REQUIRE (panel.getLastPreview().existsAsFile());
-    CHECK (peakOf (panel.getLastPreview()) > 0.01f);
-    CHECK (session.getProject() == before);
-    session.getSamplePreview().stop();
 
     // Applied: one undo step.
     REQUIRE (panel.apply());
@@ -166,7 +147,7 @@ TEST_CASE ("Track creator: a song written, heard before Apply, applied and a par
     CHECK (panel.makeProposal()["summary"].toString().startsWith ("a new song"));
 }
 
-TEST_CASE ("Track creator: a full arrangement is written, heard and applied as one undo step, the choice remembered",
+TEST_CASE ("Track creator: a full arrangement's parts are written and applied as one undo step; none, none",
            "[ui][trackcreator][song]")
 {
     if (ai::AiService::findInstallation().python == juce::File())
@@ -180,19 +161,14 @@ TEST_CASE ("Track creator: a full arrangement is written, heard and applied as o
     context.summary = testSummary();
     context.service = &service;
     context.workFolder = t.root.getChildFile ("song");
-    {
-        SongWriterPanel panel (session, [&context] { return context; });
-        panel.setArrangement ("sketch");
-    }
+    context.partsFromPage = true;
     SongWriterPanel panel (session, [&context] { return context; });
     panel.setSize (700, 560);
     panel.setSeed (5);
-    CHECK (panel.getArrangement() == "sketch");
-    panel.setArrangement ("full");
-    {
-        SongWriterPanel again (session, [&context] { return context; });
-        CHECK (again.getArrangement() == "full"); // remembered
-    }
+    // The Sounds page has no parts yet: it says so.
+    CHECK_FALSE (panel.write());
+    CHECK (panel.getStatusText().contains ("no parts yet"));
+    context.parts = parts::suggestedParts ("full", context.summary);
 
     const auto before = session.getProject();
     REQUIRE (panel.write());
@@ -203,14 +179,6 @@ TEST_CASE ("Track creator: a full arrangement is written, heard and applied as o
     CHECK (layers.size() >= 8);
     CHECK (panel.getText().contains ("parts, a channel each"));
     CHECK (panel.getText().contains ("Drums, Bass, Synths, Leads, FX"));
-
-    REQUIRE (panel.listen());
-    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 600000));
-    INFO (panel.getStatusText());
-    REQUIRE (panel.getLastPreview().existsAsFile());
-    CHECK (peakOf (panel.getLastPreview()) > 0.01f);
-    CHECK (session.getProject() == before);
-    session.getSamplePreview().stop();
 
     REQUIRE (panel.apply());
     CHECK (session.getHistory().getUndoDescriptions().size() == 1);
@@ -347,7 +315,7 @@ TEST_CASE ("Track creator write a song screenshot for the manual", "[.screenshot
     panel.setLookAndFeel (&look);
     panel.setSize (700, 520);
     panel.setSeed (3);
-    panel.setArrangement ("full");
+    context.parts = parts::suggestedParts ("full", context.summary);
     REQUIRE (panel.write());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
@@ -380,7 +348,7 @@ TEST_CASE ("Track creator full arrangement Playlist screenshot for the manual", 
     context.service = &service;
     SongWriterPanel panel (session, [&context] { return context; });
     panel.setSeed (3);
-    panel.setArrangement ("full");
+    context.parts = parts::suggestedParts ("full", context.summary);
     REQUIRE (panel.write());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
     REQUIRE (panel.apply());

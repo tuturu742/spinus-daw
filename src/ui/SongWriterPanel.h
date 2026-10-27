@@ -2,7 +2,6 @@
 
 #include "MessageLabel.h"
 #include "ai/AiService.h"
-#include "engine/Exporter.h"
 #include "session/PartSounds.h"
 #include "session/Session.h"
 #include "session/SongWriter.h"
@@ -15,17 +14,18 @@ namespace spinus::ui
 {
 
 /** The Track creator's new song (experimental, milestone 4), shown in its panel: a song written from the style
-    summary, to read about, listen to and apply.
+    summary, to read about and apply.
 
-    Write asks the AI service (ai.v1.song.write, spinus_ai/songwriter.py) for a song: rules and seeded chance on
-    this computer, no AI connection needed. The arrangement (remembered between runs) is a sketch of four parts,
-    or a full arrangement of about a dozen layers laid out as the demo songs are (session/SongWriter), each layer
-    without a sound chosen on the Sounds page getting the closest sound of its role from the sound index; with "Let the
-   AI vary the plan" and an AI connection, the AI may vary the sections, chord loops and melody shapes (checked against
-   the style; the rules write every note). Another version writes again with a new seed; Redo part writes one part or
-   one section again, keeping the rest. Listen renders the project as it would be with the song (the proposal tried on a
-   copy) and plays it; Apply puts it into the project through commands as one undo step (session/SongWriter), or, once a
-   song is in, only the parts or sections written again. Mix it opens the automixer toward the reference songs.
+    Write asks the AI service (ai.v1.song.write, spinus_ai/songwriter.py) for a song with the Sounds page's parts
+    (the user's list, each with a role): rules and seeded chance on this computer, no AI connection needed. Each
+    part plays the sound chosen for it on the Sounds page; a part without one gets the closest sound of its role
+    from the sound index (varied between parts and songs), else Spinus's own. With "Let the AI vary the plan" and
+    an AI connection, the AI may vary the sections, chord loops and melody shapes (checked against the style; the
+    rules write every note). Another version writes again with a new seed; Redo part writes one part or one
+    section again, keeping the rest. Apply puts it into the project through commands as one undo step
+    (session/SongWriter), replacing the song written before when the user says so, or, once a song is in, only the
+    parts or sections written again; that is how it is heard. Mix it opens the automixer toward the reference
+    songs.
 
     Nothing changes the project before Apply (AGENTS rule 3). Without the AI service the panel says so; the rest
     of Spinus works as ever. Message thread only. */
@@ -41,7 +41,8 @@ public:
         juce::Array<juce::File> songs;      // the reference songs (the automixer's reference)
         parts::Plan sounds;                 // the sounds chosen on the Sounds page (none: Spinus's own)
         juce::File indexFolder;             // the sound index, for the parts the Sounds page has no sound for
-        std::vector<parts::SongPart> parts; // the Sounds page's list: the parts to write (none: the arrangement's)
+        std::vector<parts::SongPart> parts; // the Sounds page's list: the parts to write
+        bool partsFromPage = false;         // the list is the Sounds page's: none means none yet (else a sketch)
     };
 
     SongWriterPanel (Session&, std::function<Context()> context);
@@ -56,7 +57,6 @@ public:
     /** Writes one part ("drums", "bass", "chords", "lead") or one section (its id, "verse") again. */
     bool redo (const juce::String& part, const juce::String& section = {});
     /** Renders the project as it would be after Apply, and plays it (Stop stops). */
-    bool listen();
     void stop();
     /** Puts the song (or what was written again) into the project: one undo step. When the project has a song
         the Track creator wrote, it first asks whether to replace it (in its place; its channels, patterns and
@@ -69,8 +69,6 @@ public:
 
     void setRefine (bool on) { refineButton.setToggleState (on, juce::dontSendNotification); }
     /** "sketch" (four parts) or "full" (about a dozen layers): what Write writes next. Remembered. */
-    void setArrangement (const juce::String& size);
-    juce::String getArrangement() const;
     /** The sound each layer of the full song gets that the Sounds page did not choose (layer id -> what was
         found in the sound index), worked out once per song. */
     const std::map<juce::String, parts::Choice>& getLayerChoices();
@@ -86,12 +84,9 @@ public:
     juce::var makeProposal (juce::String* error = nullptr);
     /** The same, replacing the project's song `replace` ("Song 1"), as Apply does when the user says so. */
     juce::var makeProposal (juce::String* error, const juce::String& replace);
-    /** Called when the arrangement changes (the Sounds page then starts its list again from it). */
-    std::function<void (const juce::String& arrangement)> onArrangementChanged;
     /** Asks "Replace Song 1?" (Replace, Keep both, Cancel: 0, 1, 2); tests answer it themselves. */
     using MessageBoxHandler = std::function<void (const juce::MessageBoxOptions&, std::function<void (int)>)>;
     void setMessageBoxHandler (MessageBoxHandler h) { messageBox = std::move (h); }
-    juce::File getLastPreview() const { return lastPreview; }
 
     void resized() override;
     void paint (juce::Graphics&) override;
@@ -120,19 +115,15 @@ private:
     bool whole = true;
     juce::StringArray redoneParts, redoneSections;
     song::Applied applied;
-    std::unique_ptr<engine::ExportJob> rendering;
-    juce::File lastPreview;
 
     juce::Label intro;
     MessageLabel status;
     MessageBoxHandler messageBox;
-    juce::Label sizeLabel;
-    juce::ComboBox sizeBox;
     juce::ToggleButton refineButton { "Let the AI vary the plan (uses your AI connection)" };
     std::map<juce::String, parts::Choice> layerChoices; // for `song`
     bool layerChoicesKnown = false;
     juce::TextButton writeButton { "Write" }, againButton { "Another version" }, redoButton { "Redo part..." },
-        listenButton { "Listen" }, stopButton { "Stop" }, applyButton { "Apply" }, mixButton { "Mix it..." };
+        stopButton { "Stop" }, applyButton { "Apply" }, mixButton { "Mix it..." };
     juce::TextEditor text;
 };
 
