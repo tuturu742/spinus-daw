@@ -38,6 +38,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **OpenAI's newer models (GPT-5 and later) work with the assistant and the pattern generator:** they
   refused every request with "Unsupported parameter: 'max_tokens'" (error 400), because they take the
   answer-length limit under a new name. Spinus now uses the name each service asks for.
+- **A key for the wrong provider is caught:** an OpenAI key with the Provider left at Anthropic (the first
+  choice) was saved anyway and then refused with a puzzling 401 from Anthropic. Spinus now tells Anthropic,
+  OpenRouter and OpenAI keys apart, doesn't save a mismatched one, and says which Provider to choose. After
+  **Save**, the new connection is the one selected, so **Test** no longer tests an older one by mistake.
 
 ### The Browser
 
