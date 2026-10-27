@@ -125,20 +125,15 @@ async def test_a_server_error_or_dropped_connection_is_tried_again(tmp_path: Pat
     assert not store.folder(model).exists()
 
 
-async def test_the_authors_other_address_and_a_pasted_link(tmp_path: Path) -> None:
+async def test_a_link_the_user_pastes(tmp_path: Path) -> None:
     data = b"\x07" * 2000
     wrong = b"\x08" * 2000
-    model = dataclasses.replace(
-        small_model({"m.ckpt": data}),
-        url="https://uni.example/share",
-        alternatives=("https://author.example/x-{name}",),
-    )
+    model = dataclasses.replace(small_model({"m.ckpt": data}), url="https://uni.example/share")
     asked: list[str] = []
-    down = {"uni.example"}
 
     def handler(request: httpx.Request) -> httpx.Response:
         asked.append(str(request.url))
-        if request.url.host in down:
+        if request.url.host == "uni.example":
             return httpx.Response(500, text="MaxDelayReached")
         if request.url.path.endswith("wrong.ckpt"):
             return httpx.Response(200, content=wrong)
@@ -148,16 +143,10 @@ async def test_the_authors_other_address_and_a_pasted_link(tmp_path: Path) -> No
 
     store = WeightStore(tmp_path / "analysis", retry_waits=(0,))
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        # The university's server is down: the author's own address gives the same file.
-        await store.download(client, model, _no_progress)
-        assert store.is_ready(model)
-        assert asked == ["https://uni.example/share/m.ckpt"] * 2 + ["https://author.example/x-m.ckpt"]
-
-        # Both down: both named, and the way to paste a link is offered.
-        store.remove(model)
-        down.add("author.example")
-        with pytest.raises(RuntimeError, match=r"server \(uni.example, author.example\).*another link"):
+        # The model's own server is down: no other address is guessed; the way to paste one is offered.
+        with pytest.raises(RuntimeError, match=r"server \(uni.example\).*another link"):
             await store.download(client, model, _no_progress)
+        assert all(url.startswith("https://uni.example/") for url in asked)
 
         # A link the authors gave: used alone; a file that isn't the model is refused.
         asked.clear()
@@ -171,15 +160,6 @@ async def test_the_authors_other_address_and_a_pasted_link(tmp_path: Path) -> No
         await store.download(client, model, _no_progress, "https://new.example/folder/")  # a folder: + the name
         assert asked[-1] == "https://new.example/folder/m.ckpt"
     assert store.is_ready(model)
-
-
-def test_beat_this_has_its_authors_second_address() -> None:
-    for model_id in ("beat_this_final0", "beat_this_small0"):
-        model = weights.find_model(model_id)
-        assert model is not None
-        urls = model.file_urls(model.files[0])
-        assert urls[0].startswith("https://cloud.cp.jku.at/")
-        assert urls[1] == f"https://f0k.de/pubs/2024_ismir/beat_this-{model.files[0].path}"
 
 
 async def _no_progress(done: int, total: int) -> None:

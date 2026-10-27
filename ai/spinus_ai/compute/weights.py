@@ -43,10 +43,6 @@ class AnalysisModel:
     url: str = ""  # where the files are, when not on Hugging Face
     architecture: str = "demucs"  # for stems: how the analysis engine runs it ("demucs" or "bs_roformer")
     homepage: str = ""  # where people can read about it and check its license (default: its Hugging Face page)
-    # Other addresses the authors themselves give for the same files, tried in order when the first one
-    # fails ("{name}" is the file's name). Never copies kept by anyone else: Spinus doesn't redistribute
-    # other people's models.
-    alternatives: tuple[str, ...] = ()
 
     @property
     def page(self) -> str:
@@ -59,15 +55,15 @@ class AnalysisModel:
         return f"https://huggingface.co/{self.repo}/resolve/{self.revision}/{name}"
 
     def file_urls(self, f: WeightFile, link: str = "") -> list[str]:
-        """Where to fetch a file from, in order. `link` is one the user pasted (the authors gave a new one):
-        the file itself for a one-file model, or the folder its files are in."""
+        """Where to fetch a file from: the model's own address, or `link`, one the user pasted (Spinus can't
+        know where authors move their files): the file itself for a one-file model, or its folder."""
         if link:
             link = link.strip()
             name = f.remote or f.path
             if len(self.files) == 1 and not link.endswith("/"):
                 return [link]
             return [f"{link.rstrip('/')}/{name}"]
-        return [self.file_url(f), *(a.format(name=f.remote or f.path) for a in self.alternatives)]
+        return [self.file_url(f)]
 
     @property
     def size(self) -> int:
@@ -172,9 +168,6 @@ MODELS: tuple[AnalysisModel, ...] = (
         kind="beats",
         url="https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp",
         homepage="https://github.com/CPJKU/beat_this",
-        # One of the authors (Jan Schlüter, JKU Linz) keeps the checkpoints on his own site too, given in
-        # github.com/CPJKU/beat_this/issues/20 while the university's server was down.
-        alternatives=("https://f0k.de/pubs/2024_ismir/beat_this-{name}",),
     ),
     AnalysisModel(
         "beat_this_small0",
@@ -187,9 +180,6 @@ MODELS: tuple[AnalysisModel, ...] = (
         kind="beats",
         url="https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp",
         homepage="https://github.com/CPJKU/beat_this",
-        # One of the authors (Jan Schlüter, JKU Linz) keeps the checkpoints on his own site too, given in
-        # github.com/CPJKU/beat_this/issues/20 while the university's server was down.
-        alternatives=("https://f0k.de/pubs/2024_ismir/beat_this-{name}",),
     ),
     # Basic Pitch (Spotify; Apache-2.0), the ONNX model of release 0.4.0, run by the AI service itself with
     # ONNX Runtime (spinus_ai/transcribe.py); no PyTorch needed.

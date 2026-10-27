@@ -31,11 +31,10 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    for yourself where it comes from. These are freely available open-source models made by others, not
    affiliated with Spinus.
    Each model downloads from its authors' own servers only (Spinus keeps no copies). If those servers are
-   busy, Spinus tries again a few times, then the authors' other address if they have one (Beat This!: the
-   university's server, then one of its authors' own site), and then says that the authors' server isn't
-   answering, to try again later. If the authors give a new link for a model, use **Sources and
-   licences... › Download from another link** and paste it: Spinus only keeps the file if it is exactly
-   the same model (it checks the file's checksum).
+   busy, Spinus tries again a few times, then says that the authors' server isn't answering, to try again
+   later. If the authors give a new link for a model (on its page, for example, when they move their
+   files), use **Sources and licences... › Download from another link** and paste it: Spinus only keeps
+   the file if it is exactly the same model (it checks the file's checksum).
    Closest presets and drum samples, and Surge XT tuned to a stem (it starts from its closest preset), also
    need CLAP (776 MB): it is listed as soon as you choose one of those for a stem. Tuning any other synth
    needs nothing more.

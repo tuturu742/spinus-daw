@@ -111,9 +111,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Model downloads try again** after a server error or a dropped connection (three more tries, a few
   seconds apart), instead of failing at the first hiccup. If the model's own server is still down, Spinus
   says so ("its authors' server isn't answering... please try again later"): each model comes only from
-  its authors. Beat This! also tries the copy one of its authors keeps on his own site, and **Sources and
-  licences... › Download from another link** takes a new link the authors give for any model (the file
-  must match the model's checksum).
+  its authors. If they give a new link for a model, **Sources and licences... › Download from another
+  link** in the Analyzer takes it (the file must match the model's checksum).
 
 ## 0.1.0-alpha.2 (2026-10-26)
 
