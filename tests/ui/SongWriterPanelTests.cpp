@@ -339,6 +339,8 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     CHECK_FALSE (panel.getInfoText().contains ("About"));
     panel.setAiWriter (true);
     REQUIRE (panel.isAiWriter());
+    panel.setEffort ("xhigh"); // where the model offers it
+    CHECK (panel.getEffort() == "xhigh");
     panel.setEffort ("high");
     CHECK (panel.getEffort() == "high");
     CHECK (panel.getRounds() == 1);

@@ -191,6 +191,7 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     effortBox.addItem ("Reasoning: low", 2);
     effortBox.addItem ("Reasoning: medium", 3);
     effortBox.addItem ("Reasoning: high", 4);
+    effortBox.addItem ("Reasoning: extra high", 5);
     effortBox.setSelectedId (1, juce::dontSendNotification);
     effortBox.setTooltip ("How hard the model thinks before it writes: higher levels use more tokens");
     roundsBox.addItem ("Then fix what Spinus hears: no", 1);
@@ -695,14 +696,14 @@ bool SongWriterPanel::isAiWriter() const { return writerBox.getSelectedId() == 2
 
 void SongWriterPanel::setEffort (const juce::String& effort)
 {
-    const juce::StringArray levels { "", "low", "medium", "high" };
+    const juce::StringArray levels { "", "low", "medium", "high", "xhigh" };
     effortBox.setSelectedId (juce::jmax (0, levels.indexOf (effort)) + 1, juce::dontSendNotification);
 }
 
 juce::String SongWriterPanel::getEffort() const
 {
-    const juce::StringArray levels { "", "low", "medium", "high" };
-    return levels[juce::jlimit (0, 3, effortBox.getSelectedId() - 1)];
+    const juce::StringArray levels { "", "low", "medium", "high", "xhigh" };
+    return levels[juce::jlimit (0, levels.size() - 1, effortBox.getSelectedId() - 1)];
 }
 
 void SongWriterPanel::setRounds (int rounds)

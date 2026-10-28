@@ -394,3 +394,71 @@ async def test_the_gateway_sends_context_editing_and_reads_what_was_cleared() ->
     assert done.usage.cleared_tokens == 5000
     assert seen[0].headers["anthropic-beta"] == "context-management-2025-06-27"
     assert json.loads(seen[0].content)["context_management"]["edits"][0]["trigger"]["value"] == 30000
+
+
+async def test_openais_reasoning_goes_back_unchanged_in_the_harness_loop(tmp_path: Path) -> None:
+    """On OpenAI's Responses API, each turn's items (its encrypted reasoning with them) are sent again on the next
+    request, as OpenAI asks; the harness reads only the tool calls."""
+    from test_responses import USAGE, answer
+
+    sent: list[dict[str, Any]] = []
+    turns: list[list[dict[str, Any]]] = [
+        [
+            {"type": "reasoning", "id": "rs_0", "summary": [], "encrypted_content": "secret-0"},
+            {"type": "function_call", "id": "fc_0", "call_id": "call_0", "name": "form", "arguments": "{}"},
+        ],
+        [
+            {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "secret-1"},
+            {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "rules_write",
+             "arguments": json.dumps({"part": "bass"})},
+            {"type": "function_call", "id": "fc_2", "call_id": "call_2", "name": "finish",
+             "arguments": json.dumps({"summary": "Through the Responses API."})},
+        ],
+    ]  # fmt: skip
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/responses"
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, content=answer(turns[len(sent) - 1]), headers={"content-type": "text/event-stream"})
+
+    service = make_service(tmp_path, handler)
+    saved = await service.handle(
+        "ai.v1.connections.save", {"name": "OpenAI", "provider": "openai", "key": "k"}, no_notify
+    )
+    chain = [{"connection": saved["id"], "model": "gpt-6.1-sol"}]
+    await service.handle("ai.v1.routing.set", {"feature": "patterns", "chain": chain}, no_notify)
+    song = await run_job(service, "ai.v1.song.compose", params(effort="xhigh"))
+    assert len(sent) == 2 and sent[0]["reasoning"] == {"effort": "xhigh"} and "max_output_tokens" not in sent[0]
+    assert sent[1]["input"][1] == turns[0][0] and sent[1]["input"][2] == turns[0][1]  # the reasoning, unchanged
+    assert sent[1]["input"][3]["type"] == "function_call_output" and sent[1]["input"][3]["call_id"] == "call_0"
+    assert song["composed"]["reason"] == "Through the Responses API." and song["layerParts"]["bass"]
+    usage = song["composed"]["usage"]
+    assert usage["reasoning"] == 2 * USAGE["output_tokens_details"]["reasoning_tokens"]  # type: ignore[index]
+
+
+def test_eval_saves_each_song(tmp_path: Path) -> None:
+    brief = tmp_path / "brief.json"
+    brief.write_text(json.dumps(BRIEF), encoding="utf-8")
+    harness.main(["eval", "--brief", str(brief), "--fake", "--efforts", ",high", "--save", str(tmp_path / "songs")])
+    saved = sorted(p.name for p in (tmp_path / "songs").iterdir())
+    assert saved == [
+        "anthropic-harness-default.song.json",
+        "anthropic-harness-high.song.json",
+        "anthropic-one-shot-default.song.json",
+        "anthropic-one-shot-high.song.json",
+    ]
+    song = json.loads((tmp_path / "songs" / "anthropic-harness-high.song.json").read_text())
+    assert song["kind"] == "spinus.song" and song["composed"]["harness"]
+
+
+async def test_a_model_name_with_slashes_is_a_file_name(tmp_path: Path) -> None:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    client = httpx.AsyncClient(transport=httpx.MockTransport(harness.fake_runs(setup(), ws)))
+    store = ConnectionStore(tmp_path, MemoryKeyStore())
+    store.upsert("Fake", "anthropic", "https://fake.test", "k")
+    await harness.compare_ways(BRIEF, client, store, Routing(tmp_path, store), tmp_path, [""], tmp_path / "out",
+                               "anthropic/claude-sonnet-5.5")  # fmt: skip
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == [
+        "anthropic_claude-sonnet-5.5-harness-default.song.json",
+        "anthropic_claude-sonnet-5.5-one-shot-default.song.json",
+    ]

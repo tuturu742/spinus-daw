@@ -465,8 +465,8 @@ made no sound (its notes may be outside the instrument's range) and the balance.
 on the same working copy. If no part could be played (Spinus's sound helper isn't there), there's nothing new to
 tell the AI, so no fix round runs.
 
-**Reasoning** (the model's own, low, medium or high) is how hard the model thinks before it writes. Higher
-levels use more tokens.
+**Reasoning** (the model's own, low, medium, high, or extra high where the model offers it) is how hard the
+model thinks before it writes. Higher levels use more tokens.
 
 **How many tokens**: Spinus doesn't guess in advance, since nobody knows how long a model will think. While the
 AI works, the page shows the tokens used so far. When it's done, it lists each round's tokens as your provider

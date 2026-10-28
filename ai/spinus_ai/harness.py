@@ -1353,9 +1353,12 @@ async def compare_ways(
     routing: Routing,
     folder: Path,
     efforts: list[str],
+    save: Path | None = None,
+    label: str = "",
 ) -> list[dict[str, Any]]:
     """The same brief written one-shot (compose) and through the harness at each reasoning level: the tokens each
-    used, as the provider reported them, and the checks' score of each song."""
+    used, as the provider reported them, and the checks' score of each song. With `save`, each song is written
+    there as <label>-<way>-<effort>.song.json (a slash in the label, a model's name, becomes _)."""
     setup = setup_of(brief)
     seed, size = int(brief.get("seed", 0)), str(brief.get("arrangement") or "sketch")
     usage_log = UsageLog(folder)
@@ -1372,6 +1375,10 @@ async def compare_ways(
             else:
                 song = await write(client, connections, routing, usage_log, setup, seed, size, effort, quiet)
                 usage = song["composed"]["usage"]
+            if save is not None:
+                save.mkdir(parents=True, exist_ok=True)
+                name = "-".join(x for x in (label, way, effort or "default") if x).replace("/", "_")
+                (save / f"{name}.song.json").write_text(json.dumps(song, indent=1), encoding="utf-8")
             rows.append(
                 {
                     "way": way,
@@ -1438,6 +1445,7 @@ def main(argv: list[str] | None = None) -> None:
         default=CLEAR_AFTER,
         help=f"input tokens after which old tool calls are cleared (Anthropic; 0: never; default {CLEAR_AFTER})",
     )
+    e.add_argument("--save", type=Path, help="a folder to save each song in (<model>-<way>-<effort>.song.json)")
     e.add_argument("--efforts", default="", help="reasoning levels to compare, e.g. ',low,medium,high' ('' default)")
     args = parser.parse_args(argv)
 
@@ -1478,7 +1486,9 @@ async def run_eval(args: argparse.Namespace) -> None:
         if args.model:
             routing.set(compose.FEATURE, [{"connection": store.connections[0].id, "model": args.model}])
         async with client:
-            rows = await compare_ways(brief, client, store, routing, Path(folder), efforts)
+            rows = await compare_ways(
+                brief, client, store, routing, Path(folder), efforts, args.save, args.model or args.provider
+            )
     print(table(rows))
     if args.fake:
         print(
