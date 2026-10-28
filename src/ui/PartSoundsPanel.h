@@ -120,6 +120,8 @@ public:
     void setTuneTries (int tries) { tuneTries = tries; }
 
     const std::vector<Row>& getRows() const noexcept { return rows; }
+    /** Whether there are reference songs (their part's button, The songs', shows only then). */
+    bool hasReferences() const noexcept { return ! context.songs.empty(); }
     juce::String getStatusText() const { return status.getText(); }
     /** A part's line as the panel shows it: its name, the chosen sound, the reasons. */
     juce::String describe (int row) const;

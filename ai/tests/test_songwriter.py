@@ -380,7 +380,7 @@ async def test_the_ai_varies_the_plan_within_the_style(tmp_path: Path) -> None:
             {"kind": "outro", "bars": 8},
         ],
         "loops": {"chorus": ["iv", "V", "i", "bVI"], "verse": ["i", "Imaj7#11", "bVI", "V"]},  # not in the style
-        "contours": {"verse": "valley", "bridge": "rise", "chorus": "zigzag"},
+        "contours": {"verse": "valley", "bridge": "rise", "chorus": "zigzag", "outro": "arch"},
         "reason": "A shorter intro, a stronger chorus.",
     }
     service = ai_service(tmp_path, answer, sent)
@@ -402,6 +402,7 @@ async def test_the_ai_varies_the_plan_within_the_style(tmp_path: Path) -> None:
     assert by_kind["chorus"]["contour"] != "zigzag"
     assert song["checks"]["notesFitChords"] == 1.0  # the rules still wrote every note
     assert "The AI changed" in song["note"]
+    assert "an arch melody in the outro" in song["note"] and "a valley melody" in song["note"]
     assert sent[0]["tools"][0]["name"] == "refine_song"
     assert "chordVocabulary" in sent[0]["messages"][0]["content"][0]["text"]
 

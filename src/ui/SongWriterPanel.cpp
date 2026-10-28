@@ -250,8 +250,147 @@ bool SongWriterPanel::write()
              status.setText ("Written. Apply puts it in the project to hear (Ctrl+Z takes it away); or write another "
                              "version or redo a part first.",
                              juce::dontSendNotification);
+             balance();
          });
     return true;
+}
+
+namespace
+{
+/** How loud a recording is: its RMS over all of it, in dB (-100: silent or unreadable). */
+double rmsDb (const juce::File& file)
+{
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+    if (reader == nullptr || reader->lengthInSamples <= 0)
+        return -100.0;
+    juce::AudioBuffer<float> audio ((int)reader->numChannels, (int)reader->lengthInSamples);
+    reader->read (&audio, 0, audio.getNumSamples(), 0, true, true);
+    double sum = 0.0;
+    for (int c = 0; c < audio.getNumChannels(); ++c)
+        for (int i = 0; i < audio.getNumSamples(); ++i)
+            sum += (double)audio.getSample (c, i) * audio.getSample (c, i);
+    const auto mean = sum / ((double)audio.getNumChannels() * audio.getNumSamples());
+    return mean > 1.0e-10 ? 10.0 * std::log10 (mean) : -100.0;
+}
+} // namespace
+
+void SongWriterPanel::balance()
+{
+    faders.clear();
+    if (! song::isFull (song) || context.helper.helper == juce::File())
+        return;
+    // Each layer's busiest bars, played with its sound in the helper (as Listen plays a part).
+    struct Measure
+    {
+        SoundSource source;
+        juce::Array<juce::var> items;
+    };
+    std::map<juce::String, Measure> byInstrument;
+    const auto folder = context.workFolder.getChildFile ("levels");
+    folder.deleteRecursively();
+    folder.createDirectory();
+    for (const auto& layer : song::layersOf (song))
+    {
+        const auto chosen = layer.part == "fx" ? std::nullopt : chosenForLayer (layer);
+        if (! chosen)
+            continue;
+        const auto& c = chosen->choice;
+        using Kind = parts::Choice::Kind;
+        if ((c.kind != Kind::preset && c.kind != Kind::kit) || (layer.drums && c.drumNotes.empty()))
+            continue;
+        const auto notes = song::layerExcerpt (song, layer, c.drumNotes);
+        if (notes.empty())
+            continue;
+        juce::Array<juce::var> played;
+        for (const auto& n : notes)
+            played.add (object ({ { "note", n.note },
+                                  { "start", n.start },
+                                  { "length", n.length },
+                                  { "velocity", (double)n.velocity } }));
+        auto item = object ({ { "id", layer.id },
+                              { "preset", c.preset },
+                              { "notes", played },
+                              { "tail", 0.5 },
+                              { "output", folder.getChildFile (layer.id + ".wav").getFullPathName() } });
+        if (chosen->tuned)
+        {
+            auto* values = new juce::DynamicObject();
+            for (const auto& [id, value] : chosen->tuned->settings)
+                values->setProperty (id, value);
+            item.getDynamicObject()->setProperty ("settings", juce::var (values));
+        }
+        auto& m = byInstrument[c.source.key];
+        m.source = c.source;
+        m.items.add (item);
+    }
+    if (byInstrument.empty())
+        return;
+    busy = true;
+    status.setText ("Written. Setting each part's level: playing it with its sound...", juce::dontSendNotification);
+    updateButtons();
+    auto measured = std::make_shared<std::map<juce::String, double>>();
+    auto problems = std::make_shared<std::map<juce::String, juce::String>>(); // layer id -> why not measured
+    task = std::make_unique<BackgroundTask> (
+        "Spinus song levels",
+        [helper = context.helper, byInstrument, measured, problems] (const std::function<bool()>& shouldStop)
+        {
+            for (const auto& [key, m] : byInstrument)
+            {
+                if (shouldStop())
+                    break;
+                juce::String problem;
+                const auto done = parts::renderInHelper (helper, m.source, m.items, shouldStop, problem);
+                for (const auto& item : m.items)
+                {
+                    const auto id = item["id"].toString();
+                    const auto* result = std::find_if (done.begin(), done.end(),
+                                                       [&] (const juce::var& d) { return d["id"].toString() == id; });
+                    if (result == done.end() || result->hasProperty ("problem"))
+                        (*problems)[id] = result != done.end()   ? (*result)["problem"].toString()
+                                          : problem.isNotEmpty() ? problem
+                                                                 : juce::String ("it did not play");
+                    else
+                        (*measured)[id] = rmsDb (juce::File ((*result)["output"].toString()));
+                }
+            }
+            return juce::Result::ok();
+        },
+        [this, a = alive, measured, problems] (const juce::Result&)
+        {
+            if (! *a)
+                return;
+            juce::MessageManager::callAsync (
+                [this, a, measured, problems]
+                {
+                    if (! *a)
+                        return;
+                    task = nullptr;
+                    busy = false;
+                    const auto layers = song::layersOf (song);
+                    faders = song::startingFaders (layers, *measured);
+                    juce::StringArray set, unmeasured;
+                    for (const auto& layer : layers)
+                        if (const auto f = faders.find (layer.id); f != faders.end())
+                            set.add (layer.name + " " + juce::String (f->second, 1) + " dB");
+                        else if (const auto p = problems->find (layer.id); p != problems->end())
+                            unmeasured.add (layer.name + " (" + p->second + ")");
+                        else if (measured->contains (layer.id))
+                            unmeasured.add (layer.name + " (it played nothing: its sounds may load late)");
+                    status.setText (
+                        "Written. Apply puts it in the project to hear (Ctrl+Z takes it away). " +
+                            (set.isEmpty() ? juce::String()
+                                           : "Each part starts at its role's level, from how loud its sound "
+                                             "played: " +
+                                                 set.joinIntoString (", ") + ".") +
+                            (unmeasured.isEmpty()
+                                 ? juce::String()
+                                 : " Not measured, left as they are: " + unmeasured.joinIntoString (", ") + "."),
+                        juce::dontSendNotification);
+                    updateButtons();
+                });
+        });
 }
 
 bool SongWriterPanel::redo (const juce::String& part, const juce::String& section)
@@ -303,7 +442,14 @@ song::Options SongWriterPanel::optionsFor (const model::Project& project, const 
     for (const auto& layer : song::layersOf (song))
         if (const auto chosen = chosenForLayer (layer))
             if (auto sound = soundOf (chosen->choice))
+            {
+                // Its fader: toward the songs when Effects and mix set one, else the starting balance.
+                if (std::abs (chosen->volumeDb) >= 0.05)
+                    sound->volumeDb = chosen->volumeDb;
+                else if (const auto f = faders.find (layer.id); f != faders.end())
+                    sound->volumeDb = f->second;
                 options.layerSounds[layer.id] = *sound;
+            }
     for (const auto& part : song::partNames())
         if (const auto* chosen = chosenFor (context.sounds, part))
             if (auto sound = soundOf (chosen->choice))
@@ -449,6 +595,11 @@ bool SongWriterPanel::applyNow (const juce::String& replace)
 
 void SongWriterPanel::stop()
 {
+    if (task != nullptr)
+    {
+        task = nullptr; // stops the measuring and waits for it
+        busy = false;
+    }
     if (context.service != nullptr && job.isNotEmpty())
         context.service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
     session.getSamplePreview().stop();

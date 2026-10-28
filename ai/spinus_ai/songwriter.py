@@ -67,7 +67,7 @@ from typing import Any
 
 import httpx
 
-from .assistant import NoConnection, Say, complete_with_fallback
+from .assistant import NoConnection, Say, answered_by, complete_with_fallback
 from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
 from .routing import Routing
@@ -2287,7 +2287,7 @@ def check_refinement(answer: Any, style: Style, song: dict[str, Any]) -> tuple[d
             section = next((s for s in plan["sections"] if s["kind"] == kind), None)
             if section is not None and shape in CONTOURS:
                 section["contour"] = shape
-                taken.append(f"a {shape} melody in the {kind}")
+                taken.append(f"{'an' if shape[0] in 'aeiou' else 'a'} {shape} melody in the {kind}")
     if not taken:
         return None, []
     return plan, taken
@@ -2316,7 +2316,8 @@ async def refine(
     request = Request(
         routes[0].model, SYSTEM, [Message("user", [Text(describe_for_ai(style, song))])], [REFINE_SONG], 3000
     )
-    completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say)
+    failed: list[str] = []
+    completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say, failed)
     usage_log.add(routes[index].connection.id, "patterns", completion.usage)
     for use in completion.tool_uses:
         if use.name != "refine_song":
@@ -2329,7 +2330,7 @@ async def refine(
         for s in plan["sections"]:
             seeds["sections"].setdefault(s["id"], mix_seed(seeds["song"], "section", s["id"]))
         varied = build(style, plan, seeds)
-        varied["refinedBy"] = completion.model
+        varied["refinedBy"] = answered_by(completion.model, failed)
         varied["note"] = "The AI changed " + "; ".join(taken) + "."
         return finish(varied, summary, style)
     song = dict(song)

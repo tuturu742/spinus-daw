@@ -2,6 +2,7 @@
 
 #include "MessageLabel.h"
 #include "ai/AiService.h"
+#include "session/AnalysisLibrary.h"
 #include "session/PartSounds.h"
 #include "session/Session.h"
 #include "session/SongWriter.h"
@@ -43,6 +44,7 @@ public:
         juce::File indexFolder;             // the sound index, for the parts the Sounds page has no sound for
         std::vector<parts::SongPart> parts; // the Sounds page's list: the parts to write
         bool partsFromPage = false;         // the list is the Sounds page's: none means none yet (else a sketch)
+        SoundIndexer::Options helper;       // the sound helper, which plays each part to measure how loud it is
     };
 
     SongWriterPanel (Session&, std::function<Context()> context);
@@ -102,6 +104,9 @@ private:
     const parts::Plan::Part* pagePartFor (const song::Layer&) const;
     /** The chosen sound of a full arrangement's layer: the Sounds page's for its part, or the index's. */
     std::optional<parts::Plan::Part> chosenForLayer (const song::Layer&);
+    /** After writing: each layer's busiest bars played with its sound in the sound helper, measured, and its
+        starting fader set from that and its role (song::startingFaders), for Apply. */
+    void balance();
 
     Session& session;
     std::function<Context()> getContext;
@@ -121,6 +126,8 @@ private:
     MessageBoxHandler messageBox;
     juce::ToggleButton refineButton { "Let the AI vary the plan (uses your AI connection)" };
     std::map<juce::String, parts::Choice> layerChoices; // for `song`
+    std::map<juce::String, double> faders;              // for `song`: its layers' starting faders (balance)
+    std::unique_ptr<BackgroundTask> task;
     bool layerChoicesKnown = false;
     juce::TextButton writeButton { "Write" }, againButton { "Another version" }, redoButton { "Redo part..." },
         stopButton { "Stop" }, applyButton { "Apply" }, mixButton { "Mix it..." };

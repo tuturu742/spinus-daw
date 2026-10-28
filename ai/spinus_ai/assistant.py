@@ -157,7 +157,9 @@ async def complete_with_fallback(
     request: Request,
     on_text: Callable[[str], Awaitable[None]],
     say: Say,
+    failed: list[str] | None = None,
 ) -> tuple[Completion, int]:
+    """The first route's answer, else the next's, and so on; each that failed is added to `failed`."""
     last: ProviderError | None = None
     for index in range(start, len(routes)):
         route = routes[index]
@@ -168,6 +170,8 @@ async def complete_with_fallback(
             ), index
         except ProviderError as error:
             last = error
+            if failed is not None:
+                failed.append(f"{route.connection.name} ({route.model}) did not answer: {error}")
             log.warning(
                 "%s (%s, %s) failed: %s: %s",
                 route.connection.name,
@@ -187,6 +191,12 @@ async def complete_with_fallback(
             )
     assert last is not None
     raise last
+
+
+def answered_by(model: str, failed: list[str]) -> str:
+    """Which model answered, and why it was not the one chosen: "model-b, because Work (model-a) did not
+    answer: ..."."""
+    return f"{model}, because {'; '.join(failed)}" if failed else model
 
 
 WRITE_NOTES = Tool(

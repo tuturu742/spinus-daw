@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from .assistant import NoConnection, Say, complete_with_fallback
+from .assistant import NoConnection, Say, answered_by, complete_with_fallback
 from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
 from .routing import Routing
@@ -296,7 +296,7 @@ class Genre:
 G = Genre
 GENRES: tuple[Genre, ...] = (
     # Pop and its neighbours
-    G("pop", "pop", ("pop", "dance pop", "dance-pop", "mainstream"), "pop", 116, (96, 128), 0.4),
+    G("pop", "pop", ("pop", "poppy", "dance pop", "dance-pop", "mainstream"), "pop", 116, (96, 128), 0.4),
     G("indiepop", "indie pop", ("indie pop", "indie-pop", "indie", "twee", "bedroom pop", "sunshine pop"), "indiepop",
       118, (100, 132), 0.3),
     G("kpop", "K-pop", ("k-pop", "kpop", "korean pop"), "pop", 120, (100, 140), 0.45),
@@ -318,12 +318,12 @@ GENRES: tuple[Genre, ...] = (
     G("chillwave", "chillwave", ("chillwave", "glo-fi"), "vapor", 100, (85, 115), 0.4),
     G("vaporwave", "vaporwave", ("vaporwave", "vapor wave", "future funk"), "vapor", 84, (70, 110), 0.35),
     # Rock and metal
-    G("rock", "rock", ("rock", "classic rock", "hard rock", "rock and roll", "rock'n'roll", "alternative",
-                       "alternative rock", "alt rock", "grunge", "garage rock", "stoner rock", "blues rock"), "rock",
-      126, (95, 160), 0.45),
+    G("rock", "rock", ("rock", "rocky", "rockin", "classic rock", "hard rock", "rock and roll", "rock'n'roll",
+                       "alternative", "alternative rock", "alt rock", "grunge", "garage rock", "stoner rock",
+                       "blues rock"), "rock", 126, (95, 160), 0.45),
     G("indierock", "indie rock", ("indie rock", "indie-rock", "math rock", "post-rock", "post rock"), "rock", 128,
       (100, 150), 0.45),
-    G("punk", "punk", ("punk", "punk rock", "hardcore punk", "skate punk"), "punk", 180, (150, 210), 0.35),
+    G("punk", "punk", ("punk", "punky", "punk rock", "hardcore punk", "skate punk"), "punk", 180, (150, 210), 0.35),
     G("poppunk", "pop punk", ("pop punk", "pop-punk", "easycore"), "punk", 172, (150, 200), 0.25),
     G("emo", "emo", ("emo", "midwest emo", "screamo"), "punk", 150, (120, 180), 0.4),
     G("metal", "metal", ("metal", "heavy metal", "nu metal", "nu-metal", "metalcore", "djent", "groove metal",
@@ -339,13 +339,15 @@ GENRES: tuple[Genre, ...] = (
     # Dance
     G("edm", "EDM", ("edm", "big room", "electro house", "festival", "dance music", "club"), "four", 128, (124, 132),
       0.6),
-    G("house", "house", ("house", "deep house", "tech house", "progressive house", "afro house", "house music"),
+    G("house", "house", ("house", "housey", "deep house", "tech house", "progressive house", "afro house",
+                         "house music"),
       "four", 124, (118, 128), 0.6),
     G("disco", "disco", ("disco", "funky house"), "disco", 118, (110, 125), 0.35),
     G("nudisco", "nu-disco", ("nu-disco", "nu disco", "nudisco", "french house"), "disco", 120, (112, 126), 0.4),
     G("techno", "techno", ("techno", "industrial techno", "minimal techno", "acid techno", "acid"),
       "techno", 132, (125, 145), 0.85),
-    G("trance", "trance", ("trance", "uplifting trance", "progressive trance", "psytrance", "psy trance", "goa"),
+    G("trance", "trance", ("trance", "trancey", "trancy", "uplifting trance", "progressive trance", "psytrance",
+                           "psy trance", "goa"),
       "trance", 138, (130, 148), 0.75),
     G("hardstyle", "hardstyle", ("hardstyle", "hard dance", "gabber", "hardcore techno", "rawstyle"), "hard", 150,
       (145, 160), 0.7),
@@ -370,7 +372,7 @@ GENRES: tuple[Genre, ...] = (
       0.5),
     # Caribbean, Latin and African
     G("reggae", "reggae", ("reggae", "roots reggae", "lovers rock", "dancehall"), "onedrop", 76, (66, 90), 0.4),
-    G("dub", "dub", ("dub", "dub reggae", "steppers"), "onedrop", 72, (62, 85), 0.7),
+    G("dub", "dub", ("dub", "dubby", "dub reggae", "steppers"), "onedrop", 72, (62, 85), 0.7),
     G("ska", "ska", ("ska", "rocksteady", "two tone"), "ska", 160, (130, 180), 0.35),
     G("reggaeton", "reggaeton", ("reggaeton", "reguetón", "dembow", "latin trap"), "dembow", 94, (88, 100), 0.7),
     G("latin", "latin", ("latin", "salsa", "cumbia", "merengue", "bachata", "mambo", "son cubano"), "latin", 110,
@@ -379,16 +381,17 @@ GENRES: tuple[Genre, ...] = (
     G("afrobeats", "afrobeats", ("afrobeats", "afrobeat", "afro-beat", "afropop", "amapiano", "highlife"), "afro",
       108, (98, 116), 0.4),
     # Soul, funk, jazz
-    G("funk", "funk", ("funk", "p-funk", "boogie"), "funk", 108, (95, 120), 0.45),
-    G("soul", "soul", ("soul", "motown", "neo soul", "neo-soul", "northern soul"), "soul", 92, (70, 110), 0.4),
+    G("funk", "funk", ("funk", "funky", "p-funk", "boogie"), "funk", 108, (95, 120), 0.45),
+    G("soul", "soul", ("soul", "soulful", "motown", "neo soul", "neo-soul", "northern soul"), "soul", 92, (70, 110),
+      0.4),
     G("rnb", "R&B", ("r&b", "rnb", "r and b", "rhythm and blues", "contemporary r&b", "slow jam"), "soul", 84,
       (65, 100), 0.5),
     G("gospel", "gospel", ("gospel", "spiritual", "church"), "soul", 84, (65, 120), 0.15),
-    G("jazz", "jazz", ("jazz", "swing", "bebop", "smooth jazz", "jazz fusion", "big band", "cool jazz"), "jazz", 120,
-      (70, 200), 0.4),
-    G("blues", "blues", ("blues", "delta blues", "chicago blues"), "soul", 88, (60, 120), 0.4),
+    G("jazz", "jazz", ("jazz", "jazzy", "swing", "bebop", "smooth jazz", "jazz fusion", "big band", "cool jazz"),
+      "jazz", 120, (70, 200), 0.4),
+    G("blues", "blues", ("blues", "bluesy", "delta blues", "chicago blues"), "soul", 88, (60, 120), 0.4),
     # Acoustic and roots
-    G("folk", "folk", ("folk", "indie folk", "singer-songwriter", "singer songwriter", "acoustic", "americana",
+    G("folk", "folk", ("folk", "folky", "indie folk", "singer-songwriter", "singer songwriter", "acoustic", "americana",
                        "celtic"), "folk", 100, (80, 125), 0.35),
     G("country", "country", ("country", "country pop", "western", "honky tonk"), "folk", 112, (90, 130), 0.2),
     G("bluegrass", "bluegrass", ("bluegrass", "hillbilly"), "folk", 140, (120, 170), 0.2),
@@ -550,22 +553,45 @@ def words_in(text: str, words: tuple[str, ...]) -> list[str]:
     return [w for w in words if found(text, w)]
 
 
+# A genre's adjective ("funky"): it names the genre unless another genre is named.
+GENRE_ADJECTIVES = ("poppy", "rocky", "rockin", "punky", "dubby", "funky", "soulful", "jazzy", "bluesy", "folky",
+                    "trancey", "trancy", "housey")  # fmt: skip
+NEGATIONS = ("no", "not", "without", "never", "nothing", "non", "don't", "dont", "doesn't", "isn't", "aren't")
+# Words that may stand between a negation and what it negates: "not too fast", "no real synth leads".
+HEDGES = ("too", "so", "very", "overly", "really", "real", "any", "a", "an", "the", "much", "super", "that", "use",
+          "want", "need", "have", "include", "add", "more")  # fmt: skip
+LONE_MODE = re.compile(r"(?<![a-z0-9])(minor|major)(?![a-z0-9])")
+
+
+def negated(text: str, start: int) -> bool:
+    """Whether the words just before `start`, in the same clause, negate it ("not too fast", "no synth leads")."""
+    clause = re.split(r"[.,;:!?()]|\bbut\b", text[:start])[-1]
+    for word in reversed(clause.split()[-4:]):
+        if word in NEGATIONS:
+            return True
+        if word not in HEDGES:
+            return False
+    return False
+
+
 def read(text: str) -> Reading:
     """The rules' reading of a description."""
     lower = " ".join(text.lower().replace("\u2013", "-").split())
     reading = Reading()
 
-    # The genre: the longest name found (the earliest on a tie), so "indie pop" wins over "pop" and "indie".
-    best: tuple[int, int, Genre, str] | None = None
+    # The genre: the longest name found (the earliest on a tie), so "indie pop" wins over "pop" and "indie"; a
+    # genre's name wins over another's adjective ("funky disco" is disco).
+    best: tuple[bool, int, int, Genre, str] | None = None
     for g in GENRES:
         for w in g.words:
-            if (m := found(lower, w)) and (
-                best is None or len(w) > best[0] or (len(w) == best[0] and m.start() < best[1])
-            ):
-                best = (len(w), m.start(), g, w)
+            if (m := found(lower, w)) is None:
+                continue
+            rank = (w not in GENRE_ADJECTIVES, len(w), -m.start())
+            if best is None or rank > (best[0], best[1], -best[2]):
+                best = (rank[0], len(w), m.start(), g, w)
     named = ""
     if best is not None:
-        reading.genre, named = best[2].id, best[3]
+        reading.genre, named = best[3].id, best[4]
 
     # A tempo or key said twice ("about 128 BPM... make it 140 BPM"): the last one.
     tempos = list(TEMPO.finditer(lower)) or list(TEMPO_BEFORE.finditer(lower))
@@ -582,6 +608,14 @@ def read(text: str) -> Reading:
         reading.tonic = tonic
         reading.scale = "major" if scale in ("major", "maj") else "minor"
         break
+    # "minor" or "major" on its own ("slow and chill, minor"): the mode, unless a key said after it.
+    keys = list(KEY.finditer(lower))
+    for match in reversed(list(LONE_MODE.finditer(lower))):
+        if any(k.start() <= match.start() < k.end() for k in keys) or negated(lower, match.start()):
+            continue
+        if not keys or match.start() > keys[-1].end():
+            reading.scale = match.group(1)
+        break
 
     # Moods: each word once, a longer one taking its words ("slow burn" is not also "slow"); the genre's own
     # name's words ("depressive" black metal) are not moods.
@@ -591,9 +625,11 @@ def read(text: str) -> Reading:
         for m in re.finditer(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", lower):
             if any(a < m.end() and m.start() < b for a, b in taken) or word in named.split():
                 continue
-            if named and best is not None and best[1] <= m.start() < best[1] + len(named):
+            if named and best is not None and best[2] <= m.start() < best[2] + len(named):
                 continue
             taken.append((m.start(), m.end()))
+            if negated(lower, m.start()):  # "not too fast": not fast
+                continue
             hits.append((m.start(), word))
             break
     pace, lean, energy = 1.0, 0.0, 0.0
@@ -612,13 +648,19 @@ def read(text: str) -> Reading:
     # in the order written; "bass" in "bass drum" is the drums'.
     spans: list[tuple[int, int]] = []
     mentioned: list[tuple[int, str, dict[str, str]]] = []
+    left_out: list[str] = []
     for word, role, name, look_for in sorted(INSTRUMENTS, key=lambda i: -len(i[0])):
-        for m in re.finditer(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", lower):
+        for m in re.finditer(rf"(?<![a-z0-9]){re.escape(word)}(?:e?s)?(?![a-z0-9])", lower):
             if any(a < m.end() and m.start() < b for a, b in spans):
                 continue
             if word == "bass" and lower[m.end() : m.end() + 5] == " drum":
                 continue
             spans.append((m.start(), m.end()))
+            if negated(lower, m.start()):  # "no synth leads": left out
+                left_out.append(role)
+                continue
+            if any(p["name"] == name or role == p["role"] == "drums" for _, _, p in mentioned):
+                continue  # "guitars ... the guitars", or "a beat" and "drums": one part
             mentioned.append((m.start(), word, {"role": role, "name": name, "sound": look_for}))
             reading.sounds.setdefault(role, look_for)
             break
@@ -626,7 +668,7 @@ def read(text: str) -> Reading:
         reading.parts.append(named_part)
         reading.instruments.append(word)
     for part, phrases in WITHOUT.items():
-        if words_in(lower, phrases):
+        if words_in(lower, phrases) or part in left_out:
             reading.without.append(part)
     if not genre_of(reading).drums and "drums" not in reading.without:
         reading.without.append("drums")
@@ -904,8 +946,12 @@ def with_references(
         out["tempo"] = {k: round(float(v) * factor, 1) for k, v in tempo.items() if isinstance(v, int | float)}
         out["tempo"]["median"] = new
 
-    if reading.scale is not None and (reading.tonic, reading.scale) != (before.tonic, before.scale):
-        name = f"{NAMES[int(reading.tonic or 0)]} {reading.scale}"
+    tonic = reading.tonic if reading.tonic is not None else before.tonic
+    if reading.scale is not None and tonic is None and reading.scale != before.scale:
+        out["modes"] = {reading.scale: 1.0}  # a mode said alone, the songs without a key: the mode only
+        changes.insert(1 if tempo_said else 0, reading.scale)
+    elif reading.scale is not None and (tonic, reading.scale) != (before.tonic, before.scale):
+        name = f"{NAMES[int(tonic or 0)]} {reading.scale}"
         out["keys"], out["modes"] = [{"name": name, "count": 3}], {reading.scale: 1.0}
         out["keyFixed"] = True
         for song in out.get("perSong") or []:  # the songs' chords, read in the new mode
@@ -1099,15 +1145,17 @@ async def read_with_ai(
         [READ_DESCRIPTION],
         1000,
     )
-    completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say)
+    failed: list[str] = []
+    completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say, failed)
     usage_log.add(routes[index].connection.id, "patterns", completion.usage)
+    by = answered_by(completion.model, failed)
     for use in completion.tool_uses:
         if use.name == "read_description" and (reading := check_reading(use.input)) is not None:
             if not reading.parts:  # the parts the words name, as Spinus's own reading finds them
                 reading.parts = checked_parts(read(text).parts, reading.without)
             if base is not None:
-                return with_references(reading, text, generated, base, completion.model)
-            return to_summary(reading, text, completion.model)
+                return with_references(reading, text, generated, base, by)
+            return to_summary(reading, text, by)
     summary = describe(text, base, generated)
     summary["described"]["note"] = "The AI's answer was not usable; Spinus's own reading stands."
     return summary

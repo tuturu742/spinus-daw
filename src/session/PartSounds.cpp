@@ -196,10 +196,10 @@ juce::String roleFromName (const juce::String& name)
         return n.contains ("lead") || n.contains ("solo")    ? "lead-guitar"
                : n.contains ("clean") || n.contains ("pick") ? "clean-guitar"
                                                              : "rhythm-guitar";
+    if (any ({ "organ", "drawbar" })) // before "keys": an organ preset is often filed under Keys
+        return "organ";
     if (any ({ "piano", "grand", "upright", "e.piano", "keys" }))
         return "piano";
-    if (any ({ "organ", "drawbar" }))
-        return "organ";
     if (any ({ "string", "violin", "viola", "cello", "ensemble", "orchestra" }))
         return "strings";
     if (any ({ "brass", "horn", "trumpet", "trombone", "tuba" }))

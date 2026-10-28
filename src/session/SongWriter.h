@@ -1,10 +1,13 @@
 #pragma once
 
 #include "model/Model.h"
+#include "OfflineInstrument.h"
 
 #include <juce_core/juce_core.h>
 
 #include <map>
+#include <optional>
+#include <vector>
 
 /** The Track creator's fourth step: the new song (spinus_ai.songwriter's result) into the project, through
     commands only, as one proposal: one undo step, applied only when the user clicks Apply.
@@ -56,6 +59,7 @@ struct Sound
     juce::var instrument;              // as channel.add takes it
     juce::String preset;               // a 3x Osc preset to load (device.loadPreset), or empty
     std::map<juce::String, int> drums; // a drum instrument's notes per drum (empty: drumNotesFor)
+    std::optional<double> volumeDb;    // its insert's fader (startingFaders), or as it is
 };
 /** Spinus's own: the Drum Machine, 3x Osc with "Pluck Bass", "Soft Keys" and "Saw Lead". */
 Sound defaultSound (const juce::String& part);
@@ -135,6 +139,22 @@ Applied findApplied (const juce::var& song, const model::Project&, const juce::S
     (`error` says why). */
 juce::var makeRedoProposal (const juce::var& song, const Applied&, const juce::String& part,
                             const juce::String& section, juce::String* error = nullptr);
+
+/** A layer's notes in its busiest section, in seconds from that section's start (at most `seconds` of them),
+    drums played on `drums`' notes: how the part sounds with its sound, to measure how loud it is. None when it
+    plays nothing. */
+std::vector<OfflineInstrument::Note> layerExcerpt (const juce::var& song, const Layer&,
+                                                   const std::map<juce::String, int>& drums, double seconds = 12.0);
+
+/** How loud a part of each role usually sits in a mix, in dB next to the drums (0): the bass close to them, a
+    pad well under. */
+double roleLevelDb (const juce::String& role);
+
+/** A starting balance for a written song's layers: from each layer's role and how loud its excerpt measured
+    with its sound (dB RMS), its fader, so that every part sits at its role's level; the loudest fader is 0 dB
+    (nothing is turned up past where it was), none under -30 dB. By layer id; layers not measured are left out. */
+std::map<juce::String, double> startingFaders (const std::vector<Layer>&,
+                                               const std::map<juce::String, double>& measured);
 
 /** What will be written, in plain words (the song's `plain`), and its numbers next to the style's. */
 juce::String describe (const juce::var& song);

@@ -5,6 +5,7 @@
 #include "dsp/sampler/SampleStorage.h"
 #include "session/PresetPreviews.h"
 #include "session/UserRoles.h"
+#include <array>
 
 namespace spinus::ui
 {
@@ -87,10 +88,11 @@ public:
         listenButton.onClick = [this] { panel.listen (index); };
         songsButton.setTooltip ("Hear the part in the reference song it was compared with");
         songsButton.onClick = [this] { panel.listenToSongs (index); };
-        for (auto* c : std::initializer_list<juce::Component*> { &title, &role, &removeButton, &choice, &listenButton,
-                                                                 &songsButton, &why })
+        for (auto* c :
+             std::initializer_list<juce::Component*> { &title, &role, &removeButton, &choice, &listenButton, &why })
             addAndMakeVisible (c);
         addChildComponent (tuneToggle);
+        addChildComponent (songsButton);
     }
 
     void update (const Row& row)
@@ -115,8 +117,9 @@ public:
         tuneToggle.setVisible (row.stem != juce::File() && row.chosen() != nullptr &&
                                row.chosen()->kind == parts::Choice::Kind::preset);
         tuneToggle.setToggleState (row.tune, juce::dontSendNotification);
-        resized();
+        songsButton.setVisible (panel.hasReferences());
         songsButton.setEnabled (row.stem != juce::File());
+        resized();
     }
 
     void resized() override
@@ -128,8 +131,11 @@ public:
         top.removeFromLeft (4);
         removeButton.setBounds (top.removeFromRight (26).reduced (0, 1));
         top.removeFromRight (4);
-        songsButton.setBounds (top.removeFromRight (90).reduced (0, 1));
-        top.removeFromRight (4);
+        if (songsButton.isVisible())
+        {
+            songsButton.setBounds (top.removeFromRight (90).reduced (0, 1));
+            top.removeFromRight (4);
+        }
         listenButton.setBounds (top.removeFromRight (70).reduced (0, 1));
         top.removeFromRight (6);
         choice.setBounds (top.reduced (0, 1));
@@ -1247,8 +1253,13 @@ namespace
     whatever sound the user picks, and drums, percussion and impacts all play drum sounds. */
 bool sameKind (const juce::String& says, const juce::String& role)
 {
-    static const juce::StringArray drums { "drums", "percussion", "impact" };
-    return role == "riser" || role == "impact" || (drums.contains (says) && drums.contains (role));
+    // Kinds a sound's category does not tell apart: a "Keys" preset may be an organ or an electric piano.
+    static const std::array<juce::StringArray, 3> kinds { juce::StringArray { "drums", "percussion", "impact" },
+                                                          juce::StringArray { "piano", "organ", "chords" },
+                                                          juce::StringArray { "pad", "strings", "choir" } };
+    return role == "riser" || role == "impact" ||
+           std::any_of (kinds.begin(), kinds.end(),
+                        [&] (const juce::StringArray& k) { return k.contains (says) && k.contains (role); });
 }
 } // namespace
 

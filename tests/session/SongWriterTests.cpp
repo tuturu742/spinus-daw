@@ -535,3 +535,50 @@ TEST_CASE ("Song writer: the Sounds page's channels are written into, by the par
         if (step["command"].toString() == "channel.remove")
             CHECK ((int)step["parameters"]["channel"] != (int)bass->id.value);
 }
+
+TEST_CASE ("Song writer: each part starts at its role's level, from how loud its sound played", "[song]")
+{
+    const auto song = makeFullSong();
+    const auto layers = song::layersOf (song);
+    const auto layerNamed = [&] (const juce::String& id)
+    { return *std::find_if (layers.begin(), layers.end(), [&] (const song::Layer& l) { return l.id == id; }); };
+
+    // The busiest section's notes, in seconds, the drums on the kit's notes.
+    const auto drums = song::layerExcerpt (song, layerNamed ("drums"), { { "kick", 36 }, { "snare", 38 } });
+    REQUIRE (drums.size() == 2); // the verse (three hits; the hat has no note on this kit)
+    const auto secondsPerBeat = 60.0 / (double)song["tempo"];
+    CHECK (drums[0].note == 36);
+    CHECK (drums[1].start == Catch::Approx (secondsPerBeat * 960.0 / ((double)song["barTicks"] / 4.0)));
+    CHECK (song::layerExcerpt (song, layerNamed ("lead"), {}).size() == 1);
+    CHECK (song::layerExcerpt (song, layerNamed ("lead"), {}, 0.1).empty()); // its note starts later
+
+    // A pad that played 12 dB over the drums is brought under them, to its role's level; a quiet bass is up to
+    // its own. Nothing is turned up: the loudest is at 0 dB.
+    const auto faders = song::startingFaders (layers, { { "drums", -20.0 }, { "bass", -22.0 }, { "pad", -8.0 } });
+    REQUIRE (faders.size() == 3);
+    const auto drumsLevel = song::roleLevelDb ("drums");
+    CHECK (faders.at ("pad") - faders.at ("drums") == Catch::Approx (song::roleLevelDb ("pad") - drumsLevel - 12.0));
+    CHECK (faders.at ("bass") - faders.at ("drums") == Catch::Approx (song::roleLevelDb ("bass") - drumsLevel + 2.0));
+    double loudest = -100.0;
+    for (const auto& [id, db] : faders)
+    {
+        CHECK ((db <= 0.0 && db >= -30.0));
+        loudest = std::max (loudest, db);
+    }
+    CHECK (loudest == 0.0);
+    CHECK (song::roleLevelDb ("pad") < song::roleLevelDb ("bass"));
+    CHECK (song::startingFaders (layers, { { "drums", -100.0 } }).empty()); // silent: not measured
+
+    // Apply sets them on the layers' inserts, in the same one undo step.
+    commands::CommandHistory history { model::Project {} };
+    song::Options options;
+    options.layerSounds["pad"] = song::defaultSound (layerNamed ("pad"));
+    options.layerSounds["pad"].volumeDb = faders.at ("pad");
+    auto proposal = ai::Proposal::prepare (song::makeProposal (song, history.getProject(), options), history);
+    REQUIRE (proposal.canApply());
+    REQUIRE (proposal.apply (history).wasOk());
+    const auto& project = history.getProject();
+    CHECK (project.findInsert (channelNamed (project, "Pad")->targetInsert)->volumeDb ==
+           Catch::Approx (faders.at ("pad")).margin (0.01));
+    CHECK (project.findInsert (channelNamed (project, "Bass")->targetInsert)->volumeDb == Catch::Approx (0.0));
+}

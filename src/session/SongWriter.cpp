@@ -414,8 +414,10 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
             step ("channel.add", object ({ { "name", layer.name }, { "instrument", sound.instrument } }));
         step ("channel.set",
               object ({ { "channel", channel + ".channel" }, { "group", layer.family }, { "colour", colour } }));
-        step ("insert.set",
-              object ({ { "insert", channel + ".insert" }, { "name", layer.name }, { "colour", colour } }));
+        auto insert = object ({ { "insert", channel + ".insert" }, { "name", layer.name }, { "colour", colour } });
+        if (sound.volumeDb)
+            insert.getDynamicObject()->setProperty ("volumeDb", juce::jlimit (-100.0, 12.0, *sound.volumeDb));
+        step ("insert.set", insert);
         if (sound.preset.isNotEmpty())
             step ("device.loadPreset", object ({ { "device", channel + ".device" }, { "preset", sound.preset } }));
         channels[layer.id] = channel + ".channel";
@@ -533,6 +535,75 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
           { "steps", steps } });
 }
 } // namespace
+
+std::vector<OfflineInstrument::Note> layerExcerpt (const juce::var& song, const Layer& layer,
+                                                   const std::map<juce::String, int>& drums, double seconds)
+{
+    const auto beatsPerBar = std::max (1, (int)song["beatsPerBar"]);
+    const auto ticksPerBeat = std::max<juce::int64> (1, (juce::int64)song["barTicks"] / beatsPerBar);
+    const auto secondsPerTick = 60.0 / (juce::jlimit (20.0, 999.0, (double)song["tempo"]) * (double)ticksPerBeat);
+    juce::Array<juce::var> busiest;
+    for (const auto& section : arrayOf (song["sections"]))
+        if (const auto notes = layerNotesOf (song, layer, section["id"].toString(), drums);
+            notes.size() > busiest.size())
+            busiest = notes;
+    std::vector<OfflineInstrument::Note> excerpt;
+    for (const auto& n : busiest)
+    {
+        const auto start = (double)(juce::int64)n["start"] * secondsPerTick;
+        if (start >= seconds)
+            continue;
+        excerpt.push_back ({ (int)n["pitch"], start, (double)(juce::int64)n["length"] * secondsPerTick,
+                             (float)(double)n["velocity"] });
+    }
+    return excerpt;
+}
+
+double roleLevelDb (const juce::String& role)
+{
+    static const std::map<juce::String, double> levels {
+        { "drums", 0.0 },
+        { "bass", -1.0 },
+        { "sub", -2.0 },
+        { "rhythm-guitar", -3.0 },
+        { "lead-guitar", -2.0 },
+        { "clean-guitar", -4.0 },
+        { "acoustic-guitar", -4.0 },
+        { "lead", -2.0 },
+        { "counter", -5.0 },
+        { "chords", -5.0 },
+        { "piano", -4.0 },
+        { "organ", -6.0 },
+        { "pad", -8.0 },
+        { "strings", -6.0 },
+        { "choir", -7.0 },
+        { "brass", -4.0 },
+        { "woodwinds", -5.0 },
+        { "arp", -6.0 },
+        { "percussion", -6.0 },
+        { "riser", -8.0 },
+        { "impact", -4.0 },
+    };
+    const auto found = levels.find (role);
+    return found != levels.end() ? found->second : -5.0;
+}
+
+std::map<juce::String, double> startingFaders (const std::vector<Layer>& layers,
+                                               const std::map<juce::String, double>& measured)
+{
+    std::map<juce::String, double> faders;
+    for (const auto& layer : layers)
+        if (const auto m = measured.find (layer.id); m != measured.end() && m->second > -90.0)
+            faders[layer.id] = roleLevelDb (layer.role) - m->second;
+    if (faders.empty())
+        return faders;
+    double loudest = -1000.0;
+    for (const auto& [id, db] : faders)
+        loudest = std::max (loudest, db);
+    for (auto& [id, db] : faders)
+        db = std::max (-30.0, std::round ((db - loudest) * 10.0) / 10.0);
+    return faders;
+}
 
 juce::var makeProposal (const juce::var& song, const model::Project& project, const Options& options,
                         juce::String* error)

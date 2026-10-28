@@ -13,6 +13,7 @@
 #include "ui/AnalysisLibraryView.h"
 #include "ui/Analyzer.h"
 #include "ui/Automixer.h"
+#include "ui/SongWriterPanel.h"
 #include "ui/SoundIndexView.h"
 #include "ui/Theme.h"
 #include "session/SongWriter.h"
@@ -582,6 +583,19 @@ TEST_CASE ("Track creator: the parts are the user's list: none at first, what th
     REQUIRE (panel.pickSound (impacts, kitChoice));
     CHECK_FALSE (panel.getRows()[(size_t)impacts].note.contains ("change the role"));
 
+    // An organ preset filed under keys, for an Organ part: no warning either (nor an electric piano for it).
+    REQUIRE (panel.addPart ("organ"));
+    parts::Choice organ;
+    organ.source.key = organ.instrument = "a-synth";
+    organ.source.name = "A Synth";
+    organ.name = "House Organ";
+    organ.category = "Keys";
+    CHECK (parts::roleFromName ("A Synth House Organ Keys") == "organ"); // its name wins over its category
+    REQUIRE (panel.pickSound ((int)panel.getParts().size() - 1, organ));
+    CHECK_FALSE (panel.getRows().back().note.contains ("change the role"));
+    // No reference songs: their part's button (The songs') is not shown.
+    CHECK_FALSE (panel.hasReferences());
+
     CHECK (parts::roleFromName ("Fingered Bass") == "bass");
     CHECK (parts::roleFromName ("Electric Guitar") == "rhythm-guitar");
     CHECK (parts::roleFromName ("Grand Piano") == "piano");
@@ -1142,6 +1156,57 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     CHECK_FALSE (bassChannel->instrument.value().parameters.empty()); // the tuned settings
     REQUIRE (session.getHistory().undo());
     CHECK (session.getProject().channels.size() == channels);
+}
+
+TEST_CASE ("Track creator: a written song's parts start at their roles' levels, measured with their sounds",
+           "[ui][trackcreator][sounds][parts]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    auto context = makePartSoundsContext (a);
+    Session session { a.host.getEngine(), makeDevices (a.host.getEngine()) };
+    PartSoundsPanel panel (session, [context] { return context; });
+    a.service.setEnabled (true);
+    panel.setTune (false);
+    panel.setEffects (false); // no level toward the songs: the starting balance sets them
+    panel.setListenCloser (false);
+    REQUIRE (panel.suggestParts ("sketch"));
+    REQUIRE (panel.chooseSounds());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+
+    SongWriterPanel writer (session,
+                            [&]
+                            {
+                                SongWriterPanel::Context c;
+                                c.summary = context.summary;
+                                c.service = &a.service;
+                                c.workFolder = a.t.root.getChildFile ("song");
+                                c.sounds = panel.makePlan();
+                                c.indexFolder = context.indexFolder;
+                                c.parts = panel.getParts();
+                                c.partsFromPage = true;
+                                c.helper = context.helper;
+                                return c;
+                            });
+    writer.setSeed (3);
+    REQUIRE (writer.write());
+    REQUIRE (waitFor ([&] { return ! writer.isBusy(); }, 240000));
+    INFO (writer.getStatusText());
+    CHECK (writer.getStatusText().contains ("Each part starts at its role's level"));
+
+    // The parts played with the test synth's presets were measured: their faders go in with Apply, the loudest
+    // at 0 dB, none turned up.
+    const auto proposal = writer.makeProposal();
+    REQUIRE (proposal.isObject());
+    int set = 0;
+    for (const auto& step : *proposal["steps"].getArray())
+        if (step["command"].toString() == "insert.set" && step["parameters"].hasProperty ("volumeDb"))
+        {
+            ++set;
+            CHECK ((double)step["parameters"]["volumeDb"] <= 0.0);
+        }
+    CHECK (set >= 2);
 }
 #endif
 

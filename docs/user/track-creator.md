@@ -156,23 +156,26 @@ If something is missing or wrong, change the words and **Read** again. What it u
 
 | You write | What it does |
 |---|---|
-| A **genre**, by any of its usual names: pop, indie pop, K-pop, J-pop, city pop, hyperpop, synthpop, new wave, synthwave, darksynth, darkwave, coldwave, post-punk, dream pop, shoegaze, chillwave, vaporwave, rock, indie rock, punk, pop punk, emo, metal, thrash, doom, power metal, black metal, DSBM, EDM, house, disco, nu-disco, techno, trance, hardstyle, drum and bass, jungle, breakbeat, UK garage, dubstep, future bass, hip hop (boom bap), trap, phonk, lo-fi hip hop, trip-hop, downtempo, reggae, dub, ska, reggaeton, latin, bossa nova, afrobeats, funk, soul, R&B, gospel, jazz, blues, folk, country, bluegrass, cinematic (orchestral), chiptune (video game music), ambient... | That genre's usual tempo, chord loops, drum groove, parts, section lengths, loudness and sound palette (a cold synth palette for darkwave, acoustic guitar for folk...). |
+| A **genre**, by any of its usual names: pop, indie pop, K-pop, J-pop, city pop, hyperpop, synthpop, new wave, synthwave, darksynth, darkwave, coldwave, post-punk, dream pop, shoegaze, chillwave, vaporwave, rock, indie rock, punk, pop punk, emo, metal, thrash, doom, power metal, black metal, DSBM, EDM, house, disco, nu-disco, techno, trance, hardstyle, drum and bass, jungle, breakbeat, UK garage, dubstep, future bass, hip hop (boom bap), trap, phonk, lo-fi hip hop, trip-hop, downtempo, reggae, dub, ska, reggaeton, latin, bossa nova, afrobeats, funk, soul, R&B, gospel, jazz, blues, folk, country, bluegrass, cinematic (orchestral), chiptune (video game music), ambient... Adjectives count too: funky, jazzy, bluesy, punky, poppy, rocky, dubby, soulful, folky ("funky disco" is still disco). | That genre's usual tempo, chord loops, drum groove, parts, section lengths, loudness and sound palette (a cold synth palette for darkwave, acoustic guitar for folk...). |
 | No genre Spinus knows | It says "genre: not recognized (using a neutral style)" and leans on your mood words for the tempo and for minor or major. |
 | A **tempo**: "72 BPM", "tempo 90" | That tempo. |
 | A **key**: "D minor", "F#m", "Bb major" | That key. Without one, a usual key of the mode, not always the same. |
+| **minor** or **major** on its own: "slow and chill, minor" | That mode, in a key Spinus picks (or your songs' key). |
 | **Pace**: slow, slowburn, laid-back, fast, uptempo, driving... | A slower or faster tempo than the genre's usual one (when no tempo is given). |
 | **Mood**: dark, brooding, melancholic, cold... or happy, sunny, euphoric, uplifting... | Minor or major more often (when no key is given). |
 | **Energy**: calm, chill, dreamy... or energetic, aggressive, heavy... | Fewer or more notes and drum hits. |
 | **Length**: short, long, epic | A shorter or longer song. |
 | **Instruments**: guitar, acoustic guitar, lead guitar, bass, drums, piano, organ, strings, brass, flute, choir, handclaps, pad, synth, whistle, 808... | The song's parts: "a song with guitar, bass and drums" gives a rhythm guitar, a bass and drums on [Sounds for each part](#sounds-for-each-part), each looking for a sound of that name in your [sound index](#your-sounds) ("Grand Piano" for a piano). Without instruments, the parts list starts empty: add parts, or **Suggest parts**. |
-| **Leaving out**: no drums, no melody | That part is left out. Ambient has no drums anyway. |
+| **Leaving out**: no drums, no melody, "no synth leads", "without strings", "don't use organ" | That part is left out. Ambient has no drums anyway. Words that say "not" count: "not too fast" is not fast. |
 
 **Let the AI read it** (off at first): with an AI connection set up in Options › AI, the AI reads the
 description instead. It answers in the same terms, choosing from the same genres, and Spinus checks its
 answer. It also names the parts the description asks for ("a wall of fuzzy guitars" becomes a Fuzz guitar
 part), which start step 3; when it names none, the parts come from the instruments your words name. If the
 AI isn't reachable or answers something unusable, Spinus's own reading stays, and the page
-says so. This sends your description, and nothing else, to your AI provider.
+says so. The page names the model that read it; when your first choice didn't answer and another
+connection or model did, it says why: "Read by the AI (claude-sonnet-5-5, because Claude
+(claude-opus-5-5) did not answer: ...)". This sends your description, and nothing else, to your AI provider.
 
 Then go on to step 3, [Parts](#sounds-for-each-part), and step 4, [Write a song](#write-a-song), which
 says "From your description" at the top. Reading a description (or your songs being summed up again)
@@ -305,8 +308,8 @@ Each part's line says what was chosen and **why**, in plain words and numbers, f
 name says); plays C1-C6 (the part: F#1-A#2); attack 6 ms (the songs' 10 ms); brightness 2.1 harmonics at
 D2 (the songs' 2.4)". Compare the numbers: the closer they are, the closer the sound.
 
-- **Listen** plays the chosen sound playing a short phrase in the songs' key. **The songs'** plays a few
-  seconds of that part in one of your songs (its stem), to compare.
+- **Listen** plays the chosen sound playing a short phrase in the songs' key. **The songs'** (only with
+  reference songs) plays a few seconds of that part in one of your songs (its stem), to compare.
 - The list beside each part holds the **alternatives**, closest first: pick another to swap. Its tuning
   and effects are dropped; **Set effects again** sets them for the sounds chosen now.
 - **Other sound...** (at the end of that list) picks **any** instrument you have, of any format (Windows
@@ -346,7 +349,11 @@ patterns you can edit like any other. Apply it to hear it.
    chords), and keeps everything else exactly as it was.
 3. **Apply** puts the song into your project, which is how you hear it: the tempo and key, a channel per
    part (or the one the Parts step added for it), a pattern per part and section, Playlist tracks and a
-   marker where each section starts. It is **one undo step**: Ctrl+Z takes it all away. After that,
+   marker where each section starts. Each part starts at a sensible level for its role (the bass near the
+   drums, a pad well under them): after **Write**, Spinus plays each part's busiest bars with its sound,
+   measures how loud it is and sets its fader, so no sound that happens to be loud drowns the rest. The
+   page lists the levels. With reference songs and **Effects and mix**, the level toward your songs is
+   used instead. It is **one undo step**: Ctrl+Z takes it all away. After that,
    **Redo part...** and **Apply** change only that part or section (one more undo step each).
 4. **Writing again replaces the song.** When the project has a song the Track creator wrote, Apply asks
    "Replace Song 1? It will be overwritten (Ctrl+Z brings it back)": **Replace** takes the old song out
@@ -417,7 +424,8 @@ anywhere and no AI connection is needed.
 change the order and length of the sections, the chord loops and the shape of the melody. Spinus checks
 what it says against your songs' style (lengths on 4-bar phrases, only your songs' chords) and writes every
 note itself; if the AI isn't reachable or answers something unusable, the rules' song stays, and the page
-says so. This sends the summary's numbers (not your songs) to your AI provider.
+says so. It names the model that answered, and why, when it wasn't your first choice. This sends the
+summary's numbers (not your songs) to your AI provider.
 
 The same click of **Write** with the same summary can give a different song; each song keeps its own
 random numbers, so **Redo part...** changes only what you asked for.

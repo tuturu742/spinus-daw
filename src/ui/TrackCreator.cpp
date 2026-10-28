@@ -272,6 +272,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
                                                         c.indexFolder = soundIndexFolder;
                                                         c.parts = partSounds->getParts();
                                                         c.partsFromPage = true;
+                                                        c.helper = soundOptions;
                                                         return c;
                                                     });
     songWriter->onMix = [this] (const juce::File& reference)

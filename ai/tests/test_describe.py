@@ -113,8 +113,8 @@ def test_moods_tempo_length_instruments_and_leaving_out() -> None:
     assert reading.tempo == 128.0
     assert reading.pace > 1.1 and reading.minor_lean == -1 and reading.energy == 1 and reading.length > 1
     assert reading.moods == ["fast", "happy", "energetic"]
-    assert reading.sounds == {"piano": "piano", "strings": "string", "drums": "drum"}
-    assert [p["role"] for p in reading.parts] == ["piano", "strings", "drums"]
+    assert reading.sounds == {"piano": "piano", "strings": "string"}
+    assert [p["role"] for p in reading.parts] == ["piano", "strings"]  # "no drums": not a part
     assert reading.without == ["drums"]
     summary = describe.to_summary(reading, "x")
     assert summary["drums"]["songs"] == 0 and summary["without"] == ["drums"]
@@ -391,3 +391,136 @@ async def test_the_service_writes_the_prompt_and_reads_it_against_the_songs(tmp_
     assert read["keys"] == [{"name": "E minor", "count": 3}] and read["described"]["references"]
     with pytest.raises(RpcError):
         await service.handle("ai.v1.song.prompt", {"summary": {"kind": "x"}}, no_notify)
+
+
+SHOEGAZE = (
+    "kinda like those early 90s shoegaze records, a wall of fuzzy guitars, dreamy and washed out, not too fast. bit "
+    "sad but it should feel hopeful at the end. bass just follows the guitars, drums big and roomy. no synth leads "
+    "please"
+)
+FUNK = (
+    "need a funky groove for a summer bbq. think slap-ish bass and a choppy guitar, horns hitting on the offbeats, "
+    "some organ underneath. keep it danceable, somewhere around 110ish, something major and happy, key doesn't matter"
+)
+LOFI = (
+    "late night study beat, lofi hip hop vibe. dusty lazy drums with a swing, mellow electric piano chords, soft "
+    "round bass, a little guitar plucking here and there. really slow and chill, minor, like rain on the window at 2am"
+)
+
+
+def test_loose_descriptions_are_read_as_meant() -> None:
+    shoegaze = describe.read(SHOEGAZE)
+    assert shoegaze.genre == "shoegaze"
+    assert "fast" not in shoegaze.moods and shoegaze.pace <= 1.0  # "not too fast"
+    assert [p["role"] for p in shoegaze.parts] == ["rhythm-guitar", "bass", "drums"]  # no Synth part
+    assert "lead" in shoegaze.without  # "no synth leads"
+
+    funk = describe.read(FUNK)
+    assert funk.genre == "funk" and funk.scale == "major"  # "funky"; "something major"
+    assert [p["role"] for p in funk.parts] == ["bass", "rhythm-guitar", "brass", "organ"]
+
+    lofi = describe.read(LOFI)
+    assert lofi.genre == "lofi" and lofi.scale == "minor" and lofi.tonic is None  # "minor" on its own
+    assert [p["role"] for p in lofi.parts].count("drums") == 1  # "beat" and "drums": one part
+    assert "minor" in describe.describe(LOFI)["described"]["understood"]
+
+
+@pytest.mark.parametrize(
+    ("text", "negated"),
+    [
+        ("not too fast", "fast"),
+        ("not so dark please", "dark"),
+        ("happy but not fast", "fast"),
+        ("fast, not slow", "slow"),
+    ],
+)
+def test_a_negated_mood_is_not_taken(text: str, negated: str) -> None:
+    assert negated not in describe.read(text).moods
+
+
+@pytest.mark.parametrize(
+    ("text", "role"),
+    [
+        ("no synth leads please", "lead"),
+        ("a ballad without strings", "strings"),
+        ("piano and bass, no drums", "drums"),
+        ("no real piano, just pads", "piano"),
+        ("don't use organ", "organ"),
+    ],
+)
+def test_an_instrument_said_not_to_be_used_is_left_out(text: str, role: str) -> None:
+    assert role not in [p["role"] for p in describe.read(text).parts]
+
+
+def test_the_parts_said_alongside_a_negated_one_stay() -> None:
+    assert [p["role"] for p in describe.read("no real piano, just pads").parts] == ["pad"]
+    assert [p["role"] for p in describe.read("guitars and bass, no synth leads").parts] == ["rhythm-guitar", "bass"]
+
+
+@pytest.mark.parametrize(
+    ("text", "scale"),
+    [
+        ("slow and chill, minor", "minor"),
+        ("something major and happy", "major"),
+        ("in D minor, but make it major", "major"),  # said after the key: the mode changes
+        ("major vibes then a key of E minor", "minor"),  # the key said last wins
+        ("not minor", None),
+    ],
+)
+def test_a_mode_said_alone_sets_the_mode(text: str, scale: str | None) -> None:
+    assert describe.read(text).scale == scale
+
+
+def test_a_beat_and_drums_are_one_drums_part() -> None:
+    for text in ("a beat with drums", "drums and a beat", "a drum machine beat", "beats and drums"):
+        assert [p["role"] for p in describe.read(text).parts] == ["drums"], text
+
+
+@pytest.mark.parametrize(
+    ("text", "genre"),
+    [
+        ("a funky groove", "funk"),
+        ("something jazzy", "jazz"),
+        ("bluesy and slow", "blues"),
+        ("punky and loud", "punk"),
+        ("poppy and bright", "pop"),
+        ("rocky anthem", "rock"),
+        ("dubby bassline", "dub"),
+        ("soulful ballad", "soul"),
+        ("folky campfire song", "folk"),
+        ("trancey build", "trance"),
+        ("housey groove", "house"),
+        ("funky disco", "disco"),  # a genre's name wins over another's adjective
+        ("jazzy lofi", "lofi"),
+    ],
+)
+def test_a_genres_adjective_names_it(text: str, genre: str) -> None:
+    assert describe.read(text).genre == genre
+
+
+def test_a_mode_alone_changes_the_references_mode_but_keeps_their_key() -> None:
+    generated = "Like your songs: about 90 BPM, in D major."
+    base = describe.describe(generated)
+    out = describe.with_references(
+        describe.read(generated + " make it minor"), generated + " make it minor", generated, base
+    )
+    assert out["keys"][0]["name"] == "D minor" and out["modes"] == {"minor": 1.0}
+
+
+async def test_the_reading_says_which_model_answered_when_one_failed(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("x-api-key") == "sk-lost":
+            return httpx.Response(401, json={"type": "error", "error": {"type": "authentication_error"}})
+        return httpx.Response(
+            200,
+            content=anthropic_reply("", ("read_description", {"genre": "funk"})),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    service = make_service(tmp_path, handler)
+    for name, key in (("Old", "sk-lost"), ("New", "sk-works")):
+        await service.handle("ai.v1.connections.save", {"name": name, "provider": "anthropic", "key": key}, no_notify)
+    read = await run_job(service, "ai.v1.song.describe", {"text": "a funky groove", "ai": True})
+    by = read["described"]["readBy"]
+    assert by.startswith("claude-test, because Old (") and "did not answer" in by
+    assert "sk-lost" not in by
