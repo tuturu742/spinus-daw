@@ -377,9 +377,9 @@ async def estimate(
     guess = answer_guess(setup)
     lo, hi = REASONING_RANGE.get(effort, REASONING_RANGE[""])
     if harness:
-        # Turns: a few for the form and the checks, one or two a part (loops, motifs, copies), up to a few a section
-        # of each part; each sends the conversation again (its answers and the tools' short results).
-        turns = (2 * parts + 4, 2 * parts * max(1, harness.sections) + 10)
+        # Turns: a few for the form and the checks, one or two a part (loops, motifs, copies), up to one a section of
+        # each part; each sends the conversation again (its answers and the tools' short results).
+        turns = (2 * parts + 4, parts * max(1, harness.sections) + 8)
         out_guess = (round(guess * lo), round(guess * hi * 2))
         in_guess = (
             round(turns[0] * input_tokens + out_guess[0] * turns[0] / 2),

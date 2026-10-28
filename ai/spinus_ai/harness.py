@@ -661,7 +661,8 @@ class Workspace:
                 for n in notes:
                     bar = int(n["start"]) // bar_ticks
                     where = f"bar {bar + 1} step {(int(n['start']) % bar_ticks) // sw.TICKS_PER_STEP}"
-                    if int(n["pitch"]) % 12 not in scale:
+                    tones = self.chord_at(sid, min(bar, int(self.sections[sid]["bars"]) - 1))
+                    if int(n["pitch"]) % 12 not in scale and int(n["pitch"]) % 12 not in tones:
                         outside.append(f"{sw.note_name(int(n['pitch']))} at {where}")
                     elif base in ("bass", "chords") and int(n["start"]) % beat == 0:
                         fits = sw.allowed_pitch_classes(
@@ -671,7 +672,7 @@ class Workspace:
                             rub.append(f"{sw.note_name(int(n['pitch']))} at {where}")
                 if outside:
                     out.append(
-                        f"{pid}, {sid}: {len(outside)} notes outside {self.key['name']}: "
+                        f"{pid}, {sid}: {len(outside)} notes outside {self.key['name']} and its chord: "
                         + ", ".join(outside[:3])
                         + (" ..." if len(outside) > 3 else "")
                     )
@@ -1304,6 +1305,11 @@ async def compare_ways(
     rows = []
     for effort in efforts:
         for way in ("one-shot", "harness"):
+            harnessed = None
+            if way == "harness":
+                ws = Workspace.start(setup, seed, size)
+                harnessed = compose.Harnessed(SYSTEM, first_message(ws), list(TOOLS), len(ws.sections))
+            guess = await compose.estimate(client, connections, routing, records, setup, effort, 0, harnessed)
             if way == "one-shot":
                 song = await compose.compose(
                     client, connections, routing, usage_log, records, setup, seed, size, effort, quiet
@@ -1321,6 +1327,9 @@ async def compare_ways(
                     "cached": usage.get("cached", 0),
                     "output": usage.get("output", 0),
                     "reasoning": usage.get("reasoning", 0),
+                    "total": int(usage.get("input", 0)) + int(usage.get("output", 0)),
+                    "estimate": f"{guess.get('low', 0)}-{guess.get('high', 0)}"
+                    + (" (runs)" if guess.get("fromRuns") else ""),
                     "usedAi": bool(song.get("composedBy")),
                     **score(song, setup),
                 }
@@ -1337,6 +1346,8 @@ def table(rows: list[dict[str, Any]]) -> str:
         "cached",
         "output",
         "reasoning",
+        "total",
+        "estimate",
         "issues",
         "notesInKey",
         "notesFitChords",

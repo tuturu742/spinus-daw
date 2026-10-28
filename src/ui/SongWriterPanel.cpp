@@ -4,6 +4,8 @@
 #include "ai/Proposal.h"
 #include "session/SoundIndex.h"
 
+#include <array>
+
 namespace spinus::ui
 {
 
@@ -77,6 +79,15 @@ const std::map<juce::String, parts::Choice>& SongWriterPanel::getLayerChoices()
         // What the Sounds page chose stays; the drums without a choice there get Spinus's Drum Machine.
         if (layer.drums || pagePartFor (layer) != nullptr)
             continue;
+        // The sound the AI picked for it, from the candidates it was given.
+        if (const auto picked = song["sounds"][juce::Identifier (layer.id)].toString(); picked.isNotEmpty())
+            if (const auto part = candidateChoices.find (layer.id); part != candidateChoices.end())
+                if (const auto c = part->second.find (picked); c != part->second.end())
+                {
+                    used.insert (c->second.instrument);
+                    layerChoices[layer.id] = c->second;
+                    continue;
+                }
         parts::Target target;
         target.part = layer.part == "fx" ? juce::String ("fx") : song::summaryPart (layer.part);
         target.roles = { layer.soundRole };
@@ -132,8 +143,9 @@ std::optional<parts::Plan::Part> SongWriterPanel::chosenForLayer (const song::La
 
 SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : session (s), getContext (std::move (c))
 {
-    intro.setText ("The last step: a new song with the parts of step 3, in the style of step 2, written by rules on "
-                   "this computer (no AI connection needed). Apply puts it in the project to hear.",
+    intro.setText ("The last step: a new song with the parts of step 3, in the style of step 2, written by Spinus's "
+                   "rules on this computer or, if you choose, by your AI connection. Apply puts it in the project to "
+                   "hear.",
                    juce::dontSendNotification);
     intro.setMinimumHorizontalScale (1.0f);
     intro.setJustificationType (juce::Justification::topLeft);
@@ -164,14 +176,49 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     applyButton.onClick = [this] { apply(); };
     mixButton.setTooltip ("Open the automixer to balance the parts, with the first reference song as its reference");
     mixButton.onClick = [this] { mix(); };
+    writerBox.addItem ("Spinus (offline, nothing is sent)", 1);
+    writerBox.addItem ("Your AI connection", 2);
+    writerBox.setSelectedId (1, juce::dontSendNotification);
+    writerBox.setTooltip ("Spinus's own rules write on this computer. Your AI connection (Options > AI) composes the "
+                          "whole song with the music harness's tools, checked by Spinus; it sends the style, your "
+                          "parts and their sounds' names to your AI provider and uses tokens");
+    writerBox.onChange = [this]
+    {
+        updateButtons();
+        refreshEstimate();
+    };
+    effortBox.addItem ("Reasoning: the model's own", 1);
+    effortBox.addItem ("Reasoning: low", 2);
+    effortBox.addItem ("Reasoning: medium", 3);
+    effortBox.addItem ("Reasoning: high", 4);
+    effortBox.setSelectedId (1, juce::dontSendNotification);
+    effortBox.setTooltip ("How hard the model thinks before it writes: higher levels can use several times more "
+                          "tokens");
+    effortBox.onChange = [this] { refreshEstimate(); };
+    roundsBox.addItem ("Then fix what Spinus hears: no", 1);
+    roundsBox.addItem ("Then fix what Spinus hears: once", 2);
+    roundsBox.addItem ("Then fix what Spinus hears: twice", 3);
+    roundsBox.addItem ("Then fix what Spinus hears: 3 times", 4);
+    roundsBox.setSelectedId (2, juce::dontSendNotification);
+    roundsBox.setTooltip ("After the AI finishes, Spinus plays each part with its sound; what it hears (a part that "
+                          "made no sound, the balance) goes back to the AI to fix, this many times");
+    roundsBox.onChange = [this] { refreshEstimate(); };
+    stopNowButton.setTooltip ("Stop the AI after its current step and keep its best checked version of the song");
+    stopNowButton.onClick = [this] { stopNow(); };
+    estimateLabel.setJustificationType (juce::Justification::topLeft);
+    estimateLabel.setMinimumHorizontalScale (1.0f);
     text.setMultiLine (true);
     text.setReadOnly (true);
     text.setScrollbarsShown (true);
     text.setCaretVisible (false);
-    for (auto* component : std::initializer_list<juce::Component*> {
-             &intro, &refineButton, &writeButton, &againButton, &redoButton, &applyButton, &mixButton, &status, &text })
+    for (auto* component :
+         std::initializer_list<juce::Component*> { &intro, &refineButton, &writeButton, &againButton, &redoButton,
+                                                   &applyButton, &mixButton, &status, &text, &writerLabel, &writerBox })
         addAndMakeVisible (component);
     addChildComponent (stopButton);
+    for (auto* component :
+         std::initializer_list<juce::Component*> { &effortBox, &roundsBox, &estimateLabel, &stopNowButton })
+        addChildComponent (component);
     updateButtons();
 }
 
@@ -185,22 +232,35 @@ SongWriterPanel::~SongWriterPanel()
 bool SongWriterPanel::aiReady() const { return context.service != nullptr && context.service->isEnabled(); }
 
 void SongWriterPanel::run (const juce::var& params, const juce::String& words,
-                           std::function<void (const juce::var&)> then)
+                           std::function<void (const juce::var&)> then, const juce::String& method)
 {
     busy = true;
     status.setText (words, juce::dontSendNotification);
     updateButtons();
     ai::runJob (
-        *context.service, "ai.v1.song.write", params, alive, [this] (const juce::String& started) { job = started; },
+        *context.service, method, params, alive, [this] (const juce::String& started) { job = started; },
         [this, then = std::move (then)] (const juce::var& result, const juce::String& error)
         {
             job.clear();
             busy = false;
             if (error.isNotEmpty())
-                status.setText ("The song could not be written: " + error, juce::dontSendNotification);
+            {
+                composing = false;
+                status.setText ((error == "Stopped." && song.isObject()
+                                     ? juce::String ("Cancelled: the song shown before stays.")
+                                     : "The song could not be written: " + error),
+                                juce::dontSendNotification);
+            }
             else
                 then (result);
             updateButtons();
+        },
+        [this, words] (double, double, const juce::String& step)
+        {
+            // The AI writer's steps in plain words, with the running total of tokens.
+            if (step.isNotEmpty())
+                status.setText (words.upToFirstOccurrenceOf ("...", false, false) + ": " + step,
+                                juce::dontSendNotification);
         });
 }
 
@@ -230,6 +290,15 @@ bool SongWriterPanel::write()
         return false;
     }
     const auto seed = fixedSeed >= 0 ? fixedSeed++ : juce::Random::getSystemRandom().nextInt (0x7fffffff);
+    if (isAiWriter())
+    {
+        composing = true;
+        stopRequested = false;
+        roundsLeft = getRounds();
+        composeRequest = composeParams (seed);
+        composeRound (composeRequest, "Writing with " + connectionName + "...");
+        return true;
+    }
     const bool refine = refineButton.getToggleState();
     // The Sounds page's parts, as the user made the list.
     juce::Array<juce::var> list;
@@ -276,11 +345,17 @@ double rmsDb (const juce::File& file)
 }
 } // namespace
 
-void SongWriterPanel::balance()
+void SongWriterPanel::balance (
+    std::function<void (const std::map<juce::String, double>&, const std::map<juce::String, juce::String>&)> then)
 {
     faders.clear();
+    const auto nothing = [&then]
+    {
+        if (then)
+            then ({}, {});
+    };
     if (! song::isFull (song) || context.helper.helper == juce::File())
-        return;
+        return nothing();
     // Each layer's busiest bars, played with its sound in the helper (as Listen plays a part).
     struct Measure
     {
@@ -326,7 +401,7 @@ void SongWriterPanel::balance()
         m.items.add (item);
     }
     if (byInstrument.empty())
-        return;
+        return nothing();
     busy = true;
     status.setText ("Written. Setting each part's level: playing it with its sound...", juce::dontSendNotification);
     updateButtons();
@@ -357,12 +432,12 @@ void SongWriterPanel::balance()
             }
             return juce::Result::ok();
         },
-        [this, a = alive, measured, problems] (const juce::Result&)
+        [this, a = alive, measured, problems, then] (const juce::Result&)
         {
             if (! *a)
                 return;
             juce::MessageManager::callAsync (
-                [this, a, measured, problems]
+                [this, a, measured, problems, then]
                 {
                     if (! *a)
                         return;
@@ -389,6 +464,8 @@ void SongWriterPanel::balance()
                                  : " Not measured, left as they are: " + unmeasured.joinIntoString (", ") + "."),
                         juce::dontSendNotification);
                     updateButtons();
+                    if (then)
+                        then (*measured, *problems);
                 });
         });
 }
@@ -603,8 +680,229 @@ void SongWriterPanel::stop()
     if (context.service != nullptr && job.isNotEmpty())
         context.service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
     session.getSamplePreview().stop();
-    status.setText ("Stopped.", juce::dontSendNotification);
+    status.setText (composing ? "Cancelled: the song shown before stays." : "Stopped.", juce::dontSendNotification);
+    composing = false;
     updateButtons();
+}
+
+//==============================================================================
+// The AI writer
+
+void SongWriterPanel::setAiWriter (bool on)
+{
+    writerBox.setSelectedId (on ? 2 : 1, juce::dontSendNotification);
+    updateButtons();
+}
+
+bool SongWriterPanel::isAiWriter() const { return writerBox.getSelectedId() == 2 && aiAvailable; }
+
+void SongWriterPanel::setEffort (const juce::String& effort)
+{
+    const juce::StringArray levels { "", "low", "medium", "high" };
+    effortBox.setSelectedId (juce::jmax (0, levels.indexOf (effort)) + 1, juce::dontSendNotification);
+}
+
+juce::String SongWriterPanel::getEffort() const
+{
+    const juce::StringArray levels { "", "low", "medium", "high" };
+    return levels[juce::jlimit (0, 3, effortBox.getSelectedId() - 1)];
+}
+
+void SongWriterPanel::setRounds (int rounds)
+{
+    roundsBox.setSelectedId (juce::jlimit (0, 3, rounds) + 1, juce::dontSendNotification);
+}
+
+juce::var SongWriterPanel::candidatesFor (juce::var& current)
+{
+    candidateChoices.clear();
+    auto* candidates = new juce::DynamicObject();
+    auto* now = new juce::DynamicObject();
+    current = juce::var (now);
+    SoundIndex index (context.indexFolder);
+    if (context.indexFolder != juce::File())
+        index.load();
+    std::map<juce::String, int> instances;
+    for (const auto& p : context.parts)
+    {
+        const auto instance = instances[p.role]++;
+        if (const auto* chosen = [&]() -> const parts::Plan::Part*
+            {
+                for (const auto& page : context.sounds.parts)
+                    if (page.target.id == p.id)
+                        return &page;
+                return nullptr;
+            }())
+        {
+            now->setProperty (p.id, chosen->choice.title()); // the user's choice: the AI only hears of it
+            continue;
+        }
+        if (index.instruments.empty())
+            continue;
+        const auto target = parts::targetFor (p, instance, context.summary);
+        juce::Array<juce::var> list;
+        for (const auto& c : parts::choose (target, {}, index, 8))
+        {
+            if (c.kind != parts::Choice::Kind::preset)
+                continue;
+            const auto id = c.instrument + "|" + c.preset;
+            candidateChoices[p.id][id] = c;
+            list.add (object ({ { "id", id }, { "name", c.title() } }));
+        }
+        if (! list.isEmpty())
+            candidates->setProperty (p.id, list);
+    }
+    return juce::var (candidates);
+}
+
+juce::var SongWriterPanel::composeParams (int seed)
+{
+    juce::Array<juce::var> list;
+    for (const auto& p : context.parts)
+        list.add (object ({ { "id", p.id }, { "name", p.name }, { "role", p.role } }));
+    juce::var current;
+    const auto candidates = candidatesFor (current);
+    auto params = object ({ { "summary", context.summary },
+                            { "seed", seed },
+                            { "candidates", candidates },
+                            { "current", current },
+                            { "effort", getEffort() },
+                            { "rounds", getRounds() },
+                            { "way", "harness" } });
+    if (! list.isEmpty())
+        params.getDynamicObject()->setProperty ("parts", list);
+    return params;
+}
+
+void SongWriterPanel::composeRound (const juce::var& params, const juce::String& words)
+{
+    run (
+        params, words,
+        [this] (const juce::var& result)
+        {
+            song = result;
+            layerChoicesKnown = false;
+            whole = true;
+            redoneParts.clear();
+            redoneSections.clear();
+            show();
+            if (! composing)
+                return;
+            if (! song["composed"].isObject())
+            {
+                // The AI was not used after all (no connection, it failed): the rules' song, and why.
+                composing = false;
+                status.setText (song["note"].toString(), juce::dontSendNotification);
+                balance();
+                return;
+            }
+            balance ([this] (const auto& levels, const auto& problems) { afterMeasured (levels, problems); });
+        },
+        "ai.v1.song.compose");
+}
+
+void SongWriterPanel::afterMeasured (const std::map<juce::String, double>& levels,
+                                     const std::map<juce::String, juce::String>& problems)
+{
+    if (! composing)
+        return;
+    if (roundsLeft <= 0 || stopRequested || ! song["composed"].isObject() || levels.empty())
+        return finishComposing();
+    --roundsLeft;
+    auto params = composeRequest.clone();
+    auto* heard = new juce::DynamicObject();
+    for (const auto& [id, db] : levels)
+        heard->setProperty (id, db);
+    auto* why = new juce::DynamicObject();
+    for (const auto& [id, problem] : problems)
+        why->setProperty (id, problem);
+    params.getDynamicObject()->setProperty ("song", song);
+    params.getDynamicObject()->setProperty ("levels", juce::var (heard));
+    params.getDynamicObject()->setProperty ("problems", juce::var (why));
+    composeRound (params, "Revising with " + connectionName + " (what Spinus heard)...");
+}
+
+void SongWriterPanel::finishComposing()
+{
+    composing = false;
+    status.setText (song["note"].toString() + " Apply puts it in the project to hear (Ctrl+Z takes it away).",
+                    juce::dontSendNotification);
+    updateButtons();
+    refreshEstimate(); // from this run's real numbers now
+}
+
+bool SongWriterPanel::stopNow()
+{
+    if (! composing)
+        return false;
+    stopRequested = true;
+    if (context.service != nullptr && job.isNotEmpty())
+        context.service->call ("ai.v1.song.composeStop", object ({ { "job", job } }), {});
+    status.setText ("Stopping after the AI's current step; its best checked version is kept...",
+                    juce::dontSendNotification);
+    return true;
+}
+
+namespace
+{
+juce::String thousands (double tokens)
+{
+    if (tokens < 1000.0)
+        return juce::String (juce::roundToInt (tokens));
+    return juce::String (tokens < 10000.0 ? juce::roundToInt (tokens / 100.0) / 10.0
+                                          : juce::roundToInt (tokens / 1000.0)) +
+           " thousand";
+}
+} // namespace
+
+void SongWriterPanel::refreshEstimate()
+{
+    if (busy)
+        return;
+    context = getContext();
+    if (context.service == nullptr || ! context.service->isEnabled() || ! context.summary.isObject())
+    {
+        aiAvailable = false;
+        writerBox.changeItemText (2, "Your AI connection (turn AI on in Options > AI)");
+        writerBox.setItemEnabled (2, false);
+        updateButtons();
+        return;
+    }
+    auto params = composeParams (fixedSeed >= 0 ? fixedSeed : 1);
+    context.service->call (
+        "ai.v1.song.composeEstimate", params,
+        [this, a = alive] (const juce::var& result, const juce::String& error)
+        {
+            if (! *a)
+                return;
+            aiAvailable = error.isEmpty() && (bool)result["available"];
+            connectionName = result["connection"].toString();
+            writerBox.changeItemText (2, aiAvailable ? "Your AI connection (" + connectionName + ")"
+                                                     : "Your AI connection (none set up: Options > AI)");
+            writerBox.setItemEnabled (2, aiAvailable);
+            if (aiAvailable)
+            {
+                const auto runs = (int)result["fromRuns"];
+                estimateLabel.setText (
+                    "Sends the style, your parts and their sounds' names to " + connectionName + " (" +
+                        result["model"].toString() + "). About " + thousands ((double)result["low"]) + " to " +
+                        thousands ((double)result["high"]) + " tokens for the song" +
+                        (runs > 0
+                             ? " (from your last " + juce::String (runs) + " run" + (runs > 1 ? "s" : "") + " like it)"
+                             : " (a rough range until you have run it: the reasoning is not known before)") +
+                        "; the first request's " + thousands ((double)result["input"]) +
+                        ((bool)result["inputCounted"] ? " input tokens counted by your provider."
+                                                      : " input tokens, about.") +
+                        ((bool)result["cached"]
+                             ? " Most of the input is read from your provider's cache, at a lower price."
+                             : "") +
+                        " Higher reasoning can use several times more.",
+                    juce::dontSendNotification);
+            }
+            else
+                estimateLabel.setText (result["reason"].toString(), juce::dontSendNotification);
+            updateButtons();
+        });
 }
 
 bool SongWriterPanel::mix()
@@ -684,6 +982,39 @@ void SongWriterPanel::show()
                    " %; fitting the chords: " +
                    juce::String (juce::roundToInt (100.0 * (double)checks["notesFitChords"])) + " %");
     }
+    if (const auto& composed = song["composed"]; composed.isObject())
+    {
+        // What the AI used, as the provider reported it, per round and in all.
+        std::map<int, std::array<juce::int64, 5>> rounds; // requests, input, cached, output, reasoning
+        if (const auto* requests = composed["usage"]["requests"].getArray())
+            for (const auto& r : *requests)
+            {
+                auto& t = rounds[(int)r["round"]];
+                t[0] += 1;
+                t[1] += (juce::int64)r["input"];
+                t[2] += (juce::int64)r["cached"];
+                t[3] += (juce::int64)r["output"];
+                t[4] += (juce::int64)r["reasoning"];
+            }
+        lines.add ({});
+        lines.add ("Tokens used (as " + connectionName + " reported them):");
+        std::array<juce::int64, 5> all {};
+        for (const auto& [round, t] : rounds)
+        {
+            for (size_t i = 0; i < all.size(); ++i)
+                all[i] += t[i];
+            lines.add ("- " + (round == 0 ? juce::String ("writing") : "revision " + juce::String (round)) + ": " +
+                       juce::String (t[0]) + " requests, " + juce::String (t[1]) + " in (" + juce::String (t[2]) +
+                       " from the cache), " + juce::String (t[3]) + " out (" + juce::String (t[4]) + " reasoning)");
+        }
+        lines.add ("- in all: " + juce::String (all[1]) + " in, " + juce::String (all[3]) + " out");
+        if (const auto* findings = composed["findings"].getArray(); findings != nullptr && ! findings->isEmpty())
+        {
+            lines.add ("Spinus's checks still find: ");
+            for (int i = 0; i < juce::jmin (6, findings->size()); ++i)
+                lines.add ("- " + (*findings)[i].toString());
+        }
+    }
     lines.add ({});
     const auto& project = session.getProject();
     if ((whole || ! applied.isIn (project)) && song::isFull (song))
@@ -733,6 +1064,16 @@ void SongWriterPanel::updateButtons()
     applyButton.setEnabled (! busy && has);
     mixButton.setEnabled (! busy && applied.isIn (session.getProject()));
     refineButton.setEnabled (! busy);
+    const bool ai = writerBox.getSelectedId() == 2;
+    refineButton.setVisible (! ai);
+    writerBox.setEnabled (! busy);
+    effortBox.setVisible (ai);
+    roundsBox.setVisible (ai);
+    estimateLabel.setVisible (ai);
+    effortBox.setEnabled (! busy);
+    roundsBox.setEnabled (! busy);
+    stopNowButton.setVisible (composing && job.isNotEmpty());
+    stopButton.setButtonText (composing ? "Cancel" : "Stop");
     stopButton.setVisible (busy || session.getSamplePreview().isPlaying());
     resized();
 }
@@ -741,7 +1082,11 @@ void SongWriterPanel::resized()
 {
     auto area = getLocalBounds();
     intro.setBounds (area.removeFromTop (36));
-    refineButton.setBounds (area.removeFromTop (26).removeFromLeft (420));
+    layoutAiRow (area.removeFromTop (26));
+    if (refineButton.isVisible())
+        refineButton.setBounds (area.removeFromTop (26).removeFromLeft (420));
+    if (estimateLabel.isVisible())
+        estimateLabel.setBounds (area.removeFromTop (34));
     area.removeFromTop (4);
     {
         auto r = area.removeFromTop (28);
@@ -751,7 +1096,12 @@ void SongWriterPanel::resized()
             r.removeFromLeft (6);
         }
         if (stopButton.isVisible())
-            stopButton.setBounds (r.removeFromLeft (60).reduced (0, 1));
+            stopButton.setBounds (r.removeFromLeft (64).reduced (0, 1));
+        if (stopNowButton.isVisible())
+        {
+            r.removeFromLeft (6);
+            stopNowButton.setBounds (r.removeFromLeft (170).reduced (0, 1));
+        }
         mixButton.setBounds (r.removeFromRight (80).reduced (0, 1));
         r.removeFromRight (6);
         applyButton.setBounds (r.removeFromRight (80).reduced (0, 1));
@@ -761,6 +1111,24 @@ void SongWriterPanel::resized()
     text.setBounds (area);
 }
 
+void SongWriterPanel::layoutAiRow (juce::Rectangle<int> row)
+{
+    writerLabel.setBounds (row.removeFromLeft (130));
+    // The writer, then (for the AI) its reasoning and fix rounds, sharing what is left of the row.
+    const auto rest = row.getWidth() - 12;
+    writerBox.setBounds (row.removeFromLeft (juce::jmin (300, rest * 2 / 5)).reduced (0, 1));
+    row.removeFromLeft (6);
+    effortBox.setBounds (row.removeFromLeft (juce::jmin (200, rest * 27 / 100)).reduced (0, 1));
+    row.removeFromLeft (6);
+    roundsBox.setBounds (row.removeFromLeft (juce::jmin (240, row.getWidth())).reduced (0, 1));
+}
+
 void SongWriterPanel::paint (juce::Graphics&) {}
+
+void SongWriterPanel::visibilityChanged()
+{
+    if (isVisible())
+        refreshEstimate();
+}
 
 } // namespace spinus::ui

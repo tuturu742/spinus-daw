@@ -432,6 +432,65 @@ note itself; if the AI isn't reachable or answers something unusable, the rules'
 says so. It names the model that answered, and why, when it wasn't your first choice. This sends the
 summary's numbers (not your songs) to your AI provider.
 
+### Let your AI connection write it
+
+![Write a song with "Your AI connection" chosen: the reasoning level, the fix rounds, the expected tokens, and after
+the run the tokens each round used and what Spinus's checks still find](images/track-creator-ai-writer.png)
+
+**Who writes the notes** (at the top of the page) is **Spinus (offline, nothing is sent)** at first. Choose
+**Your AI connection** (shown with its name; greyed out until you set one up in Options › AI) and the AI
+composes the whole song: the form, the chords, every part's notes, and a sound for each part you didn't
+choose yourself in step 3 (from a few that fit in your sound index). Your own choices in step 3 always win.
+
+It works like a programmer with tools, which Spinus calls the **music harness**. The song is a working copy
+kept on your computer; the AI never sends it whole. It reads the brief (your style and your parts), looks at
+the form, writes each part (a loop once, repeated), names a riff and places it again, copies a section that
+repeats, lets Spinus's own rules write a part it doesn't need to shape by hand, and runs Spinus's checks, as a
+programmer runs tests:
+
+- notes outside the key, or rubbing against the chord on the beat (with the bar and step);
+- two parts in the same register;
+- notes a bar against your songs' parts;
+- the drums' groove against your songs';
+- a lead repeating one bar, a part with no notes, sections off the 4-bar phrases.
+
+It fixes what the checks find with small edits of a few bars, then says it's finished. While it works, the
+page shows each step in plain words ("Writing the bass for the chorus", "Checking: 2 issues") and the tokens
+used so far. A note it can't read, outside its instrument's range or off the grid is fixed or left out,
+and the page says so. A part it never wrote is written by Spinus's rules, and the page says which.
+
+When it's done, Spinus plays each part with its sound to set its level (as for its own songs). **Then fix
+what Spinus hears** (once, at first; no, twice or 3 times) sends what it heard back to the AI: a part that
+made no sound (its notes may be outside the instrument's range) and the balance. The AI fixes it the same way,
+on the same working copy.
+
+**Reasoning** (the model's own, low, medium or high) is how hard the model thinks before it writes. Higher
+levels can use several times more tokens.
+
+**How many tokens**: before you click **Write**, the page shows a range, for example "About 30 to 120
+thousand tokens for the song". The first request's input is counted by your provider where it can (Anthropic
+does this for free); the rest can't be known in advance, since nobody knows how long the model will think. After
+your first runs, the range comes from what your own runs really used with that model and reasoning level
+("from your last 3 runs like it"). After every run, the page lists the tokens each round used, as your
+provider reported them: input (and how much of it was read from the provider's cache, which costs less),
+output, and of that the reasoning. Spinus keeps those numbers, and only those (no song, description or key), in
+`compose-usage.json` in its settings folder.
+
+There's no token limit that could cut a song short when it's almost finished. If an answer still reaches
+the model's own length limit, Spinus asks it to go on and joins the pieces. You control the cost with the
+reasoning level and the number of fix rounds. **Stop now, keep the best** stops the AI after its current step and
+keeps its best checked version so far. **Cancel** stops at once and keeps the song shown before.
+
+**What is sent** to your AI provider: your style's numbers (tempo, keys, chords, groove, the parts'
+ranges), your description, your parts' names and roles, and the names of the sounds it may choose from. Not
+your songs or their audio, and nothing else from your computer.
+
+**For developers**: the same tools run outside Spinus as an MCP server (`python -m spinus_ai.harness mcp
+--brief brief.json --out song.json`, after `python -m spinus_ai.harness brief --describe "..." -o
+brief.json`), so a coding agent can compose through the identical harness. `python -m spinus_ai.harness
+eval` writes the same brief once in one answer and once with the harness, at each reasoning level, and
+prints the tokens each way used and the checks' score of each song.
+
 The same click of **Write** with the same summary can give a different song; each song keeps its own
 random numbers, so **Redo part...** changes only what you asked for.
 

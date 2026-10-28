@@ -5,6 +5,26 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: your AI connection writes the song (experimental)
+
+- **Who writes the notes** on Write a song: Spinus (offline, as before and the default) or, if you choose,
+  your AI connection. It composes the whole song with the **music harness**: tools that read and edit a
+  working copy of the song, Spinus's checks run as its tests (notes outside the key or the chords, parts in
+  one register, the groove and density against your songs), fixes with small edits, and finish. You see each
+  step and the tokens so far; nothing changes in the project until you Apply (one undo step).
+- **Then fix what Spinus hears**: after the AI finishes, each part is played with its sound, and what was heard
+  (a silent part, the balance) goes back to the AI to fix (once by default, up to 3 times).
+- **Tokens, honestly**: a range before you send, from your own past runs once there are some (the input
+  counted by your provider where it can); after, what each round really used, as your provider reported it
+  (input, the part read from its cache, output, reasoning). **Reasoning** sets how hard the model thinks
+  (higher can cost several times more). No token cap: an answer cut off at the model's own limit is
+  continued and joined. **Stop now, keep the best** keeps the best checked version; **Cancel** keeps the song
+  shown before.
+- For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on
+  tokens and the checks' scores (`python -m spinus_ai.harness`).
+
+## Not released yet (in alpha 3)
+
 ### Starter pack
 
 - **Spinus now comes with free samples:** the **Spinus Starter Pack**, 97 sounds from Signature Sounds
