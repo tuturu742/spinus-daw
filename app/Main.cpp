@@ -386,7 +386,7 @@ private:
             juce::File folder;
             ~Cleanup() { folder.deleteRecursively(); }
         } cleanup { scratch };
-        ProjectDocument document (*session, scratch);
+        ProjectDocument scratchDocument (*session, scratch);
 
         if (const auto type = valueOf ("--describe"); args.contains ("--describe"))
         {
@@ -405,10 +405,10 @@ private:
 
         if (const auto project = fileOf ("--check"); args.contains ("--check"))
         {
-            if (const auto opened = document.open (project); opened.failed())
+            if (const auto opened = scratchDocument.open (project); opened.failed())
                 return failed (opened.getErrorMessage());
             session->getEdit().dispatchPendingUpdatesSynchronously();
-            auto summary = cli::summarize (*session, document.getFolder());
+            auto summary = cli::summarize (*session, scratchDocument.getFolder());
             const bool clean = summary["problems"].size() == 0;
             summary.getDynamicObject()->setProperty ("ok", clean);
             say (juce::JSON::toString (summary, true));
@@ -420,10 +420,10 @@ private:
             const auto out = fileOf ("--out");
             if (out == juce::File())
                 return failed ("--render needs --out <file.wav|.flac|.opus|.mp3>");
-            if (const auto opened = document.open (project); opened.failed())
+            if (const auto opened = scratchDocument.open (project); opened.failed())
                 return failed (opened.getErrorMessage());
             const auto tail = valueOf ("--tail");
-            return cli::render (*session, document.getFolder().getChildFile ("audio"), out, fileOf ("--stems"),
+            return cli::render (*session, scratchDocument.getFolder().getChildFile ("audio"), out, fileOf ("--stems"),
                                 tail.isEmpty() ? 2.0 : tail.getDoubleValue(), say);
         }
 
@@ -433,7 +433,7 @@ private:
         if (! script.existsAsFile() || ! steps.isArray())
             return failed ("--run needs a JSON file with a list of steps: " + script.getFullPathName());
         if (const auto project = fileOf ("--open"); project != juce::File())
-            if (const auto opened = document.open (project); opened.failed())
+            if (const auto opened = scratchDocument.open (project); opened.failed())
                 return failed (opened.getErrorMessage());
         const auto status = cli::runSteps (
             *session, steps,
@@ -441,9 +441,9 @@ private:
         if (const auto save = fileOf ("--save");
             save != juce::File() && (status == 0 || args.contains ("--keep-going")))
         {
-            if (const auto saved = document.saveAs (save); saved.failed())
+            if (const auto saved = scratchDocument.saveAs (save); saved.failed())
                 return failed ("saving: " + saved.getErrorMessage());
-            say ("{\"saved\": " + juce::JSON::toString (document.getFolder().getFullPathName()) + "}");
+            say ("{\"saved\": " + juce::JSON::toString (scratchDocument.getFolder().getFullPathName()) + "}");
         }
         return status;
     }

@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "dsp/drums/StarterPack.h"
@@ -107,7 +108,7 @@ TEST_CASE ("Command line: a script's steps run as commands, and a failed step st
     CHECK_FALSE ((bool)said[2]["ok"]);
     CHECK (said[2]["error"].toString().isNotEmpty());
     REQUIRE (f.session.getProject().channels.size() == 1); // "After" did not run
-    CHECK (f.session.getProject().channels[0].volumeDb == -6.0f);
+    CHECK (f.session.getProject().channels[0].volumeDb == Catch::Approx (-6.0));
     CHECK (f.session.getHistory().getUndoDescriptions().size() == 2); // one undo step per command
 
     said.clear();
@@ -136,8 +137,8 @@ TEST_CASE ("Command line: check sums up the project, and names what is missing",
                     said) == 0);
 
     const auto summary = cli::summarize (f.session, {});
-    CHECK ((double)summary["tempoBpm"] == 120.0);
-    CHECK ((double)summary["bars"] == 2.0);
+    CHECK ((double)summary["tempoBpm"] == Catch::Approx (120.0));
+    CHECK ((double)summary["bars"] == Catch::Approx (2.0));
     CHECK (summary["channels"].size() == 3); // drums, bass and the audio clip's channel
     CHECK (summary["channels"][0]["instrument"]["type"].toString() == "spinus.drum-machine");
     CHECK (summary["channels"][0]["instrument"]["kit"].toString() == "Spinus Synth Kit");
