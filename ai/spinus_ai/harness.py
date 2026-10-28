@@ -394,7 +394,8 @@ TRANSITIONS = ("riser", "downlifter", "swell", "impact")
 TRANSITIONS_TOOLS = [
     Tool(
         "automate",
-        "A Playlist automation clip for a part: volume (dB), pan (-1 left to 1 right) or a filter's cutoff (Hz; "
+        "A Playlist automation clip for a part (or the song's master: part 'master', a fade or a sweep of the whole "
+        "mix): volume (dB), pan (-1 left to 1 right) or a filter's cutoff (Hz; "
         "Spinus adds a filter to the part's insert, low-pass or high-pass). Points are 'bar value' on the song's "
         "bars (1 is the first; 16.5 is half way through bar 16), separated by semicolons: '17 -30; 21 0' fades in "
         "over four bars.",
@@ -1221,7 +1222,7 @@ class Workspace:
         return sum(int(self.sections[s]["bars"]) for s in self.order)
 
     def tool_automate(self, part: str, what: str, points: str, filter: str = "low-pass", shape: str = "linear") -> str:
-        pid = self.part(part)["id"]
+        pid = MASTER if str(part).strip().lower() == MASTER else self.part(part)["id"]
         if what not in AUTOMATABLE:
             raise Mistake(f"automate one of {', '.join(AUTOMATABLE)}")
         if shape not in SHAPES:
@@ -1348,7 +1349,7 @@ class Workspace:
         return "\n".join(lines) or "No automation or transitions yet."
 
     def tool_remove_automation(self, part: str, what: str = "") -> str:
-        pid = self.part(part)["id"]
+        pid = MASTER if str(part).strip().lower() == MASTER else self.part(part)["id"]
         kept = [
             a for a in self.extra.get("automation", []) if not (a["part"] == pid and (not what or a["what"] == what))
         ]

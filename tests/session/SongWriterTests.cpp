@@ -683,6 +683,31 @@ TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of t
     CHECK (samples == (dsp::starter::findPack().isDirectory() ? 1 : 0));
 }
 
+TEST_CASE ("Song writer: the AI's automation of the master fades the whole mix", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "automation": [{"part": "master", "what": "volume", "points": [
+            {"bar": 0, "value": 0.74, "curve": 0}, {"bar": 2, "value": 0.0, "curve": 0}]}]
+    })"));
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    auto proposal = ai::Proposal::prepare (song::makeProposal (song, history.getProject(), options, &error), history);
+    INFO (error << proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    int fades = 0;
+    for (const auto& clip : history.getProject().playlist.clips)
+        if (const auto* a = std::get_if<model::AutomationClip> (&clip.content))
+        {
+            ++fades;
+            CHECK (a->target.kind == model::ParameterTarget::Kind::insertVolume);
+            CHECK (a->target.insert == model::masterInsertId);
+        }
+    CHECK (fades == 1);
+}
+
 TEST_CASE ("Song writer: the AI's master chain ends with its limiter, once", "[song]")
 {
     commands::CommandHistory history { model::Project {} };

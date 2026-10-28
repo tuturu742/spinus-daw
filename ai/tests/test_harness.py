@@ -997,3 +997,15 @@ async def test_check_names_the_sections_the_description_asked_for_and_the_model_
     assert "asks for a solo" in first and "asks for a breakdown" in first
     assert "asks for" not in second
     assert {"solo", "breakdown"} <= {s["id"] for s in song["sections"]}
+
+
+def test_the_master_can_be_automated_for_a_fade_of_the_whole_mix() -> None:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    ws.groups = {"basic", "transitions"}
+    end = ws.song_bars()
+    said = ws.call("automate", {"part": "master", "what": "volume", "points": f"{end - 3} 0; {end + 1} -60"})
+    assert "master" in said
+    fade = next(a for a in ws.production()["automation"] if a["part"] == "master")
+    assert fade["what"] == "volume" and fade["points"][0]["value"] > fade["points"][-1]["value"]
+    ws.call("remove_automation", {"part": "master"})
+    assert not [a for a in ws.production()["automation"] if a["part"] == "master"]

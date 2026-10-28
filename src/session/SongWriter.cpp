@@ -683,20 +683,23 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
         {
             const auto id = entry["part"].toString();
             const auto points = arrayOf (entry["points"]);
-            if (! inserts.contains (id) || points.size() < 2)
+            // The song's master (the AI's "master" part): a fade or a sweep of the whole mix.
+            const auto insert = id == "master"          ? juce::var ((int)model::masterInsertId.value)
+                                : inserts.contains (id) ? inserts.at (id)
+                                                        : juce::var();
+            if (insert.isVoid() || points.size() < 2)
                 continue;
             const auto what = entry["what"].toString();
             juce::var target;
             if (what == "volume" || what == "pan")
-                target =
-                    object ({ { "kind", what == "volume" ? "insertVolume" : "insertPan" }, { "insert", inserts[id] } });
+                target = object ({ { "kind", what == "volume" ? "insertVolume" : "insertPan" }, { "insert", insert } });
             else if (what == "filter")
             {
                 if (! filters.contains (id))
                 {
                     const auto added = step (
                         "insert.addEffect",
-                        object ({ { "insert", inserts[id] },
+                        object ({ { "insert", insert },
                                   { "device", object ({ { "kind", "stock" }, { "stockType", "spinus.filter" } }) } }));
                     filters[id] = added + ".device";
                     step ("device.setParameters",
