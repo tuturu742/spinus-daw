@@ -661,7 +661,7 @@ TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of t
     REQUIRE (volume.points.size() == 2);
     CHECK (volume.points[1].time == 2 * barTicks);
     CHECK (std::abs (volume.points[1].value - 0.8f) < 1e-4f);
-    CHECK (volume.points[0].curve == 0.5f);
+    CHECK (volume.points[0].curve == Catch::Approx (0.5f));
     CHECK (cutoff.target.kind == model::ParameterTarget::Kind::deviceParameter);
     CHECK (cutoff.target.device == insert->effects[0].device.id);
     CHECK (cutoff.target.parameterId == "cutoff");

@@ -876,11 +876,11 @@ juce::var SongWriterPanel::composeParams (int seed)
                                   for (const auto& [name, device] : userSendEffects())
                                   {
                                       const auto kind = song::sendEffectKind (name);
-                                      auto list = kinds->getProperty (kind);
-                                      if (! list.isArray())
-                                          list = juce::Array<juce::var>();
-                                      list.getArray()->add (name);
-                                      kinds->setProperty (kind, list);
+                                      auto names = kinds->getProperty (kind);
+                                      if (! names.isArray())
+                                          names = juce::Array<juce::var>();
+                                      names.getArray()->add (name);
+                                      kinds->setProperty (kind, names);
                                   }
                                   return juce::var (kinds);
                               }() },
