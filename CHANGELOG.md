@@ -16,7 +16,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   (a silent part, the balance) goes back to the AI to fix (once by default, up to 3 times).
 - **Tokens, as your provider reports them**: no guess before you send; while it works, the tokens so far;
   after, each round's input (and the part read from the provider's cache), output and reasoning. **Reasoning**
-  sets how hard the model thinks (higher uses more). No token cap: an answer cut off at the model's own limit is
+  sets how hard the model thinks before each step: low by default; higher levels (up to extra high, where the
+  model offers it) use many more tokens; a model without the level chosen uses the lowest it offers. AI models
+  can be unreliable: listen before you keep a song. No token cap: an answer cut off at the model's own limit is
   continued and joined. **Stop now, keep the best** keeps the best checked version; **Cancel** keeps the song
   shown before.
 - For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the

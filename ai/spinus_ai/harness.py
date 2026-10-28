@@ -858,6 +858,7 @@ class Run:
     model: str = ""
     turns: int = 0
     stopped: bool = False  # the user said stop now
+    notices: list[str] = field(default_factory=list)  # what the provider changed (a reasoning level it lacks)
 
     def remember_if_best(self) -> None:
         count = len(self.workspace.issues())
@@ -902,6 +903,8 @@ async def session(
     async def on_turn(completion: Completion, route: Route) -> None:
         usage_log.add(route.connection.id, compose.FEATURE, completion.usage)
         run.by, run.model = answered_by(completion.model, []), route.model
+        if completion.notice and completion.notice not in run.notices:
+            run.notices.append(completion.notice)
         run.requests.append(
             {
                 "input": completion.usage.input_tokens,
@@ -988,7 +991,7 @@ def result_song(
         "workspace": ws.export(),
         "answer": {"parts": {p: {} for p in ws.notes}},  # what the notes say "left out" against
     }
-    song["note"] = compose.written_note(setup, composed) + note
+    song["note"] = compose.written_note(setup, composed) + note + "".join(f" {n}" for n in run.notices)
     if usage.get("cached"):
         song["note"] += f" {int(usage['cached']):,} of the input tokens were read from the provider's cache."
     return compose.finish(song, setup, composed)

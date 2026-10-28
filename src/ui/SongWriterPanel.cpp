@@ -189,11 +189,14 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     };
     effortBox.addItem ("Reasoning: the model's own", 1);
     effortBox.addItem ("Reasoning: low", 2);
-    effortBox.addItem ("Reasoning: medium", 3);
-    effortBox.addItem ("Reasoning: high", 4);
-    effortBox.addItem ("Reasoning: extra high", 5);
-    effortBox.setSelectedId (1, juce::dontSendNotification);
-    effortBox.setTooltip ("How hard the model thinks before it writes: higher levels use more tokens");
+    effortBox.addItem ("Reasoning: medium (more tokens)", 3);
+    effortBox.addItem ("Reasoning: high (many more tokens)", 4);
+    effortBox.addItem ("Reasoning: extra high (many more tokens)", 5);
+    // Low by default (owner decision): the harness asks for each step, and reasoning before every one adds up. A
+    // model without low uses the lowest it offers, and the page says so.
+    effortBox.setSelectedId (2, juce::dontSendNotification);
+    effortBox.setTooltip ("How hard the model thinks before each step: low at first; higher levels use many more "
+                          "tokens. A model without the level chosen uses the lowest it offers");
     roundsBox.addItem ("Then fix what Spinus hears: no", 1);
     roundsBox.addItem ("Then fix what Spinus hears: once", 2);
     roundsBox.addItem ("Then fix what Spinus hears: twice", 3);
@@ -869,7 +872,9 @@ void SongWriterPanel::refreshConnection()
                 aiAvailable ? "Sends the style, your parts and their sounds' names to " + connectionName + " (" +
                                   result["model"].toString() +
                                   "). The tokens it uses are shown as it works, and for each round when it is done, "
-                                  "as your provider reports them. Higher reasoning uses more."
+                                  "as your provider reports them.\nAI models can be unreliable: a song may not match "
+                                  "your references, and the tokens a song uses vary. Spinus checks the notes, but "
+                                  "listen before you keep it."
                             : result["reason"].toString(),
                 juce::dontSendNotification);
             updateButtons();
@@ -1061,7 +1066,7 @@ void SongWriterPanel::resized()
     if (refineButton.isVisible())
         refineButton.setBounds (area.removeFromTop (26).removeFromLeft (420));
     if (infoLabel.isVisible())
-        infoLabel.setBounds (area.removeFromTop (34));
+        infoLabel.setBounds (area.removeFromTop (70)); // four lines: what is sent, the tokens, the disclaimer
     area.removeFromTop (4);
     {
         auto r = area.removeFromTop (28);

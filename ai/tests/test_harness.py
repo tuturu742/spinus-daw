@@ -462,3 +462,35 @@ async def test_a_model_name_with_slashes_is_a_file_name(tmp_path: Path) -> None:
         "anthropic_claude-sonnet-5.5-harness-default.song.json",
         "anthropic_claude-sonnet-5.5-one-shot-default.song.json",
     ]
+
+
+def test_a_refused_reasoning_level_becomes_the_lowest_offered() -> None:
+    from spinus_ai.gateway import offered_effort
+
+    said = "Unsupported value: 'reasoning.effort' does not support 'low' with this model. Supported values are: "
+    assert offered_effort("low", said + "'medium', 'high' and 'xhigh'.") == "medium"
+    assert offered_effort("low", "reasoning effort low is not available for this model") == "medium"
+    assert offered_effort("xhigh", "reasoning effort xhigh is not available") is None  # nothing named
+    assert offered_effort("high", "Unsupported value: 'reasoning_effort' 'high'.") is None  # not guessed at
+    assert offered_effort("low", "max_tokens: 64000 > 8192") is None  # another refusal
+    assert offered_effort("", "reasoning effort") is None
+
+
+async def test_the_harness_says_when_the_model_lacks_the_level_asked(tmp_path: Path) -> None:
+    sent: list[dict[str, Any]] = []
+    fake = harness.FakeModel([[("rules_write", {"part": "bass"})], [("finish", {"summary": "s"})]], {})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        sent.append(body)
+        if body.get("output_config", {}).get("effort") == "low":
+            message = "output_config.effort: 'low' is not supported by this model. Supported values: 'medium', 'high'"
+            return httpx.Response(400, json={"type": "error", "error": {"message": message}})
+        return fake(request)
+
+    service = make_service(tmp_path, handler)
+    await connect(service)
+    song = await run_job(service, "ai.v1.song.compose", params(effort="low"))
+    efforts = [r["output_config"]["effort"] for r in sent]
+    assert efforts == ["low", "medium", "medium"]  # asked once at low; the rest of the loop at medium
+    assert "does not reason at the level 'low', so 'medium', the lowest it offers, was used" in song["note"]

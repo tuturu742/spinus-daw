@@ -82,7 +82,8 @@ public:
     /** Who writes: false, Spinus (offline); true, the AI connection (when there is one). */
     void setAiWriter (bool on);
     bool isAiWriter() const;
-    /** The AI's reasoning level: "" (the model's own), "low", "medium", "high", "xhigh" (where offered). */
+    /** The AI's reasoning level: "" (the model's own), "low" (the default), "medium", "high", "xhigh" (where
+        offered). */
     void setEffort (const juce::String& effort);
     juce::String getEffort() const;
     /** How many times what Spinus hears goes back to the AI (0 to 3; 1 by default). */

@@ -336,6 +336,8 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My local model"); }));
     INFO (panel.getInfoText());
     CHECK (panel.getInfoText().contains ("shown as it works"));
+    CHECK (panel.getInfoText().contains ("AI models can be unreliable"));
+    CHECK (panel.getEffort() == "low"); // the default
     CHECK_FALSE (panel.getInfoText().contains ("About"));
     panel.setAiWriter (true);
     REQUIRE (panel.isAiWriter());
@@ -466,7 +468,6 @@ TEST_CASE ("Track creator AI writer screenshot for the manual", "[.screenshot][m
     panel.refreshConnection();
     REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My AI"); }));
     panel.setAiWriter (true);
-    panel.setEffort ("medium");
     REQUIRE (panel.write());
     REQUIRE (waitFor ([&] { return ! panel.isBusy() && ! panel.isComposing(); }, 120000));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);

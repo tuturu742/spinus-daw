@@ -617,7 +617,43 @@ async def complete_responses(
 # ---------------------------------------------------------------------------------------------------
 
 
+def offered_effort(asked: str, error: str) -> str | None:
+    """The level to ask again with when a model refused the reasoning level `asked`: the lowest it says it supports
+    ("Supported values are: 'medium' and 'high'"), else medium for low; None when the refusal is about something
+    else, or names no level to use."""
+    if asked not in EFFORTS or not ("effort" in error.lower() or "reasoning" in error.lower()):
+        return None
+    if "turn its reasoning off" in error:  # the chat API's own retry already failed: no level would do
+        return None
+    tail = error[error.lower().find("support") :] if "support" in error.lower() else ""
+    named = [level for level in EFFORTS if level != asked and f"'{level}'" in tail]
+    if named:
+        return named[0]
+    # Nothing named: only the default low (a model whose least reasoning is more) steps up, never a level the user
+    # chose higher, which is not guessed at.
+    return "medium" if asked == "low" else None
+
+
 async def complete(
+    client: httpx.AsyncClient, connection: Connection, key: str | None, request: Request, on_text: OnText
+) -> Completion:
+    """The model's answer. A model that refuses the reasoning level asked for is asked once more with the lowest
+    level it offers (request.effort changes, so a tool loop's later turns use it too), and the answer says so."""
+    try:
+        return await complete_once(client, connection, key, request, on_text)
+    except ProviderError as error:
+        asked = request.effort
+        level = offered_effort(asked, str(error)) if error.kind == "bad_request" else None
+        if level is None:
+            raise
+        request.effort = level
+        completion = await complete_once(client, connection, key, request, on_text)
+        said = f"{request.model} does not reason at the level '{asked}', so '{level}', the lowest it offers, was used."
+        completion.notice = f"{completion.notice} {said}".strip()
+        return completion
+
+
+async def complete_once(
     client: httpx.AsyncClient, connection: Connection, key: str | None, request: Request, on_text: OnText
 ) -> Completion:
     try:
