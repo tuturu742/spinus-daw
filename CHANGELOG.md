@@ -5,6 +5,22 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Command line, after a first test by an AI agent
+
+- **`spinus --help`** lists the command-line options, and an option Spinus doesn't know is refused with
+  "unknown option": neither opens Spinus's window any more.
+- **`--describe`** lists every value of a choice setting (`choices`), and a wrong one says which there are.
+  Before, "Low cut" was missing from Spinus EQ's band types.
+- **`--describe all`** ends with the free plugins that aren't installed here, such as the reverbs, and
+  how to get them.
+- **`--commands`** describes instrument and effect devices (Spinus's own, bundled, or a plugin by name)
+  and what each kind of automation needs.
+- **Automation points in scripts** can be given in the control's own units: `"text": "-6 dB"`, `"30% L"`,
+  `"1.2 kHz"`.
+- **`--check`** says which channels nothing plays (`used`, `unusedChannels`).
+- **`--render --stems`** writes the stems straight into the folder (`04 Bass.opus`), from the same render
+  as the mix. Each file reports how long it sounds, and Opus or MP3 the true peak before encoding too.
+
 ### Spinus from the command line
 
 - **Scripts and AI agents can make songs with Spinus, without its window:** `spinus --run script.json --save

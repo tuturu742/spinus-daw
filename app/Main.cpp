@@ -81,13 +81,17 @@ public:
     void initialise (const juce::String& commandLine) override
     {
         session::ensureUtf8ForChildProcesses();
+        const auto args = juce::StringArray::fromTokens (commandLine, true);
+        const auto unknown = cli::unknownOption (args);
+        const bool help = args.contains ("--help") || args.contains ("-h");
 
 #if JUCE_WINDOWS
         // A Windows program with a window has no terminal of its own: the commands that print use the one
         // Spinus was started from, unless their output already goes somewhere (a pipe, a file).
         const auto output = GetStdHandle (STD_OUTPUT_HANDLE);
         if ((commandLine.contains ("--version") || commandLine.contains ("--self-test") ||
-             commandLine.contains ("--scan-plugins") || isAgentCommandLine (commandLine)) &&
+             commandLine.contains ("--scan-plugins") || isAgentCommandLine (commandLine) || help ||
+             unknown.isNotEmpty()) &&
             (output == nullptr || output == INVALID_HANDLE_VALUE))
             if (AttachConsole (ATTACH_PARENT_PROCESS))
             {
@@ -96,14 +100,28 @@ public:
                 freopen_s (&stream, "CONOUT$", "w", stderr);
             }
 #endif
+        // The options never open the window: --help prints them, and an option Spinus doesn't know is refused
+        // (an agent's guess must not start the whole program on someone's screen).
+        if (help)
+        {
+            std::cout << cli::usage() << std::flush;
+            quit();
+            return;
+        }
+        if (unknown.isNotEmpty())
+        {
+            std::cerr << "spinus: unknown option " << unknown << "\n\n" << cli::usage() << std::flush;
+            setApplicationReturnValue (1);
+            quit();
+            return;
+        }
+
         if (commandLine.contains ("--version"))
         {
             std::cout << productName << ' ' << versionString << '\n';
             quit();
             return;
         }
-
-        const auto args = juce::StringArray::fromTokens (commandLine, true);
 
         // Spinus from the command line, for scripts and AI agents (docs/user/command-line.md): no window and no
         // audio device; engine settings of its own, and nothing written to the user's settings or logs.
@@ -400,6 +418,8 @@ private:
                 status = described.hasProperty ("error") ? 1 : status;
                 say (juce::JSON::toString (described, true));
             }
+            if (type == "all")
+                say (juce::JSON::toString (cli::notInstalled (*session), true));
             return status;
         }
 
