@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -27,6 +28,7 @@ class ToolUse:
     id: str
     name: str
     input: dict[str, Any]
+    partial: str = ""  # the arguments as they arrived when they could not be read (an answer cut off)
 
 
 @dataclass
@@ -55,7 +57,8 @@ class Tool:
 @dataclass
 class Usage:
     input_tokens: int = 0
-    output_tokens: int = 0
+    output_tokens: int = 0  # with the reasoning tokens (both kinds of provider count them in)
+    reasoning_tokens: int = 0  # of output_tokens, how many the model spent thinking (when the provider says)
     cost: float | None = None  # only when the provider reports it
 
 
@@ -98,7 +101,17 @@ class Request:
     system: str
     messages: list[Message]
     tools: list[Tool] = field(default_factory=list)
-    max_tokens: int = 4096
+    max_tokens: int | None = 4096  # None: the model's whole output allowance (ANSWER_ROOM where one is required)
+    effort: str = ""  # "low", "medium" or "high": how hard the model reasons; "" leaves the provider's default
+
+
+EFFORTS = ("low", "medium", "high")
+# The answer's room when the provider requires a number and none is known (Anthropic): the most every current
+# model writes; a model that allows less says so (400) and is asked again with what it names, or SMALLER_ROOM.
+ANSWER_ROOM = 64000
+SMALLER_ROOM = (32000, 8192)
+# Why an answer stopped when it ran out of room (Anthropic, OpenAI).
+CUT_OFF = ("max_tokens", "length")
 
 
 def error_for_status(status: int, body: str) -> ProviderError:
@@ -156,7 +169,7 @@ def anthropic_body(request: Request) -> dict[str, Any]:
 
     body: dict[str, Any] = {
         "model": request.model,
-        "max_tokens": request.max_tokens,
+        "max_tokens": ANSWER_ROOM if request.max_tokens is None else request.max_tokens,
         "system": request.system,
         "messages": [{"role": m.role, "content": content(m)} for m in request.messages],
         "stream": True,
@@ -165,7 +178,31 @@ def anthropic_body(request: Request) -> dict[str, Any]:
         body["tools"] = [
             {"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in request.tools
         ]
+    if request.effort:
+        body["output_config"] = {"effort": request.effort}
     return body
+
+
+def anthropic_reasoning(usage: dict[str, Any]) -> int | None:
+    """The thinking tokens an Anthropic usage reports (output_tokens_details.thinking_tokens), if it does."""
+    details = usage.get("output_tokens_details")
+    value = details.get("thinking_tokens") if isinstance(details, dict) else None
+    return int(value) if isinstance(value, int) else None
+
+
+async def count_anthropic(client: httpx.AsyncClient, connection: Connection, key: str, request: Request) -> int:
+    """The request's input tokens as the model counts them (POST /v1/messages/count_tokens), free of charge."""
+    headers = {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+    body = anthropic_body(request)
+    for unused in ("max_tokens", "stream"):
+        body.pop(unused, None)
+    try:
+        response = await client.post(f"{connection.base_url}/v1/messages/count_tokens", headers=headers, json=body)
+    except httpx.TransportError as error:
+        raise ProviderError("network", f"Could not reach {connection.base_url}: {error}") from error
+    if response.status_code != 200:
+        raise error_for_status(response.status_code, response.text)
+    return int(response.json()["input_tokens"])
 
 
 async def complete_anthropic(
@@ -177,11 +214,22 @@ async def complete_anthropic(
     usage = Usage()
     stop_reason = ""
     model = request.model
-    async with client.stream(
-        "POST", f"{connection.base_url}/v1/messages", headers=headers, json=anthropic_body(request)
-    ) as response:
-        if response.status_code != 200:
-            raise error_for_status(response.status_code, (await response.aread()).decode(errors="replace"))
+    body = anthropic_body(request)
+    rooms = list(SMALLER_ROOM) if request.max_tokens is None else []
+    async with contextlib.AsyncExitStack() as stack:
+        while True:
+            response = await stack.enter_async_context(
+                client.stream("POST", f"{connection.base_url}/v1/messages", headers=headers, json=body)
+            )
+            if response.status_code == 200:
+                break
+            text = (await response.aread()).decode(errors="replace")
+            if not (response.status_code == 400 and "max_tokens" in text and rooms):
+                raise error_for_status(response.status_code, text)
+            # The model allows a shorter answer: the most it names, else the next smaller room.
+            named = [int(n) for n in re.findall(r"\b(\d{4,6})\b", text) if int(n) < body["max_tokens"]]
+            body["max_tokens"] = max(named) if named else rooms.pop(0)
+            rooms = [r for r in rooms if r < body["max_tokens"]]
         async for event, data in sse_events(response):
             payload = json.loads(data)
             kind = payload.get("type", event)
@@ -189,6 +237,7 @@ async def complete_anthropic(
                 message = payload["message"]
                 model = message.get("model", model)
                 usage.input_tokens = message.get("usage", {}).get("input_tokens", 0)
+                usage.reasoning_tokens = anthropic_reasoning(message.get("usage", {})) or 0
             elif kind == "content_block_start":
                 start = payload["content_block"]
                 if start["type"] == "tool_use":
@@ -210,16 +259,25 @@ async def complete_anthropic(
                 index = payload["index"]
                 use = blocks[index]
                 if isinstance(use, ToolUse) and partial_json.get(index):
-                    use.input = json.loads(partial_json[index])
+                    try:
+                        use.input = json.loads(partial_json.pop(index))
+                    except json.JSONDecodeError as unread:
+                        use.partial = str(unread.doc)
             elif kind == "message_delta":
                 stop_reason = payload.get("delta", {}).get("stop_reason") or stop_reason
                 usage.output_tokens = payload.get("usage", {}).get("output_tokens", usage.output_tokens)
+                thought = anthropic_reasoning(payload.get("usage", {}))
+                usage.reasoning_tokens = usage.reasoning_tokens if thought is None else thought
             elif kind == "error":
                 error = payload.get("error", {})
                 raise ProviderError(
                     "outage" if error.get("type") == "overloaded_error" else "bad_request",
                     error.get("message", "The provider reported an error."),
                 )
+    for index, text in partial_json.items():  # cut off before the block's end
+        use = blocks[index]
+        if isinstance(use, ToolUse) and text:
+            use.partial = text
     return Completion(blocks, stop_reason, usage, model)
 
 
@@ -250,10 +308,11 @@ def openai_body(request: Request, connection: Connection, limit: str = "max_toke
     body: dict[str, Any] = {
         "model": request.model,
         "messages": messages,
-        limit: request.max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
     }
+    if request.max_tokens is not None:  # None: the service's own limit, the model's whole allowance
+        body[limit] = request.max_tokens
     if request.tools:
         body["tools"] = [
             {
@@ -264,6 +323,12 @@ def openai_body(request: Request, connection: Connection, limit: str = "max_toke
         ]
     if connection.provider == "openrouter":
         body["usage"] = {"include": True}  # OpenRouter then reports the cost
+    if request.effort:
+        # OpenRouter's own field; OpenAI's (and the services that copy it) otherwise.
+        if connection.provider == "openrouter":
+            body["reasoning"] = {"effort": request.effort}
+        else:
+            body["reasoning_effort"] = request.effort
     return body
 
 
@@ -312,6 +377,9 @@ async def complete_openai(
                 u = payload["usage"]
                 usage.input_tokens = u.get("prompt_tokens", 0)
                 usage.output_tokens = u.get("completion_tokens", 0)
+                details = u.get("completion_tokens_details")
+                if isinstance(details, dict) and isinstance(details.get("reasoning_tokens"), int):
+                    usage.reasoning_tokens = details["reasoning_tokens"]
                 if isinstance(u.get("cost"), int | float):
                     usage.cost = float(u["cost"])
             for choice in payload.get("choices", []):
@@ -333,7 +401,9 @@ async def complete_openai(
         try:
             arguments = json.loads(call["arguments"] or "{}")
         except json.JSONDecodeError:
-            arguments = {"_unparsed": call["arguments"]}
+            blocks.append(ToolUse(call["id"] or f"call_{index}", call["name"], {"_unparsed": call["arguments"]},
+                                  call["arguments"]))  # fmt: skip
+            continue
         blocks.append(ToolUse(call["id"] or f"call_{index}", call["name"], arguments))
     return Completion(blocks, "tool_use" if calls else (stop_reason or "end_turn"), usage, model)
 

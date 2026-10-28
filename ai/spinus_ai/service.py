@@ -153,6 +153,8 @@ class Service:
             "ai.v1.song.write": self.song_write,
             "ai.v1.song.describe": self.song_describe,
             "ai.v1.song.prompt": self.song_prompt,
+            "ai.v1.song.compose": self.song_compose,
+            "ai.v1.song.composeEstimate": self.song_compose_estimate,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -961,9 +963,11 @@ class Service:
 
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
             if redo is not None:
+                from .compose import redo_kept
+
                 part, section = redo.get("part"), redo.get("section")
-                return songwriter.redo(dict(params["song"]), summary, seed,
-                                       str(part) if part else None, str(section) if section else None)  # fmt: skip
+                return redo_kept(dict(params["song"]), summary, seed,
+                                 str(part) if part else None, str(section) if section else None)  # fmt: skip
             song = songwriter.write(summary, seed, size, parts)
             if not params.get("refine"):
                 return song
@@ -978,6 +982,87 @@ class Service:
             return song
 
         return {"job": self.job(notify, work)}
+
+    def compose_setup(self, params: dict[str, Any]) -> tuple[Any, str]:
+        """The Setup (spinus_ai.compose) and reasoning level of an ai.v1.song.compose call, checked."""
+        from . import compose, songwriter
+        from .gateway import EFFORTS
+
+        summary = params.get("summary")
+        if not isinstance(summary, dict) or summary.get("kind") != "spinus.style-summary":
+            raise RpcError(-32602, "summary must be the Track creator's style summary.")
+        size = str(params.get("arrangement") or "sketch")
+        if size not in songwriter.SIZES:
+            raise RpcError(-32602, "arrangement is sketch or full.")
+        effort = str(params.get("effort") or "")
+        if effort and effort not in EFFORTS:
+            raise RpcError(-32602, f"The reasoning level is {', '.join(EFFORTS)}, or none for the model's own.")
+        try:
+            setup = compose.Setup.make(summary, params.get("parts"), size, params.get("candidates"),
+                                       params.get("current"))  # fmt: skip
+        except ValueError as error:
+            raise RpcError(-32602, str(error)) from error
+        return setup, effort
+
+    async def song_compose(self, params: dict[str, Any], notify: Notify) -> Any:
+        """A song written by the AI (spinus_ai.compose), opt-in: {summary, seed, parts, arrangement, candidates
+        (part id -> [{id, name}]: sounds from the sound index it may pick), current (part id -> its sound in
+        words), effort ("low", "medium", "high" or none: the model's own), song and levels/problems (a song it
+        wrote, with how loud each part played and why one could not: one revision round)} -> the song, as
+        ai.v1.song.write's, with `composed` (the model, each request's tokens, Spinus's findings) and `sounds`
+        (the picks). Without a connection, or when the AI fails or its answer is not usable, the rules' song (or
+        the song before the revision) with a note saying so."""
+        from . import compose, songwriter
+
+        setup, effort = self.compose_setup(params)
+        try:
+            seed = int(params.get("seed", 0)) & 0x7FFFFFFF
+        except (TypeError, ValueError) as error:
+            raise RpcError(-32602, "seed must be a number.") from error
+        size = str(params.get("arrangement") or "sketch")
+        previous = params.get("song")
+        if previous is not None:
+            try:
+                songwriter.check_song(previous)
+            except ValueError as error:
+                raise RpcError(-32602, str(error)) from error
+            if not isinstance(previous.get("composed"), dict):
+                raise RpcError(-32602, "Only a song the AI wrote can be revised.")
+        records = compose.UsageRecords(self.config)
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            try:
+                if previous is not None:
+                    return await compose.revise(self.client, self.connections, self.routing, self.usage, records,
+                                                setup, previous, params.get("levels"), params.get("problems"),
+                                                effort, say)  # fmt: skip
+                return await compose.compose(self.client, self.connections, self.routing, self.usage, records, setup,
+                                             seed, size, effort, say)  # fmt: skip
+            except NoConnection:
+                note = "no AI connection is set up"
+            except ProviderError as error:
+                note = f"the AI failed ({error})"
+            if previous is not None:
+                kept = dict(previous)
+                kept["note"] = f"Not revised: {note}; the song before stands."
+                return kept
+            return compose.rules_song(setup, seed, size, f"Written by the rules: {note}.", [])
+
+        return {"job": self.job(notify, work)}
+
+    async def song_compose_estimate(self, params: dict[str, Any], notify: Notify) -> Any:
+        """What the AI writer would use (spinus_ai.compose.estimate): {summary, parts, arrangement, candidates,
+        effort, rounds} -> {available, connection, model, input (counted by the provider when inputCounted), low,
+        high (the whole song's tokens, a range), fromRuns (how many of the user's own runs it is from), ...}."""
+        from . import compose
+
+        setup, effort = self.compose_setup(params)
+        try:
+            rounds = int(params.get("rounds", 1))
+        except (TypeError, ValueError) as error:
+            raise RpcError(-32602, "rounds must be a number.") from error
+        records = compose.UsageRecords(self.config)
+        return await compose.estimate(self.client, self.connections, self.routing, records, setup, effort, rounds)
 
     async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read
