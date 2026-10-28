@@ -191,6 +191,8 @@ add_library (spinus_core STATIC
     session/TextLocale.cpp
     session/TextLocale.h
     session/SelfTest.h
+    session/AgentCommandLine.cpp
+    session/AgentCommandLine.h
     session/ProblemReport.cpp
     session/ProblemReport.h
     session/SystemInfo.cpp

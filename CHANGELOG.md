@@ -5,6 +5,16 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Spinus from the command line
+
+- **Scripts and AI agents can make songs with Spinus, without its window:** `spinus --run script.json --save
+  <folder>` runs a list of steps (the commands Spinus's own buttons use, plus loading a Drum Machine kit or
+  samples), and saves an ordinary project. `spinus --check <project>` says what a project holds and what is
+  missing, `spinus --render <project> --out song.wav` renders it and prints its loudness, `spinus --describe
+  <device>` lists a device's settings, presets, pads and kits, and `spinus --commands` lists every command.
+  None of them need a sound card, and they leave your settings alone. See
+  [Spinus from the command line](docs/user/command-line.md).
+
 ### Fixes
 
 - **Track creator: plugins measured as silent, or that failed, can be measured again:** the sound index kept
