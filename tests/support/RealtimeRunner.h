@@ -64,8 +64,13 @@ public:
     double getMaxMessageThreadStallMs() const noexcept { return maxDispatchMs; }
     void resetMaxMessageThreadStall() noexcept { maxDispatchMs = 0.0; }
 
+    /** With no sound processed for this long while running, the watchdog prints which thread is stuck and
+        aborts, so a hang shows where it is instead of running into the test timeout. */
+    static constexpr double stallSeconds = 120.0;
+
 private:
     void audioThreadLoop();
+    void watchdogLoop();
 
     tracktion::Engine& engine;
     Params params;
@@ -81,6 +86,12 @@ private:
     std::atomic<int64_t> samplesProcessed { 0 };
     std::atomic<bool> running { false };
     std::thread thread;
+
+    // For the watchdog: when the audio thread entered processBlock and the message thread its last
+    // dispatch pass (milliseconds on the steady clock), 0 while outside.
+    std::atomic<int64_t> processingSinceMs { 0 }, dispatchingSinceMs { 0 };
+    std::atomic<bool> watching { false };
+    std::thread watchdog;
 };
 
 } // namespace spinus::test
