@@ -32,7 +32,7 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Transition and automation tools** for the AI: automation clips on the Playlist for a part's volume, pan or a
   filter sweep (Spinus adds a Spinus Filter to the part's insert), and transitions into and out of a section
   wherever it plays: a riser (noise rising and opening over the bars before it), a downlifter, a swell into its
-  first beat, an impact on it (the kit's kick and crash, or the starter pack's crash and 808). They go on tracks
+  first beat (a noise swell, or a reversed cymbal from the starter pack's crash), an impact on it (the kit's kick and crash, or the starter pack's crash and 808). They go on tracks
   of their own under the song's Automation and Samples tracks, in the same undo step.
 - **Effects and mix tools** for the AI: Spinus's own effects on a part's insert with their controls set by name
   (EQ, compressor, gate, limiter, filter, ducker, stereo), sends to a reverb and a delay bus made with the reverb

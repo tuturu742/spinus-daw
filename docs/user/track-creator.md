@@ -476,7 +476,8 @@ tell the AI, so no fix round runs.
   yours always stay.
 - **Transitions and automation**: automation clips on the Playlist (a part's volume, pan, or a filter sweep:
   Spinus adds a Spinus Filter to that part's insert), and transitions into and out of a section wherever it
-  plays: a riser before it, a downlifter after it starts, a swell into its first beat, an impact on it (the
+  plays: a riser before it, a downlifter after it starts, a swell into its first beat (a noise swell, or a reversed
+  cymbal: the starter pack's crash played backwards), an impact on it (the
   kit's kick and crash, or the starter pack's crash and 808). They go on tracks of their own, under the song's
   **Automation** and **Samples** tracks.
 - **Effects and mix**: Spinus's own effects on a part's insert, with their controls set by name (EQ,

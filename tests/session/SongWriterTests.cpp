@@ -683,6 +683,39 @@ TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of t
     CHECK (samples == (dsp::starter::findPack().isDirectory() ? 1 : 0));
 }
 
+TEST_CASE ("Song writer: a reversed cymbal is the crash played backwards, ending on its bar", "[song]")
+{
+    if (! dsp::starter::findPack().isDirectory())
+        SKIP ("the starter pack is not here");
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "samples": [{"file": "Drums/Cymbals/Crash Wide.flac", "bar": 4, "name": "Reverse cymbal", "reversed": true}]
+    })"));
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    auto proposal = ai::Proposal::prepare (song::makeProposal (song, history.getProject(), options, &error), history);
+    INFO (error << proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    CHECK (history.getUndoDescriptions().size() == 1);
+    const auto barTicks = (model::Ticks)(int)song["barTicks"];
+    model::Ticks songStart = -1;
+    for (const auto& clip : history.getProject().playlist.clips)
+        if (std::holds_alternative<model::PatternClip> (clip.content) && (songStart < 0 || clip.start < songStart))
+            songStart = clip.start;
+    int found = 0;
+    for (const auto& clip : history.getProject().playlist.clips)
+        if (const auto* audio = std::get_if<model::AudioClip> (&clip.content))
+        {
+            ++found;
+            CHECK (audio->reversed);
+            CHECK (clip.length > 0);
+            CHECK (clip.start + clip.length == songStart + 4 * barTicks); // it lands on bar 5's first beat
+        }
+    CHECK (found == 1);
+}
+
 TEST_CASE ("Song writer: the AI's effects, buses, sends and ducking are part of the one undo step", "[song]")
 {
     CHECK (song::sendEffectKind ("Dragon Hall Reverb") == "reverb");

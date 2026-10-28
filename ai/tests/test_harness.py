@@ -752,6 +752,24 @@ def test_transitions_lead_into_and_out_of_sections() -> None:
         ws.call("transition", {"kind": "laser", "section": chorus})
 
 
+def test_a_sampled_swell_is_a_reversed_cymbal_ending_on_the_beat() -> None:
+    ws = transitioned()
+    chorus = next(sid for sid, s in ws.sections.items() if s["kind"] == "chorus")
+    starts, at = [], 0
+    for sid in ws.order:
+        if sid == chorus:
+            starts.append(at)
+        at += ws.sections[sid]["bars"]
+    said = ws.call("transition", {"kind": "swell", "section": chorus, "sample": True})
+    assert "reversed" in said
+    ws.call("transition", {"kind": "swell", "section": chorus, "sample": True})  # again: no duplicates
+    song = ws.song()
+    reversed_ = [x for x in song["production"]["samples"] if x.get("reversed")]
+    assert [x["bar"] for x in reversed_] == starts  # each ends on the chorus's first beat
+    assert all(x["file"] == "Drums/Cymbals/Crash Wide.flac" for x in reversed_)
+    assert "swell" not in {layer["id"] for layer in song["layers"]}  # no held synth note as well
+
+
 async def test_transition_tools_only_with_their_group(tmp_path: Path) -> None:
     sent: list[dict[str, Any]] = []
     script: Script = [

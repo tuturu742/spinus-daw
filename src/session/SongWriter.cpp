@@ -3,6 +3,8 @@
 #include "PartSounds.h"
 #include "dsp/drums/StarterPack.h"
 
+#include <juce_audio_formats/juce_audio_formats.h>
+
 #include <optional>
 #include <set>
 
@@ -714,8 +716,20 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
                           { "target", target },
                           { "points", curve } }));
         }
-        // Samples from the Spinus Starter Pack (an impact's crash and 808), through one channel.
+        // Samples from the Spinus Starter Pack (an impact's crash and 808, a reversed cymbal), through one channel.
         const auto pack = dsp::starter::findPack();
+        const auto ticksPerSecond = (double)barTicks * juce::jlimit (20.0, 999.0, (double)song["tempo"]) /
+                                    (60.0 * std::max (1, (int)song["beatsPerBar"]));
+        // A reversed sample ends on its bar: its clip is as long as the file, so the swell lands on the beat.
+        const auto lengthInTicks = [ticksPerSecond] (const juce::File& file) -> juce::int64
+        {
+            juce::AudioFormatManager formats;
+            formats.registerBasicFormats();
+            const std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+            if (reader == nullptr || reader->sampleRate <= 0.0)
+                return 0;
+            return juce::roundToInt ((double)reader->lengthInSamples / reader->sampleRate * ticksPerSecond);
+        };
         juce::var sampleLane, sampleChannel;
         for (const auto& entry : arrayOf (production["samples"]))
         {
@@ -724,10 +738,16 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
                 continue;
             if (sampleLane.isVoid())
                 sampleLane = step ("lane.add", object ({ { "name", options.name + ": Samples" } })) + ".lane";
+            const bool reversed = (bool)entry["reversed"];
+            const auto at = offset + juce::roundToInt ((double)entry["bar"] * (double)barTicks);
+            const auto fileTicks = reversed ? lengthInTicks (file) : juce::int64 {};
+            const auto length = reversed && fileTicks > 0 ? std::min (fileTicks, at - offset) : 2 * barTicks;
+            if (length <= 0)
+                continue;
             auto clip = object ({ { "lane", sampleLane },
                                   { "file", file.getFullPathName() },
-                                  { "start", offset + juce::roundToInt ((double)entry["bar"] * (double)barTicks) },
-                                  { "length", 2 * barTicks } });
+                                  { "start", reversed ? at - length : at },
+                                  { "length", length } });
             if (sampleChannel.isVoid())
                 clip.getDynamicObject()->setProperty ("name", options.name + ": Samples");
             else
@@ -735,6 +755,8 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
             const auto added = step ("clip.addAudio", clip);
             if (sampleChannel.isVoid())
                 sampleChannel = added + ".channel";
+            if (reversed)
+                step ("clip.setAudio", object ({ { "clip", added + ".clip" }, { "reversed", true } }));
         }
     }
 

@@ -405,14 +405,18 @@ TRANSITIONS_TOOLS = [
     Tool(
         "transition",
         "Into or out of every play of a section: a riser (noise rising over the bars before it), a downlifter "
-        "(falling away over the bars after it starts), a swell (a cymbal-like swell into its first beat) or an "
-        "impact (a hit on its first beat: the kit's kick and crash, or with sample, the starter pack's).",
+        "(falling away over the bars after it starts), a swell (a cymbal-like swell into its first beat; with "
+        "sample, the starter pack's crash played reversed, ending on that beat) or an impact (a hit on its first "
+        "beat: the kit's kick and crash, or with sample, the starter pack's).",
         schema(
             {
                 "kind": {"type": "string", "enum": list(TRANSITIONS)},
                 "section": SECTION,
                 "bars": {"type": "integer", "description": "How long, 1 to 8 (a riser: 2 or 4; a swell: 1)"},
-                "sample": {"type": "boolean", "description": "impact: the starter pack's crash and 808"},
+                "sample": {
+                    "type": "boolean",
+                    "description": "impact: the starter pack's crash and 808; swell: its crash reversed",
+                },
             },
             ["kind", "section"],
         ),
@@ -1209,6 +1213,20 @@ class Workspace:
         places = [b - bars if before else b for b in starts if (b - bars >= 0 if before else True)]
         if not places:
             raise Mistake(f"there are not {bars} bars before the {s['id']}: it starts the song")
+        if kind == "swell" and sample:
+            # A reversed cymbal: the starter pack's crash played backwards, ending on the section's first beat.
+            samples = self.extra.setdefault("samples", [])
+            for place in places:
+                entry = {
+                    "file": STARTER_SAMPLES["crash"],
+                    "bar": place + bars,
+                    "name": "Reverse cymbal",
+                    "reversed": True,
+                }
+                if entry not in samples:
+                    samples.append(entry)
+            where = ", ".join(f"bar {p + bars + 1}" for p in places)
+            return f"Reverse cymbal (the starter pack's crash, reversed) ending on {where}."
         pid = self.fx_part(kind)
         bar_ticks = self.steps * sw.TICKS_PER_STEP
         if kind == "impact":
