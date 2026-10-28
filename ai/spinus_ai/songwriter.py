@@ -70,6 +70,7 @@ import httpx
 from .assistant import NoConnection, Say, answered_by, complete_with_fallback
 from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
+from .keynames import key_name, tonic_of
 from .routing import Routing
 from .usage import UsageLog
 
@@ -187,9 +188,9 @@ def note_name(midi: int) -> str:
 
 def key_of_name(name: str) -> tuple[int, str] | None:
     parts = name.split()
-    if len(parts) != 2 or parts[0] not in NAMES or parts[1] not in SCALES:
+    if len(parts) != 2 or (tonic := tonic_of(parts[0])) is None or parts[1] not in SCALES:
         return None
-    return NAMES.index(parts[0]), parts[1]
+    return tonic, parts[1]
 
 
 ROMAN = re.compile(r"^(b?)(VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)(°|sus4|maj7|7)?$")
@@ -565,7 +566,7 @@ def make_plan(
     ]
     return {
         "tempo": tempo,
-        "key": {"tonic": tonic, "scale": mode, "name": f"{NAMES[tonic]} {mode}"},
+        "key": {"tonic": tonic, "scale": mode, "name": key_name(tonic, mode)},
         "beatsPerBar": style.beats_per_bar,
         "sections": sections,
         "order": list(form),

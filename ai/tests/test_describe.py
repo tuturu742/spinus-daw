@@ -345,11 +345,18 @@ def test_reference_songs_become_a_description_whose_edits_win() -> None:
         "Like your songs: about 128 BPM, in A minor, four-on-the-floor drums; with drums, bass, synth chords and a "
         "lead melody."
     )
-    # Left as it is: the songs' own numbers, nothing changed, their parts named.
+    # Left as it is: the songs' own numbers, nothing changed, their parts named; the key it names (their
+    # commonest) is the song's.
     same = describe.describe(prompt, songs, prompt)
     assert same["described"]["understood"].startswith("Understood: like your songs;")
-    assert same["tempo"] == songs["tempo"] and same["keys"] == songs["keys"] and same["chords"] == songs["chords"]
-    assert same["perSong"] == songs["perSong"] and same["drums"] == songs["drums"]
+    assert same["tempo"] == songs["tempo"] and same["chords"] == songs["chords"]
+    assert same["keys"] == [{"name": "A minor", "count": 3}] and same["keyFixed"]
+    for seed in range(4):
+        assert songwriter.write(same, seed)["key"]["name"] == "A minor"
+    assert same["drums"] == songs["drums"]
+    # Their chords, each song's read in that key's mode (as when the key is changed).
+    assert [{**s, "key": None} for s in same["perSong"]] == [{**s, "key": None} for s in songs["perSong"]]
+    assert all(s["key"]["scale"] == "minor" for s in same["perSong"])
     assert [p["role"] for p in same["described"]["parts"]] == ["drums", "bass", "chords", "lead"]
 
     # Edited: the words written in win; the rest of the songs' style stays underneath.
@@ -524,3 +531,42 @@ async def test_the_reading_says_which_model_answered_when_one_failed(tmp_path: P
     by = read["described"]["readBy"]
     assert by.startswith("claude-test, because Old (") and "did not answer" in by
     assert "sk-lost" not in by
+
+
+def test_the_generated_text_rounds_its_tempo_and_spells_keys_as_usual() -> None:
+    from test_songwriter import summary as songs_summary
+
+    songs = songs_summary()
+    songs["tempo"] = dict(songs["tempo"], median=152.5)
+    songs["keys"] = [{"name": "A# minor", "count": 2}, {"name": "F major", "count": 1}]  # an older analysis's
+    prompt = describe.prompt_from(songs)
+    assert "about 152 BPM" in prompt or "about 153 BPM" in prompt
+    assert "in Bb minor" in prompt
+    left = describe.describe(prompt, songs, prompt)
+    assert left["keys"] == [{"name": "Bb minor", "count": 3}]
+    assert songwriter.write(left, 1)["key"] == {"tonic": 10, "scale": "minor", "name": "Bb minor"}
+
+
+@pytest.mark.parametrize(
+    ("tonic", "scale", "name"),
+    [
+        (10, "minor", "Bb minor"),
+        (3, "minor", "Eb minor"),
+        (1, "minor", "C# minor"),
+        (6, "minor", "F# minor"),
+        (8, "minor", "G# minor"),
+        (10, "major", "Bb major"),
+        (3, "major", "Eb major"),
+        (8, "major", "Ab major"),
+        (1, "major", "Db major"),
+        (6, "major", "F# major"),
+    ],
+)
+def test_keys_are_named_as_usual(tonic: int, scale: str, name: str) -> None:
+    from spinus_ai import keynames
+
+    assert keynames.key_name(tonic, scale) == name
+    assert keynames.spelled(name.replace("Bb", "A#").replace("Eb", "D#")) == name
+    assert songwriter.key_of_name(name) == (tonic, scale)
+    reading = describe.read(f"a song in {name}")
+    assert (reading.tonic, reading.scale) == (tonic, scale)

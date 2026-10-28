@@ -36,6 +36,8 @@ from typing import Any
 
 import numpy as np
 
+from . import keynames
+
 FEATURES_VERSION = 4  # change when what analyze_song measures changes (Spinus then analyzes songs again)
 SUMMARY_VERSION = 1  # change when the summary's format changes
 
@@ -579,7 +581,7 @@ TEMPERLEY_MINOR = np.array([5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.
 
 def key_name(index: int) -> str:
     """0-11: C major..B major, 12-23: C minor..B minor."""
-    return f"{NAMES[index % 12]} {'major' if index < 12 else 'minor'}"
+    return keynames.key_name(index % 12, "major" if index < 12 else "minor")
 
 
 def key_scores(profile: np.ndarray) -> list[np.ndarray]:
@@ -804,7 +806,7 @@ def summarize(songs: list[dict[str, Any]]) -> dict[str, Any]:
     count = len(songs)
     tempos = [float(s["tempo"]) for s in songs if s.get("tempo")]
     meters = Counter(int(s.get("beatsPerBar") or 4) for s in songs if s.get("tempo"))
-    keys = Counter(str(s["key"]["name"]) for s in songs if s.get("key"))
+    keys = Counter(keynames.spelled(str(s["key"]["name"])) for s in songs if s.get("key"))
     modes = Counter(str(s["key"]["scale"]) for s in songs if s.get("key"))
 
     # Chords.

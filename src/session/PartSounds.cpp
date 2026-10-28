@@ -1105,13 +1105,16 @@ std::vector<Choice> choose (const Target& target, const Reference& reference, co
 //==============================================================================
 namespace
 {
-/** The key's tonic (pitch class) and whether it is minor, from the summary's commonest key ("D minor"). */
+/** The key's tonic (pitch class) and whether it is minor, from the summary's commonest key ("D minor", "Bb minor"
+    or, from older analyses, "A# minor"). */
 std::pair<int, bool> keyOf (const juce::var& summary)
 {
     const auto* keys = summary["keys"].getArray();
     const auto name = keys != nullptr && ! keys->isEmpty() ? keys->getReference (0)["name"].toString() : juce::String();
-    static const juce::StringArray notes { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    const auto tonic = notes.indexOf (name.upToFirstOccurrenceOf (" ", false, false));
+    static const juce::StringArray sharps { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    static const juce::StringArray flats { "C", "Db", "D", "Eb", "Fb", "F", "Gb", "G", "Ab", "A", "Bb", "Cb" };
+    const auto note = name.upToFirstOccurrenceOf (" ", false, false);
+    const auto tonic = sharps.contains (note) ? sharps.indexOf (note) : flats.indexOf (note);
     return { tonic < 0 ? 0 : tonic, name.containsIgnoreCase ("minor") };
 }
 } // namespace

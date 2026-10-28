@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from .keynames import key_name
+
 NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 # Krumhansl-Kessler probe-tone profiles (1982), from C.
@@ -78,10 +80,8 @@ def key_of(profile: np.ndarray) -> dict[str, Any]:
     return {
         "tonic": best[1],
         "scale": best[2],
-        "name": f"{NAMES[best[1]]} {best[2]}",
+        "name": key_name(best[1], best[2]),
         # How clearly it wins: the gap to the second best, as a 0-1 number (0.1 apart is already clear).
         "confidence": round(min(1.0, max(0.0, (best[0] - scores[1][0]) * 10.0)), 2),
-        "others": [
-            {"tonic": t, "scale": s, "name": f"{NAMES[t]} {s}", "score": round(r, 3)} for r, t, s in scores[1:4]
-        ],
+        "others": [{"tonic": t, "scale": s, "name": key_name(t, s), "score": round(r, 3)} for r, t, s in scores[1:4]],
     }

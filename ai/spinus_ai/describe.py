@@ -30,6 +30,7 @@ import httpx
 from .assistant import NoConnection, Say, answered_by, complete_with_fallback
 from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
+from .keynames import key_name, spelled
 from .routing import Routing
 from .songwriter import ROLES
 from .style import SUMMARY_VERSION
@@ -697,7 +698,7 @@ def understood(reading: Reading, tempo: float, modes: dict[str, float]) -> str:
     """'Understood: 72 BPM, D minor, slow, dark; genre: depressive black metal'."""
     said = [f"{tempo:g} BPM" if reading.tempo else f"about {tempo:g} BPM"]
     if reading.tonic is not None and reading.scale is not None:
-        said.append(f"{NAMES[reading.tonic]} {reading.scale}")
+        said.append(key_name(reading.tonic, reading.scale))
     else:
         mode = max(modes, key=lambda m: modes[m])
         said.append(f"mostly {mode}" if modes[mode] < 0.85 else mode)
@@ -720,7 +721,7 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
     tempo = tempo_of(reading)
     modes = modes_of(reading)
     if reading.tonic is not None and reading.scale is not None:
-        keys = [{"name": f"{NAMES[reading.tonic]} {reading.scale}", "count": 3}]
+        keys = [{"name": key_name(reading.tonic, reading.scale), "count": 3}]
     else:
         keys = []
         for mode in modes:
@@ -729,7 +730,7 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
                 if feel.guitar_keys
                 else (MINOR_KEYS if mode == "minor" else MAJOR_KEYS)
             )
-            keys += [{"name": f"{NAMES[t]} {mode}", "count": n} for t, n in usual]
+            keys += [{"name": key_name(t, mode), "count": n} for t, n in usual]
 
     busy = 1.0 + 0.3 * reading.energy
     bass_low, bass_mid, bass_high, bass_per = feel.bass
@@ -871,7 +872,8 @@ def describe(text: str, base: dict[str, Any] | None = None, generated: str = "")
 def prompt_from(summary: dict[str, Any]) -> str:
     """The reference songs' summary as a description the user can edit: "Like your songs: about 128 BPM, in A
     minor, four-on-the-floor drums; with drums, bass, synth chords and a lead melody." Only words this module
-    reads back to the same numbers (no mood words), so leaving it as it is changes nothing."""
+    reads back to the same numbers (no mood words), so leaving it as it is changes nothing but the key: the one
+    it names (the songs' commonest) is the song's."""
     tempo = float((summary.get("tempo") or {}).get("median") or 120.0)
     keys = summary.get("keys") or []
     key = str(keys[0]["name"]) if keys else ""
@@ -902,7 +904,7 @@ def prompt_from(summary: dict[str, Any]) -> str:
         named.append("synth chords" if float(parts_found["other"].get("voices") or 1.0) > 1.3 else "plucks")
     if has("vocals"):
         named.append("a lead melody")
-    words = [f"about {tempo:g} BPM"] + ([f"in {key}"] if key else []) + ([groove] if groove else [])
+    words = [f"about {round(tempo)} BPM"] + ([f"in {spelled(key)}"] if key else []) + ([groove] if groove else [])
     text = "Like your songs: " + ", ".join(words)
     if named:
         text += "; with " + (", ".join(named[:-1]) + " and " + named[-1] if len(named) > 1 else named[0])
@@ -950,14 +952,17 @@ def with_references(
     if reading.scale is not None and tonic is None and reading.scale != before.scale:
         out["modes"] = {reading.scale: 1.0}  # a mode said alone, the songs without a key: the mode only
         changes.insert(1 if tempo_said else 0, reading.scale)
-    elif reading.scale is not None and (tonic, reading.scale) != (before.tonic, before.scale):
-        name = f"{NAMES[int(tonic or 0)]} {reading.scale}"
+    elif reading.scale is not None and tonic is not None:
+        # The key the text names is the song's, as generated (the songs' commonest) or changed: it is what the
+        # user sees and edits.
+        name = key_name(tonic, reading.scale)
         out["keys"], out["modes"] = [{"name": name, "count": 3}], {reading.scale: 1.0}
         out["keyFixed"] = True
-        for song in out.get("perSong") or []:  # the songs' chords, read in the new mode
+        for song in out.get("perSong") or []:  # the songs' chords, read in its mode
             if isinstance(song, dict) and isinstance(song.get("key"), dict):
                 song["key"]["scale"] = reading.scale
-        changes.insert(1 if tempo_said else 0, name)
+        if (tonic, reading.scale) != (before.tonic, before.scale):
+            changes.insert(1 if tempo_said else 0, name)
     elif lean:
         modes = out.get("modes") or {"minor": 0.5, "major": 0.5}
         minor = min(1.0, max(0.0, float(modes.get("minor", 0.5)) + 0.4 * lean))

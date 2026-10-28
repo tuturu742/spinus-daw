@@ -137,6 +137,10 @@ Step 2, **Description**, holds the song in words; the next steps work from it. T
 > Like your songs: about 128 BPM, in A minor, four-on-the-floor drums; with drums, bass, synth chords and a
 > lead melody.
 
+The tempo is your songs' typical one, in whole BPM, and the key is their commonest, named as musicians
+usually write it (Bb minor rather than A# minor). The song is written in the key the text names: leave it,
+or change it.
+
 Change what you want and **Read** again: "make it 140 BPM", "in D minor", "darker", "add a guitar", "make it
 trance". What you change wins; everything you don't change stays as your songs have it (their chords,
 groove, parts and sections, measured in detail). Spinus says what changed: "Understood: like your songs,

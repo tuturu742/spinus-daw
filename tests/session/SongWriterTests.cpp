@@ -565,7 +565,7 @@ TEST_CASE ("Song writer: each part starts at its role's level, from how loud its
         CHECK ((db <= 0.0 && db >= -30.0));
         loudest = std::max (loudest, db);
     }
-    CHECK (loudest == 0.0);
+    CHECK (loudest == Catch::Approx (0.0));
     CHECK (song::roleLevelDb ("pad") < song::roleLevelDb ("bass"));
     CHECK (song::startingFaders (layers, { { "drums", -100.0 } }).empty()); // silent: not measured
 
