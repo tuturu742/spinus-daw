@@ -13,7 +13,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   do. Spinus now talks to OpenAI's own service through its newer Responses API, which does; the model's
   reasoning carries on between its tool calls, and nothing is kept on OpenAI's side. Other OpenAI-compatible
   services (OpenRouter, local servers, your own address) keep the chat API; if one gives the same refusal,
-  Spinus asks again with the model's reasoning turned off, and the assistant says so.
+  Spinus asks again once with the model's reasoning turned off, and the assistant says so. A model that
+  can't turn its reasoning off (gpt-6.1-sol) gets a clear message there instead: use it through OpenAI's own
+  address. The highest reasoning level some models offer, "xhigh", is passed on as it is.
 
 ## 0.1.0-alpha.3 (2026-10-28)
 

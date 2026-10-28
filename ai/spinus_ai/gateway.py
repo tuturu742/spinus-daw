@@ -113,7 +113,8 @@ class Request:
     messages: list[Message]
     tools: list[Tool] = field(default_factory=list)
     max_tokens: int = 4096
-    effort: str = ""  # "low", "medium" or "high": how hard the model reasons; "" leaves the provider's default
+    effort: str = ""  # "low", "medium", "high" (or "xhigh" where offered): how hard the model reasons; "" leaves
+    # the provider's default
 
 
 def error_for_status(status: int, body: str) -> ProviderError:
@@ -329,6 +330,15 @@ async def complete_openai(
                 notice = (
                     f"{connection.name} does not let {request.model} use tools while it reasons, so its reasoning "
                     "was turned off for this answer."
+                )
+            elif response.status_code == 400 and no_reasoning:
+                # Asked once with reasoning off, and the model can't turn it off either (gpt-6.1-sol: "does not
+                # support 'none'"): no way to use tools with it here. Never asked a third time.
+                raise ProviderError(
+                    "bad_request",
+                    f"{connection.name} does not let {request.model} use tools while it reasons, and the model "
+                    "can't turn its reasoning off. Use the model through OpenAI's own address "
+                    f"(api.openai.com), or another model or connection. {error.strip()[:300]}",
                 )
             else:
                 raise error_for_status(response.status_code, error)

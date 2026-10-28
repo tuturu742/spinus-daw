@@ -48,7 +48,8 @@ Click **Add...**, choose a provider, and **Save and test**. You can add several 
 - **"Reasoning was turned off for this answer"**: some services don't let a model that thinks before it
   answers (as OpenAI's newest models do) use Spinus's tools through their chat API. Spinus then asks again
   with the model's thinking off, and the assistant says so. The answer still comes, perhaps a little less
-  considered.
+  considered. A model that can't stop thinking (gpt-6.1-sol, for example) can't use the tools there at all:
+  the assistant says so; add it as a connection to OpenAI's own address (api.openai.com) instead.
 - **Pattern generator model**: the Piano Roll's [Generate](piano-roll.md#generate) uses the assistant's
   model, or the one you pick with **Use for patterns**.
 - **Used this month**, near the bottom of the window above the Manual search and Analysis engine

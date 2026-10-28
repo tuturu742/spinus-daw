@@ -334,3 +334,44 @@ async def test_chat_api_does_not_retry_a_reasoning_error_without_tools(tmp_path:
             client_for(handler), c, "k", Request("m", "s", [Message("user", [Text("hi")])], effort="high"), no_text
         )
     assert calls == 1
+
+
+async def test_chat_api_asks_without_reasoning_once_and_explains_a_model_that_cannot(tmp_path: Path) -> None:
+    """gpt-6.1-sol through the chat API refuses tools while it reasons, and refuses "none" too."""
+    sent: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        if len(sent) == 1:
+            message = (
+                "Function tools with reasoning_effort are not supported for gpt-6.1-sol in /v1/chat/completions. "
+                "To use function tools, use /v1/responses or set reasoning_effort to 'none'."
+            )
+        else:
+            message = (
+                "Unsupported value: 'reasoning_effort' does not support 'none' with this model. Supported values "
+                "are: 'low', 'medium', 'high', and 'xhigh'."
+            )
+        return httpx.Response(400, json={"error": {"message": message, "param": "reasoning_effort"}})
+
+    store = ConnectionStore(tmp_path, MemoryKeyStore())
+    c = store.upsert("Work proxy", "openai", "https://proxy.example/v1", "k")
+    request = Request("gpt-6.1-sol", "s", [Message("user", [Text("hi")])], [LOOKUP], effort="xhigh")
+    with pytest.raises(ProviderError) as caught:
+        await complete(client_for(handler), c, "k", request, no_text)
+
+    assert [b.get("reasoning_effort") for b in sent] == ["xhigh", "none"]  # asked again once, never a third time
+    assert caught.value.kind == "bad_request"
+    assert "can't turn its reasoning off" in str(caught.value) and "api.openai.com" in str(caught.value)
+
+
+async def test_the_responses_api_takes_any_reasoning_level_the_model_offers(tmp_path: Path) -> None:
+    sent: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, content=answer([MESSAGE], "Hi"))
+
+    request = Request("gpt-6.1-sol", "s", [Message("user", [Text("hi")])], [LOOKUP], effort="xhigh")
+    await complete(client_for(handler), openai_connection(tmp_path), "k", request, no_text)
+    assert sent[0]["reasoning"] == {"effort": "xhigh"} and "tools" in sent[0]
