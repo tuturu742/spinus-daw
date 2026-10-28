@@ -46,4 +46,5 @@ A page for every feature of Spinus. The assistant reads these pages too, so you 
 - [The Automixer](automixer.md): suggested mix changes with reasons, applied in one step, before and after
 - [The Launcher](launcher.md): launch patterns and audio clips live, in scenes (Ableton-style)
 - [Synth profiles](synth-profiles.md) (experimental): which settings the Analyzer tunes when it matches a synth to a part
+- [Spinus from the command line](command-line.md): making, checking and rendering songs from scripts and AI agents
 - [The analysis engine](analysis-engine.md) (experimental): installing PyTorch for song analysis, on the graphics card or the CPU

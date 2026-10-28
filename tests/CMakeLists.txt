@@ -62,6 +62,7 @@ add_executable (spinus_tests
     session/ProjectListTests.cpp
     session/MidiRecorderTests.cpp
     session/SessionTests.cpp
+    session/AgentCommandLineTests.cpp
     session/TextLocaleTests.cpp
     session/ProgramFolderTests.cpp
     session/SilenceTests.cpp

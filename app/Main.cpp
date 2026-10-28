@@ -17,6 +17,7 @@
 #include "engine/EngineHost.h"
 #include "engine/PluginCrashGuard.h"
 #include "session/ProgramFolder.h"
+#include "session/AgentCommandLine.h"
 #include "session/AudioDeviceLog.h"
 #include "session/SelfTest.h"
 #include "session/SystemInfo.h"
@@ -86,7 +87,7 @@ public:
         // Spinus was started from, unless their output already goes somewhere (a pipe, a file).
         const auto output = GetStdHandle (STD_OUTPUT_HANDLE);
         if ((commandLine.contains ("--version") || commandLine.contains ("--self-test") ||
-             commandLine.contains ("--scan-plugins")) &&
+             commandLine.contains ("--scan-plugins") || isAgentCommandLine (commandLine)) &&
             (output == nullptr || output == INVALID_HANDLE_VALUE))
             if (AttachConsole (ATTACH_PARENT_PROCESS))
             {
@@ -103,6 +104,21 @@ public:
         }
 
         const auto args = juce::StringArray::fromTokens (commandLine, true);
+
+        // Spinus from the command line, for scripts and AI agents (docs/user/command-line.md): no window and no
+        // audio device; engine settings of its own, and nothing written to the user's settings or logs.
+        if (args.contains ("--commands"))
+        {
+            std::cout << juce::JSON::toString (commands::CommandRegistry::get().getSchema()) << '\n' << std::flush;
+            quit();
+            return;
+        }
+        const bool agent = isAgentCommandLine (commandLine);
+        if (agent)
+        {
+            quietTerminal();
+            EngineHost::setSettingsName ("Spinus DAW Command Line");
+        }
 
         if (const auto selfTest = args.indexOf ("--self-test"); selfTest >= 0)
         {
@@ -143,20 +159,23 @@ public:
 
         // This run's log (Help > Open log folder); not for snapshots, which are made by tools.
         const auto started = juce::Time::getMillisecondCounter();
-        if (snapshotIndex < 0)
+        if (snapshotIndex < 0 && ! agent)
             startLog (commandLine);
 
         // A plugin that took Spinus down last time is named here; from now on a crash in one is noted.
         const auto crashRecord = getSettingsFolder().getChildFile ("plugin-crash.json");
-        const auto crashed = engine::PluginCrashGuard::takeRecorded (crashRecord);
-        getSettingsFolder().createDirectory();
-        engine::PluginCrashGuard::install (crashRecord);
+        const auto crashed = agent ? std::nullopt : engine::PluginCrashGuard::takeRecorded (crashRecord);
+        if (! agent)
+        {
+            getSettingsFolder().createDirectory();
+            engine::PluginCrashGuard::install (crashRecord);
+        }
         if (crashed)
             core::Logs::warning ("start", "A plugin took Spinus down last time: " + crashed->name +
                                               ". Spinus offers to run it in a separate process.");
 
         EngineHost::Options options;
-        options.openAudioDevice = ! args.contains ("--no-audio") && snapshotIndex < 0;
+        options.openAudioDevice = ! args.contains ("--no-audio") && snapshotIndex < 0 && ! agent;
 
         engineHost = std::make_unique<EngineHost> (options);
         if (snapshotIndex < 0)
@@ -223,6 +242,13 @@ public:
         catalog->addKnownTypesTo (engineHost->getEngine().getPluginManager().knownPluginList);
         session->getDeviceList().setPreferencesFile (getPluginListFolder().getChildFile ("plugin-formats.json"));
         session->getDeviceList().setCatalog (catalog.get());
+
+        if (agent)
+        {
+            setApplicationReturnValue (runAgentCommandLine (args));
+            quit();
+            return;
+        }
 
         document = std::make_unique<ProjectDocument> (*session, getSettingsFolder());
         mainWindow = std::make_unique<MainWindow> (getApplicationName(), *session, *document,
@@ -322,6 +348,106 @@ public:
     }
 
 private:
+    static bool isAgentCommandLine (const juce::String& commandLine)
+    {
+        const auto args = juce::StringArray::fromTokens (commandLine, true);
+        return args.contains ("--run") || args.contains ("--check") || args.contains ("--render") ||
+               args.contains ("--describe") || args.contains ("--commands");
+    }
+
+    /** --run, --check, --render, --describe (session::AgentCommandLine): JSON lines on the terminal. */
+    int runAgentCommandLine (const juce::StringArray& args)
+    {
+        const auto valueOf = [&] (const char* flag)
+        {
+            const auto i = args.indexOf (flag);
+            return i >= 0 && i + 1 < args.size() ? args[i + 1].unquoted() : juce::String();
+        };
+        const auto fileOf = [&] (const char* flag)
+        {
+            const auto v = valueOf (flag);
+            return v.isEmpty() ? juce::File() : juce::File::getCurrentWorkingDirectory().getChildFile (v);
+        };
+        const auto say = [] (const juce::String& text) { std::cout << text << '\n' << std::flush; };
+        const auto failed = [&] (const juce::String& error)
+        {
+            auto* o = new juce::DynamicObject();
+            o->setProperty ("ok", false);
+            o->setProperty ("error", error);
+            say (juce::JSON::toString (juce::var (o), true));
+            return 1;
+        };
+
+        // A document of its own: the user's recent projects and Unsaved folder are left alone.
+        const auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                 .getChildFile ("spinus-command-line-" + juce::Uuid().toString());
+        struct Cleanup
+        {
+            juce::File folder;
+            ~Cleanup() { folder.deleteRecursively(); }
+        } cleanup { scratch };
+        ProjectDocument scratchDocument (*session, scratch);
+
+        if (const auto type = valueOf ("--describe"); args.contains ("--describe"))
+        {
+            if (type.isEmpty())
+                return failed ("--describe needs a device type (e.g. spinus.3x-osc) or \"all\"");
+            const auto types = type == "all" ? cli::describableTypes (*session) : juce::StringArray { type };
+            int status = 0;
+            for (auto& t : types)
+            {
+                const auto described = cli::describe (*session, t);
+                status = described.hasProperty ("error") ? 1 : status;
+                say (juce::JSON::toString (described, true));
+            }
+            return status;
+        }
+
+        if (const auto project = fileOf ("--check"); args.contains ("--check"))
+        {
+            if (const auto opened = scratchDocument.open (project); opened.failed())
+                return failed (opened.getErrorMessage());
+            session->getEdit().dispatchPendingUpdatesSynchronously();
+            auto summary = cli::summarize (*session, scratchDocument.getFolder());
+            const bool clean = summary["problems"].size() == 0;
+            summary.getDynamicObject()->setProperty ("ok", clean);
+            say (juce::JSON::toString (summary, true));
+            return clean ? 0 : 3;
+        }
+
+        if (const auto project = fileOf ("--render"); args.contains ("--render"))
+        {
+            const auto out = fileOf ("--out");
+            if (out == juce::File())
+                return failed ("--render needs --out <file.wav|.flac|.opus|.mp3>");
+            if (const auto opened = scratchDocument.open (project); opened.failed())
+                return failed (opened.getErrorMessage());
+            const auto tail = valueOf ("--tail");
+            return cli::render (*session, scratchDocument.getFolder().getChildFile ("audio"), out, fileOf ("--stems"),
+                                tail.isEmpty() ? 2.0 : tail.getDoubleValue(), say);
+        }
+
+        // --run <script.json> [--open <project>] --save <folder>
+        const auto script = fileOf ("--run");
+        const auto steps = juce::JSON::parse (script.loadFileAsString());
+        if (! script.existsAsFile() || ! steps.isArray())
+            return failed ("--run needs a JSON file with a list of steps: " + script.getFullPathName());
+        if (const auto project = fileOf ("--open"); project != juce::File())
+            if (const auto opened = scratchDocument.open (project); opened.failed())
+                return failed (opened.getErrorMessage());
+        const auto status = cli::runSteps (
+            *session, steps,
+            { .scriptFolder = script.getParentDirectory(), .keepGoing = args.contains ("--keep-going") }, say);
+        if (const auto save = fileOf ("--save");
+            save != juce::File() && (status == 0 || args.contains ("--keep-going")))
+        {
+            if (const auto saved = scratchDocument.saveAs (save); saved.failed())
+                return failed ("saving: " + saved.getErrorMessage());
+            say ("{\"saved\": " + juce::JSON::toString (scratchDocument.getFolder().getFullPathName()) + "}");
+        }
+        return status;
+    }
+
     /** Starts this run's session log (core::Logs) in the log folder, with a header describing the run. */
     static void startLog (const juce::String& commandLine)
     {
