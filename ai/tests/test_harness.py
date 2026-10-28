@@ -907,3 +907,44 @@ def test_the_master_takes_effects_and_check_asks_for_its_limiter() -> None:
     assert not any("master: no limiter" in line for line in ws.issues())
     ws.groups = {"basic"}
     assert not any("master" in line for line in ws.issues())  # without the mix tools it can't, so it isn't asked
+
+
+def test_chat_services_clear_old_tool_calls_in_batches_as_anthropic_does() -> None:
+    from spinus_ai import gateway
+
+    request = gateway.Request("m", "system", [gateway.Message("user", [gateway.Text("brief")])])
+    request.context_edits = [
+        {
+            "type": "clear_tool_uses_20250919",
+            "trigger": {"type": "input_tokens", "value": 2000},
+            "keep": {"type": "tool_uses", "value": 2},
+            "clear_at_least": {"type": "input_tokens", "value": 1000},
+            "clear_tool_inputs": True,
+            "exclude_tools": ["finish"],
+        }
+    ]
+
+    def turn(n: int, name: str = "read") -> None:
+        use = gateway.ToolUse(f"t{n}", name, {"part": "bass", "notes": "x" * 400})
+        request.messages.append(gateway.Message("assistant", [use]))
+        request.messages.append(gateway.Message("user", [gateway.ToolResult(f"t{n}", "y" * 2000)]))
+
+    turn(0, "finish")
+    for n in range(1, 3):
+        turn(n)
+    assert gateway.clear_old_tool_calls(request) == 0  # under the trigger: nothing
+    for n in range(3, 9):
+        turn(n)
+    cleared = gateway.clear_old_tool_calls(request)
+    assert cleared > 1000
+    results = [b for m in request.messages for b in m.blocks if isinstance(b, gateway.ToolResult)]
+    assert [r.content == gateway.CLEARED for r in results] == [
+        False,
+        *[True] * 6,
+        False,
+        False,
+    ]  # finish and the last 2
+    uses = [b for m in request.messages for b in m.blocks if isinstance(b, gateway.ToolUse)]
+    assert uses[1].input == {} and uses[-1].input["part"] == "bass"
+    turn(9)  # one more call: less than clear_at_least to gain, so the history (and the cache) stays as it was
+    assert gateway.clear_old_tool_calls(request) == 0

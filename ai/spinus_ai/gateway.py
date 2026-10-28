@@ -403,9 +403,58 @@ def openai_body(request: Request, connection: Connection, limit: str = "max_toke
     return body
 
 
+CLEARED = "[cleared]"
+
+
+def clear_old_tool_calls(request: Request) -> int:
+    """Anthropic's clear_tool_uses edit (request.context_edits), done here for the services that have no context
+    editing of their own (chat completions): past the edit's trigger, the oldest tool calls' results (and inputs) are
+    replaced by a note, all but the last `keep`, at least `clear_at_least` tokens at a time. The request's messages are
+    changed in place, so a tool loop's later requests start with the same cleared history, and the provider's prefix
+    cache holds between clearings. A plain chat history may be edited; nothing here preserves reasoning. Returns the
+    tokens cleared now (characters over four)."""
+
+    def size(value: Any) -> int:
+        return len(json.dumps(value, default=lambda o: o.__dict__)) // 4
+
+    cleared = 0
+    for edit in request.context_edits:
+        if edit.get("type") != "clear_tool_uses_20250919":
+            continue
+        if size([request.system, request.messages]) <= int(edit["trigger"]["value"]):
+            continue
+        excluded = set(edit.get("exclude_tools", []))
+        uses = [
+            b
+            for m in request.messages
+            if m.role == "assistant"
+            for b in m.blocks
+            if isinstance(b, ToolUse) and b.name not in excluded
+        ]
+        old = {b.id: b for b in uses[: max(0, len(uses) - int(edit.get("keep", {}).get("value", 3)))]}
+        results = [
+            b
+            for m in request.messages
+            for b in m.blocks
+            if isinstance(b, ToolResult) and b.tool_use_id in old and b.content != CLEARED
+        ]
+        gain = sum(size(r.content) for r in results)
+        if edit.get("clear_tool_inputs"):
+            gain += sum(size(old[r.tool_use_id].input) for r in results)
+        if not results or gain < int((edit.get("clear_at_least") or {}).get("value", 0)):
+            continue
+        for r in results:
+            r.content = CLEARED
+            if edit.get("clear_tool_inputs"):
+                old[r.tool_use_id].input = {}
+        cleared += gain
+    return cleared
+
+
 async def complete_openai(
     client: httpx.AsyncClient, connection: Connection, key: str | None, request: Request, on_text: OnText
 ) -> Completion:
+    cleared = clear_old_tool_calls(request) if request.context_edits else 0
     headers = {"content-type": "application/json"}
     if key:
         headers["authorization"] = f"Bearer {key}"
@@ -413,7 +462,7 @@ async def complete_openai(
         headers["x-title"] = "Spinus DAW"
     text = ""
     calls: dict[int, dict[str, str]] = {}
-    usage = Usage()
+    usage = Usage(cleared_tokens=cleared)
     stop_reason = ""
     model = request.model
     limits = ["max_tokens", "max_completion_tokens"]  # OpenAI's own service is asked through complete_responses

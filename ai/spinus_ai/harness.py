@@ -63,7 +63,8 @@ MOST_LINES = 24  # a tool's answer is cut to this many issue lines ("and N more"
 # Anthropic's context editing: once a request's input passes CLEAR_AFTER tokens, the provider clears the oldest tool
 # calls and their results (all but the last KEEP_CALLS), at least CLEAR_AT_LEAST tokens at a time so the cache is
 # rewritten seldom (each clearing starts it again). The calls' arguments go too (clear_tool_inputs): the notes a write
-# sent are in the working copy, and read shows them again. finish is kept.
+# sent are in the working copy, and read shows them again. finish is kept. Services without context editing (chat
+# completions: DeepSeek, OpenRouter, local servers) get the same edit done in Spinus (gateway.clear_old_tool_calls).
 CLEAR_AFTER = 30000
 KEEP_CALLS = 8
 CLEAR_AT_LEAST = 8000

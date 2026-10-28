@@ -510,9 +510,10 @@ reported them:
 - input, and how much of it was read from the provider's cache, which costs less;
 - output, and of that the reasoning.
 
-Nothing about it is kept beyond the song itself. With an Anthropic connection, a long session also lets
-the provider clear the oldest tool calls from what it reads (the working copy on your computer keeps everything).
-The page counts what was cleared.
+Nothing about it is kept beyond the song itself. In a long session the oldest tool calls are cleared from what
+the model reads, a batch at a time (the working copy on your computer keeps everything): Anthropic does this on its
+side; for OpenAI-compatible services such as DeepSeek or OpenRouter, Spinus does it before sending. The page counts
+what was cleared.
 
 There's no token limit that could cut a song short when it's almost finished. If an answer still reaches
 the model's own length limit, Spinus asks it to go on and joins the pieces. You control the cost with the
