@@ -948,3 +948,52 @@ def test_chat_services_clear_old_tool_calls_in_batches_as_anthropic_does() -> No
     assert uses[1].input == {} and uses[-1].input["part"] == "bass"
     turn(9)  # one more call: less than clear_at_least to gain, so the history (and the cache) stays as it was
     assert gateway.clear_old_tool_calls(request) == 0
+
+
+def test_the_sections_a_description_names_are_read_in_generic_words() -> None:
+    assert harness.asked_sections(
+        "an atmospheric intro; verse 1; a pre-chorus that builds; a chorus; a half-time breakdown; a build-up with a "
+        "snare roll; a final double chorus; and an outro"
+    ) == [["intro"], ["verse"], ["pre-chorus"], ["chorus"], ["breakdown"], ["build-up"], ["double chorus"], ["outro"]]
+    assert harness.asked_sections("a breakdown or bridge, then the chorus; the bass drops back") == [
+        ["breakdown", "bridge"],
+        ["chorus"],
+    ]  # either will do, and a verb isn't a drop
+    assert harness.asked_sections("a dreamy song in D minor") == []
+
+
+def described(text: str) -> dict[str, Any]:
+    return {**BRIEF, "summary": {**summary(), "described": {"text": text}}}
+
+
+async def test_check_names_the_sections_the_description_asked_for_and_the_model_adds_them(tmp_path: Path) -> None:
+    text = "A song with a guitar solo and a breakdown, then the final chorus."
+    ws = harness.Workspace.start(harness.setup_of(described(text)), 5, "sketch")
+    missing = [line for line in ws.issues() if line.startswith("form:")]
+    assert len(missing) == 2 and "a solo" in missing[0] and "a breakdown" in missing[1]
+    sections = [
+        {"id": sid, "kind": s["kind"], "bars": s["bars"], "chords": s["chords"]} for sid, s in ws.sections.items()
+    ]
+    chords = sections[-1]["chords"]
+    fixed = {
+        "sections": [
+            *sections,
+            {"id": "solo", "kind": "bridge", "bars": 8, "chords": chords},
+            {"id": "breakdown", "kind": "bridge", "bars": 8, "chords": chords},
+        ],
+        "order": [*ws.order[:-1], "solo", "breakdown", ws.order[-1]],
+    }
+    # Through the fake gateway: the model checks, adds the sections by name, checks again and finishes.
+    sent: list[dict[str, Any]] = []
+    script: Script = [[("check", {})], [("set_form", fixed)], [("check", {})], [("finish", {"summary": "Done."})]]
+    service = scripted(tmp_path, script, sent)
+    await connect(service)
+    song = await run_job(
+        service,
+        "ai.v1.song.compose",
+        params(tools="basic", summary={**summary(), "described": {"text": text}}),
+    )
+    first, second = (sent[i]["messages"][-1]["content"][0]["content"] for i in (1, 3))
+    assert "asks for a solo" in first and "asks for a breakdown" in first
+    assert "asks for" not in second
+    assert {"solo", "breakdown"} <= {s["id"] for s in song["sections"]}

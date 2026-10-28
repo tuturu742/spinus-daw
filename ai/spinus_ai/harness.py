@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import dataclasses
+import itertools
 import json
 import math
 import re
@@ -140,7 +141,9 @@ TOOLS = [
     Tool(
         "set_form",
         "Set the sections and their order (and the tempo and key). Notes of sections that go are dropped; a "
-        "section that gets shorter keeps its first bars.",
+        "section that gets shorter keeps its first bars. A section's kind is one of intro, verse, chorus, bridge, "
+        "outro: name its id by what it is (prechorus, solo, breakdown, buildup, drop, interlude) so a pre-chorus, a "
+        "solo or a breakdown the description asks for is there by name.",
         schema(
             {
                 "sections": {"type": "array", "items": SECTION_ITEM},
@@ -576,6 +579,45 @@ master for add_effect: end its chain with a limiter (ceiling about -1 dB) so the
 see the balance. Less is more: a few clear moves beat effects on every part."""
 
 TOOL_NAMES = [t.name for t in TOOLS]
+
+# Sections a description can ask for, in generic words: the name the finding uses, how the text says it, and what a
+# section's id (or kind) shows when the form has one. Kinds are only intro, verse, chorus, bridge and outro, so the
+# others are found by the id the model gives the section.
+NAMED_SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
+    ("intro", r"\bintro(?:duction)?s?\b", ("intro",)),
+    ("verse", r"\bverses?\b", ("verse",)),
+    ("pre-chorus", r"\bpre[- ]?choruse?s?\b", ("pre",)),
+    ("chorus", r"\b(?<!pre-)(?<!pre)choruse?s?\b", ("chorus",)),
+    ("bridge", r"\bbridges?\b", ("bridge",)),
+    ("solo", r"\bsolos?\b", ("solo",)),
+    ("breakdown", r"\bbreak[- ]?downs?\b", ("breakdown",)),
+    ("build-up", r"\bbuild[- ]?ups?\b", ("build",)),
+    ("drop", r"\bdrops?\b(?!\s+(?:back|out|off|down|away|to)\b)", ("drop",)),
+    ("interlude", r"\binterludes?\b", ("interlude",)),
+    ("double chorus", r"\bdouble[- ]choruse?s?\b", ("double",)),
+    ("outro", r"\boutros?\b", ("outro",)),
+]
+
+
+def asked_sections(text: str) -> list[list[str]]:
+    """The sections the description names, each a group of names any one of which will do ("a breakdown or
+    bridge": either)."""
+    lowered = text.lower()
+    found = [(m.start(), m.end(), name) for name, pattern, _ in NAMED_SECTIONS for m in re.finditer(pattern, lowered)]
+    found.sort()
+    groups: list[list[str]] = []
+    for i, (start, _, name) in enumerate(found):
+        before = found[i - 1] if i else None
+        if before is not None and re.fullmatch(r"\s+or\s+(?:an?\s+)?", lowered[before[1] : start]):
+            group = next(g for g in groups if before[2] in g)
+            if name not in group:
+                group.append(name)
+            continue
+        if not any(name in g and len(g) == 1 for g in groups):
+            groups.append([name])
+    return groups
+
+
 MASTER = "master"  # add_effect's name for the song's master insert
 
 
@@ -1632,10 +1674,37 @@ class Workspace:
                     out.append(f"{sid}: {s['bars']} bars, off the 4-bar phrases (the style's: {lengths})")
         if not only_part and not only_section and "arrangement" in self.groups:
             out += self.energy_issues()
+        if not only_part and not only_section:
+            out += self.form_issues()
         if not only_part and not only_section and "mix" in self.groups:
             on_master = [e["effect"] for e in self.extra.get("effects", []) if e["part"] == MASTER]
             if "limiter" not in on_master:
                 out.append("master: no limiter (add_effect part master, effect limiter, ceiling '-1 dB')")
+        return out
+
+    def form_issues(self) -> list[str]:
+        """Sections the description asks for that the form does not have (by its sections' ids and kinds)."""
+        text = str((self.setup.summary.get("described") or {}).get("text") or "")
+        if not text:
+            return []
+        markers = {name: shows for name, _, shows in NAMED_SECTIONS}
+        kinds = [self.sections[sid]["kind"] for sid in self.order]
+
+        def has(name: str) -> bool:
+            if name == "double chorus" and any(a == b == "chorus" for a, b in itertools.pairwise(kinds)):
+                return True  # a chorus played twice in a row
+            if name in ("intro", "verse", "chorus", "bridge", "outro") and name in kinds:
+                return True
+            return any(m in sid.lower().replace("-", "").replace("_", "") for sid in self.order for m in markers[name])
+
+        out = []
+        for group in asked_sections(text):
+            if not any(has(name) for name in group):
+                wanted = " or a ".join(group)
+                out.append(
+                    f"form: the description asks for a {wanted}, and no section is one (add it in set_form, its id "
+                    f"naming it, e.g. '{markers[group[0]][0]}'; its kind can be bridge)"
+                )
         return out
 
     def tool_check(self, part: str = "", section: str = "") -> str:

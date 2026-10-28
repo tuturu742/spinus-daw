@@ -453,7 +453,9 @@ programmer runs tests:
 - two parts in the same register;
 - notes a bar against your songs' parts;
 - the drums' groove against your songs';
-- a lead repeating one bar, a part with no notes, sections off the 4-bar phrases.
+- a lead repeating one bar, a part with no notes, sections off the 4-bar phrases;
+- sections your description asks for that the form doesn't have: a pre-chorus, a solo, a breakdown, a build-up,
+  a drop, a double chorus, an outro ("a breakdown or bridge": either will do).
 
 It fixes what the checks find with small edits of a few bars, then says it's finished. While it works, the
 page shows each step in plain words ("Writing the bass for the chorus", "Checking: 2 issues") and the tokens
