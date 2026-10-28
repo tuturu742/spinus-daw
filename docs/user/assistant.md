@@ -31,7 +31,7 @@ Click **Add...**, choose a provider, and **Save and test**. You can add several 
 |---|---|
 | **Anthropic (Claude)** | An API key from console.anthropic.com. |
 | **OpenRouter** | One key from openrouter.ai for many models (Claude, GPT, open models). OpenRouter reports what each answer cost. |
-| **OpenAI-compatible service** | Its address and key. Choose this for an OpenAI key (from platform.openai.com). |
+| **OpenAI-compatible service** | Its address and key. Choose this for an OpenAI key (from platform.openai.com). Spinus talks to OpenAI's own address in OpenAI's newer way (its Responses API), which its newest models need. |
 | **Local server** | Nothing leaves your computer and nothing costs money. Needs a model server running on this computer (below). No key. |
 
 - Keys are stored in your system's keyring (the same safe store your desktop uses for Wi-Fi passwords),
@@ -45,6 +45,10 @@ Click **Add...**, choose a provider, and **Save and test**. You can add several 
 - **Assistant model**: choose the connection in the list, pick a model and click **Use for the
   assistant**. If that connection is down, busy or refuses the key, the assistant tries your other
   connections in the order you added them, and each answer says which model gave it.
+- **"Reasoning was turned off for this answer"**: some services don't let a model that thinks before it
+  answers (as OpenAI's newest models do) use Spinus's tools through their chat API. Spinus then asks again
+  with the model's thinking off, and the assistant says so. The answer still comes, perhaps a little less
+  considered.
 - **Pattern generator model**: the Piano Roll's [Generate](piano-roll.md#generate) uses the assistant's
   model, or the one you pick with **Use for patterns**.
 - **Used this month**, near the bottom of the window above the Manual search and Analysis engine
