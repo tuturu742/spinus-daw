@@ -3,7 +3,7 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
-## Not released yet
+## 0.1.0-alpha.3 (2026-10-28)
 
 ### Starter pack
 
