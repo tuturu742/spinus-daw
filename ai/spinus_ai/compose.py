@@ -317,6 +317,16 @@ def total_of(requests: list[dict[str, int]], what: str) -> int:
     return sum(int(r.get(what, 0)) for r in requests)
 
 
+@dataclass
+class Harnessed:
+    """What the harness's first request holds (spinus_ai.harness), for its estimate."""
+
+    system: str
+    text: str
+    tools: list[Tool]
+    sections: int
+
+
 async def estimate(
     client: httpx.AsyncClient,
     connections: ConnectionStore,
@@ -325,17 +335,22 @@ async def estimate(
     setup: Setup,
     effort: str,
     rounds: int,
+    harness: Harnessed | None = None,
 ) -> dict[str, Any]:
-    """The tokens a song may take, as a range: the request's input counted by the provider where it can
-    (Anthropic's count_tokens; else about four characters a token), the answer and its reasoning from the
-    user's own past runs with that model and level (else from REASONING_RANGE), then each revision."""
+    """The tokens a song may take, as a range: the first request's input counted by the provider where it can
+    (Anthropic's count_tokens; else about four characters a token), then the input and the answer (with its
+    reasoning) from the user's own past runs with that model, level and way of writing; without runs, from
+    REASONING_RANGE (and, through the harness, from how many turns the parts and sections may take: each turn
+    sends the conversation so far again, mostly read from the provider's cache). Then each revision."""
     routes = routing.resolve(FEATURE)
     if not routes:
         return {"available": False, "reason": "No AI connection is set up: add one in Options > AI."}
     route = routes[0]
-    request = Request(route.model, SYSTEM, [Message("user", [Text(first_message(setup))])], [WRITE_SONG], None, effort)
+    system, text, tools = (harness.system, harness.text, harness.tools) if harness else (
+        SYSTEM, first_message(setup), [WRITE_SONG])  # fmt: skip
+    request = Request(route.model, system, [Message("user", [Text(text)])], tools, None, effort)
     counted = False
-    input_tokens = round(len(SYSTEM + first_message(setup) + json.dumps(WRITE_SONG.input_schema)) / 4)
+    input_tokens = round(len(system + text + json.dumps([t.input_schema for t in tools])) / 4)
     if route.connection.provider == "anthropic":
         key = connections.key_for(route.connection)
         if key:
@@ -343,41 +358,62 @@ async def estimate(
                 input_tokens, counted = await count_anthropic(client, route.connection, key, request), True
     parts = max(1, len(setup.written()))
     rounds = max(0, min(MOST_ROUNDS, rounds))
+    kind = "harness" if harness else "write"
+    revise_kind = "harness-revise" if harness else "revise"
 
-    def from_runs(kind: str) -> tuple[int, int] | None:
-        runs = records.like(route.model, effort, kind)
-        per_part = [
-            total_of(r["requests"], "output") / max(1, int(r.get("parts", 1))) for r in runs if r.get("requests")
-        ]
-        if not per_part:
+    def from_runs(kind: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
+        """The input and output a run of this kind took, per part, the least and the most (x parts)."""
+        runs = [r for r in records.like(route.model, effort, kind) if r.get("requests")]
+        if not runs:
             return None
-        low, high = min(per_part), max(per_part)
-        if len(per_part) == 1:
-            low, high = low * 0.8, high * 1.25
-        return round(low * parts), round(high * parts)
+        spread = (0.8, 1.25) if len(runs) == 1 else (1.0, 1.0)
+
+        def span(what: str) -> tuple[int, int]:
+            each = [total_of(r["requests"], what) / max(1, int(r.get("parts", 1))) for r in runs]
+            return round(min(each) * spread[0] * parts), round(max(each) * spread[1] * parts)
+
+        return span("input"), span("output")
 
     guess = answer_guess(setup)
     lo, hi = REASONING_RANGE.get(effort, REASONING_RANGE[""])
-    first = from_runs("write")
-    runs = len(records.like(route.model, effort, "write"))
-    write_out = first or (round(guess * lo), round(guess * hi))
-    revision = from_runs("revise") or (round(write_out[0] / 2), write_out[1])
-    revision_in = input_tokens + guess  # the song is sent back with the findings
-    low = input_tokens + write_out[0] + rounds * (revision_in + revision[0])
-    high = input_tokens + write_out[1] + rounds * (revision_in + revision[1])
+    if harness:
+        # Turns: a few for the form and the checks, one or two a part (loops, motifs, copies), up to a few a section
+        # of each part; each sends the conversation again (its answers and the tools' short results).
+        turns = (2 * parts + 4, 2 * parts * max(1, harness.sections) + 10)
+        out_guess = (round(guess * lo), round(guess * hi * 2))
+        in_guess = (
+            round(turns[0] * input_tokens + out_guess[0] * turns[0] / 2),
+            round(turns[1] * input_tokens + out_guess[1] * turns[1] / 2),
+        )
+    else:
+        out_guess = (round(guess * lo), round(guess * hi))
+        in_guess = (input_tokens, input_tokens)
+    first = from_runs(kind)
+    first_in, first_out = first or (in_guess, out_guess)
+    again = from_runs(revise_kind)
+    if again is None:
+        sent_back = guess if not harness else 0  # the harness revises the working copy; one-shot sends the song
+        again = (
+            (round(first_in[0] / 2) + sent_back, first_in[1] + sent_back),
+            (round(first_out[0] / 2), first_out[1]),
+        )
+    rev_in, rev_out = again
     return {
         "available": True,
         "connection": route.connection.name,
         "model": route.model,
         "effort": effort,
-        "input": input_tokens,
+        "way": kind,
+        "input": input_tokens,  # the first request's
         "inputCounted": counted,  # counted by the provider (else about)
-        "output": list(write_out),
-        "perRevision": [revision_in + revision[0], revision_in + revision[1]],
-        "low": low,
-        "high": high,
-        "fromRuns": runs,  # 0: from the reasoning level's usual range
+        "inputRange": list(first_in),  # the whole first round's
+        "output": list(first_out),
+        "perRevision": [rev_in[0] + rev_out[0], rev_in[1] + rev_out[1]],
+        "low": first_in[0] + first_out[0] + rounds * (rev_in[0] + rev_out[0]),
+        "high": first_in[1] + first_out[1] + rounds * (rev_in[1] + rev_out[1]),
+        "fromRuns": len(records.like(route.model, effort, kind)),  # 0: from the level's usual range
         "rounds": rounds,
+        "cached": bool(harness) and route.connection.provider == "anthropic",
     }
 
 

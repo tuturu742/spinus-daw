@@ -82,6 +82,7 @@ class Service:
         self.connections = ConnectionStore(config, keys)
         self.routing = Routing(config, self.connections)
         self.usage = UsageLog(config)
+        self.compose_stops: dict[str, dict[str, bool]] = {}  # an AI writer's job -> "stop now" said
         self.manual = Manual(docs)
         self.commands = load_commands(schema)
         self.models = ModelStore(config, models)
@@ -155,6 +156,7 @@ class Service:
             "ai.v1.song.prompt": self.song_prompt,
             "ai.v1.song.compose": self.song_compose,
             "ai.v1.song.composeEstimate": self.song_compose_estimate,
+            "ai.v1.song.composeStop": self.song_compose_stop,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -299,6 +301,7 @@ class Service:
                 await say({"kind": "error", "message": str(error)})
             finally:
                 self.jobs.pop(job, None)
+                self.compose_stops.pop(job, None)
 
         self.jobs[job] = asyncio.create_task(run())
         return job
@@ -1005,14 +1008,16 @@ class Service:
         return setup, effort
 
     async def song_compose(self, params: dict[str, Any], notify: Notify) -> Any:
-        """A song written by the AI (spinus_ai.compose), opt-in: {summary, seed, parts, arrangement, candidates
-        (part id -> [{id, name}]: sounds from the sound index it may pick), current (part id -> its sound in
-        words), effort ("low", "medium", "high" or none: the model's own), song and levels/problems (a song it
-        wrote, with how loud each part played and why one could not: one revision round)} -> the song, as
-        ai.v1.song.write's, with `composed` (the model, each request's tokens, Spinus's findings) and `sounds`
-        (the picks). Without a connection, or when the AI fails or its answer is not usable, the rules' song (or
-        the song before the revision) with a note saying so."""
-        from . import compose, songwriter
+        """A song written by the AI, opt-in: {summary, seed, parts, arrangement, candidates (part id -> [{id, name}]:
+        sounds from the sound index it may pick), current (part id -> its sound in words), effort ("low", "medium",
+        "high" or none: the model's own), way ("harness", the default: the model composes with the music harness's
+        tools, spinus_ai.harness; "one-shot": one answer with the whole song, spinus_ai.compose), song and
+        levels/problems (a song it wrote, with how loud each part played and why one could not: one revision
+        round)} -> the song, as ai.v1.song.write's, with `composed` (the model, each request's tokens, Spinus's
+        findings) and `sounds` (the picks). ai.v1.song.composeStop {job} stops it, keeping the best checked
+        version. Without a connection, or when the AI fails or its answer is not usable, the rules' song (or the
+        song before the revision) with a note saying so."""
+        from . import compose, harness, songwriter
 
         setup, effort = self.compose_setup(params)
         try:
@@ -1020,6 +1025,9 @@ class Service:
         except (TypeError, ValueError) as error:
             raise RpcError(-32602, "seed must be a number.") from error
         size = str(params.get("arrangement") or "sketch")
+        way = str(params.get("way") or "harness")
+        if way not in ("harness", "one-shot"):
+            raise RpcError(-32602, "way is harness or one-shot.")
         previous = params.get("song")
         if previous is not None:
             try:
@@ -1028,16 +1036,46 @@ class Service:
                 raise RpcError(-32602, str(error)) from error
             if not isinstance(previous.get("composed"), dict):
                 raise RpcError(-32602, "Only a song the AI wrote can be revised.")
+            way = "harness" if previous["composed"].get("harness") else "one-shot"
         records = compose.UsageRecords(self.config)
+        flag = {"stop": False}
 
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
             try:
+                if way == "harness":
+                    return await harness.write(
+                        self.client,
+                        self.connections,
+                        self.routing,
+                        self.usage,
+                        records,
+                        setup,
+                        seed,
+                        size,
+                        effort,
+                        say,
+                        lambda: flag["stop"],
+                        previous,
+                        params.get("levels"),
+                        params.get("problems"),
+                    )
                 if previous is not None:
-                    return await compose.revise(self.client, self.connections, self.routing, self.usage, records,
-                                                setup, previous, params.get("levels"), params.get("problems"),
-                                                effort, say)  # fmt: skip
-                return await compose.compose(self.client, self.connections, self.routing, self.usage, records, setup,
-                                             seed, size, effort, say)  # fmt: skip
+                    return await compose.revise(
+                        self.client,
+                        self.connections,
+                        self.routing,
+                        self.usage,
+                        records,
+                        setup,
+                        previous,
+                        params.get("levels"),
+                        params.get("problems"),
+                        effort,
+                        say,
+                    )
+                return await compose.compose(
+                    self.client, self.connections, self.routing, self.usage, records, setup, seed, size, effort, say
+                )
             except NoConnection:
                 note = "no AI connection is set up"
             except ProviderError as error:
@@ -1048,21 +1086,42 @@ class Service:
                 return kept
             return compose.rules_song(setup, seed, size, f"Written by the rules: {note}.", [])
 
-        return {"job": self.job(notify, work)}
+        job = self.job(notify, work)
+        self.compose_stops[job] = flag
+        return {"job": job}
+
+    async def song_compose_stop(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Stops an AI writer's job after the model's current turn, keeping the best checked version: {job} ->
+        {stopping}."""
+        flag = self.compose_stops.get(str(params.get("job", "")))
+        if flag is None:
+            return {"stopping": False}
+        flag["stop"] = True
+        return {"stopping": True}
 
     async def song_compose_estimate(self, params: dict[str, Any], notify: Notify) -> Any:
         """What the AI writer would use (spinus_ai.compose.estimate): {summary, parts, arrangement, candidates,
-        effort, rounds} -> {available, connection, model, input (counted by the provider when inputCounted), low,
-        high (the whole song's tokens, a range), fromRuns (how many of the user's own runs it is from), ...}."""
-        from . import compose
+        effort, rounds, way} -> {available, connection, model, input (the first request's, counted by the provider
+        when inputCounted), low, high (the whole song's tokens, a range), fromRuns (how many of the user's own runs
+        it is from), cached (most input read from the provider's cache), ...}."""
+        from . import compose, harness
 
         setup, effort = self.compose_setup(params)
         try:
             rounds = int(params.get("rounds", 1))
+            seed = int(params.get("seed", 0) or 0) & 0x7FFFFFFF
         except (TypeError, ValueError) as error:
-            raise RpcError(-32602, "rounds must be a number.") from error
+            raise RpcError(-32602, "rounds and seed are numbers.") from error
         records = compose.UsageRecords(self.config)
-        return await compose.estimate(self.client, self.connections, self.routing, records, setup, effort, rounds)
+        harnessed = None
+        if str(params.get("way") or "harness") == "harness":
+            ws = harness.Workspace.start(setup, seed, str(params.get("arrangement") or "sketch"))
+            harnessed = compose.Harnessed(
+                harness.SYSTEM, harness.first_message(ws), list(harness.TOOLS), len(ws.sections)
+            )
+        return await compose.estimate(
+            self.client, self.connections, self.routing, records, setup, effort, rounds, harnessed
+        )
 
     async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read

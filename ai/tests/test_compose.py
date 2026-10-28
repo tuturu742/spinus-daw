@@ -106,7 +106,7 @@ async def connect(service: Any) -> None:
 
 
 def params(**more: Any) -> dict[str, Any]:
-    return {"summary": summary(), "seed": 7, "parts": PARTS, "candidates": CANDIDATES, **more}
+    return {"summary": summary(), "seed": 7, "parts": PARTS, "candidates": CANDIDATES, "way": "one-shot", **more}
 
 
 def played(song: dict[str, Any], pid: str) -> list[dict[str, Any]]:
@@ -256,7 +256,8 @@ async def test_the_estimate_is_a_range_and_then_comes_from_the_users_runs(tmp_pa
     after = await service.handle("ai.v1.song.composeEstimate", params(effort="high", rounds=0), no_notify)
     # One run of 3000 output tokens for four parts: 750 a part, from 0.8 to 1.25 times that.
     assert after["fromRuns"] == 1 and after["output"] == [2400, 3750]
-    assert after["low"] == 1500 + 2400 and after["high"] == 1500 + 3750
+    # Its input too (1200): 0.8 to 1.25 times it.
+    assert after["inputRange"] == [960, 1500] and after["low"] == 960 + 2400 and after["high"] == 1500 + 3750
     other = await service.handle("ai.v1.song.composeEstimate", params(effort="medium", rounds=0), no_notify)
     assert other["fromRuns"] == 0  # another level: not from these runs
 

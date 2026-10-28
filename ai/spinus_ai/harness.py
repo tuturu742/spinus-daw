@@ -1,0 +1,1415 @@
+"""The music harness: the Track creator's AI writes a song the way a coding agent writes code, with tools.
+
+A song is a working copy kept here (Workspace): its form (sections, bars, chords, energy, tempo, key), every part's
+notes per section, the sound picked for each part and named motifs. The model never sends the whole song: it reads
+and edits the working copy through small tools, checks it like code ("tests and linter": short issue lists with
+locations, as a compiler gives them), fixes what the checks find with patches of a few bars, and calls finish.
+Re-using a motif or copying a section costs a line, not the notes again, so a song costs fewer tokens than writing
+it out whole (spinus_ai.compose, the one-shot writer it is compared with: `python -m spinus_ai.harness eval`).
+
+Tools (TOOLS; each answers in a few lines of text):
+
+- read: brief (the style and the parts), form, read (a part's notes in a section, or some of its bars), list_sounds;
+- write: set_form, set_chords, write (a part's notes in a section, a loop repeated), edit (only some bars), motif
+  (a named phrase) and place (a motif into a part at a bar, transposed, repeated, fitted to the chords), copy
+  (a section's notes to another), pick_sound, rules_write (Spinus's offline writer fills a part or a section);
+- check: check (notes outside the key or rubbing on the chords, parts in the same register, notes a bar against the
+  references', the drums' groove against theirs, repetition, empty parts, section lengths), measure (how loud each
+  part played with its sound when Spinus last played it, and a balance from the notes' velocities);
+- finish: the song is checked a last time and goes to the Track creator's page, where the user hears it and
+  Applies it (one undo step; the Replace question as for every written song).
+
+The loop is the assistant's (spinus_ai.assistant.tool_loop). The request's start (tools, system prompt, brief) is
+cached on Anthropic between turns. History is never edited (models that reason refuse an edited history), so tool
+results are kept short instead. There is no token cap (an answer is never cut short on purpose): the cost is set by
+the reasoning level and the rounds, shown before as an estimate and live as the running total. "Stop now" keeps the
+best checked version so far; a model that never calls finish is stopped after MOST_TURNS with the same.
+
+The same tools are served outside Spinus for development and evaluation (`python -m spinus_ai.harness mcp`, an MCP
+server over stdio), so a coding agent can compose through the identical harness from a saved brief.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import math
+import re
+import sys
+import tempfile
+from collections import Counter
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from . import compose
+from . import songwriter as sw
+from .assistant import NoConnection, Say, answered_by, tool_loop
+from .connections import ConnectionStore
+from .gateway import Completion, Message, Request, Text, Tool, ToolUse
+from .routing import Route, Routing
+from .usage import UsageLog
+
+MOST_TURNS = 150  # generous: a model that never calls finish is stopped here, with the best checked version
+MOST_LINES = 24  # a tool's answer is cut to this many issue lines ("and N more")
+
+SYSTEM = """You are a songwriter and arranger composing inside Spinus, a digital audio workstation, through a \
+music harness: tools that read and edit a working copy of the song, check it, and finish it. Work like a good \
+programmer: look at the brief and form, write each part, run check, fix what it reports with small edits, and \
+call finish when the song is good. Write an original song in the style of the brief; never copy a reference song.
+
+Write idiomatically for each instrument: a bass that locks with the kick, chords voiced for the instrument \
+(guitar strums and power chords, piano voicings, held pads), a singable lead with phrases and rests, drums with a \
+groove, fills at section ends and a crash where a section starts. Thin verses, full choruses; parts come and go.
+
+Notation: a note is "step pitch length velocity"; step is the sixteenth from the start of the section (or of the \
+loop, motif or bar range you write), pitch a MIDI note (60 is middle C), length in sixteenths, velocity 1 to 127; \
+notes are separated by semicolons. Drum parts write the drum's name (kick, snare, hat, openHat, crash, tomLow, \
+tomMid, tomHigh) instead of the pitch. Chords are Roman numerals (i, iv, V7, bVI, Imaj7, Vsus4, vii°...).
+
+Save tokens: write a loop once with loop_bars instead of every bar; reuse phrases with motif and place; copy a \
+section that repeats; fix a few bars with edit, not the whole part; let rules_write fill a part you don't need to \
+shape by hand. Riser and impact parts are placed by Spinus. Keep tool calls small; don't explain between them."""
+
+
+def schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+    return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
+
+
+PART = {"type": "string", "description": "The part's id, as the brief lists it"}
+SECTION = {"type": "string", "description": "The section's id, as form lists it"}
+NOTES = {"type": "string", "description": "'step pitch length velocity; ...' (drums: the drum's name for pitch)"}
+BARS = {"type": "string", "description": "Bars of the section, from 1: '3' or '5-8'"}
+SECTION_ITEM = schema(
+    {
+        "id": {"type": "string"},
+        "kind": {"type": "string", "enum": list(sw.KINDS)},
+        "bars": {"type": "integer"},
+        "chords": {"type": "array", "items": {"type": "string"}},
+        "barsPerChord": {"type": "integer", "enum": [1, 2]},
+        "energy": {"type": "number"},
+    },
+    ["id", "kind", "bars", "chords"],
+)
+
+TOOLS = [
+    Tool("brief", "The style, the key and tempo, and the parts with their roles, ranges and sounds.", schema({}, [])),
+    Tool("form", "The sections: kind, bars, chords, energy; the order; which parts have notes where.", schema({}, [])),
+    Tool(
+        "read",
+        "A part's notes in a section (or some of its bars), in the notation.",
+        schema({"part": PART, "section": SECTION, "bars": BARS}, ["part", "section"]),
+    ),
+    Tool(
+        "list_sounds",
+        "The sounds a part may use, from the user's sound index (optionally those whose name has `query`).",
+        schema({"part": PART, "query": {"type": "string"}}, ["part"]),
+    ),
+    Tool(
+        "set_form",
+        "Set the sections and their order (and the tempo and key). Notes of sections that go are dropped; a "
+        "section that gets shorter keeps its first bars.",
+        schema(
+            {
+                "sections": {"type": "array", "items": SECTION_ITEM},
+                "order": {"type": "array", "items": {"type": "string"}},
+                "tempo": {"type": "number"},
+                "key": {"type": "string", "description": "'A minor', 'F# major'"},
+            },
+            ["sections", "order"],
+        ),
+    ),
+    Tool(
+        "set_chords",
+        "Set one section's chord loop.",
+        schema(
+            {
+                "section": SECTION,
+                "chords": {"type": "array", "items": {"type": "string"}},
+                "barsPerChord": {"type": "integer", "enum": [1, 2]},
+            },
+            ["section", "chords"],
+        ),
+    ),
+    Tool(
+        "write",
+        "Write a part's notes for a whole section (replacing what it had): a loop of loop_bars bars repeated over "
+        "the section (default: the section's length, no repeat). An empty string: the part rests there.",
+        schema(
+            {"part": PART, "section": SECTION, "notes": NOTES, "loop_bars": {"type": "integer"}},
+            ["part", "section", "notes"],
+        ),
+    ),
+    Tool(
+        "edit",
+        "Replace a part's notes in some bars of a section only (steps count from the first of those bars).",
+        schema({"part": PART, "section": SECTION, "bars": BARS, "notes": NOTES}, ["part", "section", "bars", "notes"]),
+    ),
+    Tool(
+        "motif",
+        "Name a phrase (a riff, a hook, a fill) to place in parts later; steps from its start.",
+        schema({"name": {"type": "string"}, "notes": NOTES, "bars": {"type": "integer"}}, ["name", "notes", "bars"]),
+    ),
+    Tool(
+        "place",
+        "Place a motif into a part at a bar of a section (replacing the notes in the bars it covers): transposed "
+        "by semitones, repeated `times`, and with fit_chords each note moved to the nearest note that fits the "
+        "chord under it.",
+        schema(
+            {
+                "part": PART,
+                "section": SECTION,
+                "motif": {"type": "string"},
+                "bar": {"type": "integer", "description": "From 1"},
+                "transpose": {"type": "integer"},
+                "times": {"type": "integer"},
+                "fit_chords": {"type": "boolean"},
+            },
+            ["part", "section", "motif", "bar"],
+        ),
+    ),
+    Tool(
+        "copy",
+        "Copy the notes of a section to another (repeated or cut to its length), for all parts or those named.",
+        schema(
+            {"from_section": SECTION, "to_section": SECTION, "parts": {"type": "array", "items": PART}},
+            ["from_section", "to_section"],
+        ),
+    ),
+    Tool(
+        "pick_sound",
+        "Choose a part's sound from list_sounds by its id.",
+        schema({"part": PART, "sound": {"type": "string"}}, ["part", "sound"]),
+    ),
+    Tool(
+        "rules_write",
+        "Let Spinus's own rules write a part (in a section, or in all) from the form's chords.",
+        schema({"part": PART, "section": SECTION}, ["part"]),
+    ),
+    Tool(
+        "check",
+        "Check the song (or one part, or one section): an issue list with locations, or OK.",
+        schema({"part": PART, "section": SECTION}, []),
+    ),
+    Tool(
+        "measure",
+        "How loud each part played with its sound when Spinus last played them, and the balance its notes give.",
+        schema({"section": SECTION}, []),
+    ),
+    Tool(
+        "finish",
+        "The song is done: Spinus checks it a last time and gives it to the user to hear and apply.",
+        schema(
+            {"summary": {"type": "string", "description": "In a sentence or two, the idea of the song"}}, ["summary"]
+        ),
+    ),
+]
+TOOL_NAMES = [t.name for t in TOOLS]
+
+
+class Mistake(ValueError):
+    """A tool call that cannot be done; its reason goes back to the model as the tool's error."""
+
+
+def bar_range(text: Any, bars: int) -> tuple[int, int]:
+    """'3' or '5-8' (from 1) -> first and last bar (from 0), inside the section."""
+    match = re.fullmatch(r"\s*(\d+)\s*(?:-\s*(\d+))?\s*", str(text or ""))
+    if not match:
+        raise Mistake(f"bars is '3' or '5-8', not '{text}'")
+    first, last = int(match.group(1)), int(match.group(2) or match.group(1))
+    if not 1 <= first <= last <= bars:
+        raise Mistake(f"the section has bars 1 to {bars}")
+    return first - 1, last - 1
+
+
+@dataclass
+class Workspace:
+    """The song being written: its form, every part's notes per section, the sounds picked, the motifs."""
+
+    setup: compose.Setup
+    seed: int
+    size: str = "sketch"
+    tempo: float = 120.0
+    key: dict[str, Any] = field(default_factory=dict)
+    sections: dict[str, dict[str, Any]] = field(default_factory=dict)  # id -> {id, kind, bars, chords, hold, energy}
+    order: list[str] = field(default_factory=list)
+    notes: dict[str, dict[str, list[dict[str, Any]]]] = field(default_factory=dict)  # part -> section -> notes
+    sounds: dict[str, str] = field(default_factory=dict)
+    motifs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    by_rules: set[tuple[str, str]] = field(default_factory=set)  # (part, section) the rules wrote
+    levels: dict[str, Any] = field(default_factory=dict)  # part -> dB as the app measured it (None: silent)
+    problems: dict[str, str] = field(default_factory=dict)
+    summary: str = ""
+    finished: bool = False
+    calls: Counter[str] = field(default_factory=Counter)
+
+    # --- making one -------------------------------------------------------------------------------
+
+    @staticmethod
+    def start(setup: compose.Setup, seed: int, size: str) -> Workspace:
+        """A new song with the rules' form for the style (sections, lengths, chords) and no notes yet."""
+        rules = sw.write(setup.summary, seed, size, setup.parts)
+        ws = Workspace(setup, seed, size, float(rules["tempo"]), dict(rules["key"]))
+        for s in rules["sections"]:
+            hold = 2 if len(s["chords"]) >= 2 and s["chords"][0]["roman"] == s["chords"][1]["roman"] else 1
+            loop = [c["roman"] for c in s["chords"][::hold]][: len(s["loop"])] or ["i"]
+            ws.sections[s["id"]] = {
+                "id": s["id"],
+                "kind": s["kind"],
+                "bars": int(s["bars"]),
+                "chords": loop,
+                "hold": hold,
+                "energy": float(s["energy"]),
+            }
+        ws.order = [e["section"] for e in rules["arrangement"]]
+        return ws
+
+    @staticmethod
+    def from_song(setup: compose.Setup, song: dict[str, Any]) -> Workspace:
+        """The working copy of a song the harness wrote (to revise it)."""
+        kept = (song.get("composed") or {}).get("workspace")
+        if not isinstance(kept, dict):
+            raise ValueError("This song was not written through the harness, so there is nothing to revise.")
+        ws = Workspace(
+            setup, int(song["seeds"]["song"]), str(song.get("size", "sketch")), float(song["tempo"]), dict(song["key"])
+        )
+        ws.sections = {s["id"]: dict(s) for s in kept["sections"]}
+        ws.order = list(kept["order"])
+        ws.notes = json.loads(json.dumps(kept["notes"]))
+        ws.sounds = dict(kept.get("sounds") or {})
+        ws.motifs = dict(kept.get("motifs") or {})
+        ws.by_rules = {(p, s) for p, s in kept.get("byRules") or []}
+        return ws
+
+    def export(self) -> dict[str, Any]:
+        return {
+            "sections": [self.sections[sid] for sid in self.sections],
+            "order": self.order,
+            "notes": self.notes,
+            "sounds": self.sounds,
+            "motifs": self.motifs,
+            "byRules": sorted([list(x) for x in self.by_rules]),
+        }
+
+    def copy(self) -> Workspace:
+        other = Workspace(self.setup, self.seed, self.size, self.tempo, dict(self.key))
+        state = json.loads(json.dumps(self.export()))
+        other.sections = {s["id"]: s for s in state["sections"]}
+        other.order, other.notes, other.sounds, other.motifs = (
+            state["order"],
+            state["notes"],
+            state["sounds"],
+            state["motifs"],
+        )
+        other.by_rules = set(self.by_rules)
+        other.summary, other.finished = self.summary, self.finished
+        return other
+
+    # --- what the tools look at ---------------------------------------------------------------------
+
+    @property
+    def steps(self) -> int:
+        return self.setup.style.steps
+
+    def part(self, pid: Any) -> dict[str, str]:
+        found = next((p for p in self.setup.written() if p["id"] == str(pid)), None)
+        if found is None:
+            names = ", ".join(p["id"] for p in self.setup.written())
+            raise Mistake(f"there is no part '{pid}' (the parts: {names})")
+        return found
+
+    def section(self, sid: Any) -> dict[str, Any]:
+        found = self.sections.get(str(sid or "").lower())
+        if found is None:
+            raise Mistake(f"there is no section '{sid}' (the sections: {', '.join(self.sections)})")
+        return found
+
+    def drums(self, pid: str) -> bool:
+        return bool(sw.ROLES[self.part(pid)["role"]][4])
+
+    def plan(self) -> dict[str, Any]:
+        """The form as compose.check_plan gives it."""
+        return {
+            "tempo": self.tempo,
+            "key": self.key,
+            "sections": [self.sections[sid] for sid in self.sections if sid in self.order],
+            "order": self.order,
+        }
+
+    def chord_at(self, sid: str, bar: int) -> list[int]:
+        s = self.sections[sid]
+        roman = s["chords"][(bar // int(s["hold"])) % len(s["chords"])]
+        return sw.chord_tones(roman, int(self.key["tonic"]))
+
+    def song(self) -> dict[str, Any]:
+        """The song from the working copy, as songwriter.write gives songs (the rules fill parts with no notes)."""
+        written = {p: by for p, by in self.notes.items() if any(by.values())}
+        checked = compose.Checked(self.plan(), written, {}, dict(self.sounds), [], {})
+        checked.filled = [p["id"] for p in self.setup.written() if p["id"] not in written]
+        return compose.build_song(checked, self.setup, self.seed, self.size)
+
+    # --- notation -----------------------------------------------------------------------------------
+
+    def parse(self, pid: str, text: str, bars: int, loop_bars: int | None = None) -> tuple[list[dict[str, Any]], str]:
+        """Notes for `bars` bars from the notation (a loop repeated), and what was fixed in words."""
+        loop = max(1, min(bars, loop_bars or bars))
+        parsed = compose.parse_notes(str(text or ""), self.drums(pid), self.part(pid)["role"], loop, bars, self.steps)
+        if parsed.tokens and not parsed.notes:
+            raise Mistake("no note could be read: write 'step pitch length velocity; ...'")
+        fixed = []
+        if parsed.bad:
+            fixed.append(f"{parsed.bad} unreadable or past the loop, left out")
+        if parsed.folded:
+            low, high = compose.RANGES.get(self.part(pid)["role"], (24, 108))
+            fixed.append(
+                f"{parsed.folded} outside the range {sw.note_name(low)}-{sw.note_name(high)}, moved by octaves"
+            )
+        if parsed.snapped:
+            fixed.append(f"{parsed.snapped} moved onto the sixteenth grid")
+        return parsed.notes, ("; ".join(fixed))
+
+    def notation(self, pid: str, notes: list[dict[str, Any]], offset: int = 0) -> str:
+        drums = self.drums(pid)
+        return "; ".join(
+            f"{(int(n['start']) - offset) // sw.TICKS_PER_STEP} {n['drum'] if drums else n['pitch']} "
+            f"{max(1, round(int(n['length']) / sw.TICKS_PER_STEP))} {round(float(n['velocity']) * 127)}"
+            for n in notes
+        )
+
+    # --- the tools ----------------------------------------------------------------------------------
+
+    def call(self, name: str, args: dict[str, Any]) -> str:
+        if name not in TOOL_NAMES:
+            raise Mistake(f"there is no tool '{name}'")
+        self.calls[name] += 1
+        result: str = getattr(self, "tool_" + name)(**args)
+        return result
+
+    def tool_brief(self) -> str:
+        style = self.setup.style
+        lines = [
+            f"Tempo {self.tempo:g} BPM (the style: {style.tempo:g}, {style.tempo_low:g}-{style.tempo_high:g}); key "
+            f"{self.key['name']}; {style.beats_per_bar} beats a bar, {self.steps} steps a bar; swing {style.swing:g}.",
+        ]
+        brief = compose.style_brief(self.setup)
+        if brief.get("understood"):
+            lines.append(f"Described: {brief.get('description') or ''} (understood: {brief['understood']}).")
+        for mode, chords in brief["chordVocabulary"].items():
+            if chords:
+                lines.append(f"Chords in {mode}: " + ", ".join(f"{c} {round(100 * v)}%" for c, v in chords.items()))
+        lines.append(
+            "Section lengths: "
+            + ", ".join(f"{b} bars x{n}" for b, n in style.lengths)
+            + f"; about {style.sections_per_song:g} sections, {style.song_bars:g} bars a song."
+        )
+        for name, p in style.parts.items():
+            lines.append(
+                f"The references' {name}: {sw.note_name(p.low)}-{sw.note_name(p.high)}, around "
+                f"{sw.note_name(p.median)}, {p.per_bar:g} notes a bar, {p.voices:g} at a time."
+            )
+        if style.has_drums:
+            for lane, values in style.lanes.items():
+                lines.append(f"Drum groove {lane} (chance a step is hit): " + " ".join(f"{v:.1f}" for v in values))
+        if style.without:
+            lines.append("Leave out: " + ", ".join(sorted(style.without)))
+        for b in compose.part_brief(self.setup):
+            words = f"Part {b['id']} ({b['name']}, role {b['role']}"
+            words += (
+                ", drums)" if b["drums"] else f", range {sw.note_name(b['range'][0])}-{sw.note_name(b['range'][1])})"
+            )
+            if b.get("currentSound"):
+                words += f"; sound: {b['currentSound']}"
+            if b.get("sounds"):
+                words += f"; {len(b['sounds'])} sounds to choose from (list_sounds)"
+            lines.append(words)
+        return "\n".join(lines)
+
+    def tool_form(self) -> str:
+        lines = [
+            f"Tempo {self.tempo:g}, key {self.key['name']}. Order: {' '.join(self.order)} "
+            f"({sum(self.sections[s]['bars'] for s in self.order)} bars)."
+        ]
+        for sid, s in self.sections.items():
+            has = [p for p, by in self.notes.items() if by.get(sid)]
+            lines.append(
+                f"{sid}: {s['kind']}, {s['bars']} bars, energy {s['energy']:g}, chords "
+                f"{' '.join(s['chords'])} ({s['hold']} bar{'s' if s['hold'] > 1 else ''} each); notes: "
+                f"{', '.join(has) or 'none yet'}"
+            )
+        return "\n".join(lines)
+
+    def tool_read(self, part: str, section: str, bars: str = "") -> str:
+        p, s = self.part(part), self.section(section)
+        notes = self.notes.get(p["id"], {}).get(s["id"], [])
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        if bars:
+            first, last = bar_range(bars, int(s["bars"]))
+            notes = [n for n in notes if first * bar_ticks <= int(n["start"]) < (last + 1) * bar_ticks]
+            text = self.notation(p["id"], notes, first * bar_ticks)
+            return f"{p['id']} in {s['id']} bars {first + 1}-{last + 1} (steps from bar {first + 1}): {text or 'rests'}"
+        return f"{p['id']} in {s['id']}: {self.notation(p['id'], notes) or 'rests'}"
+
+    def tool_list_sounds(self, part: str, query: str = "") -> str:
+        p = self.part(part)
+        found = [c for c in self.setup.candidates.get(p["id"], []) if query.lower() in c["name"].lower()]
+        current = self.setup.current.get(p["id"])
+        if not found:
+            return (
+                f"No sounds to choose for {p['id']}"
+                + (f" with '{query}'" if query else "")
+                + (f"; it plays {current}, chosen by the user." if current else ".")
+            )
+        picked = self.sounds.get(p["id"])
+        return "\n".join(f"{c['id']}: {c['name']}" + (" (picked)" if c["id"] == picked else "") for c in found)
+
+    def tool_set_form(
+        self, sections: list[dict[str, Any]], order: list[str], tempo: float | None = None, key: str | None = None
+    ) -> str:
+        answer: dict[str, Any] = {
+            "sections": sections,
+            "order": order,
+            "tempo": tempo or self.tempo,
+            "key": key or self.key["name"],
+        }
+        try:
+            plan = compose.check_plan(answer, self.setup)
+        except compose.Unusable as why:
+            raise Mistake(str(why)) from why
+        old = self.sections
+        self.tempo, self.key = plan["tempo"], plan["key"]
+        self.sections = {s["id"]: s for s in plan["sections"]}
+        self.order = plan["order"]
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        for by in self.notes.values():
+            for sid in list(by):
+                if sid not in self.sections:
+                    del by[sid]
+                elif old.get(sid) and self.sections[sid]["bars"] < old[sid]["bars"]:
+                    end = self.sections[sid]["bars"] * bar_ticks
+                    by[sid] = [n for n in by[sid] if int(n["start"]) < end]
+        return (
+            f"Form set: {' '.join(self.order)}, {sum(self.sections[s]['bars'] for s in self.order)} bars, "
+            f"{self.tempo:g} BPM, {self.key['name']}."
+        )
+
+    def tool_set_chords(self, section: str, chords: list[str], barsPerChord: int = 1) -> str:
+        s = self.section(section)
+        romans = [str(c).strip() for c in chords]
+        wrong = [c for c in romans if sw.parse_roman(c) is None]
+        if not 1 <= len(romans) <= 8 or wrong:
+            raise Mistake(f"1 to 8 chords as Roman numerals ({', '.join(wrong)} not read)")
+        s["chords"], s["hold"] = romans, 2 if barsPerChord == 2 else 1
+        return f"{s['id']} chords: {' '.join(romans)}."
+
+    def put(self, pid: str, sid: str, notes: list[dict[str, Any]]) -> None:
+        self.notes.setdefault(pid, {})[sid] = sorted(
+            notes, key=lambda n: (int(n["start"]), str(n.get("pitch", n.get("drum"))))
+        )
+        self.by_rules.discard((pid, sid))
+
+    def tool_write(self, part: str, section: str, notes: str, loop_bars: int | None = None) -> str:
+        p, s = self.part(part), self.section(section)
+        written, fixed = self.parse(p["id"], notes, int(s["bars"]), loop_bars)
+        self.put(p["id"], s["id"], written)
+        return f"{p['id']} in {s['id']}: {len(written)} notes." + (f" Fixed: {fixed}." if fixed else "")
+
+    def tool_edit(self, part: str, section: str, bars: str, notes: str) -> str:
+        p, s = self.part(part), self.section(section)
+        first, last = bar_range(bars, int(s["bars"]))
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        written, fixed = self.parse(p["id"], notes, last - first + 1)
+        offset = first * bar_ticks
+        kept = [
+            n
+            for n in self.notes.get(p["id"], {}).get(s["id"], [])
+            if not offset <= int(n["start"]) < (last + 1) * bar_ticks
+        ]
+        self.put(p["id"], s["id"], kept + [{**n, "start": int(n["start"]) + offset} for n in written])
+        return f"{p['id']} in {s['id']} bars {first + 1}-{last + 1}: {len(written)} notes." + (
+            f" Fixed: {fixed}." if fixed else ""
+        )
+
+    def tool_motif(self, name: str, notes: str, bars: int) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9 _-]{1,30}", name or ""):
+            raise Mistake("a motif's name is a short word")
+        if not 1 <= int(bars) <= 16:
+            raise Mistake("a motif is 1 to 16 bars")
+        self.motifs[name] = {"notes": str(notes), "bars": int(bars)}
+        return f"Motif '{name}' ({bars} bar{'s' if bars > 1 else ''}) saved."
+
+    def tool_place(
+        self,
+        part: str,
+        section: str,
+        motif: str,
+        bar: int,
+        transpose: int = 0,
+        times: int = 1,
+        fit_chords: bool = False,
+    ) -> str:
+        p, s = self.part(part), self.section(section)
+        m = self.motifs.get(motif)
+        if m is None:
+            raise Mistake(f"there is no motif '{motif}' (motifs: {', '.join(self.motifs) or 'none yet'})")
+        times = max(1, min(64, int(times)))
+        first = int(bar) - 1
+        length = int(m["bars"]) * times
+        if not 0 <= first < int(s["bars"]):
+            raise Mistake(f"the section has bars 1 to {s['bars']}")
+        length = min(length, int(s["bars"]) - first)
+        drums = self.drums(p["id"])
+        notes, fixed = self.parse(p["id"], m["notes"], length, int(m["bars"]))
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        low, high = compose.RANGES.get(p["role"], (24, 108))
+        scale = sw.scale_of(self.key)
+        moved = 0
+        for n in notes:
+            n["start"] = int(n["start"]) + first * bar_ticks
+            if drums:
+                continue
+            pitch = int(n["pitch"]) + int(transpose)
+            if fit_chords:
+                fits = sw.allowed_pitch_classes(self.chord_at(s["id"], int(n["start"]) // bar_ticks), scale)
+                if pitch % 12 not in fits:
+                    pitch = min(
+                        (pitch + d for d in (-1, 1, -2, 2) if (pitch + d) % 12 in fits),
+                        default=pitch,
+                        key=lambda x: abs(x - pitch),
+                    )
+                    moved += 1
+            while pitch < low:
+                pitch += 12
+            while pitch > high:
+                pitch -= 12
+            n["pitch"] = pitch
+        end = (first + length) * bar_ticks
+        kept = [
+            n for n in self.notes.get(p["id"], {}).get(s["id"], []) if not first * bar_ticks <= int(n["start"]) < end
+        ]
+        self.put(p["id"], s["id"], kept + notes)
+        words = f"'{motif}' in {p['id']}, {s['id']} bars {first + 1}-{first + length}: {len(notes)} notes"
+        if moved:
+            words += f", {moved} moved to fit the chords"
+        return words + "." + (f" Fixed: {fixed}." if fixed else "")
+
+    def tool_copy(self, from_section: str, to_section: str, parts: list[str] | None = None) -> str:
+        a, b = self.section(from_section), self.section(to_section)
+        ids = [self.part(x)["id"] for x in parts] if parts else [p for p, by in self.notes.items() if by.get(a["id"])]
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        span, end = int(a["bars"]) * bar_ticks, int(b["bars"]) * bar_ticks
+        for pid in ids:
+            source = self.notes.get(pid, {}).get(a["id"], [])
+            out = []
+            for k in range(math.ceil(end / span)):
+                for n in source:
+                    start = int(n["start"]) + k * span
+                    if start < end:
+                        out.append({**n, "start": start, "length": min(int(n["length"]), end - start)})
+            self.put(pid, b["id"], out)
+        return f"Copied {a['id']} to {b['id']} for {', '.join(ids) or 'no part (nothing there yet)'}."
+
+    def tool_pick_sound(self, part: str, sound: str) -> str:
+        p = self.part(part)
+        if not any(c["id"] == sound for c in self.setup.candidates.get(p["id"], [])):
+            raise Mistake(f"'{sound}' is not one of {p['id']}'s sounds (list_sounds)")
+        self.sounds[p["id"]] = sound
+        return f"{p['id']} plays {sound}."
+
+    def tool_rules_write(self, part: str, section: str = "") -> str:
+        p = self.part(part)
+        ids = [self.section(section)["id"]] if section else list(self.sections)
+        checked = compose.Checked(self.plan(), {}, {}, {}, [], {})
+        rules = compose.build_song(checked, self.setup, self.seed, self.size)
+        written = rules["layerParts"].get(p["id"], {})
+        for sid in ids:
+            self.notes.setdefault(p["id"], {})[sid] = list(written.get(sid, []))
+            self.by_rules.add((p["id"], sid))
+        count = sum(len(written.get(sid, [])) for sid in ids)
+        return f"The rules wrote {p['id']} in {', '.join(ids)}: {count} notes."
+
+    def issues(self, part: str = "", section: str = "") -> list[str]:
+        """The checks, as lines with locations (worst first)."""
+        only_part = self.part(part)["id"] if part else ""
+        only_section = self.section(section)["id"] if section else ""
+        style, scale = self.setup.style, sw.scale_of(self.key)
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        beat = bar_ticks // max(1, style.beats_per_bar)
+        out: list[str] = []
+        total_bars = sum(self.sections[s]["bars"] for s in self.order)
+        medians: dict[str, dict[str, int]] = {}
+        for p in self.setup.written():
+            pid = p["id"]
+            if only_part and pid != only_part:
+                continue
+            by = self.notes.get(pid, {})
+            if not any(by.get(s) for s in self.order):
+                out.append(f"{pid}: no notes anywhere (write it, or rules_write it)")
+                continue
+            drums = self.drums(pid)
+            base = sw.ROLES[p["role"]][2]
+            for sid in self.sections:
+                if only_section and sid != only_section:
+                    continue
+                notes = by.get(sid, [])
+                if not notes or drums:
+                    continue
+                outside, rub = [], []
+                for n in notes:
+                    bar = int(n["start"]) // bar_ticks
+                    where = f"bar {bar + 1} step {(int(n['start']) % bar_ticks) // sw.TICKS_PER_STEP}"
+                    if int(n["pitch"]) % 12 not in scale:
+                        outside.append(f"{sw.note_name(int(n['pitch']))} at {where}")
+                    elif base in ("bass", "chords") and int(n["start"]) % beat == 0:
+                        fits = sw.allowed_pitch_classes(
+                            self.chord_at(sid, min(bar, int(self.sections[sid]["bars"]) - 1)), scale
+                        )
+                        if int(n["pitch"]) % 12 not in fits:
+                            rub.append(f"{sw.note_name(int(n['pitch']))} at {where}")
+                if outside:
+                    out.append(
+                        f"{pid}, {sid}: {len(outside)} notes outside {self.key['name']}: "
+                        + ", ".join(outside[:3])
+                        + (" ..." if len(outside) > 3 else "")
+                    )
+                if len(rub) > max(1, len(notes) // 10):
+                    out.append(
+                        f"{pid}, {sid}: {len(rub)} notes on the beat rub against the chord: "
+                        + ", ".join(rub[:3])
+                        + (" ..." if len(rub) > 3 else "")
+                    )
+                pitches = sorted(int(n["pitch"]) for n in notes)
+                medians.setdefault(sid, {})[pid] = pitches[len(pitches) // 2]
+                # Repetition: one bar played over and over in a long section, for a lead.
+                bars_seen = Counter(
+                    tuple((int(n["start"]) % bar_ticks, n["pitch"]) for n in notes if int(n["start"]) // bar_ticks == b)
+                    for b in range(int(self.sections[sid]["bars"]))
+                )
+                if base == "lead" and int(self.sections[sid]["bars"]) >= 8 and len(bars_seen) <= 1:
+                    out.append(f"{pid}, {sid}: the same bar {self.sections[sid]['bars']} times (vary the phrase)")
+            if not only_section:
+                played = sum(len(by.get(s, [])) for s in self.order)
+                per_bar = played / max(1, total_bars)
+                if drums and p["role"] == "drums":
+                    want = float(((self.setup.summary.get("parts") or {}).get("drums") or {}).get("notesPerBar") or 0)
+                elif not drums and base in sw.SUMMARY_PART:
+                    want = style.parts[sw.SUMMARY_PART[base]].per_bar
+                else:
+                    want = 0.0
+                if want and not 0.4 <= per_bar / want <= 2.5:
+                    out.append(f"{pid}: {per_bar:.1f} notes a bar over the song; the references' play about {want:g}")
+        for sid, heights in medians.items():
+            ids = sorted(heights)
+            for i, a in enumerate(ids):
+                for b in ids[i + 1 :]:
+                    if abs(heights[a] - heights[b]) <= 2:
+                        out.append(
+                            f"{a} and {b}, {sid}: the same register (around {sw.note_name(heights[a])}): move one "
+                            "an octave, or give them different rhythms"
+                        )
+        if not only_part and not only_section and style.has_drums:
+            drum_parts = [p["id"] for p in self.setup.written() if p["role"] == "drums" and self.notes.get(p["id"])]
+            if drum_parts:
+                song = self.song()
+                groove = (sw.compare(song, self.setup.summary, style).get("groove")) or {}
+                low = {lane: v for lane, v in groove.items() if v < 0.6}
+                if low:
+                    out.append(
+                        "drums: the groove is unlike the references' in "
+                        + ", ".join(f"{lane} ({round(100 * v)} % alike)" for lane, v in low.items())
+                    )
+        if not only_part:
+            lengths = sorted({b for b, _ in style.lengths})
+            for sid, s in self.sections.items():
+                if (not only_section or sid == only_section) and int(s["bars"]) % 4:
+                    out.append(f"{sid}: {s['bars']} bars, off the 4-bar phrases (the style's: {lengths})")
+        return out
+
+    def tool_check(self, part: str = "", section: str = "") -> str:
+        found = self.issues(part, section)
+        if not found:
+            return "OK: no issues."
+        shown = found[:MOST_LINES]
+        more = len(found) - len(shown)
+        return (
+            f"{len(found)} issue{'s' if len(found) > 1 else ''}:\n"
+            + "\n".join(shown)
+            + (f"\n... and {more} more" if more else "")
+        )
+
+    def tool_measure(self, section: str = "") -> str:
+        only = self.section(section)["id"] if section else ""
+        lines = []
+        if self.levels or self.problems:
+            heard = []
+            for p in self.setup.written():
+                if p["id"] in self.problems:
+                    heard.append(f"{p['id']} could not be played ({self.problems[p['id']]})")
+                elif p["id"] in self.levels:
+                    db = self.levels[p["id"]]
+                    heard.append(
+                        f"{p['id']} " + ("made no sound" if db is None or db <= -90 else f"{float(db):.1f} dB")
+                    )
+            lines.append("As Spinus played each part with its sound last time: " + "; ".join(heard) + ".")
+        else:
+            lines.append("Not played yet: after finish, Spinus plays each part with its sound and sets its level.")
+        weights = {}
+        for p in self.setup.written():
+            notes = [n for sid, ns in self.notes.get(p["id"], {}).items() if not only or sid == only for n in ns]
+            if notes:
+                weights[p["id"]] = sum(
+                    float(n["velocity"]) ** 2 * min(4, int(n["length"]) // sw.TICKS_PER_STEP + 1) for n in notes
+                )
+        if weights:
+            top = max(weights.values())
+            lines.append(
+                "Balance from the notes (velocity and length, loudest 0 dB): "
+                + ", ".join(
+                    f"{pid} {10 * math.log10(w / top):.0f} dB"
+                    for pid, w in sorted(weights.items(), key=lambda kv: -kv[1])
+                )
+            )
+        return "\n".join(lines)
+
+    def tool_finish(self, summary: str) -> str:
+        self.summary = str(summary)[:400]
+        self.finished = True
+        left = [p["id"] for p in self.setup.written() if not any(self.notes.get(p["id"], {}).values())]
+        found = self.issues()
+        words = "Finished: the song goes to the user."
+        if left:
+            words += f" Spinus's rules write {', '.join(left)}."
+        if found:
+            words += f" {len(found)} issues remain."
+        return words
+
+
+# ---------------------------------------------------------------------------------------------------
+# The loop
+
+
+def describe_call(name: str, args: dict[str, Any], result: str, failed: bool) -> str:
+    """What a tool call did, in plain words, for the progress line."""
+    part, section = args.get("part", ""), args.get("section", "")
+    words = {
+        "brief": "Reading the brief",
+        "form": "Looking at the form",
+        "read": f"Reading the {part} in the {section}",
+        "list_sounds": f"Looking for sounds for the {part}",
+        "set_form": "Setting the form",
+        "set_chords": f"Setting the {section}'s chords",
+        "write": f"Writing the {part} for the {section}",
+        "edit": f"Fixing bars {args.get('bars', '')} of the {part} in the {section}",
+        "motif": f"Making the motif '{args.get('name', '')}'",
+        "place": f"Placing '{args.get('motif', '')}' in the {part}, {section}",
+        "copy": f"Copying the {args.get('from_section', '')} to the {args.get('to_section', '')}",
+        "pick_sound": f"Choosing the {part}'s sound",
+        "rules_write": f"Letting the rules write the {part}",
+        "check": "Checking" + (f" the {part}" if part else "") + (f" in the {section}" if section else ""),
+        "measure": "Measuring the balance",
+        "finish": "Finishing",
+    }.get(name, name)
+    if failed:
+        return f"{words}: not done ({result[:80]})"
+    if name == "check":
+        return f"{words}: {result.splitlines()[0].rstrip(':')}"
+    return words
+
+
+@dataclass
+class Run:
+    """A harness session: the working copy, the best checked version and what it used."""
+
+    workspace: Workspace
+    best: Workspace | None = None
+    best_issues: int = 1 << 30
+    requests: list[dict[str, int]] = field(default_factory=list)
+    by: str = ""
+    model: str = ""
+    turns: int = 0
+    stopped: bool = False  # the user said stop now
+
+    def remember_if_best(self) -> None:
+        count = len(self.workspace.issues())
+        if count <= self.best_issues:
+            self.best, self.best_issues = self.workspace.copy(), count
+
+
+def first_message(ws: Workspace, revising: str = "") -> str:
+    text = "The brief:\n" + ws.tool_brief() + "\n\nThe form to start from (change it with set_form):\n" + ws.tool_form()
+    if revising:
+        text += "\n\n" + revising
+    else:
+        text += "\n\nWrite the song with the tools, check it, fix what check finds, then finish."
+    return text
+
+
+async def session(
+    client: httpx.AsyncClient,
+    connections: ConnectionStore,
+    routes: list[Route],
+    usage_log: UsageLog,
+    run: Run,
+    effort: str,
+    say: Say,
+    stop: Callable[[], bool],
+    revising: str = "",
+    spent: int = 0,
+) -> Run:
+    """The model works on run.workspace with the tools until it calls finish (or stop, or MOST_TURNS)."""
+    ws = run.workspace
+    request = Request(
+        routes[0].model,
+        SYSTEM,
+        [Message("user", [Text(first_message(ws, revising))])],
+        list(TOOLS),
+        None,
+        effort,
+        cache=True,
+    )
+
+    async def on_turn(completion: Completion, route: Route) -> None:
+        usage_log.add(route.connection.id, compose.FEATURE, completion.usage)
+        run.by, run.model = answered_by(completion.model, []), route.model
+        run.requests.append(
+            {
+                "input": completion.usage.input_tokens,
+                "output": completion.usage.output_tokens,
+                "reasoning": completion.usage.reasoning_tokens,
+                "cached": completion.usage.cached_tokens,
+            }
+        )
+
+    async def call(use: ToolUse) -> tuple[str, bool]:
+        try:
+            if use.partial:
+                raise Mistake("the call was cut off at your length limit: make it smaller (fewer bars, or a loop)")
+            result, failed = ws.call(use.name, dict(use.input)), False
+        except Mistake as why:
+            result, failed = f"Not done: {why}.", True
+        except TypeError as why:  # arguments the tool does not take
+            result, failed = f"Not done: {str(why).split(')', 1)[-1].strip() or why}.", True
+        if use.name == "check" and not failed:
+            run.remember_if_best()
+        used = spent + sum(r["input"] + r["output"] for r in run.requests)
+        await say(
+            {
+                "kind": "progress",
+                "done": 0,
+                "total": 1,
+                "step": f"{describe_call(use.name, use.input, result, failed)} ({used:,} tokens so far)",
+            }
+        )
+        return result, failed
+
+    async def no_text(_: str) -> None:
+        pass
+
+    def done() -> bool:
+        if stop():
+            run.stopped = True
+        return ws.finished or run.stopped
+
+    run.turns = await tool_loop(client, connections, routes, request, call, on_turn, no_text, say, MOST_TURNS, done)
+    return run
+
+
+def result_song(
+    run: Run, setup: compose.Setup, effort: str, round_number: int, before: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """The song the session gives: the finished working copy, else the best checked version (else as it is)."""
+    ws = run.workspace
+    note = ""
+    if not ws.finished:
+        run.remember_if_best()
+        assert run.best is not None
+        ws = run.best
+        why = (
+            "you stopped it"
+            if run.stopped
+            else (
+                f"it did not finish in {MOST_TURNS} turns"
+                if run.turns >= MOST_TURNS
+                else "it stopped without finishing"
+            )
+        )
+        note = f" The AI's best checked version, as {why}."
+    song = ws.song()
+    requests = before + [{"round": round_number, **r} for r in run.requests]
+    usage = compose.usage_of(requests)
+    usage["cached"] = compose.total_of(requests, "cached")
+    filled = [p["id"] for p in setup.written() if not any(ws.notes.get(p["id"], {}).values())]
+    composed = {
+        "by": run.by,
+        "effort": effort,
+        "harness": True,
+        "round": round_number,
+        "turns": run.turns,
+        "calls": dict(ws.calls),
+        "usage": usage,
+        "sounds": dict(ws.sounds),
+        "filled": filled,
+        "byRules": sorted({p for p, _ in ws.by_rules}),
+        "reason": ws.summary,
+        "findings": ws.issues(),
+        "workspace": ws.export(),
+        "answer": {"parts": {p: {} for p in ws.notes}},  # what the notes say "left out" against
+    }
+    song["note"] = compose.written_note(setup, composed) + note
+    if usage.get("cached"):
+        song["note"] += f" {int(usage['cached']):,} of the input tokens were read from the provider's cache."
+    return compose.finish(song, setup, composed)
+
+
+async def write(
+    client: httpx.AsyncClient,
+    connections: ConnectionStore,
+    routing: Routing,
+    usage_log: UsageLog,
+    records: compose.UsageRecords,
+    setup: compose.Setup,
+    seed: int,
+    size: str,
+    effort: str,
+    say: Say,
+    stop: Callable[[], bool] = lambda: False,
+    song: dict[str, Any] | None = None,
+    levels: Any = None,
+    problems: Any = None,
+) -> dict[str, Any]:
+    """A song written through the harness; with `song` (one it wrote) and how its parts played (levels,
+    problems), a revision of it. NoConnection without a connection."""
+    routes = routing.resolve(compose.FEATURE)
+    if not routes:
+        raise NoConnection("No AI connection is set up.")
+    revising, round_number, before, spent = "", 0, [], 0
+    if song is not None:
+        ws = Workspace.from_song(setup, song)
+        composed = song.get("composed") or {}
+        round_number = int(composed.get("round", 0)) + 1
+        before = list((composed.get("usage") or {}).get("requests") or [])
+        spent = compose.total_of(before, "input") + compose.total_of(before, "output")
+        ws.levels = {str(k): v for k, v in (levels or {}).items()} if isinstance(levels, dict) else {}
+        ws.problems = {str(k): str(v) for k, v in (problems or {}).items()} if isinstance(problems, dict) else {}
+        found = ws.issues()
+        revising = (
+            "Spinus played each part with its sound. "
+            + ws.tool_measure()
+            + "\n\nThe checks now:\n"
+            + (ws.tool_check() if found else "OK: no issues.")
+            + "\n\nFix what needs fixing with small edits (a part that made no sound may sit outside its "
+            "instrument's range), check, then finish."
+        )
+        await say({"kind": "status", "text": f"Revising: the AI is fixing what Spinus heard (round {round_number})..."})
+    else:
+        ws = Workspace.start(setup, seed, size)
+        await say({"kind": "status", "text": "Writing: the AI is composing with the harness..."})
+    run = Run(ws)
+    await session(client, connections, routes, usage_log, run, effort, say, stop, revising, spent)
+    records.add(
+        run.model or routes[0].model,
+        effort,
+        len(setup.written()),
+        "harness-revise" if song else "harness",
+        run.requests,
+    )
+    return result_song(run, setup, effort, round_number, before)
+
+
+# ---------------------------------------------------------------------------------------------------
+# The checks' score, for comparing ways of writing
+
+
+def score(song: dict[str, Any], setup: compose.Setup) -> dict[str, Any]:
+    """How the song fares on Spinus's checks: the issues found, and compare's numbers."""
+    ws = Workspace(
+        setup, int(song["seeds"]["song"]), str(song.get("size", "sketch")), float(song["tempo"]), dict(song["key"])
+    )
+    for s in song["sections"]:
+        hold = 2 if len(s["chords"]) >= 2 and s["chords"][0]["roman"] == s["chords"][1]["roman"] else 1
+        ws.sections[s["id"]] = {
+            "id": s["id"],
+            "kind": s["kind"],
+            "bars": int(s["bars"]),
+            "hold": hold,
+            "chords": [c["roman"] for c in s["chords"][::hold]][:8],
+            "energy": s["energy"],
+        }
+    ws.order = [e["section"] for e in song["arrangement"]]
+    ws.notes = {
+        pid: {sid: list(ns) for sid, ns in by.items()}
+        for pid, by in song["layerParts"].items()
+        if any(p["id"] == pid for p in setup.written())
+    }
+    checks = song.get("checks") or sw.compare(song, setup.summary, setup.style)
+    groove = checks.get("groove") or {}
+    return {
+        "issues": len(ws.issues()),
+        "notesInKey": checks.get("notesInKey"),
+        "notesFitChords": checks.get("notesFitChords"),
+        "groove": round(sum(groove.values()) / len(groove), 3) if groove else None,
+    }
+
+
+# ---------------------------------------------------------------------------------------------------
+# Outside Spinus: a brief file, an MCP server over stdio, and the comparison with the one-shot writer
+
+
+def make_brief(text: str, parts: list[str], seed: int, size: str) -> dict[str, Any]:
+    """A brief from a description (read by Spinus's offline rules) and parts written id:role."""
+    from .describe import describe
+
+    listed = []
+    for item in parts:
+        pid, _, role = item.partition(":")
+        listed.append({"id": pid, "name": sw.ROLES.get(role or pid, (pid,))[0], "role": role or pid})
+    return {
+        "kind": "spinus.harness-brief",
+        "summary": describe(text),
+        "parts": listed,
+        "seed": seed,
+        "arrangement": size,
+        "candidates": {},
+        "current": {},
+    }
+
+
+def setup_of(brief: dict[str, Any]) -> compose.Setup:
+    return compose.Setup.make(
+        brief["summary"],
+        brief.get("parts"),
+        str(brief.get("arrangement") or "sketch"),
+        brief.get("candidates"),
+        brief.get("current"),
+    )
+
+
+def stdout_line(text: str) -> None:
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
+def serve_mcp(
+    brief: dict[str, Any],
+    out: Path,
+    read: Callable[[], str] = sys.stdin.readline,
+    write: Callable[[str], None] = stdout_line,
+) -> None:
+    """The harness's tools as an MCP server (JSON-RPC over stdio, one message a line), on a working copy made from
+    the brief; finish writes the song to `out`."""
+    setup = setup_of(brief)
+    ws = Workspace.start(setup, int(brief.get("seed", 0)), str(brief.get("arrangement") or "sketch"))
+
+    def reply(id_: Any, result: Any = None, error: dict[str, Any] | None = None) -> None:
+        message: dict[str, Any] = {"jsonrpc": "2.0", "id": id_}
+        message["error" if error else "result"] = error or result
+        write(json.dumps(message) + "\n")
+
+    while True:
+        line = read()
+        if not line:
+            return
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        method, id_ = message.get("method"), message.get("id")
+        if id_ is None:
+            continue  # a notification
+        if method == "initialize":
+            reply(
+                id_,
+                {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "spinus-music-harness", "version": "1"},
+                    "instructions": SYSTEM + "\n\n" + first_message(ws),
+                },
+            )
+        elif method == "tools/list":
+            reply(
+                id_,
+                {
+                    "tools": [
+                        {"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in TOOLS
+                    ]
+                },
+            )
+        elif method == "tools/call":
+            params = message.get("params") or {}
+            try:
+                text, failed = ws.call(str(params.get("name")), dict(params.get("arguments") or {})), False
+            except (Mistake, TypeError) as why:
+                text, failed = f"Not done: {why}.", True
+            if params.get("name") == "finish" and not failed:
+                out.write_text(json.dumps(result_song(Run(ws, turns=0), setup, "", 0, []), indent=1), encoding="utf-8")
+                text += f" Saved to {out}."
+            reply(id_, {"content": [{"type": "text", "text": text}], "isError": failed})
+        elif method == "ping":
+            reply(id_, {})
+        else:
+            reply(id_, error={"code": -32601, "message": f"Unknown method {method}"})
+
+
+class FakeModel:
+    """A scripted model for the comparison and the tests (no API call): Anthropic's streaming answers, the
+    one-shot writer's write_song call or the harness's tool calls turn by turn, with made-up token counts that
+    grow as a real conversation's do."""
+
+    def __init__(self, harness_script: list[list[tuple[str, dict[str, Any]]]], one_shot: dict[str, Any]) -> None:
+        self.script, self.one_shot = harness_script, one_shot
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if request.url.path.endswith("/count_tokens"):
+            return httpx.Response(200, json={"input_tokens": len(json.dumps(body)) // 4})
+        names = [t["name"] for t in body.get("tools", [])]
+        size_in = len(json.dumps(body)) // 4
+        turn = 0
+        if "write_song" in names:
+            calls = [("write_song", self.one_shot)]
+        else:
+            turn = sum(1 for m in body["messages"] if m["role"] == "assistant")
+            calls = self.script[turn] if turn < len(self.script) else []
+        events: list[dict[str, Any]] = [
+            {
+                "type": "message_start",
+                "message": {"model": "fake-model", "usage": {"input_tokens": size_in, "cache_read_input_tokens": 0}},
+            }
+        ]
+        out = 0
+        for i, (name, args) in enumerate(calls):
+            text = json.dumps(args)
+            out += len(text) // 4 + 10
+            events += [
+                {
+                    "type": "content_block_start",
+                    "index": i,
+                    "content_block": {"type": "tool_use", "id": f"t{turn}_{i}", "name": name},
+                },
+                {
+                    "type": "content_block_delta",
+                    "index": i,
+                    "delta": {"type": "input_json_delta", "partial_json": text},
+                },
+                {"type": "content_block_stop", "index": i},
+            ]
+        if not calls:
+            events += [
+                {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}},
+                {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Done."}},
+                {"type": "content_block_stop", "index": 0},
+            ]
+            out = 3
+        events.append(
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "tool_use" if calls else "end_turn"},
+                "usage": {"output_tokens": out},
+            }
+        )
+        data = "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events).encode()
+        return httpx.Response(200, content=data, headers={"content-type": "text/event-stream"})
+
+
+def fake_runs(setup: compose.Setup, ws: Workspace) -> FakeModel:
+    """The fake model's two ways of writing the same plain song: drums, bass and a lead by hand (a loop, a motif
+    placed and copied), the rest by the rules; and the one-shot writer's whole answer for it."""
+    parts = [p for p in setup.written()]
+    first = next(iter(ws.sections))
+    beat = "0 kick 1 110; 4 snare 1 100; 8 kick 1 105; 12 snare 1 100; " + "; ".join(
+        f"{s} hat 1 70" for s in range(0, 16, 2)
+    )
+    tonic = 36 + int(ws.key["tonic"])
+    script: list[list[tuple[str, dict[str, Any]]]] = [[("form", {})]]
+    one_shot_parts: dict[str, Any] = {}
+    for p in parts:
+        role = p["role"]
+        if sw.ROLES[role][4]:
+            turn = [("write", {"part": p["id"], "section": sid, "notes": beat, "loop_bars": 1}) for sid in ws.sections]
+            one_shot_parts[p["id"]] = {"sections": {sid: {"bars": 1, "notes": beat} for sid in ws.sections}}
+        elif sw.ROLES[role][2] == "bass":
+            riff = f"0 {tonic} 4 100; 4 {tonic} 2 90; 8 {tonic + 7} 4 90; 12 {tonic + 12} 2 80"
+            turn = [("motif", {"name": "riff", "notes": riff, "bars": 1})] + [
+                (
+                    "place",
+                    {
+                        "part": p["id"],
+                        "section": sid,
+                        "motif": "riff",
+                        "bar": 1,
+                        "times": ws.sections[sid]["bars"],
+                        "fit_chords": True,
+                    },
+                )
+                for sid in ws.sections
+            ]
+            one_shot_parts[p["id"]] = {"sections": {sid: {"bars": 1, "notes": riff} for sid in ws.sections}}
+        else:
+            turn = [("rules_write", {"part": p["id"]})]
+            song = compose.build_song(compose.Checked(ws.plan(), {}, {}, {}, [], {}), setup, ws.seed, ws.size)
+            drums = sw.ROLES[role][4]
+            one_shot_parts[p["id"]] = {
+                "sections": {
+                    sid: {"bars": ws.sections[sid]["bars"], "notes": compose.as_notation(ns, drums)}
+                    for sid, ns in song["layerParts"].get(p["id"], {}).items()
+                }
+            }
+        script.append(turn)
+    script += [
+        [("check", {})],
+        [("copy", {"from_section": first, "to_section": first})],
+        [("finish", {"summary": "A plain test song."})],
+    ]
+    one_shot = {
+        "tempo": ws.tempo,
+        "key": ws.key["name"],
+        "order": ws.order,
+        "parts": one_shot_parts,
+        "sections": [
+            {
+                "id": s["id"],
+                "kind": s["kind"],
+                "bars": s["bars"],
+                "chords": s["chords"],
+                "barsPerChord": s["hold"],
+                "energy": s["energy"],
+            }
+            for s in ws.sections.values()
+        ],
+    }
+    return FakeModel(script, one_shot)
+
+
+async def compare_ways(
+    brief: dict[str, Any],
+    client: httpx.AsyncClient,
+    connections: ConnectionStore,
+    routing: Routing,
+    folder: Path,
+    efforts: list[str],
+) -> list[dict[str, Any]]:
+    """The same brief written one-shot (compose) and through the harness at each reasoning level: the tokens each
+    used, as the provider reported them, and the checks' score of each song."""
+    setup = setup_of(brief)
+    seed, size = int(brief.get("seed", 0)), str(brief.get("arrangement") or "sketch")
+    usage_log, records = UsageLog(folder), compose.UsageRecords(folder)
+
+    async def quiet(_: dict[str, Any]) -> None:
+        pass
+
+    rows = []
+    for effort in efforts:
+        for way in ("one-shot", "harness"):
+            if way == "one-shot":
+                song = await compose.compose(
+                    client, connections, routing, usage_log, records, setup, seed, size, effort, quiet
+                )
+                usage = song.get("composed", {}).get("usage") or song.get("usage") or {}
+            else:
+                song = await write(client, connections, routing, usage_log, records, setup, seed, size, effort, quiet)
+                usage = song["composed"]["usage"]
+            rows.append(
+                {
+                    "way": way,
+                    "effort": effort or "default",
+                    "requests": len(usage.get("requests", [])),
+                    "input": usage.get("input", 0),
+                    "cached": usage.get("cached", 0),
+                    "output": usage.get("output", 0),
+                    "reasoning": usage.get("reasoning", 0),
+                    "usedAi": bool(song.get("composedBy")),
+                    **score(song, setup),
+                }
+            )
+    return rows
+
+
+def table(rows: list[dict[str, Any]]) -> str:
+    keys = [
+        "way",
+        "effort",
+        "requests",
+        "input",
+        "cached",
+        "output",
+        "reasoning",
+        "issues",
+        "notesInKey",
+        "notesFitChords",
+        "groove",
+        "usedAi",
+    ]
+    widths = {k: max(len(k), *(len(str(r.get(k))) for r in rows)) for k in keys}
+    lines = ["  ".join(k.ljust(widths[k]) for k in keys)]
+    lines += ["  ".join(str(r.get(k)).ljust(widths[k]) for k in keys) for r in rows]
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="python -m spinus_ai.harness", description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+    b = sub.add_parser("brief", help="write a brief from a description")
+    b.add_argument("--describe", required=True)
+    b.add_argument("--parts", default="drums:drums,bass:bass,chords:chords,lead:lead", help="id:role,...")
+    b.add_argument("--seed", type=int, default=1)
+    b.add_argument("--arrangement", default="sketch", choices=sw.SIZES)
+    b.add_argument("-o", "--out", type=Path, required=True)
+    m = sub.add_parser("mcp", help="serve the harness's tools over stdio (MCP) on a brief")
+    m.add_argument("--brief", type=Path, required=True)
+    m.add_argument("--out", type=Path, required=True, help="where finish saves the song")
+    e = sub.add_parser("eval", help="compare one-shot and harness writing on tokens and the checks' score")
+    e.add_argument("--brief", type=Path, required=True)
+    e.add_argument("--fake", action="store_true", help="a scripted model, no API call (checks the comparison)")
+    e.add_argument("--provider", default="anthropic", choices=("anthropic", "openai", "openrouter", "local"))
+    e.add_argument("--base-url")
+    e.add_argument("--model", default="")
+    e.add_argument("--key-env", default="ANTHROPIC_API_KEY", help="the environment variable holding the key")
+    e.add_argument("--efforts", default="", help="reasoning levels to compare, e.g. ',low,medium,high' ('' default)")
+    args = parser.parse_args(argv)
+
+    if args.command == "brief":
+        brief = make_brief(args.describe, [x for x in args.parts.split(",") if x], args.seed, args.arrangement)
+        args.out.write_text(json.dumps(brief, indent=1), encoding="utf-8")
+        print(f"Brief saved to {args.out}: {', '.join(p['id'] for p in brief['parts'])}.")
+    elif args.command == "mcp":
+        serve_mcp(json.loads(args.brief.read_text(encoding="utf-8")), args.out)
+    else:
+        asyncio.run(run_eval(args))
+
+
+async def run_eval(args: argparse.Namespace) -> None:
+    import os
+
+    from .connections import MemoryKeyStore
+
+    brief = json.loads(args.brief.read_text(encoding="utf-8"))
+    efforts = args.efforts.split(",") if args.efforts else [""]
+    with tempfile.TemporaryDirectory() as folder:
+        store = ConnectionStore(Path(folder), MemoryKeyStore())
+        if args.fake:
+            setup = setup_of(brief)
+            ws = Workspace.start(setup, int(brief.get("seed", 0)), str(brief.get("arrangement") or "sketch"))
+            client = httpx.AsyncClient(transport=httpx.MockTransport(fake_runs(setup, ws)))
+            store.upsert("Fake", "anthropic", "https://fake.test", "fake-key")
+        else:
+            key = os.environ.get(args.key_env, "")
+            if not key and args.provider != "local":
+                raise SystemExit(f"Set {args.key_env} to your key first (it is used for this run only, never saved).")
+            client = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=20.0))
+            store.upsert("Owner check", args.provider, args.base_url, key or None)
+        routing = Routing(Path(folder), store)
+        if args.model:
+            routing.set(compose.FEATURE, [{"connection": store.connections[0].id, "model": args.model}])
+        async with client:
+            rows = await compare_ways(brief, client, store, routing, Path(folder), efforts)
+    print(table(rows))
+    if args.fake:
+        print("\nA scripted model: this shows the comparison works; its token numbers mean nothing.")
+
+
+if __name__ == "__main__":
+    main()

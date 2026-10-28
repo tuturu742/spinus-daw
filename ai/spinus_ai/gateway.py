@@ -38,7 +38,17 @@ class ToolResult:
     is_error: bool = False
 
 
-Block = Text | ToolUse | ToolResult
+@dataclass
+class Thinking:
+    """A model's reasoning block (Anthropic), passed back unchanged in a tool loop as the provider asks:
+    `thinking` (often empty: the reasoning is not shown) and its `signature`, or a redacted block's `data`."""
+
+    thinking: str = ""
+    signature: str = ""
+    data: str = ""  # redacted_thinking
+
+
+Block = Text | ToolUse | ToolResult | Thinking
 
 
 @dataclass
@@ -60,6 +70,7 @@ class Usage:
     output_tokens: int = 0  # with the reasoning tokens (both kinds of provider count them in)
     reasoning_tokens: int = 0  # of output_tokens, how many the model spent thinking (when the provider says)
     cost: float | None = None  # only when the provider reports it
+    cached_tokens: int = 0  # of input_tokens' kind, read from the provider's cache (cheaper), when it says
 
 
 @dataclass
@@ -103,6 +114,7 @@ class Request:
     tools: list[Tool] = field(default_factory=list)
     max_tokens: int | None = 4096  # None: the model's whole output allowance (ANSWER_ROOM where one is required)
     effort: str = ""  # "low", "medium" or "high": how hard the model reasons; "" leaves the provider's default
+    cache: bool = False  # ask the provider to cache the request's start (tools, system, earlier turns) for the next
 
 
 EFFORTS = ("low", "medium", "high")
@@ -154,6 +166,10 @@ def anthropic_body(request: Request) -> dict[str, Any]:
     def block(b: Block) -> dict[str, Any]:
         if isinstance(b, Text):
             return {"type": "text", "text": b.text}
+        if isinstance(b, Thinking):
+            if b.data:
+                return {"type": "redacted_thinking", "data": b.data}
+            return {"type": "thinking", "thinking": b.thinking, "signature": b.signature}
         if isinstance(b, ToolUse):
             return {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
         return {
@@ -164,7 +180,12 @@ def anthropic_body(request: Request) -> dict[str, Any]:
         }
 
     def content(m: Message) -> list[dict[str, Any]]:
-        blocks = [block(b) for b in m.blocks if not (isinstance(b, Text) and not b.text.strip())]
+        blocks = [
+            block(b)
+            for b in m.blocks
+            if not (isinstance(b, Text) and not b.text.strip()) and not (isinstance(b, Thinking) and not b.signature
+                                                                          and not b.data)
+        ]  # fmt: skip
         return blocks or [{"type": "text", "text": "(no answer)"}]
 
     body: dict[str, Any] = {
@@ -180,6 +201,8 @@ def anthropic_body(request: Request) -> dict[str, Any]:
         ]
     if request.effort:
         body["output_config"] = {"effort": request.effort}
+    if request.cache:
+        body["cache_control"] = {"type": "ephemeral"}  # the prefix up to the last turn, read back next time
     return body
 
 
@@ -236,13 +259,25 @@ async def complete_anthropic(
             if kind == "message_start":
                 message = payload["message"]
                 model = message.get("model", model)
-                usage.input_tokens = message.get("usage", {}).get("input_tokens", 0)
+                started = message.get("usage", {})
+                # All the input, as OpenAI counts it: Anthropic's input_tokens leave out what was read from or
+                # written to the cache.
+                usage.cached_tokens = int(started.get("cache_read_input_tokens") or 0)
+                usage.input_tokens = (
+                    int(started.get("input_tokens") or 0)
+                    + usage.cached_tokens
+                    + int(started.get("cache_creation_input_tokens") or 0)
+                )
                 usage.reasoning_tokens = anthropic_reasoning(message.get("usage", {})) or 0
             elif kind == "content_block_start":
                 start = payload["content_block"]
                 if start["type"] == "tool_use":
                     blocks.append(ToolUse(start["id"], start["name"], {}))
                     partial_json[len(blocks) - 1] = ""
+                elif start["type"] == "thinking":
+                    blocks.append(Thinking(str(start.get("thinking") or ""), str(start.get("signature") or "")))
+                elif start["type"] == "redacted_thinking":
+                    blocks.append(Thinking(data=str(start.get("data") or "")))
                 else:
                     blocks.append(Text(""))
             elif kind == "content_block_delta":
@@ -255,6 +290,11 @@ async def complete_anthropic(
                     await on_text(delta["text"])
                 elif delta["type"] == "input_json_delta":
                     partial_json[index] = partial_json.get(index, "") + delta["partial_json"]
+                elif delta["type"] in ("thinking_delta", "signature_delta"):
+                    thought = blocks[index]
+                    if isinstance(thought, Thinking):
+                        thought.thinking += str(delta.get("thinking") or "")
+                        thought.signature += str(delta.get("signature") or "")
             elif kind == "content_block_stop":
                 index = payload["index"]
                 use = blocks[index]
@@ -377,6 +417,9 @@ async def complete_openai(
                 u = payload["usage"]
                 usage.input_tokens = u.get("prompt_tokens", 0)
                 usage.output_tokens = u.get("completion_tokens", 0)
+                prompt_details = u.get("prompt_tokens_details")
+                if isinstance(prompt_details, dict) and isinstance(prompt_details.get("cached_tokens"), int):
+                    usage.cached_tokens = prompt_details["cached_tokens"]
                 details = u.get("completion_tokens_details")
                 if isinstance(details, dict) and isinstance(details.get("reasoning_tokens"), int):
                     usage.reasoning_tokens = details["reasoning_tokens"]
