@@ -48,8 +48,8 @@ std::vector<SoundSource> findSoundSources (const plugins::DeviceList&);
     differs):
     - `index.json`: `{kind: "spinus.sound-index", version, descriptorsVersion, updated, roleExamples, instruments:
       [{key, name, format, file, pluginName, uniqueId, stockType, badge, fingerprint, complete, presetFiles,
-      problem, problemPresets, sounds (how many), updated}], sampleFolders, summary: {instruments, presets,
-      samples, problems}}`;
+      problem, problemPresets, sounds (how many), measuredWith, updated}], sampleFolders, summary: {instruments,
+   presets, samples, problems}}`;
     - `instruments/<key>.json`: `{version, key, sounds: [{id, version, name, category, role, roleFrom,
       soundRole, soundRoleFrom, ruleRole, silent, tracksPitch, polyphonic, low, high, width, registerLevels,
       registerBrightness, sound: {descriptors}, drumMap}]}`;
@@ -61,6 +61,10 @@ class SoundIndex
 {
 public:
     static constexpr int version = 1;
+    /** How the helper measures (SoundRender): raised when that changes in a way that can make a sound silent or
+        failed before measure now. 2: it waits for instruments that load their sounds late, and tries a plugin
+        that crashes listing its presets with its default sound only. */
+    static constexpr int helperRevision = 2;
 
     explicit SoundIndex (juce::File folder) : root (std::move (folder)) {}
     /** <plugin list folder>/ai/sounds. */
@@ -75,7 +79,11 @@ public:
         juce::String problem;             // the instrument itself did not load
         bool complete = false;            // every preset measured (not stopped part way)
         bool presetFiles = false;         // its presets are files (more may come): listed again at each update
+        int measuredWith = 0;             // the helperRevision that measured it (0: older than revision 2)
         juce::Time updated;
+
+        /** It did not load, a preset crashed or hung the helper, or a sound was silent. */
+        bool silentOrFailed() const;
     };
     struct Sample
     {
@@ -117,10 +125,17 @@ public:
     /** The space the index takes on disk. */
     juce::int64 getDiskUse() const;
 
-    /** Whether an update should start the helper for this instrument: new, changed (its fingerprint), measured
-        by another version, not finished, or with preset files (which may have been added or changed). One
-        that did not load is not tried again until it changes. */
+    /** Whether an update should start the helper for this instrument: new, changed (its fingerprint), not
+        finished, with preset files (which may have been added or changed), or silent or failed when measured
+        by an older helperRevision (or marked with measureAgain). A healthy one measured by an older helper is
+        kept as it is; one that did not load is otherwise not tried again until it changes. */
     bool needsVisit (const SoundSource&) const;
+
+    /** Forgets what was measured of this instrument (its sounds and problems), so the next update measures it
+        all again. Saves the index. False when it is not in the index. */
+    bool measureAgain (const juce::String& key);
+    /** measureAgain for every instrument that is silentOrFailed(). Returns how many. */
+    int measureAgainSilentOrFailed();
 
     struct SampleFile
     {

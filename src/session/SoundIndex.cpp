@@ -209,6 +209,7 @@ void SoundIndex::load()
             i.complete = (bool)v["complete"];
             i.presetFiles = (bool)v["presetFiles"];
             i.problem = v["problem"].toString();
+            i.measuredWith = (int)v["measuredWith"];
             i.updated = juce::Time::fromISO8601 (v["updated"].toString());
             if (const auto* bad = v["problemPresets"].getArray())
                 for (const auto& b : *bad)
@@ -254,6 +255,7 @@ bool SoundIndex::saveIndex() const
             bad.add (b);
         o->setProperty ("problemPresets", bad);
         o->setProperty ("sounds", i.sounds.size());
+        o->setProperty ("measuredWith", i.measuredWith);
         o->setProperty ("updated", i.updated.toISO8601 (true));
         list.add (v);
     }
@@ -360,6 +362,16 @@ juce::int64 SoundIndex::getDiskUse() const
     return bytes;
 }
 
+bool SoundIndex::Instrument::silentOrFailed() const
+{
+    if (problem.isNotEmpty() || ! problemPresets.isEmpty())
+        return true;
+    for (const auto& sound : sounds)
+        if ((bool)sound["silent"] || sound.hasProperty ("problem"))
+            return true;
+    return false;
+}
+
 bool SoundIndex::needsVisit (const SoundSource& source) const
 {
     const auto found = instruments.find (source.key);
@@ -368,9 +380,38 @@ bool SoundIndex::needsVisit (const SoundSource& source) const
     const auto& known = found->second;
     if (known.source.fingerprint != source.fingerprint)
         return true;
+    // Silent or failed with an older helper, which may have measured it too soon or given up too early.
+    if (known.measuredWith != helperRevision && known.silentOrFailed())
+        return true;
     if (known.problem.isNotEmpty())
         return false; // it did not load: not again until it changes
     return ! known.complete || known.presetFiles;
+}
+
+bool SoundIndex::measureAgain (const juce::String& key)
+{
+    const auto found = instruments.find (key);
+    if (found == instruments.end())
+        return false;
+    auto& i = found->second;
+    i.sounds.clear();
+    i.problemPresets.clear();
+    i.problem.clear();
+    i.complete = false;
+    saveInstrument (i);
+    saveIndex();
+    return true;
+}
+
+int SoundIndex::measureAgainSilentOrFailed()
+{
+    juce::StringArray keys;
+    for (const auto& [key, i] : instruments)
+        if (i.silentOrFailed())
+            keys.add (key);
+    for (const auto& key : keys)
+        measureAgain (key);
+    return keys.size();
 }
 
 std::vector<SoundIndex::SampleFile> SoundIndex::listSampleFiles (const juce::Array<juce::File>& folders,
@@ -726,6 +767,15 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
         entry.sounds.clear();
         entry.problemPresets.clear();
     }
+    else if (entry.measuredWith != SoundIndex::helperRevision && entry.silentOrFailed())
+    {
+        // Measured by an older helper: its silent sounds and the presets it gave up on are measured again.
+        for (int i = entry.sounds.size(); --i >= 0;)
+            if ((bool)entry.sounds[i]["silent"] || entry.sounds[i].hasProperty ("problem"))
+                entry.sounds.remove (i);
+        entry.problemPresets.clear();
+    }
+    entry.measuredWith = SoundIndex::helperRevision;
     entry.source = source;
     entry.problem.clear();
     entry.complete = false;

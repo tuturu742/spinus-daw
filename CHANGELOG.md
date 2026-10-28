@@ -7,6 +7,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- **Track creator: plugins measured as silent, or that failed, can be measured again:** the sound index kept
+  what an older Spinus heard forever, so big sampled instruments it measured too soon (before it waited for
+  their sounds to load) stayed silent, and a plugin that crashed once was never tried again. Now the next
+  **Update sound index** listens again to those an older version found silent or failed (the ones that
+  worked are kept), and **Your plugins... › Measure again** measures one plugin, or every silent or failed
+  one, anew. A plugin that stays silent until a sound is chosen in its own window (a drum player that needs a
+  kit, say) still can't be heard; saving the sound you set up there is planned for alpha 4.
+
 - **OpenAI's newest models (GPT-5.5 and later) work with the assistant and the pattern generator:** they
   refused every request that offered Spinus's tools ("Function tools with reasoning_effort are not
   supported"), because they think before answering and OpenAI's older chat API doesn't allow tools while they
