@@ -3,7 +3,7 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
-## 0.1.0-alpha.3 (2026-10-28)
+## Not released yet
 
 ### Track creator: your AI connection writes the song (experimental)
 
@@ -23,7 +23,7 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on
   tokens and the checks' scores (`python -m spinus_ai.harness`).
 
-## Not released yet (in alpha 3)
+## 0.1.0-alpha.3 (2026-10-28)
 
 ### Starter pack
 
