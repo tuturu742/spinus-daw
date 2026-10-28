@@ -772,7 +772,10 @@ TEST_CASE ("Song writer: the AI's effects, buses, sends and ducking are part of 
     CHECK (song::sendEffectKind ("Tape Echo") == "delay");
     CHECK (song::sendEffectKind ("Ping Pong Delay") == "delay");
     CHECK (song::sendEffectKind ("Bass Compressor").isEmpty());
-    CHECK (song::sendEffectKind ("Roomba").isEmpty()); // a word, not a part of one
+    CHECK (song::sendEffectKind ("Roomba").isEmpty());           // a word, not a part of one
+    CHECK (song::sendEffectKind ("Micro Delay Line").isEmpty()); // lines a sound up by milliseconds: no echo
+    CHECK (song::sendEffectKind ("MIDI Delayline").isEmpty());
+    CHECK (song::sendEffectKind ("Stereo Delay") == "delay");
 
     auto song = makeFullSong();
     const auto layers = song::layersOf (song);

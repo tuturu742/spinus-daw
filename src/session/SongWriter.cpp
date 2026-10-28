@@ -202,6 +202,9 @@ juce::String sendEffectKind (const juce::String& name)
     for (const auto* word : { "reverb", "hall", "room", "plate", "chamber" })
         if (words.contains (juce::String (" ") + word + " ") || words.contains (juce::String (word) + "verb"))
             return "reverb";
+    // A delay line or a micro delay shifts a sound by a few milliseconds (to line it up): not an echo.
+    if (words.contains (" delay line ") || words.contains (" delayline ") || words.contains (" micro "))
+        return {};
     for (const auto* word : { "delay", "echo" })
         if (words.contains (juce::String (" ") + word))
             return "delay";
