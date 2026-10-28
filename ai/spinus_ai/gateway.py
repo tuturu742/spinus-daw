@@ -4,6 +4,7 @@ llama.cpp). All stream."""
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import re
@@ -142,6 +143,22 @@ ANSWER_ROOM = 64000
 SMALLER_ROOM = (32000, 8192)
 # Why an answer stopped when it ran out of room (Anthropic, OpenAI).
 CUT_OFF = ("max_tokens", "length")
+# A model's answer: long conversations and reasoning can keep a provider quiet for minutes before it streams.
+ANSWER_TIMEOUT = httpx.Timeout(600.0, connect=15.0)
+NETWORK_RETRY_WAITS = (2.0, 8.0)  # a dropped connection is asked again twice, a step of a long tool loop not lost
+
+
+def network_trouble(error: httpx.TransportError) -> str:
+    """What went wrong, in words, for errors whose text is empty (a timeout, a closed connection)."""
+    if str(error):
+        return str(error)
+    if isinstance(error, httpx.TimeoutException):
+        return "no answer in time"
+    if isinstance(error, httpx.RemoteProtocolError):
+        return "the connection was closed before the answer was complete"
+    if isinstance(error, httpx.ConnectError):
+        return "could not connect"
+    return type(error).__name__
 
 
 def error_for_status(status: int, body: str) -> ProviderError:
@@ -250,7 +267,9 @@ async def complete_anthropic(
     async with contextlib.AsyncExitStack() as stack:
         while True:
             response = await stack.enter_async_context(
-                client.stream("POST", f"{connection.base_url}/v1/messages", headers=headers, json=body)
+                client.stream(
+                    "POST", f"{connection.base_url}/v1/messages", headers=headers, json=body, timeout=ANSWER_TIMEOUT
+                )
             )
             if response.status_code == 200:
                 break
@@ -406,7 +425,13 @@ async def complete_openai(
                 body.pop("reasoning", None)
                 body["reasoning_effort"] = "none"
             response = await stack.enter_async_context(
-                client.stream("POST", f"{connection.base_url}/chat/completions", headers=headers, json=body)
+                client.stream(
+                    "POST",
+                    f"{connection.base_url}/chat/completions",
+                    headers=headers,
+                    json=body,
+                    timeout=ANSWER_TIMEOUT,
+                )
             )
             if response.status_code == 200:
                 break
@@ -569,7 +594,11 @@ async def complete_responses(
     stop_reason = ""
     model = request.model
     async with client.stream(
-        "POST", f"{connection.base_url}/responses", headers=headers, json=responses_body(request)
+        "POST",
+        f"{connection.base_url}/responses",
+        headers=headers,
+        json=responses_body(request),
+        timeout=ANSWER_TIMEOUT,
     ) as response:
         if response.status_code != 200:
             raise error_for_status(response.status_code, (await response.aread()).decode(errors="replace"))
@@ -640,17 +669,30 @@ async def complete(
     """The model's answer. A model that refuses the reasoning level asked for is asked once more with the lowest
     level it offers (request.effort changes, so a tool loop's later turns use it too), and the answer says so."""
     try:
-        return await complete_once(client, connection, key, request, on_text)
+        return await complete_retrying(client, connection, key, request, on_text)
     except ProviderError as error:
         asked = request.effort
         level = offered_effort(asked, str(error)) if error.kind == "bad_request" else None
         if level is None:
             raise
         request.effort = level
-        completion = await complete_once(client, connection, key, request, on_text)
+        completion = await complete_retrying(client, connection, key, request, on_text)
         said = f"{request.model} does not reason at the level '{asked}', so '{level}', the lowest it offers, was used."
         completion.notice = f"{completion.notice} {said}".strip()
         return completion
+
+
+async def complete_retrying(
+    client: httpx.AsyncClient, connection: Connection, key: str | None, request: Request, on_text: OnText
+) -> Completion:
+    for wait in (*NETWORK_RETRY_WAITS, None):
+        try:
+            return await complete_once(client, connection, key, request, on_text)
+        except ProviderError as error:
+            if error.kind != "network" or wait is None:
+                raise
+            await asyncio.sleep(wait)
+    raise AssertionError("unreachable")
 
 
 async def complete_once(
@@ -667,7 +709,7 @@ async def complete_once(
             return await complete_responses(client, connection, key, request, on_text)
         return await complete_openai(client, connection, key, request, on_text)
     except httpx.TransportError as error:
-        raise ProviderError("network", f"Could not reach {connection.base_url}: {error}") from error
+        raise ProviderError("network", f"Could not reach {connection.base_url}: {network_trouble(error)}") from error
 
 
 async def list_models(client: httpx.AsyncClient, connection: Connection, key: str | None) -> list[str]:
