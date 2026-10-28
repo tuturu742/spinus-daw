@@ -162,6 +162,10 @@ std::vector<Layer> layersOf (const juce::var& song)
         layer.id = l["id"].toString();
         layer.name = l["name"].toString();
         layer.family = l["family"].toString();
+        // "#rrggbb" as the AI writes it, as a colour command takes it (#AARRGGBB).
+        if (const auto c = l["colour"].toString();
+            c.length() == 7 && c.startsWith ("#") && c.substring (1).containsOnly ("0123456789abcdefABCDEF"))
+            layer.colour = "#ff" + c.substring (1).toLowerCase();
         layer.part = l["part"].toString();
         layer.role = l["role"].toString();
         layer.soundRole = l["soundRole"].toString();
@@ -187,6 +191,11 @@ juce::String familyColour (const juce::String& family)
     };
     const auto found = colours.find (family);
     return found != colours.end() ? found->second : juce::String ("#ff9b5cff");
+}
+
+juce::String layerColour (const Layer& layer)
+{
+    return layer.colour.isNotEmpty() ? layer.colour : familyColour (layer.family);
 }
 
 Sound defaultSound (const Layer& layer)
@@ -409,7 +418,7 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
         }
         const auto found = options.layerSounds.find (layer.id);
         const auto sound = found != options.layerSounds.end() ? found->second : defaultSound (layer);
-        const auto colour = familyColour (layer.family);
+        const auto colour = layerColour (layer);
         const auto channel =
             step ("channel.add", object ({ { "name", layer.name }, { "instrument", sound.instrument } }));
         step ("channel.set",
@@ -440,8 +449,7 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
         [&] (const juce::String& name, juce::int64 length, const Layer& layer, const juce::Array<juce::var>& notes)
     {
         const auto pattern = step ("pattern.add", object ({ { "name", name }, { "length", length } }));
-        step ("pattern.set",
-              object ({ { "pattern", pattern + ".pattern" }, { "colour", familyColour (layer.family) } }));
+        step ("pattern.set", object ({ { "pattern", pattern + ".pattern" }, { "colour", layerColour (layer) } }));
         if (swing > 0.0 && ! isEffect (layer))
             step ("pattern.setSwing", object ({ { "pattern", pattern + ".pattern" }, { "swing", swing } }));
         step ("pattern.setNotes",

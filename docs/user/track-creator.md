@@ -469,8 +469,11 @@ tell the AI, so no fix round runs.
 **AI tools** is how deep the AI may go: which groups of the harness's tools it gets.
 
 - **Basic**: the form, chords, every part's notes, motifs, sounds, the checks and finish. Always on.
-- **Arrangement**: parts and layers of its own, motif variations, drum fills, layers entering and leaving
-  per section, and a check of the song's energy against your songs' sections.
+- **Arrangement**: parts and layers of its own (a channel each, grouped and coloured by family, or the family
+  and colour it chooses), a motif varied instead of repeated (its rhythm or notes, upside down, or moved
+  later), drum fills at phrase ends with a crash after, layers entering and leaving per section, and a check
+  of the song's energy section by section against your songs' sections. Parts it adds can be removed by it;
+  yours always stay.
 - **Transitions and automation**: automation clips (filter sweeps, volume fades, effect sends), risers,
   impacts and swells.
 - **Effects and mix**: effects on each part's insert, sends to reverb and delay, sidechain ducking from the

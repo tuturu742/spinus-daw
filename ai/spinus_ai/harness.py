@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import json
 import math
 import re
@@ -294,6 +295,89 @@ def depth_words(groups: tuple[str, ...]) -> str:
     return " + ".join(GROUPS[g][0] if i == 0 else GROUPS[g][0].lower() for i, g in enumerate(groups))
 
 
+# ---------------------------------------------------------------------------------------------------
+# Arrangement
+
+FAMILIES = ("Drums", "Bass", "Synths", "Leads", "Guitars", "Keys", "Orchestra", "FX")
+COLOUR = re.compile(r"^#[0-9a-fA-F]{6}$")
+VARIATIONS = ("rhythm", "notes", "invert", "displace")
+FILLS = ("snare", "toms", "build")
+ARRANGEMENT_TOOLS = [
+    Tool(
+        "add_part",
+        "Add a part of your own to the song (a layer: a pad, a second guitar, a percussion loop...), with its role. "
+        "Spinus gives it a channel, coloured and grouped by family, and a sound of its role.",
+        schema(
+            {
+                "id": {"type": "string", "description": "Short, lowercase, its own: 'pad2', 'shaker'"},
+                "name": {"type": "string"},
+                "role": {"type": "string", "enum": list(sw.ROLES)},
+            },
+            ["id", "role"],
+        ),
+    ),
+    Tool("remove_part", "Remove a part you added (the user's parts stay).", schema({"part": PART}, ["part"])),
+    Tool(
+        "set_look",
+        "A part's family (its Channel Rack group and mixer bus) and colour.",
+        schema(
+            {
+                "part": PART,
+                "family": {"type": "string", "description": f"One of {', '.join(FAMILIES)}, or a name of your own"},
+                "colour": {"type": "string", "description": "'#rrggbb'"},
+            },
+            ["part"],
+        ),
+    ),
+    Tool(
+        "vary",
+        "Make a new motif from one you named: rhythm (notes moved off and onto the beat), notes (some notes moved "
+        "a step of the key), invert (upside down around its first note), displace (moved later by `amount` steps).",
+        schema(
+            {
+                "name": {"type": "string", "description": "The new motif's name"},
+                "motif": {"type": "string", "description": "The motif it varies"},
+                "how": {"type": "string", "enum": list(VARIATIONS)},
+                "amount": {"type": "integer", "description": "Steps for displace; how many notes for notes"},
+            },
+            ["name", "motif", "how"],
+        ),
+    ),
+    Tool(
+        "fill",
+        "Drum fills at phrase ends in a section: the end of every `every` bars (and the section's last bar), with "
+        "a crash where the next phrase starts.",
+        schema(
+            {
+                "part": PART,
+                "section": SECTION,
+                "every": {"type": "integer", "description": "Phrase length in bars (4 or 8; the section's own)"},
+                "kind": {"type": "string", "enum": list(FILLS)},
+                "crash": {"type": "boolean"},
+            },
+            ["part", "section"],
+        ),
+    ),
+    Tool(
+        "play_only",
+        "Where a part plays in a section: only the bars given ('1-4', '5-8'), 'none' (it rests), or 'all' (back as "
+        "written). Layers entering and leaving.",
+        schema({"part": PART, "section": SECTION, "bars": {"type": "string"}}, ["part", "section", "bars"]),
+    ),
+    Tool(
+        "energy",
+        "The song's energy section by section (how busy, how many parts, how loud the notes), against the reference "
+        "songs' sections.",
+        schema({}, []),
+    ),
+]
+TOOLS += ARRANGEMENT_TOOLS
+TOOL_GROUP.update({t.name: "arrangement" for t in ARRANGEMENT_TOOLS})
+GROUP_SYSTEM["arrangement"] = """Arrangement tools: design the form and length yourself (set_form), add the \
+parts and layers the song needs (add_part, with set_look for its family and colour), vary motifs instead of \
+repeating them unchanged (vary, then place), put drum fills at phrase ends (fill), and let layers enter and \
+leave so sections build and drop (play_only). Check the energy curve against the references (energy)."""
+
 TOOL_NAMES = [t.name for t in TOOLS]
 
 
@@ -333,6 +417,9 @@ class Workspace:
     finished: bool = False
     calls: Counter[str] = field(default_factory=Counter)
     groups: tuple[str, ...] = GROUP_ORDER  # the groups of tools allowed (the page's depth)
+    # The later groups' state: "added" (parts the AI added), "looks" (part -> family, colour), "stash" (part ->
+    # section -> notes play_only took out).
+    extra: dict[str, Any] = field(default_factory=dict)
 
     # --- making one -------------------------------------------------------------------------------
 
@@ -341,6 +428,7 @@ class Workspace:
         """A new song with the rules' form for the style (sections, lengths, chords) and no notes yet."""
         rules = sw.write(setup.summary, seed, size, setup.parts)
         ws = Workspace(setup, seed, size, float(rules["tempo"]), dict(rules["key"]))
+        ws.setup = ws.own_setup()
         for s in rules["sections"]:
             hold = 2 if len(s["chords"]) >= 2 and s["chords"][0]["roman"] == s["chords"][1]["roman"] else 1
             loop = [c["roman"] for c in s["chords"][::hold]][: len(s["loop"])] or ["i"]
@@ -370,6 +458,11 @@ class Workspace:
         ws.sounds = dict(kept.get("sounds") or {})
         ws.motifs = dict(kept.get("motifs") or {})
         ws.by_rules = {(p, s) for p, s in kept.get("byRules") or []}
+        ws.extra = json.loads(json.dumps(kept.get("extra") or {}))
+        ws.setup = ws.own_setup()
+        for part in ws.extra.get("added", []):
+            if not any(p["id"] == part["id"] for p in ws.setup.parts):
+                ws.setup.parts.append(dict(part))
         return ws
 
     def export(self) -> dict[str, Any]:
@@ -380,10 +473,16 @@ class Workspace:
             "sounds": self.sounds,
             "motifs": self.motifs,
             "byRules": sorted([list(x) for x in self.by_rules]),
+            "extra": self.extra,
         }
 
+    def own_setup(self) -> compose.Setup:
+        """The setup with a parts list of this working copy's own (the AI may add parts)."""
+        return dataclasses.replace(self.setup, parts=[dict(p) for p in self.setup.parts])
+
     def copy(self) -> Workspace:
-        other = Workspace(self.setup, self.seed, self.size, self.tempo, dict(self.key))
+        other = Workspace(self.own_setup(), self.seed, self.size, self.tempo, dict(self.key))
+        other.groups = self.groups
         state = json.loads(json.dumps(self.export()))
         other.sections = {s["id"]: s for s in state["sections"]}
         other.order, other.notes, other.sounds, other.motifs = (
@@ -393,6 +492,7 @@ class Workspace:
             state["motifs"],
         )
         other.by_rules = set(self.by_rules)
+        other.extra = state["extra"]
         other.summary, other.finished = self.summary, self.finished
         return other
 
@@ -437,7 +537,11 @@ class Workspace:
         written = {p: by for p, by in self.notes.items() if any(by.values())}
         checked = compose.Checked(self.plan(), written, {}, dict(self.sounds), [], {})
         checked.filled = [p["id"] for p in self.setup.written() if p["id"] not in written]
-        return compose.build_song(checked, self.setup, self.seed, self.size)
+        song = compose.build_song(checked, self.setup, self.seed, self.size)
+        for layer in song["layers"]:
+            look = (self.extra.get("looks") or {}).get(layer["id"]) or {}
+            layer.update({k: v for k, v in look.items() if k in ("family", "colour")})
+        return song
 
     # --- notation -----------------------------------------------------------------------------------
 
@@ -721,6 +825,208 @@ class Workspace:
         count = sum(len(written.get(sid, [])) for sid in ids)
         return f"The rules wrote {p['id']} in {', '.join(ids)}: {count} notes."
 
+    # --- arrangement ----------------------------------------------------------------------------------
+
+    def tool_add_part(self, id: str, role: str, name: str = "") -> str:
+        pid = str(id).strip().lower()
+        if not compose.SECTION_ID.match(pid):
+            raise Mistake("a part's id is a short lowercase word")
+        if any(p["id"] == pid for p in self.setup.parts):
+            raise Mistake(f"there is a part '{pid}' already")
+        if role not in sw.ROLES:
+            raise Mistake(f"'{role}' is not a role (the roles: {', '.join(sw.ROLES)})")
+        if len(self.setup.parts) >= sw.MOST_PARTS:
+            raise Mistake(f"the song has {sw.MOST_PARTS} parts, the most it can have")
+        part = {"id": pid, "name": (str(name).strip() or sw.ROLES[role][0])[:60], "role": role}
+        self.setup.parts.append(part)
+        self.extra.setdefault("added", []).append(part)
+        return f"Part {pid} ({part['name']}, {role}) added, in the {sw.ROLES[role][1]} family; write its notes."
+
+    def tool_remove_part(self, part: str) -> str:
+        pid = self.part(part)["id"]
+        if not any(p["id"] == pid for p in self.extra.get("added", [])):
+            raise Mistake(f"{pid} is one of the user's parts: it stays (let it rest with play_only instead)")
+        self.setup.parts = [p for p in self.setup.parts if p["id"] != pid]
+        self.extra["added"] = [p for p in self.extra["added"] if p["id"] != pid]
+        self.notes.pop(pid, None)
+        self.sounds.pop(pid, None)
+        (self.extra.get("looks") or {}).pop(pid, None)
+        return f"Part {pid} removed."
+
+    def tool_set_look(self, part: str, family: str = "", colour: str = "") -> str:
+        pid = self.part(part)["id"]
+        look = self.extra.setdefault("looks", {}).setdefault(pid, {})
+        if family:
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 &-]{0,19}", family):
+                raise Mistake("a family is a short name (Drums, Bass, Synths...)")
+            look["family"] = family
+        if colour:
+            if not COLOUR.match(colour):
+                raise Mistake("a colour is '#rrggbb'")
+            look["colour"] = colour.lower()
+        if not family and not colour:
+            raise Mistake("give a family, a colour or both")
+        return f"{pid}: " + ", ".join(f"{k} {v}" for k, v in look.items()) + "."
+
+    def tool_vary(self, name: str, motif: str, how: str, amount: int = 1) -> str:
+        source = self.motifs.get(motif)
+        if source is None:
+            raise Mistake(f"there is no motif '{motif}' (motifs: {', '.join(self.motifs) or 'none yet'})")
+        if how not in VARIATIONS:
+            raise Mistake(f"vary is one of {', '.join(VARIATIONS)}")
+        if not re.fullmatch(r"[A-Za-z0-9 _-]{1,30}", name or ""):
+            raise Mistake("a motif's name is a short word")
+        bars = int(source["bars"])
+        span = bars * self.steps
+        notes = [n.split() for n in re.split(r"[;\n]+", str(source["notes"])) if len(n.split()) in (3, 4)]
+        if not notes:
+            raise Mistake(f"'{motif}' has no notes to vary")
+        amount = max(1, min(span - 1, int(amount)))
+        scale = sorted(sw.scale_of(self.key))
+        pitched = [n for n in notes if n[1].lstrip("-").replace(".", "", 1).isdigit()]
+        first = float(pitched[0][1]) if pitched else 0.0
+        out = []
+        for i, n in enumerate(notes):
+            step, pitch, rest = n[0], n[1], n[2:]
+            if how == "displace":
+                step = str((round(float(step)) + amount) % span)
+            elif how == "rhythm" and i % 2 == 1:
+                step = str(min(span - 1, round(float(step)) + 1))  # pushed a sixteenth: off the beat
+            elif how == "invert" and n in pitched:
+                pitch = str(round(2 * first - float(pitch)))
+            elif how == "notes" and n in pitched and i % 2 == 1 and i // 2 < amount:
+                p = round(float(pitch))
+                ups = [q for q in range(p + 1, p + 4) if q % 12 in scale]
+                pitch = str(ups[0] if ups else p)
+            out.append(" ".join([step, pitch, *rest]))
+        out.sort(key=lambda t: float(t.split()[0]))
+        self.motifs[name] = {"notes": "; ".join(out), "bars": bars}
+        return f"Motif '{name}': '{motif}' {how}" + (f" by {amount}" if how in ("displace", "notes") else "") + "."
+
+    def tool_fill(self, part: str, section: str, every: int = 0, kind: str = "snare", crash: bool = True) -> str:
+        p, s = self.part(part), self.section(section)
+        if not self.drums(p["id"]):
+            raise Mistake(f"{p['id']} plays no drums: fills are for drum parts")
+        if kind not in FILLS:
+            raise Mistake(f"a fill is one of {', '.join(FILLS)}")
+        bars = int(s["bars"])
+        every = int(every) if every else bars
+        if every < 1:
+            raise Mistake("every is a number of bars")
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        ends = sorted({b for b in range(every - 1, bars, every)} | {bars - 1})
+        notes = list(self.notes.get(p["id"], {}).get(s["id"], []))
+        half = self.steps // 2
+        for end in ends:
+            start = end * bar_ticks + (0 if kind == "build" else half * sw.TICKS_PER_STEP)
+            notes = [n for n in notes if not start <= int(n["start"]) < (end + 1) * bar_ticks]
+            length = bar_ticks if kind == "build" else half * sw.TICKS_PER_STEP
+            count = length // sw.TICKS_PER_STEP
+            toms = ("tomHigh", "tomHigh", "tomMid", "tomMid", "tomLow", "tomLow", "kick", "snare")
+            for k in range(count):
+                drum = toms[k * len(toms) // count] if kind == "toms" else "snare"
+                notes.append({"start": start + k * sw.TICKS_PER_STEP, "length": sw.TICKS_PER_STEP // 2,
+                              "drum": drum, "velocity": round(0.55 + 0.45 * k / max(1, count - 1), 3)})  # fmt: skip
+            if crash and end + 1 < bars:
+                at = (end + 1) * bar_ticks
+                notes = [n for n in notes if not (int(n["start"]) == at and n.get("drum") == "crash")]
+                notes.append({"start": at, "length": sw.TICKS_PER_STEP // 2, "drum": "crash", "velocity": 0.9})
+        self.put(p["id"], s["id"], notes)
+        where = ", ".join(str(e + 1) for e in ends)
+        return f"{kind.capitalize()} fills in {p['id']}, {s['id']}, at the end of bars {where}."
+
+    def tool_play_only(self, part: str, section: str, bars: str) -> str:
+        p, s = self.part(part), self.section(section)
+        stash = self.extra.setdefault("stash", {}).setdefault(p["id"], {})
+        written = stash.get(s["id"])
+        if written is None:
+            written = list(self.notes.get(p["id"], {}).get(s["id"], []))
+        word = str(bars).strip().lower()
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        if word == "all":
+            kept = written
+            stash.pop(s["id"], None)
+        else:
+            stash[s["id"]] = written
+            if word == "none":
+                kept = []
+            else:
+                first, last = bar_range(bars, int(s["bars"]))
+                kept = [n for n in written if first * bar_ticks <= int(n["start"]) < (last + 1) * bar_ticks]
+        self.notes.setdefault(p["id"], {})[s["id"]] = kept
+        return (
+            f"{p['id']} in {s['id']}: "
+            + ("as written" if word == "all" else "rests" if word == "none" else f"bars {bars}")
+            + f" ({len(kept)} notes)."
+        )
+
+    def energies(self) -> dict[str, float]:
+        """Each section's energy, 0 to 1 against the song's busiest: notes a bar, parts playing, velocity."""
+        raw = {}
+        for sid, s in self.sections.items():
+            bars = max(1, int(s["bars"]))
+            playing = [ns for by in self.notes.values() if (ns := by.get(sid))]
+            count = sum(len(ns) for ns in playing)
+            loud = sum(float(n["velocity"]) for ns in playing for n in ns) / max(1, count)
+            raw[sid] = (count / bars) * 0.4 + len(playing) * 2.0 + loud * 4.0 if playing else 0.0
+        top = max(raw.values(), default=0.0) or 1.0
+        return {sid: round(v / top, 2) for sid, v in raw.items()}
+
+    def reference_energy(self) -> list[float]:
+        """The references' sections from start to end, as their level (0 to 1 against each song's loudest), at
+        five points of a song."""
+        curves = []
+        for song in self.setup.summary.get("perSong") or []:
+            sections = [x for x in song.get("sections") or [] if isinstance(x.get("level"), int | float)]
+            if len(sections) < 2:
+                continue
+            levels = [float(x["level"]) for x in sections]
+            low, high = min(levels), max(levels)
+            spread = (high - low) or 1.0
+            total = sum(int(x.get("bars") or 1) for x in sections)
+            curve, at = [], 0
+            for x in sections:
+                curve.append(((at + int(x.get("bars") or 1) / 2) / total, (float(x["level"]) - low) / spread))
+                at += int(x.get("bars") or 1)
+            curves.append([min(curve, key=lambda c: abs(c[0] - t))[1] for t in (0.1, 0.3, 0.5, 0.7, 0.9)])
+        if not curves:
+            return []
+        return [round(sum(c[i] for c in curves) / len(curves), 2) for i in range(5)]
+
+    def tool_energy(self) -> str:
+        energy = self.energies()
+        total = sum(int(self.sections[s]["bars"]) for s in self.order)
+        lines, at = [], 0
+        for sid in self.order:
+            bars = int(self.sections[sid]["bars"])
+            lines.append(f"bars {at + 1}-{at + bars}, {sid}: {energy.get(sid, 0):.2f}")
+            at += bars
+        reference = self.reference_energy()
+        if reference:
+            points = ", ".join(
+                f"{round(100 * t)} %: {v:.2f}" for t, v in zip((0.1, 0.3, 0.5, 0.7, 0.9), reference, strict=True)
+            )
+            lines.append(f"The reference songs' sections (0 to 1, through the song): {points}.")
+        else:
+            lines.append("No reference song has its sections measured: the energies of the kinds are " + ", ".join(
+                f"{k} {v:g}" for k, v in sw.ENERGY.items()) + ".")  # fmt: skip
+        lines += [f"Song: {total} bars.", *self.energy_issues()]
+        return "\n".join(lines)
+
+    def energy_issues(self) -> list[str]:
+        energy = self.energies()
+        out = []
+        by_kind: dict[str, list[float]] = {}
+        for sid, s in self.sections.items():
+            by_kind.setdefault(str(s["kind"]), []).append(energy.get(sid, 0.0))
+        chorus, verse = max(by_kind.get("chorus", [0.0])), max(by_kind.get("verse", [0.0]))
+        if "chorus" in by_kind and "verse" in by_kind and chorus <= verse:
+            out.append(f"energy: the chorus ({chorus:.2f}) is not above the verse ({verse:.2f}): add layers or notes")
+        values = [energy.get(sid, 0.0) for sid in self.order]
+        if len(values) >= 3 and max(values) - min(values) < 0.2:
+            out.append("energy: every section is about as full as the others (let layers enter and leave)")
+        return out
+
     def issues(self, part: str = "", section: str = "") -> list[str]:
         """The checks, as lines with locations (worst first)."""
         only_part = self.part(part)["id"] if part else ""
@@ -817,6 +1123,8 @@ class Workspace:
             for sid, s in self.sections.items():
                 if (not only_section or sid == only_section) and int(s["bars"]) % 4:
                     out.append(f"{sid}: {s['bars']} bars, off the 4-bar phrases (the style's: {lengths})")
+        if not only_part and not only_section and "arrangement" in self.groups:
+            out += self.energy_issues()
         return out
 
     def tool_check(self, part: str = "", section: str = "") -> str:

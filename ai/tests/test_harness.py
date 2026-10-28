@@ -179,7 +179,7 @@ async def test_a_model_that_never_finishes_leaves_the_best_checked_version(tmp_p
     script += [[("form", {})]] * 10
     service = scripted(tmp_path, script, sent)
     await connect(service)
-    song = await run_job(service, "ai.v1.song.compose", params())
+    song = await run_job(service, "ai.v1.song.compose", params(tools="basic"))
     assert len(sent) == 6 and "did not finish in 6 turns" in song["note"]
     # The best checked version: the drums, before the bass line full of notes outside the key.
     assert song["layerParts"]["drums"] and "bass" in song["composed"]["filled"]
@@ -537,3 +537,138 @@ def test_eval_compares_depths(tmp_path: Path, capsys: Any) -> None:
         "anthropic-harness-basic-default.song.json",
         "anthropic-harness-basic+arrangement+transitions+mix-default.song.json",
     }
+
+
+# ---------------------------------------------------------------------------------------------------
+# Arrangement
+
+
+def arranged() -> harness.Workspace:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    ws.groups = harness.DEPTHS["arrangement"]
+    return ws
+
+
+def test_the_ai_adds_its_own_parts_with_a_family_and_colour() -> None:
+    ws = arranged()
+    assert "added" in ws.call("add_part", {"id": "shaker", "name": "Shaker", "role": "percussion"})
+    ws.call("set_look", {"part": "shaker", "family": "Percussion", "colour": "#AA3300"})
+    first = next(iter(ws.sections))
+    ws.call("write", {"part": "shaker", "section": first, "notes": "0 hat 1 60; 2 hat 1 50", "loop_bars": 1})
+    song = ws.song()
+    layer = next(x for x in song["layers"] if x["id"] == "shaker")
+    assert layer["family"] == "Percussion" and layer["colour"] == "#aa3300" and layer["drums"]
+    assert song["layerParts"]["shaker"][first]
+    # A copy (the best checked version) keeps it, and the user's parts are not the AI's to remove.
+    assert any(p["id"] == "shaker" for p in ws.copy().setup.parts)
+    assert not any(p["id"] == "shaker" for p in setup().parts)  # the request's own list is untouched
+    for bad, why in [
+        ({"id": "shaker", "role": "percussion"}, "already"),
+        ({"id": "Big Pad!", "role": "pad"}, "lowercase"),
+        ({"id": "kz", "role": "kazoo"}, "not a role"),
+    ]:
+        with pytest.raises(harness.Mistake, match=why):
+            ws.call("add_part", bad)
+    with pytest.raises(harness.Mistake, match="user's parts"):
+        ws.call("remove_part", {"part": "bass"})
+    with pytest.raises(harness.Mistake, match="'#rrggbb'"):
+        ws.call("set_look", {"part": "bass", "colour": "red"})
+    with pytest.raises(harness.Mistake, match="give a family"):
+        ws.call("set_look", {"part": "bass"})
+    assert "removed" in ws.call("remove_part", {"part": "shaker"})
+    assert not any(x["id"] == "shaker" for x in ws.song()["layers"])
+
+
+def test_motifs_vary_by_rhythm_notes_inversion_and_displacement() -> None:
+    ws = arranged()
+    ws.call("motif", {"name": "hook", "notes": "0 64 2 100; 4 67 2 90; 8 71 2 90; 12 69 2 80", "bars": 1})
+    ws.call("vary", {"name": "up", "motif": "hook", "how": "invert"})
+    assert ws.motifs["up"]["notes"].split("; ")[1].split()[1] == "61"  # 2*64 - 67
+    ws.call("vary", {"name": "late", "motif": "hook", "how": "displace", "amount": 2})
+    assert [t.split()[0] for t in ws.motifs["late"]["notes"].split("; ")] == ["2", "6", "10", "14"]
+    ws.call("vary", {"name": "pushed", "motif": "hook", "how": "rhythm"})
+    assert [t.split()[0] for t in ws.motifs["pushed"]["notes"].split("; ")] == ["0", "5", "8", "13"]
+    ws.call("vary", {"name": "moved", "motif": "hook", "how": "notes", "amount": 2})
+    assert ws.motifs["moved"]["notes"] != ws.motifs["hook"]["notes"]
+    with pytest.raises(harness.Mistake, match="no motif"):
+        ws.call("vary", {"name": "x", "motif": "nothing", "how": "invert"})
+    with pytest.raises(harness.Mistake, match="one of"):
+        ws.call("vary", {"name": "x", "motif": "hook", "how": "sideways"})
+
+
+def test_fills_go_at_phrase_ends_with_a_crash_after() -> None:
+    ws = arranged()
+    section = next(s for s in ws.sections.values() if s["bars"] >= 8)
+    sid, bars = section["id"], section["bars"]
+    ws.call("write", {"part": "drums", "section": sid, "notes": "0 kick 1 100; 8 snare 1 100", "loop_bars": 1})
+    ends = ", ".join(str(e) for e in sorted(set(range(4, bars + 1, 4)) | {bars}))
+    said = ws.call("fill", {"part": "drums", "section": sid, "every": 4, "kind": "toms"})
+    assert said.endswith(f"at the end of bars {ends}.")
+    bar = ws.steps * 960 // 4
+    notes = ws.notes["drums"][sid]
+    in_fourth = [n for n in notes if 3 * bar <= n["start"] < 4 * bar]
+    assert any(n["drum"].startswith("tom") for n in in_fourth)
+    assert any(n["drum"] == "crash" and n["start"] == 4 * bar for n in notes)
+    with pytest.raises(harness.Mistake, match="plays no drums"):
+        ws.call("fill", {"part": "bass", "section": sid})
+    with pytest.raises(harness.Mistake, match="a fill is one of"):
+        ws.call("fill", {"part": "drums", "section": sid, "kind": "cowbell"})
+
+
+def test_layers_enter_and_leave_and_come_back() -> None:
+    ws = arranged()
+    sid = next(s["id"] for s in ws.sections.values() if s["bars"] >= 8)
+    ws.call("write", {"part": "bass", "section": sid, "notes": "0 45 4 100; 8 45 4 90", "loop_bars": 1})
+    written = len(ws.notes["bass"][sid])
+    ws.call("play_only", {"part": "bass", "section": sid, "bars": "5-8"})
+    assert len(ws.notes["bass"][sid]) == 8  # two a bar, four bars
+    ws.call("play_only", {"part": "bass", "section": sid, "bars": "none"})
+    assert ws.notes["bass"][sid] == []
+    ws.call("play_only", {"part": "bass", "section": sid, "bars": "all"})
+    assert len(ws.notes["bass"][sid]) == written
+    with pytest.raises(harness.Mistake, match="'3' or '5-8'"):
+        ws.call("play_only", {"part": "bass", "section": sid, "bars": "sometimes"})
+
+
+def test_the_energy_check_follows_the_references_sections() -> None:
+    brief = json.loads(json.dumps(BRIEF))
+    for i, song in enumerate(brief["summary"]["perSong"]):
+        song["sections"] = [{"bars": 8, "level": -12.0 - i}, {"bars": 8, "level": -6.0}, {"bars": 8, "level": -14.0}]
+    ws = harness.Workspace.start(harness.setup_of(brief), 5, "sketch")
+    ws.groups = harness.DEPTHS["arrangement"]
+    flat = "0 kick 1 100; 4 snare 1 100; 8 kick 1 100; 12 snare 1 100"
+    for sid in ws.sections:
+        ws.call("write", {"part": "drums", "section": sid, "notes": flat, "loop_bars": 1})
+    said = ws.call("energy", {})
+    assert "The reference songs' sections" in said and "50 %: 1.00" in said
+    assert any("about as full as the others" in line for line in ws.issues())
+    ws.groups = ("basic",)
+    assert not any(line.startswith("energy") for line in ws.issues())  # only with the arrangement tools
+
+
+async def test_arrangement_tools_through_a_run_and_not_at_basic(tmp_path: Path) -> None:
+    first = next(iter(harness.Workspace.start(setup(), 5, "sketch").sections))
+    script: Script = [
+        [("add_part", {"id": "pad2", "role": "pad"}), ("set_look", {"part": "pad2", "colour": "#336699"})],
+        [("rules_write", {"part": "pad2"}), ("play_only", {"part": "pad2", "section": first, "bars": "none"})],
+        [("energy", {})],
+        [("finish", {"summary": "s"})],
+    ]
+    sent: list[dict[str, Any]] = []
+    service = scripted(tmp_path, script, sent)
+    await connect(service)
+    song = await run_job(service, "ai.v1.song.compose", params())
+    assert {t["name"] for t in sent[0]["tools"]} >= {"add_part", "fill", "energy"}
+    assert "Arrangement tools:" in sent[0]["system"]
+    layer = next(x for x in song["layers"] if x["id"] == "pad2")
+    assert layer["colour"] == "#336699" and song["layerParts"]["pad2"][first] == []
+    # At Basic the same calls are refused, and their definitions are not sent.
+    sent.clear()
+    service = scripted(
+        tmp_path / "b", [[("add_part", {"id": "x", "role": "pad"})], [("finish", {"summary": "s"})]], sent
+    )
+    await connect(service)
+    await run_job(service, "ai.v1.song.compose", params(tools="basic"))
+    assert "add_part" not in {t["name"] for t in sent[0]["tools"]}
+    result = sent[1]["messages"][-1]["content"][0]
+    assert result["is_error"] and "Arrangement tools, which are not allowed" in result["content"]

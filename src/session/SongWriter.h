@@ -68,6 +68,7 @@ Sound defaultSound (const juce::String& part);
 struct Layer
 {
     juce::String id, name, family;     // a part of the user's list (parts::SongPart): its id and name
+    juce::String colour;               // its own colour (#AARRGGBB, the AI's choice), or empty: its family's
     juce::String part;                 // the song part it is made from ("fx" for the effects)
     juce::String role;                 // what it plays: parts::songRoles()
     juce::String soundRole;            // the role of sound it wants (the sound index's roles)
@@ -81,6 +82,8 @@ bool isFull (const juce::var& song);
 std::vector<Layer> layersOf (const juce::var& song);
 /** The colour of a family's channels, inserts and tracks (#AARRGGBB), as the demo songs have them. */
 juce::String familyColour (const juce::String& family);
+/** A layer's colour: its own, else its family's. */
+juce::String layerColour (const Layer&);
 /** Spinus's own sound for a layer: the Drum Machine for drums, 3x Osc with a preset of its role otherwise
     ("Sub Bass", "Warm Pad", "Pluck", "Bell", "Noise Riser"...). */
 Sound defaultSound (const Layer&);

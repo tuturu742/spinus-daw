@@ -25,6 +25,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   automation, Effects and mix. Pick Basic, Basic + arrangement (at first), Basic + arrangement + transitions,
   Full or Custom (a checkbox per group). More groups let it do more, and cost more. Only the allowed tools are
   sent; the choice is remembered, and the song's note says which tools wrote it.
+- **Arrangement tools** for the AI: it adds parts and layers of its own (a channel each, grouped and coloured by
+  family, or a family and colour it chooses), varies a motif (its rhythm or notes, upside down, or moved later)
+  instead of repeating it, puts drum fills at phrase ends with a crash after, lets layers enter and leave so
+  sections build and drop, and checks the song's energy section by section against your songs' sections.
 - For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the
   tokens each really used and the checks' scores (`python -m spinus_ai.harness`).
 

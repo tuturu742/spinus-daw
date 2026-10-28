@@ -582,3 +582,32 @@ TEST_CASE ("Song writer: each part starts at its role's level, from how loud its
            Catch::Approx (faders.at ("pad")).margin (0.01));
     CHECK (project.findInsert (channelNamed (project, "Bass")->targetInsert)->volumeDb == Catch::Approx (0.0));
 }
+
+TEST_CASE ("Song writer: a layer's own colour, as the AI chose it, colours its channel", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    auto* first = song["layers"][0].getDynamicObject();
+    first->setProperty ("colour", "#336699");
+    first->setProperty ("family", "Percussion");                         // a family of the AI's own
+    song["layers"][1].getDynamicObject()->setProperty ("colour", "red"); // not #rrggbb: its family's
+    const auto layers = song::layersOf (song);
+    CHECK (layers[0].colour == "#ff336699");
+    CHECK (song::layerColour (layers[0]) == "#ff336699");
+    CHECK (layers[1].colour.isEmpty());
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    const auto json = song::makeProposal (song, history.getProject(), options, &error);
+    INFO (error);
+    auto proposal = ai::Proposal::prepare (json, history);
+    INFO (proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    const auto* c = channelNamed (history.getProject(), layers[0].name);
+    REQUIRE (c != nullptr);
+    CHECK (c->colour == 0xff336699u);
+    CHECK (c->group == "Percussion");
+    const auto* other = channelNamed (history.getProject(), layers[1].name);
+    REQUIRE (other != nullptr);
+    CHECK (other->colour == (juce::uint32)song::familyColour (layers[1].family).substring (1).getHexValue64());
+}
