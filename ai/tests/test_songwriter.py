@@ -187,29 +187,22 @@ def test_a_part_or_a_section_is_written_again_and_the_rest_kept() -> None:
         songwriter.redo({"kind": "other"}, s, 1, part="bass")
 
 
-def test_a_full_arrangement_has_layers_that_come_and_go_by_section() -> None:
+def test_a_full_arrangement_has_parts_that_come_and_go_by_section() -> None:
     s = summary()
     sketch = songwriter.write(s, 3)
-    assert sketch["size"] == "sketch" and "layers" not in sketch
+    assert [layer["id"] for layer in sketch["layers"]] == ["drums", "bass", "chords", "lead"]
     full = songwriter.write(s, 3, "full")
     # The same song underneath: plan, chords and the four parts.
     assert full["parts"] == sketch["parts"] and full["sections"] == sketch["sections"]
     layers = {layer["id"]: layer for layer in full["layers"]}
-    assert 10 <= len(layers) <= 15, list(layers)
-    assert {"kick", "snare", "hats", "bass", "chords", "pad", "arp", "lead", "counter", "riser", "impact"} <= set(
-        layers
-    )
+    assert set(layers) == {"drums", "bass", "chords", "pad", "arp", "lead", "counter", "riser", "impact"}
     assert "sub" not in layers  # this bass sits low (its middle note 38): no room for a sub under it
     assert {layer["family"] for layer in full["layers"]} == {"Drums", "Bass", "Synths", "Leads", "FX"}
-    assert all(layer["role"] in ("drums", "bass", "keys", "pad", "pluck", "lead", "fx") for layer in full["layers"])
-
-    # Every drum note of the sketch is in exactly one drum layer.
-    for sid, notes in full["parts"]["drums"].items():
-        split = [n for layer in ("kick", "snare", "hats") for n in full["layerParts"][layer].get(sid, [])]
-        assert sorted(json.dumps(n, sort_keys=True) for n in split) == sorted(
-            json.dumps(n, sort_keys=True) for n in notes
-        )
-    assert all(n["drum"] == "kick" for notes in full["layerParts"]["kick"].values() for n in notes)
+    assert all(
+        layer["soundRole"] in ("drums", "bass", "keys", "pad", "pluck", "lead", "fx") for layer in layers.values()
+    )
+    # One drums part: every drum note of the sketch, kick, snare and hats together.
+    assert full["layerParts"]["drums"] == full["parts"]["drums"]
 
     # Thin verses, full choruses.
     def playing(sid: str) -> set[str]:
@@ -236,8 +229,48 @@ def test_a_full_arrangement_has_layers_that_come_and_go_by_section() -> None:
     choruses = [e["bar"] for e in full["arrangement"] if by_id[e["section"]]["kind"] == "chorus"]
     assert full["fx"]["riser"]["at"] == [b - 2 for b in choruses]
     assert set(choruses) <= set(full["fx"]["impact"]["at"])
-    assert "full arrangement" in " ".join(full["plain"])
+    assert "9 parts, a channel each" in " ".join(full["plain"])
     assert songwriter.write(s, 3, "full") == full
+
+
+def test_the_users_parts_are_written_two_of_a_role_unlike_each_other() -> None:
+    s = summary()
+    parts = [
+        {"id": "kit", "name": "Drum Machine", "role": "drums"},
+        {"id": "rhythm", "name": "Rhythm guitar", "role": "chords"},
+        {"id": "picked", "name": "Picked guitar", "role": "chords"},
+        {"id": "synth", "name": "Synth lead", "role": "lead"},
+        {"id": "harmony", "name": "Harmony", "role": "lead"},
+    ]
+    song = songwriter.write(s, 4, parts=parts)
+    assert [layer["id"] for layer in song["layers"]] == ["kit", "rhythm", "picked", "synth", "harmony"]
+    assert [layer["name"] for layer in song["layers"]][:2] == ["Drum Machine", "Rhythm guitar"]
+    assert "bass" not in song["layerParts"]  # not on the list: not written
+    notes = song["layerParts"]
+    assert notes["rhythm"] == song["parts"]["chords"] and notes["kit"] == song["parts"]["drums"]
+    # The second chords part breaks the chords up, an octave higher, with a rhythm of its own.
+    rhythm = [n for ns in notes["rhythm"].values() for n in ns]
+    picked = [n for ns in notes["picked"].values() for n in ns]
+    assert picked and sum(n["pitch"] for n in picked) / len(picked) > sum(n["pitch"] for n in rhythm) / len(rhythm)
+    assert {n["start"] for n in picked} != {n["start"] for n in rhythm}
+    # The harmony a few semitones under the lead, note for note.
+    by_id = {x["id"]: x for x in song["sections"]}
+    for sid, harmony in notes["harmony"].items():
+        lead = {n["start"]: n["pitch"] for n in song["parts"]["lead"][sid]}
+        assert not harmony or by_id[sid]["kind"] in ("chorus", "bridge")
+        assert all(3 <= lead[n["start"]] - n["pitch"] <= 5 for n in harmony)
+
+    # Redoing the second chords part changes only it.
+    again = songwriter.redo(song, s, 77, part="picked")
+    assert again["layerParts"]["picked"] != notes["picked"]
+    assert all(again["layerParts"][k] == notes[k] for k in ("kit", "rhythm", "synth", "harmony"))
+    # Redoing the first one is redoing the chords: what is made from them follows.
+    chords = songwriter.redo(song, s, 77, part="rhythm")
+    assert chords["layerParts"]["rhythm"] != notes["rhythm"] and chords["layerParts"]["kit"] == notes["kit"]
+
+    for bad in ([], [{"id": "a", "role": "cowbell"}], [{"id": "a", "role": "bass"}, {"id": "a", "role": "pad"}]):
+        with pytest.raises(ValueError):
+            songwriter.write(s, 1, parts=bad)
 
 
 def test_a_high_bass_gets_a_sub_and_redoing_a_part_redoes_its_layers() -> None:
@@ -250,7 +283,7 @@ def test_a_high_bass_gets_a_sub_and_redoing_a_part_redoes_its_layers() -> None:
 
     chords = songwriter.redo(full, s, 99, part="chords")
     assert chords["size"] == "full"
-    assert chords["layerParts"]["kick"] == full["layerParts"]["kick"]
+    assert chords["layerParts"]["drums"] == full["layerParts"]["drums"]
     assert chords["layerParts"]["lead"] == full["layerParts"]["lead"]
     assert chords["layerParts"]["chords"] != full["layerParts"]["chords"]
     assert (
@@ -315,7 +348,15 @@ async def test_without_a_connection_the_rules_song_stands(tmp_path: Path) -> Non
     full = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "arrangement": "full"})
     assert full == songwriter.write(s, 4, "full") and full["layers"]
 
+    mine = await run_job(
+        service,
+        "ai.v1.song.write",
+        {"summary": s, "seed": 4, "parts": [{"id": "g", "name": "Guitar", "role": "chords"}]},
+    )
+    assert [layer["name"] for layer in mine["layers"]] == ["Guitar"]
+
     for bad in (
+        {"summary": s, "parts": [{"id": "x", "role": "kazoo"}]},
         {"summary": s, "arrangement": "huge"},
         {"summary": {"kind": "x"}},
         {"summary": s, "seed": "x"},
@@ -339,7 +380,7 @@ async def test_the_ai_varies_the_plan_within_the_style(tmp_path: Path) -> None:
             {"kind": "outro", "bars": 8},
         ],
         "loops": {"chorus": ["iv", "V", "i", "bVI"], "verse": ["i", "Imaj7#11", "bVI", "V"]},  # not in the style
-        "contours": {"verse": "valley", "bridge": "rise", "chorus": "zigzag"},
+        "contours": {"verse": "valley", "bridge": "rise", "chorus": "zigzag", "outro": "arch"},
         "reason": "A shorter intro, a stronger chorus.",
     }
     service = ai_service(tmp_path, answer, sent)
@@ -361,6 +402,7 @@ async def test_the_ai_varies_the_plan_within_the_style(tmp_path: Path) -> None:
     assert by_kind["chorus"]["contour"] != "zigzag"
     assert song["checks"]["notesFitChords"] == 1.0  # the rules still wrote every note
     assert "The AI changed" in song["note"]
+    assert "an arch melody in the outro" in song["note"] and "a valley melody" in song["note"]
     assert sent[0]["tools"][0]["name"] == "refine_song"
     assert "chordVocabulary" in sent[0]["messages"][0]["content"][0]["text"]
 

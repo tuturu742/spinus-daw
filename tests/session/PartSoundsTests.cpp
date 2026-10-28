@@ -13,6 +13,19 @@
 #include <thread>
 
 using namespace spinus;
+
+namespace
+{
+/** A folder of its own for an index a test never saves (or saves only for itself): nothing left for the next
+    test or run to find. */
+struct UnusedFolder
+{
+    juce::File folder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                            .getNonexistentChildFile ("spinus-unused-index", {}, false);
+    ~UnusedFolder() { folder.deleteRecursively(); }
+};
+} // namespace
+
 using namespace spinus::parts;
 using Catch::Approx;
 
@@ -203,7 +216,8 @@ TEST_CASE ("Sounds per part: the closest presets of the right role and register 
     pad.release = 0.8;
     pad.wave = [] (double p) { return std::sin (2 * pi * p); };
 
-    SoundIndex index (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("spinus-unused-index"));
+    const UnusedFolder unused;
+    SoundIndex index (unused.folder);
     auto& synth = index.instruments["plugin-synth"];
     synth.source = sourceNamed ("plugin-synth", "Synth");
     synth.sounds.add (presetOf (slow, "Slow Bass", "Basses"));
@@ -276,7 +290,8 @@ TEST_CASE ("Sounds per part: drums get the closest kick, snare and hat samples",
             { { "kind", "one-shot" }, { "class", cls }, { "sound", sounds::toVar (d) }, { "duration", length } });
         return s;
     };
-    SoundIndex index (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("spinus-unused-index"));
+    const UnusedFolder unused;
+    SoundIndex index (unused.folder);
     index.samples = { sample ("/s/Kick Long.wav", "kick", 0.003, 0.9, 90.0),
                       sample ("/s/Kick Short.wav", "kick", 0.003, 0.25, 120.0),
                       sample ("/s/Snare A.wav", "snare", 0.002, 0.3, 2500.0),
@@ -315,15 +330,22 @@ TEST_CASE ("Sounds per part: drums get the closest kick, snare and hat samples",
     drums.tempo = 128.0;
 
     const auto found = choose (drums, reference, index, 5);
-    REQUIRE (found.size() == 3); // two sets of samples, and the loop
+    REQUIRE (found.size() == 4); // two sets of samples, Spinus's own Drum Machine and the loop
     CHECK (found[0].kind == Choice::Kind::drumSamples);
     CHECK (found[0].drums.at ("kick") == "/s/Kick Short.wav");
     CHECK (found[0].drums.at ("snare") == "/s/Snare B.wav");
     CHECK (found[0].drums.at ("hat") == "/s/Hat A.wav");
     CHECK (found[0].compared);
     CHECK (found[1].drums.at ("kick") == "/s/Kick Long.wav");
-    CHECK (found[2].kind == Choice::Kind::loop);
-    CHECK (found[2].reasons().contains ("127.0 BPM"));
+    const auto ownKit =
+        std::find_if (found.begin(), found.end(), [] (const Choice& c)
+                      { return c.kind == Choice::Kind::kit && c.source.stockType == "spinus.drum-machine"; });
+    REQUIRE (ownKit != found.end());
+    CHECK (ownKit->drumNotes.at ("kick") == 60);
+    const auto drumLoop =
+        std::find_if (found.begin(), found.end(), [] (const Choice& c) { return c.kind == Choice::Kind::loop; });
+    REQUIRE (drumLoop != found.end());
+    CHECK (drumLoop->reasons().contains ("127.0 BPM"));
     CHECK (found[0].deviceJson()["stockType"].toString() == "spinus.drum-machine");
 }
 
@@ -333,7 +355,8 @@ TEST_CASE ("Sounds per part: the role guess learnt from presets that name their 
     // ones of each kind.
     juce::Random random (3); // the same every time
     auto jitter = [&random] (auto&) { return 0.9 + 0.2 * random.nextDouble(); };
-    SoundIndex index (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("spinus-unused-index"));
+    const UnusedFolder unused;
+    SoundIndex index (unused.folder);
     auto& synth = index.instruments["plugin-synth"];
     synth.source = sourceNamed ("plugin-synth", "Synth");
     auto make = [&] (const juce::String& name, const juce::String& role, bool bass)

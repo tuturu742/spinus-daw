@@ -23,7 +23,7 @@ from typing import Any
 
 import httpx
 
-from .assistant import NoConnection, Say, complete_with_fallback
+from .assistant import NoConnection, Say, answered_by, complete_with_fallback
 from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
 from .mixing import BANDS
@@ -396,7 +396,8 @@ async def review(
     await say({"kind": "status", "text": "The AI is reviewing the plan..."})
     request = Request(routes[0].model, SYSTEM, [Message("user", [Text(describe(mix, master, target, plan))])],
                       [WRITE_MIX_PLAN], 4000)  # fmt: skip
-    completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say)
+    failed: list[str] = []
+    completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say, failed)
     usage_log.add(routes[index].connection.id, "mixing", completion.usage)
     names = set(mix.get("inserts", {})) | {"Master"}
     reviewed: list[dict[str, Any]] = []
@@ -408,4 +409,4 @@ async def review(
     # The loudness target is the user's choice: keep the rules' item whatever the review did with it.
     loudness = [i for i in plan if i["kind"] == "limiter"]
     reviewed = [i for i in reviewed if i["kind"] != "limiter"] + loudness
-    return reviewed, completion.model
+    return reviewed, answered_by(completion.model, failed)

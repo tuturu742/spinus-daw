@@ -6,6 +6,7 @@
 #include "SynthMatch.h"
 
 #include <map>
+#include <set>
 #include <optional>
 #include <vector>
 
@@ -30,10 +31,43 @@
 namespace spinus::parts
 {
 
+/** A part of the song to write, on the user's list (the Sounds page): what it is called and what it plays. The
+    song writer (spinus_ai.songwriter's ROLES) writes exactly the parts of the list, each by its role; two parts
+    of one role get complementary material (a second chords part an arpeggio an octave up...). */
+struct SongPart
+{
+    juce::String id;   // unique in the list ("chords", "chords-2")
+    juce::String name; // as the user reads it ("Chords", "Rhythm guitar")
+    juce::String role; // one of songRoles()
+
+    bool operator== (const SongPart&) const = default;
+};
+/** drums, percussion, bass, sub, rhythm-guitar, acoustic-guitar, clean-guitar, lead-guitar, chords, piano, organ,
+    pad, strings, choir, brass, woodwinds, arp, lead, counter, riser, impact (spinus_ai.songwriter.ROLES). */
+const juce::StringArray& songRoles();
+/** The role generic instrument words in an instrument's or preset's name say ("Steel Guitar": acoustic-guitar,
+    "Fingered Bass": bass, "Grand Piano": piano), or empty. No vendor or product names: what the user marked
+    (UserRoles) comes first where roles are used. */
+juce::String roleFromName (const juce::String& name);
+/** The parts a description names (its `described.parts`: "guitar, bass and drums"), none otherwise. */
+std::vector<SongPart> describedParts (const juce::var& summary);
+/** Suggest parts: "genre" (the described genre's usual parts), "sketch" or "full" (defaultParts). */
+std::vector<SongPart> suggestedParts (const juce::String& which, const juce::var& summary);
+/** How the page names a role: "Chords (rhythm)", "Arpeggio", "Riser (effect)"... */
+juce::String roleName (const juce::String& role);
+/** The list an arrangement proposes: "sketch" drums, bass, chords and lead; "full" those and a pad, an arpeggio,
+    a counter-melody, a riser and impacts, with a sub bass when the summary's bass sits high enough. */
+std::vector<SongPart> defaultParts (const juce::String& arrangement, const juce::var& summary);
+/** A new part of a role for the list: an id and a name not taken yet ("Chords 2"). */
+SongPart newPart (const std::vector<SongPart>& list, const juce::String& role);
+
 /** A part of the summary and what it needs. */
 struct Target
 {
-    juce::String part;                 // the stem: "bass", "other", "vocals", "drums"
+    juce::String part;                 // the stem: "bass", "other", "vocals", "drums" ("fx": an effect)
+    juce::String id, name, role;       // the part of the list it is for (targetFor), or the stem's part and name
+    bool measure = true;               // compared with the stem (the songs' own parts)
+    juce::StringArray names;           // words a fitting sound's name has (a guitar part: "guitar", "metal"...)
     juce::StringArray roles;           // the roles that fit, the best first
     int low = 0, median = 0, high = 0; // MIDI notes (0: unknown)
     double notesPerBar = 0.0, voices = 1.0;
@@ -41,6 +75,10 @@ struct Target
     double tempo = 0.0;  // the songs' median tempo (drum loops)
     int songs = 0;       // how many reference songs have the part
 };
+
+/** What a part of the list needs, from the summary: the roles of sound that fit, its register (a second part of
+    a role an octave up), and the stem to compare with (only the first part of drums, bass, chords and lead). */
+Target targetFor (const SongPart&, int instance, const juce::var& summary);
 
 /** The parts of a style summary (`parts`), in the order bass, other, vocals, drums; parts no song has are
     left out. */
@@ -155,6 +193,12 @@ struct Reference
     rules (no preset of that role covering the register), the closest that fit fewer of them, saying so. */
 std::vector<Choice> choose (const Target&, const Reference&, const SoundIndex&, int most = 5);
 
+/** Varied suggestions: `candidates` (closest first) put in an order whose first few come from different
+    instruments (then different preset families), the instruments in `avoid` (the other parts') later, and
+    near ones shuffled by `seed` (another seed, other suggestions). At most `most`. */
+std::vector<Choice> vary (std::vector<Choice> candidates, const std::set<juce::String>& avoid, juce::uint32 seed,
+                          int most);
+
 /** How far a preset's measurements are from the stem's (scaled so that 1 is "clearly different"), and the
     reasons in words. Exposed for tests. */
 double presetDistance (const juce::var& sound, const Measured& stem, juce::StringArray* why = nullptr);
@@ -198,7 +242,7 @@ struct Plan
 {
     struct Part
     {
-        Target target;
+        Target target; // its id, name and role: the part of the list
         Choice choice;
         std::optional<SynthMatchResult> tuned;
         juce::Array<juce::var> effects; // spinus_ai.mixplan items for its insert (eq, compressor, gate)

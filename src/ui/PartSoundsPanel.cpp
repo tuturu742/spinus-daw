@@ -4,6 +4,8 @@
 #include "ai/Proposal.h"
 #include "dsp/sampler/SampleStorage.h"
 #include "session/PresetPreviews.h"
+#include "session/UserRoles.h"
+#include <array>
 
 namespace spinus::ui
 {
@@ -38,6 +40,8 @@ int padOf (const juce::String& drum) { return drum == "kick" ? 60 : drum == "sna
 class PartSoundsPanel::RowView final : public juce::Component
 {
 public:
+    static constexpr int otherId = 10000;
+
     RowView (PartSoundsPanel& p, int i) : panel (p), index (i)
     {
         title.setFont (juce::FontOptions (15.0f, juce::Font::bold));
@@ -45,40 +49,98 @@ public:
         why.setJustificationType (juce::Justification::topLeft);
         why.setMinimumHorizontalScale (1.0f);
         why.setColour (juce::Label::textColourId, findColour (juce::Label::textColourId).withAlpha (0.75f));
-        choice.onChange = [this] { panel.select (index, choice.getSelectedId() - 1); };
+        choice.onChange = [this]
+        {
+            if (choice.getSelectedId() == otherId) // any instrument and preset, chosen from a menu
+            {
+                juce::MessageManager::callAsync (
+                    [safe = juce::Component::SafePointer<PartSoundsPanel> (&panel), row = index]
+                    {
+                        if (safe == nullptr)
+                            return;
+                        safe->updateRows(); // shows the sound chosen until another is picked
+                        safe->showOtherMenu (row);
+                    });
+                return;
+            }
+            panel.select (index, choice.getSelectedId() - 1);
+        };
+        for (int r = 0; r < parts::songRoles().size(); ++r)
+            role.addItem (parts::roleName (parts::songRoles()[r]), r + 1);
+        role.setTooltip ("What this part plays in the song");
+        role.onChange = [this] { panel.setRole (index, parts::songRoles()[role.getSelectedId() - 1]); };
+        tuneToggle.setTooltip ("Tune this synth toward the part in your reference songs with synth match, in a "
+                               "separate program (a minute or more; Stop keeps what was found)");
+        tuneToggle.onClick = [this] { panel.setTuneFor (index, tuneToggle.getToggleState()); };
+        removeButton.setTooltip ("Remove this part: the song is written without it");
+        removeButton.onClick = [this]
+        {
+            juce::Component::SafePointer<PartSoundsPanel> safe (&panel);
+            juce::MessageManager::callAsync (
+                [safe, row = index]
+                {
+                    if (safe != nullptr)
+                        safe->removePart (row);
+                });
+        };
         choice.setTooltip ("The closest sounds for this part, the closest first: pick another to swap it");
         listenButton.setTooltip ("Hear the chosen sound play a short phrase");
         listenButton.onClick = [this] { panel.listen (index); };
         songsButton.setTooltip ("Hear the part in the reference song it was compared with");
         songsButton.onClick = [this] { panel.listenToSongs (index); };
-        for (auto* c : std::initializer_list<juce::Component*> { &title, &choice, &listenButton, &songsButton, &why })
+        for (auto* c :
+             std::initializer_list<juce::Component*> { &title, &role, &removeButton, &choice, &listenButton, &why })
             addAndMakeVisible (c);
+        addChildComponent (tuneToggle);
+        addChildComponent (songsButton);
     }
 
     void update (const Row& row)
     {
-        title.setText (parts::displayName (row.target.part), juce::dontSendNotification);
+        title.setText (row.part.name, juce::dontSendNotification);
+        role.setSelectedId (parts::songRoles().indexOf (row.part.role) + 1, juce::dontSendNotification);
         choice.clear (juce::dontSendNotification);
         for (size_t i = 0; i < row.choices.size(); ++i)
-            choice.addItem (juce::String ((int)i + 1) + ". " + row.choices[i].title(), (int)i + 1);
+            choice.addItem (juce::String ((int)i + 1) + ". " + row.choices[i].title() +
+                                (i == 0 && row.picked ? " (your choice)" : ""),
+                            (int)i + 1);
+        choice.addSeparator();
+        choice.addItem ("Other sound...", otherId);
         if (! row.choices.empty())
             choice.setSelectedId (row.selected + 1, juce::dontSendNotification);
-        choice.setTextWhenNothingSelected ("No sound in the index fits");
+        choice.setTextWhenNothingSelected (row.choices.empty() && row.measured == 0 && row.note.isEmpty()
+                                               ? "Choose sounds finds one (or Other sound...)"
+                                               : "No sound in the index fits: Other sound...");
         why.setText (panel.describe (index).fromFirstOccurrenceOf ("\n", false, false), juce::dontSendNotification);
         listenButton.setEnabled (! row.choices.empty());
+        // Only with references: it tunes toward their part.
+        tuneToggle.setVisible (row.stem != juce::File() && row.chosen() != nullptr &&
+                               row.chosen()->kind == parts::Choice::Kind::preset);
+        tuneToggle.setToggleState (row.tune, juce::dontSendNotification);
+        songsButton.setVisible (panel.hasReferences());
         songsButton.setEnabled (row.stem != juce::File());
+        resized();
     }
 
     void resized() override
     {
         auto r = getLocalBounds().reduced (2);
         auto top = r.removeFromTop (26);
-        title.setBounds (top.removeFromLeft (170));
-        songsButton.setBounds (top.removeFromRight (90).reduced (0, 1));
+        title.setBounds (top.removeFromLeft (130));
+        role.setBounds (top.removeFromLeft (140).reduced (0, 1));
+        top.removeFromLeft (4);
+        removeButton.setBounds (top.removeFromRight (26).reduced (0, 1));
         top.removeFromRight (4);
+        if (songsButton.isVisible())
+        {
+            songsButton.setBounds (top.removeFromRight (90).reduced (0, 1));
+            top.removeFromRight (4);
+        }
         listenButton.setBounds (top.removeFromRight (70).reduced (0, 1));
         top.removeFromRight (6);
         choice.setBounds (top.reduced (0, 1));
+        if (tuneToggle.isVisible())
+            tuneToggle.setBounds (r.removeFromBottom (22).removeFromLeft (240));
         why.setBounds (r);
     }
 
@@ -88,7 +150,9 @@ private:
     PartSoundsPanel& panel;
     int index;
     juce::Label title, why;
-    juce::TextButton listenButton { "Listen" }, songsButton { "The songs'" };
+    juce::ComboBox role;
+    juce::ToggleButton tuneToggle { "Tune toward the references" };
+    juce::TextButton listenButton { "Listen" }, songsButton { "The songs'" }, removeButton { "x" };
 };
 
 /** What the measuring thread is given and finds. */
@@ -102,8 +166,8 @@ struct PartSoundsPanel::Measuring
 //==============================================================================
 PartSoundsPanel::PartSoundsPanel (Session& s, std::function<Context()> c) : session (s), getContext (std::move (c))
 {
-    intro.setText ("For each part of the songs, the closest sounds you have (from the sound index), with why. "
-                   "Experimental: a starting point to change by ear.",
+    intro.setText ("The song's parts, each with a role and its sound: the closest you have (from the sound index), or "
+                   "any instrument and preset with Other sound. The song is written with exactly these.",
                    juce::dontSendNotification);
     intro.setMinimumHorizontalScale (1.0f);
     intro.setJustificationType (juce::Justification::topLeft);
@@ -111,8 +175,6 @@ PartSoundsPanel::PartSoundsPanel (Session& s, std::function<Context()> c) : sess
     status.setMinimumHorizontalScale (1.0f);
     closerButton.setTooltip ("Compare the closest presets with the songs' stems by listening, with closest preset's "
                              "CLAP model (AI on, the analysis engine and its model files)");
-    tuneButton.setTooltip ("Tune each chosen synth toward the song's part with synth match, in a separate program "
-                           "(a minute or more per part; Stop keeps what was found)");
     effectsButton.setTooltip ("Set an EQ, a compressor and the level of each part toward the songs, and the "
                               "master's loudness (measured by the AI service; no AI connection needed)");
     closerButton.setToggleState (true, juce::dontSendNotification);
@@ -125,11 +187,17 @@ PartSoundsPanel::PartSoundsPanel (Session& s, std::function<Context()> c) : sess
     addButton.setTooltip ("Make a channel with its sound and effects for each part, and a pattern with a short "
                           "phrase on each: one undo step");
     addButton.onClick = [this] { addToProject(); };
+    addPartButton.setTooltip ("Add a part to the song: drums, bass, chords, pad, arpeggio, lead, counter-melody or an "
+                              "effect (two of one role play different things)");
+    addPartButton.onClick = [this] { showAddMenu(); };
+    suggestButton.setTooltip ("Fill the list with the parts a song like this usually has: your genre's, a sketch "
+                              "(drums, bass, chords, lead) or a full arrangement");
+    suggestButton.onClick = [this] { showSuggestMenu(); };
     viewport.setViewedComponent (&list, false);
     viewport.setScrollBarsShown (true, false);
-    for (auto* component :
-         std::initializer_list<juce::Component*> { &intro, &closerButton, &tuneButton, &effectsButton, &chooseButton,
-                                                   &effectsAgainButton, &addButton, &viewport, &status })
+    for (auto* component : std::initializer_list<juce::Component*> {
+             &intro, &closerButton, &effectsButton, &chooseButton, &addPartButton, &suggestButton, &effectsAgainButton,
+             &addButton, &viewport, &status })
         addAndMakeVisible (component);
     addChildComponent (stopButton);
     updateButtons();
@@ -156,7 +224,7 @@ juce::File PartSoundsPanel::work (const juce::String& name) const
 
 juce::File PartSoundsPanel::stemWav (const Row& row) const
 {
-    return work ("stems/" + row.songDigest.substring (0, 12) + "-" + row.target.part + ".wav");
+    return work ("stems/" + row.songDigest.substring (0, 12) + "-" + row.target.id + ".wav");
 }
 
 bool PartSoundsPanel::aiReady() const { return context.service != nullptr && context.service->isEnabled(); }
@@ -203,28 +271,60 @@ bool PartSoundsPanel::chooseSounds()
                         juce::dontSendNotification);
         return false;
     }
+    if (rows.empty())
+        resetParts();
+    if (rows.empty())
+    {
+        status.setText ("There are no parts yet: Add part..., or Suggest parts.", juce::dontSendNotification);
+        return false;
+    }
     busy = true;
     *stopping = false;
     notes.clear();
     updateButtons();
     auto state = std::make_shared<Measuring>();
     state->context = context;
+    // The user's parts, the sound each has now (kept when it is among the new choices) and the one the user
+    // picked themselves (kept first, whatever).
+    struct Wanted
+    {
+        parts::SongPart part;
+        juce::String had;
+        std::optional<parts::Choice> picked;
+        bool tune;
+    };
+    std::vector<Wanted> wanted;
+    wanted.reserve (rows.size());
+    for (const auto& row : rows)
+        wanted.push_back ({ row.part, row.chosen() != nullptr ? row.chosen()->title() : juce::String(), row.picked,
+                            row.tune || tuneByDefault });
+    // Another seed each time: Choose sounds again proposes others.
+    const auto seed =
+        (juce::uint32)juce::JSON::toString (context.summary, true).hashCode() + (juce::uint32)++chooseCount;
     runInBackground (
         "Measuring the songs' parts and choosing sounds...",
-        [state] (const std::function<bool()>& shouldStop)
+        [state, wanted, seed] (const std::function<bool()>& shouldStop)
         {
             SoundIndex index (state->context.indexFolder);
             index.load();
-            if (index.instruments.empty() && index.samples.empty())
-                return juce::String ("The sound index is empty: click Update sound index first.");
-            for (const auto& target : parts::targetsFromSummary (state->context.summary))
+            UserRoles marked (state->context.indexFolder);
+            marked.load();
+            std::map<juce::String, int> instances;
+            std::set<juce::String> used; // the instruments suggested first for the parts before
+            for (const auto& [part, had, picked, tune] : wanted)
             {
+                const auto target = parts::targetFor (part, instances[part.role]++, state->context.summary);
                 Row row;
+                row.part = part;
                 row.target = target;
+                row.picked = picked;
+                row.tune = tune;
                 parts::Reference reference;
                 size_t most = 0;
                 for (const auto& song : state->context.songs)
                 {
+                    if (! target.measure)
+                        break;
                     if (shouldStop())
                         return juce::String ("Stopped.");
                     const auto entry = state->context.library.read (song.digest);
@@ -273,7 +373,33 @@ bool PartSoundsPanel::chooseSounds()
                 }
                 if (target.part != "drums")
                     row.measured = reference.notes.count();
-                row.choices = parts::choose (target, reference, index, 5);
+                row.choices = parts::vary (parts::choose (target, reference, index, 40), used,
+                                           seed + (juce::uint32)state->rows.size(), 6);
+                // Instruments the index has not measured that the user marked for this role: offered too.
+                for (const auto& source : state->context.sources)
+                    if (marked.get (source.key) == part.role && ! index.instruments.contains (source.key))
+                    {
+                        parts::Choice c;
+                        c.kind = part.role == "drums" || part.role == "percussion" ? parts::Choice::Kind::kit
+                                                                                   : parts::Choice::Kind::preset;
+                        c.instrument = source.key;
+                        c.source = source;
+                        c.name = "Default sound";
+                        c.drumNotes = { { "kick", 36 },   { "snare", 38 },  { "hat", 42 },     { "openHat", 46 },
+                                        { "tomLow", 45 }, { "tomMid", 47 }, { "tomHigh", 50 }, { "crash", 49 } };
+                        c.why = { "you marked it as " + parts::roleName (part.role).toLowerCase(), "not measured" };
+                        row.choices.insert (row.choices.begin(), c);
+                    }
+                if (! row.choices.empty())
+                    used.insert (row.choices.front().instrument);
+                if (picked)
+                    row.choices.insert (row.choices.begin(), *picked);
+                for (size_t i = 0; i < row.choices.size(); ++i)
+                    if (had.isNotEmpty() && row.choices[i].title() == had)
+                    {
+                        row.selected = (int)i;
+                        break;
+                    }
                 state->rows.push_back (std::move (row));
             }
             return juce::String();
@@ -342,7 +468,7 @@ void PartSoundsPanel::listenCloser (size_t part)
             for (auto i : presets)
             {
                 const auto& c = row.choices[i];
-                const auto file = work ("previews/" + row.target.part + "-" + juce::String ((int)i) + ".wav");
+                const auto file = work ("previews/" + row.target.id + "-" + juce::String ((int)i) + ".wav");
                 items.add (object ({ { "id", c.preset },
                                      { "preset", c.preset },
                                      { "notes", notesVar (phraseNotes) },
@@ -360,8 +486,7 @@ void PartSoundsPanel::listenCloser (size_t part)
                       { "output", wav.getFullPathName() } }));
             auto options = context.helper;
             runInBackground (
-                "Playing the " + parts::displayName (row.target.part).toLowerCase() +
-                    "'s closest presets to listen closer...",
+                "Playing the " + row.target.name.toLowerCase() + "'s closest presets to listen closer...",
                 [options, source, items] (const std::function<bool()>& shouldStop)
                 {
                     juce::String problem;
@@ -378,8 +503,7 @@ void PartSoundsPanel::listenCloser (size_t part)
                                           (problem.isNotEmpty() ? problem : "the stem could not be read.");
                         return listenCloser (part + 1);
                     }
-                    status.setText ("Listening to the " + parts::displayName (rows[part].target.part).toLowerCase() +
-                                        "'s presets...",
+                    status.setText ("Listening to the " + rows[part].target.name.toLowerCase() + "'s presets...",
                                     juce::dontSendNotification);
                     ai::runJob (
                         *context.service, "ai.v1.presets.add",
@@ -448,8 +572,7 @@ void PartSoundsPanel::listenCloser (size_t part)
                         [this, part] (double done, double total, const juce::String&)
                         {
                             status.setText (
-                                "Listening to the " + parts::displayName (rows[part].target.part).toLowerCase() +
-                                    "'s presets: " +
+                                "Listening to the " + rows[part].target.name.toLowerCase() + "'s presets: " +
                                     juce::String (juce::roundToInt (100.0 * done / juce::jmax (1.0, total))) + " %...",
                                 juce::dontSendNotification);
                         });
@@ -459,19 +582,20 @@ void PartSoundsPanel::listenCloser (size_t part)
 
 void PartSoundsPanel::tuneNext (size_t part)
 {
-    if (! tuneButton.getToggleState() || part >= rows.size())
-        return setEffectsFor();
+    if (part >= rows.size())
+        return tuningOne ? finish ({}) : setEffectsFor();
     auto& row = rows[part];
     const auto* c = row.chosen();
-    if (c == nullptr || c->kind != parts::Choice::Kind::preset || row.excerpt.notes.empty() || row.stem == juce::File())
-        return tuneNext (part + 1);
+    if (! row.tune || c == nullptr || c->kind != parts::Choice::Kind::preset || row.excerpt.notes.empty() ||
+        row.stem == juce::File())
+        return tuningOne ? finish ({}) : tuneNext (part + 1);
     const auto source = c->source;
     const auto preset = c->preset;
     const auto stem = row.stem;
     const auto excerpt = row.excerpt;
     const auto options = context.helper;
     const auto tries = tuneTries;
-    const auto name = parts::displayName (row.target.part).toLowerCase();
+    const auto name = row.target.name.toLowerCase();
     auto found = std::make_shared<std::optional<SynthMatchResult>>();
     runInBackground (
         "Tuning " + source.name + " to the " + name + "...",
@@ -510,6 +634,11 @@ void PartSoundsPanel::tuneNext (size_t part)
             updateRows();
             if (*stopping)
                 return fail ("Stopped; what was found is kept.");
+            if (tuningOne)
+            {
+                tuningOne = false;
+                return finish ({});
+            }
             tuneNext (part + 1);
         });
 }
@@ -520,7 +649,7 @@ juce::var PartSoundsPanel::renderItem (const Row& row, const parts::Choice& c,
 {
     using Kind = parts::Choice::Kind;
     if (c.kind == Kind::loop)
-        return object ({ { "id", row.target.part },
+        return object ({ { "id", row.target.id },
                          { "cut", object ({ { "file", c.file },
                                             { "from", 0.0 },
                                             { "length", juce::jmin (8.0, juce::jmax (1.0, c.duration)) } }) },
@@ -542,7 +671,7 @@ juce::var PartSoundsPanel::renderItem (const Row& row, const parts::Choice& c,
             if (file.isNotEmpty())
                 hits.add (object ({ { "file", file }, { "at", n.start }, { "gain", (double)n.velocity } }));
         }
-        return object ({ { "id", row.target.part },
+        return object ({ { "id", row.target.id },
                          { "mix", hits },
                          { "length", end + 1.0 },
                          { "output", output.getFullPathName() } });
@@ -553,7 +682,7 @@ juce::var PartSoundsPanel::renderItem (const Row& row, const parts::Choice& c,
             for (const auto& [drum, note] : c.drumNotes)
                 if (padOf (drum) == n.note)
                     n.note = note;
-    auto item = object ({ { "id", row.target.part },
+    auto item = object ({ { "id", row.target.id },
                           { "preset", c.preset },
                           { "notes", notesVar (notesPlayed) },
                           { "tail", 0.5 },
@@ -586,7 +715,7 @@ void PartSoundsPanel::setEffectsFor()
         const auto* c = row.chosen();
         if (c == nullptr || row.excerpt.notes.empty())
             continue;
-        const auto output = work ("mix/" + row.target.part + ".wav");
+        const auto output = work ("mix/" + row.target.id + ".wav");
         Render r;
         r.source =
             c->kind == parts::Choice::Kind::preset || c->kind == parts::Choice::Kind::kit ? c->source : SoundSource {};
@@ -598,9 +727,9 @@ void PartSoundsPanel::setEffectsFor()
                   { "cut", object ({ { "file", row.stem.getFullPathName() }, { "from", 0.0 }, { "length", -1.0 } }) },
                   { "output", wav.getFullPathName() } }));
         renders.push_back (std::move (r));
-        toMeasure.add (object ({ { "name", row.target.part }, { "file", output.getFullPathName() } }));
-        toMeasure.add (object ({ { "name", row.target.part + " reference" }, { "file", wav.getFullPathName() } }));
-        names.add (row.target.part);
+        toMeasure.add (object ({ { "name", row.target.id }, { "file", output.getFullPathName() } }));
+        toMeasure.add (object ({ { "name", row.target.id + " reference" }, { "file", wav.getFullPathName() } }));
+        names.add (row.target.id);
     }
     if (renders.empty())
         return finish ({});
@@ -669,7 +798,7 @@ void PartSoundsPanel::setEffectsFor()
                                                        if (insert == "Master")
                                                            master.add (item);
                                                        for (auto& row : rows)
-                                                           if (row.target.part == insert)
+                                                           if (row.target.id == insert)
                                                            {
                                                                if (item["kind"].toString() == "volume")
                                                                    row.volumeDb = (double)item["db"];
@@ -760,7 +889,7 @@ bool PartSoundsPanel::listen (int index)
         return false;
     const auto& row = rows[(size_t)index];
     const auto& c = *row.chosen();
-    const auto output = work ("listen/" + row.target.part + "-" + juce::String (row.selected) + ".wav");
+    const auto output = work ("listen/" + row.target.id + "-" + juce::String (row.selected) + ".wav");
     output.deleteFile();
     const auto phrase = parts::auditionPhrase (row.target, c, context.summary["tempo"]["median"], context.summary);
     const auto item = renderItem (row, c, phrase, true, output);
@@ -798,7 +927,7 @@ bool PartSoundsPanel::listenToSongs (int index)
     if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()) || rows[(size_t)index].stem == juce::File())
         return false;
     const auto& row = rows[(size_t)index];
-    const auto output = work ("listen/" + row.target.part + "-song.wav");
+    const auto output = work ("listen/" + row.target.id + "-song.wav");
     const auto item = object ({ { "id", "song" },
                                 { "cut", object ({ { "file", row.stem.getFullPathName() },
                                                    { "from", row.excerpt.start },
@@ -816,7 +945,7 @@ bool PartSoundsPanel::listenToSongs (int index)
             parts::renderInHelper (options, {}, { item }, shouldStop, problem);
             return problem;
         },
-        [this, output, name = row.songName, part = parts::displayName (row.target.part)] (const juce::String& problem)
+        [this, output, name = row.songName, part = row.target.name] (const juce::String& problem)
         {
             busy = false;
             updateButtons();
@@ -827,6 +956,335 @@ bool PartSoundsPanel::listenToSongs (int index)
             status.setText ("Playing the " + part.toLowerCase() + " of " + name + " (its stem).",
                             juce::dontSendNotification);
         });
+    return true;
+}
+
+std::vector<parts::SongPart> PartSoundsPanel::getParts() const
+{
+    std::vector<parts::SongPart> found;
+    found.reserve (rows.size());
+    for (const auto& row : rows)
+        found.push_back (row.part);
+    return found;
+}
+
+void PartSoundsPanel::resetParts (const juce::String& why)
+{
+    if (busy)
+        stop();
+    context = getContext ? getContext() : Context {};
+    rows.clear();
+    master.clear();
+    // The parts a description names ("guitar, bass and drums"); none otherwise.
+    setParts (parts::describedParts (context.summary));
+    status.setText ((why.isNotEmpty() ? why + " " : juce::String()) +
+                        (rows.empty() ? "Add parts, or Suggest parts, then Choose sounds."
+                                      : "These are the parts your description names: add or remove parts, give each "
+                                        "a role, then Choose sounds."),
+                    juce::dontSendNotification);
+    updateRows();
+    updateButtons();
+}
+
+bool PartSoundsPanel::addPart (const juce::String& role)
+{
+    if (busy || ! parts::songRoles().contains (role) || rows.size() >= 16)
+        return false;
+    context = getContext ? getContext() : Context {};
+    Row row;
+    row.part = parts::newPart (getParts(), role);
+    row.target = parts::targetFor (row.part, 0, context.summary);
+    rows.push_back (std::move (row));
+    status.setText ("Added " + rows.back().part.name + ": Choose sounds finds its sound (the others keep theirs).",
+                    juce::dontSendNotification);
+    updateRows();
+    updateButtons();
+    return true;
+}
+
+bool PartSoundsPanel::removePart (int index)
+{
+    if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()) || rows.size() <= 1)
+        return false;
+    const auto name = rows[(size_t)index].part.name;
+    rows.erase (rows.begin() + index);
+    status.setText ("Removed " + name + ": the song is written without it.", juce::dontSendNotification);
+    updateRows();
+    updateButtons();
+    return true;
+}
+
+bool PartSoundsPanel::setRole (int index, const juce::String& role)
+{
+    if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()) || ! parts::songRoles().contains (role))
+        return false;
+    context = getContext ? getContext() : Context {};
+    auto& row = rows[(size_t)index];
+    if (row.part.role == role)
+        return true;
+    row.part.role = role;
+    row.target = parts::targetFor (row.part, 0, context.summary);
+    row.choices.clear();
+    row.selected = 0;
+    row.tuned.reset();
+    row.effects.clear();
+    row.note = "Its role changed: Choose sounds finds a sound for it.";
+    updateRows();
+    return true;
+}
+
+void PartSoundsPanel::setParts (const std::vector<parts::SongPart>& wanted)
+{
+    rows.clear();
+    std::map<juce::String, int> instances;
+    for (const auto& part : wanted)
+    {
+        Row row;
+        row.part = part;
+        row.target = parts::targetFor (part, instances[part.role]++, context.summary);
+        rows.push_back (std::move (row));
+    }
+    updateRows();
+    updateButtons();
+}
+
+bool PartSoundsPanel::suggestParts (const juce::String& which)
+{
+    if (busy)
+        return false;
+    context = getContext ? getContext() : Context {};
+    const auto suggested = parts::suggestedParts (which, context.summary);
+    if (suggested.empty())
+        return false;
+    setParts (suggested);
+    juce::StringArray names;
+    for (const auto& p : suggested)
+        names.add (p.name);
+    status.setText ("Suggested: " + names.joinIntoString (", ") + ". Change them as you like, then Choose sounds.",
+                    juce::dontSendNotification);
+    return true;
+}
+
+void PartSoundsPanel::showSuggestMenu()
+{
+    context = getContext ? getContext() : Context {};
+    juce::PopupMenu menu;
+    auto label = [this] (const juce::String& which)
+    {
+        juce::StringArray names;
+        for (const auto& p : parts::suggestedParts (which, context.summary))
+            names.add (p.name);
+        return names.joinIntoString (", ");
+    };
+    if (const auto genre = context.summary["described"]["genreName"].toString(); genre.isNotEmpty())
+        menu.addItem ("For " + genre + ": " + label ("genre"), [this] { suggestParts ("genre"); });
+    menu.addItem ("Sketch: " + label ("sketch"), [this] { suggestParts ("sketch"); });
+    menu.addItem ("Full: " + label ("full"), [this] { suggestParts ("full"); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&suggestButton));
+}
+
+void PartSoundsPanel::showAddMenu()
+{
+    juce::PopupMenu menu;
+    for (const auto& role : parts::songRoles())
+        menu.addItem (parts::roleName (role), [this, role] { addPart (role); });
+    menu.addSeparator();
+    // A part from an instrument: its role the one you marked it with, or what its name says ("Steel Guitar": an
+    // acoustic guitar); its sound that one.
+    juce::PopupMenu instruments;
+    fillInstrumentMenu (instruments, [this] (const parts::Choice& c) { addPartFrom (c); });
+    menu.addSubMenu ("From an instrument", instruments);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&addPartButton));
+}
+
+juce::String PartSoundsPanel::roleOf (const parts::Choice& c) const
+{
+    UserRoles marked (context.indexFolder);
+    marked.load();
+    const auto mine = marked.get (c.instrument.isNotEmpty() ? c.instrument : c.source.key, c.preset);
+    return mine.isNotEmpty() ? mine : parts::roleFromName (c.source.name + " " + c.name + " " + c.category);
+}
+
+bool PartSoundsPanel::addPartFrom (const parts::Choice& c)
+{
+    auto role = roleOf (c);
+    if (role.isEmpty())
+        role = c.source.stockType == "spinus.drum-machine" ? "drums" : "lead";
+    if (! addPart (role))
+        return false;
+    return pickSound ((int)rows.size() - 1, c);
+}
+
+namespace
+{
+/** The notes a drum instrument plays each drum on: its own map when the index measured one, the Drum Machine's
+    pads, or General MIDI's drums. */
+std::map<juce::String, int> drumNotesOf (const SoundSource& source, const juce::var& sound)
+{
+    if (source.stockType == "spinus.drum-machine")
+        return { { "kick", 60 },   { "snare", 61 },  { "hat", 63 },     { "openHat", 64 },
+                 { "tomLow", 65 }, { "tomMid", 66 }, { "tomHigh", 67 }, { "crash", 70 } };
+    std::map<juce::String, int> notes { { "kick", 36 },   { "snare", 38 },  { "hat", 42 },     { "openHat", 46 },
+                                        { "tomLow", 45 }, { "tomMid", 47 }, { "tomHigh", 50 }, { "crash", 49 } };
+    if (const auto* map = sound["drumMap"].getArray())
+        for (const auto& entry : *map)
+        {
+            const auto cls = entry["class"].toString();
+            const auto drum = cls == "closed_hat" ? juce::String ("hat") : cls == "clap" ? juce::String ("snare") : cls;
+            if (notes.contains (drum))
+                notes[drum] = (int)entry["note"];
+        }
+    return notes;
+}
+} // namespace
+
+void PartSoundsPanel::fillInstrumentMenu (juce::PopupMenu& menu,
+                                          const std::function<void (const parts::Choice&)>& picked)
+{
+    context = getContext ? getContext() : Context {};
+    SoundIndex index (context.indexFolder);
+    index.load();
+    auto sources = context.sources;
+    std::sort (sources.begin(), sources.end(),
+               [] (const SoundSource& a, const SoundSource& b) { return a.name.compareIgnoreCase (b.name) < 0; });
+    for (const auto& source : sources)
+    {
+        const auto found = index.instruments.find (source.key);
+        const bool measured = found != index.instruments.end() && found->second.problem.isEmpty();
+        auto make = [source, measured] (const juce::var& sound)
+        {
+            parts::Choice c;
+            c.kind = parts::Choice::Kind::preset;
+            c.instrument = source.key;
+            c.source = source;
+            c.preset = sound["id"].toString();
+            c.version = sound["version"].toString();
+            c.name = sound.isObject() ? sound["name"].toString() : juce::String ("Default sound");
+            c.category = sound["category"].toString();
+            c.role = sound["role"].toString();
+            c.drumNotes = drumNotesOf (source, sound);
+            c.why.add ("chosen by you");
+            if (! measured || ! sound.isObject() || sound.hasProperty ("problem") || (bool)sound["silent"])
+                c.why.add ("not measured");
+            return c;
+        };
+        juce::PopupMenu presets;
+        presets.addItem (juce::String ("Default sound") + (measured ? "" : " (not measured)"),
+                         [picked, make] { picked (make ({})); });
+        if (found != index.instruments.end())
+        {
+            // Many presets: by category.
+            std::map<juce::String, juce::PopupMenu> byCategory;
+            for (const auto& sound : found->second.sounds)
+            {
+                const auto unmeasured = sound.hasProperty ("problem") || (bool)sound["silent"];
+                const auto name = sound["name"].toString() + (unmeasured ? " (not measured)" : "");
+                auto& into = found->second.sounds.size() > 40 ? byCategory[sound["category"].toString()] : presets;
+                into.addItem (name, [picked, make, sound] { picked (make (sound)); });
+            }
+            for (auto& [category, sub] : byCategory)
+                presets.addSubMenu (category.isEmpty() ? juce::String ("Other") : category, sub);
+        }
+        // The user's own role for the instrument, kept beside the sound index (it survives a new scan).
+        UserRoles marked (context.indexFolder);
+        marked.load();
+        const auto mine = marked.get (source.key);
+        juce::PopupMenu markAs;
+        for (const auto& role : parts::songRoles())
+            markAs.addItem (parts::roleName (role), true, mine == role,
+                            [this, key = source.key, role] { markInstrument (key, role); });
+        if (mine.isNotEmpty())
+            markAs.addItem ("Forget it", [this, key = source.key] { markInstrument (key, {}); });
+        presets.addSeparator();
+        presets.addSubMenu (
+            "Mark it as" + (mine.isNotEmpty() ? " (now " + parts::roleName (mine).toLowerCase() + ")" : juce::String()),
+            markAs);
+        menu.addSubMenu (source.name + " (" + (source.badge.isNotEmpty() ? source.badge : source.format) + ")" +
+                             (measured ? "" : ", not measured") +
+                             (mine.isNotEmpty() ? ", yours: " + parts::roleName (mine).toLowerCase() : juce::String()),
+                         presets);
+    }
+    if (sources.empty())
+        menu.addItem ("No instruments found (Browser > Instruments lists them)", false, false, [] {});
+}
+
+bool PartSoundsPanel::setTuneFor (int index, bool on)
+{
+    if (! juce::isPositiveAndBelow (index, (int)rows.size()))
+        return false;
+    rows[(size_t)index].tune = on;
+    if (! on || busy || rows[(size_t)index].stem == juce::File())
+        return true;
+    // Tuned now, on its own.
+    busy = true;
+    *stopping = false;
+    tuningOne = true;
+    updateButtons();
+    tuneNext ((size_t)index);
+    return true;
+}
+
+bool PartSoundsPanel::markInstrument (const juce::String& instrument, const juce::String& role)
+{
+    context = getContext ? getContext() : Context {};
+    UserRoles marked (context.indexFolder);
+    marked.load();
+    marked.set (instrument, {}, role);
+    if (! marked.save())
+        return false;
+    status.setText (role.isEmpty() ? juce::String ("Its role is Spinus's guess again.")
+                                   : "Marked as " + parts::roleName (role).toLowerCase() +
+                                         ": Choose sounds and From an instrument use it.",
+                    juce::dontSendNotification);
+    return true;
+}
+
+void PartSoundsPanel::showOtherMenu (int index)
+{
+    juce::PopupMenu menu;
+    fillInstrumentMenu (menu, [this, index] (const parts::Choice& c) { pickSound (index, c); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (
+        juce::isPositiveAndBelow (index, (int)views.size()) ? (juce::Component*)views[(size_t)index].get() : this));
+}
+
+namespace
+{
+/** Whether a sound of role `says` fits a part of role `role` anyway: an effect part (a riser, impacts) plays
+    whatever sound the user picks, and drums, percussion and impacts all play drum sounds. */
+bool sameKind (const juce::String& says, const juce::String& role)
+{
+    // Kinds a sound's category does not tell apart: a "Keys" preset may be an organ or an electric piano.
+    static const std::array<juce::StringArray, 3> kinds { juce::StringArray { "drums", "percussion", "impact" },
+                                                          juce::StringArray { "piano", "organ", "chords" },
+                                                          juce::StringArray { "pad", "strings", "choir" } };
+    return role == "riser" || role == "impact" ||
+           std::any_of (kinds.begin(), kinds.end(),
+                        [&] (const juce::StringArray& k) { return k.contains (says) && k.contains (role); });
+}
+} // namespace
+
+bool PartSoundsPanel::pickSound (int index, const parts::Choice& choice)
+{
+    if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()))
+        return false;
+    auto& row = rows[(size_t)index];
+    auto c = choice;
+    if (row.part.role == "drums" || row.part.role == "percussion" || row.part.role == "impact")
+        c.kind = parts::Choice::Kind::kit; // a drum instrument: its notes per drum
+    if (row.picked)
+        row.choices.erase (row.choices.begin()); // the earlier pick
+    row.picked = c;
+    row.choices.insert (row.choices.begin(), c);
+    row.selected = 0;
+    row.tuned.reset();
+    row.effects.clear();
+    row.volumeDb = 0.0;
+    const auto says = roleOf (c);
+    row.note = "Your choice: the song plays " + c.title() + "." +
+               (says.isNotEmpty() && says != row.part.role && ! sameKind (says, row.part.role)
+                    ? " It is marked or named as " + parts::roleName (says).toLowerCase() + ": change the role if so."
+                    : juce::String());
+    updateRows();
     return true;
 }
 
@@ -893,7 +1351,7 @@ juce::String PartSoundsPanel::describe (int index) const
     if (! juce::isPositiveAndBelow (index, (int)rows.size()))
         return {};
     const auto& row = rows[(size_t)index];
-    juce::String text = parts::displayName (row.target.part) + ": ";
+    juce::String text = row.part.name + " (" + parts::roleName (row.part.role).toLowerCase() + "): ";
     const auto* c = row.chosen();
     text += c == nullptr ? juce::String ("no sound in the index fits") : c->title();
     juce::StringArray lines;
@@ -901,7 +1359,7 @@ juce::String PartSoundsPanel::describe (int index) const
         lines.add (c->reasons());
     if (row.measured > 0)
         lines.add ("Compared with " + juce::String (row.measured) + (row.target.part == "drums" ? " hits" : " notes") +
-                   " of the songs' " + row.target.part + " stems.");
+                   " of the songs' " + parts::displayName (row.target.part).toLowerCase() + " stems.");
     if (! row.effects.isEmpty() || std::abs (row.volumeDb) > 0.0)
     {
         juce::StringArray fx;
@@ -933,10 +1391,12 @@ void PartSoundsPanel::updateRows()
 void PartSoundsPanel::updateButtons()
 {
     chooseButton.setEnabled (! busy);
+    addPartButton.setEnabled (! busy && rows.size() < 16);
+    suggestButton.setEnabled (! busy);
     addButton.setEnabled (! busy && ! rows.empty());
     effectsAgainButton.setEnabled (! busy && ! rows.empty());
     stopButton.setVisible (busy);
-    for (auto* b : { &closerButton, &tuneButton, &effectsButton })
+    for (auto* b : { &closerButton, &effectsButton })
         b->setEnabled (! busy);
     resized();
 }
@@ -948,7 +1408,6 @@ void PartSoundsPanel::resized()
     {
         auto r = area.removeFromTop (26);
         closerButton.setBounds (r.removeFromLeft (160));
-        tuneButton.setBounds (r.removeFromLeft (180));
         effectsButton.setBounds (r.removeFromLeft (180));
     }
     area.removeFromTop (4);
@@ -961,6 +1420,10 @@ void PartSoundsPanel::resized()
             stopButton.setBounds (r.removeFromLeft (70).reduced (0, 1));
             r.removeFromLeft (6);
         }
+        addPartButton.setBounds (r.removeFromLeft (100).reduced (0, 1));
+        r.removeFromLeft (6);
+        suggestButton.setBounds (r.removeFromLeft (120).reduced (0, 1));
+        r.removeFromLeft (6);
         effectsAgainButton.setBounds (r.removeFromLeft (130).reduced (0, 1));
         addButton.setBounds (r.removeFromRight (230).reduced (0, 1));
     }

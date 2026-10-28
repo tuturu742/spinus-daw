@@ -6,13 +6,17 @@
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
 #include "session/PartSounds.h"
+#include "session/UserRoles.h"
+#include "ui/PartSoundsPanel.h"
 #include "session/SongPreparation.h"
 #include "session/SoundDescriptors.h"
 #include "ui/AnalysisLibraryView.h"
 #include "ui/Analyzer.h"
 #include "ui/Automixer.h"
+#include "ui/SongWriterPanel.h"
 #include "ui/SoundIndexView.h"
 #include "ui/Theme.h"
+#include "session/SongWriter.h"
 #include "ui/TrackCreator.h"
 
 using namespace spinus;
@@ -281,6 +285,26 @@ TEST_CASE ("Track creator: says what is missing, analyzes a song, keeps it, sums
     CHECK (! work.exists());                                                   // not decoded again
     CHECK (creator.getSummary()["names"][0].toString() == "Copy of Song One"); // named as it is now
 
+    // One path: the songs' style is written into the description (step 2) and read; the parts and the song work
+    // from it. Changing the words changes the song; the rest of the songs' style stays.
+    auto& describer = creator.getDescriber();
+    REQUIRE (waitFor (
+        [&]
+        {
+            return describer.getText().startsWith ("Like your songs:") && ! describer.isBusy() &&
+                   creator.isFromDescription();
+        },
+        20000));
+    CHECK (describer.hasReferences());
+    CHECK (describer.getUnderstoodText().startsWith ("Understood: like your songs"));
+    CHECK ((bool)creator.getActiveSummary()["described"]["references"]);
+    describer.setText (describer.getText() + " Make it 150 BPM.");
+    REQUIRE (describer.read());
+    REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 20000));
+    CHECK (describer.getUnderstoodText().contains ("changed: 150 BPM"));
+    CHECK ((int)creator.getActiveSummary()["tempo"]["median"] == 150);
+    CHECK (creator.getActiveSummary()["perSong"].size() == creator.getSummary()["perSong"].size());
+
     // A song that cannot be read: a problem on its row, the others carry on.
     const auto broken = t.root.getChildFile ("Broken.wav");
     broken.replaceWithText ("not audio");
@@ -386,6 +410,263 @@ TEST_CASE ("Track creator: the songs and the summary are remembered, without sta
     CHECK (next.getState() != ai::AiService::State::running);
     CHECK (next.getState() != ai::AiService::State::starting);
     CHECK (creator.getMethodsRun().isEmpty());
+}
+
+TEST_CASE ("Track creator: a song described in words is read, written from and remembered", "[ui][ai][trackcreator]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    const auto text = juce::String ("A slow, dark depressive black metal song in D minor at 72 BPM, with a piano");
+    {
+        TrackCreator creator (a.session, &a.service);
+        creator.setSize (720, 720);
+        creator.showPage (TrackCreator::Page::describe);
+        auto& describer = creator.getDescriber();
+        CHECK (describer.isVisible());
+        describer.setText (text);
+        // AI off: the page says what to do, and nothing starts.
+        CHECK_FALSE (describer.read());
+        CHECK (describer.getStatusText().contains ("Options > AI"));
+
+        a.service.setEnabled (true);
+        REQUIRE (describer.read());
+        REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
+        INFO (describer.getStatusText());
+        CHECK (describer.getUnderstoodText() ==
+               "Understood: 72 BPM, D minor, slow, dark; genre: depressive black metal; sounds: piano.");
+        CHECK (describer.getDetailsText().contains ("As depressive black metal usually is"));
+        REQUIRE (creator.isFromDescription());
+        CHECK (creator.getActiveSummary()["described"]["genre"].toString() == "dsbm");
+
+        // The song is written from it, in a full arrangement.
+        auto& writer = creator.getSongWriter();
+        writer.setSeed (1);
+        REQUIRE (creator.getPartSounds().suggestParts ("full"));
+        creator.showPage (TrackCreator::Page::song);
+        REQUIRE (writer.write());
+        REQUIRE (waitFor ([&] { return ! writer.isBusy(); }, 120000));
+        INFO (writer.getStatusText());
+        CHECK (writer.getText().startsWith ("From your description. Understood: 72 BPM"));
+        // A description's style, not songs: said as such; parts without a chosen sound named as Spinus's own.
+        CHECK (writer.getText().contains ("Compared with the style of your description:"));
+        CHECK_FALSE (writer.getText().contains ("Compared with the songs"));
+        CHECK (writer.getText().contains ("Spinus's own instruments for: Drums"));
+        CHECK ((int)writer.getSong()["tempo"] == 72);
+        CHECK (song::isFull (writer.getSong()));
+        const auto channels = a.session.getProject().channels.size();
+        REQUIRE (writer.apply());
+        CHECK (a.session.getProject().channels.size() > channels + 8);
+        CHECK (a.session.getHistory().getUndoDescriptions().size() == 1);
+    }
+
+    // The next start: the description and what was understood come back, and the pages still work from it.
+    ai::AiService next (a.t.root, a.models);
+    TrackCreator creator (a.session, nullptr);
+    creator.setService (&next);
+    CHECK (creator.isFromDescription());
+    CHECK (creator.getDescriber().getText() == text);
+    CHECK (creator.getDescriber().getUnderstoodText().startsWith ("Understood: 72 BPM, D minor"));
+    CHECK ((int)creator.getActiveSummary()["tempo"]["median"] == 72);
+    CHECK (next.getState() != ai::AiService::State::running);
+}
+
+TEST_CASE ("Track creator: the parts are the user's list: none at first, what the description names, suggested, "
+           "any instrument",
+           "[ui][trackcreator]")
+{
+    Analysis a;
+    PartSoundsPanel::Context context;
+    context.summary = juce::JSON::parse (R"({"kind": "spinus.style-summary", "tempo": {"median": 108},
+        "parts": {"bass": {"songs": 3, "low": 28, "median": 38, "high": 50, "notesPerBar": 8},
+                  "other": {"songs": 3, "low": 52, "median": 62, "high": 76, "notesPerBar": 6, "voices": 3},
+                  "vocals": {"songs": 3, "low": 55, "median": 64, "high": 74, "notesPerBar": 3},
+                  "drums": {"songs": 3, "notesPerBar": 13}}})");
+    SoundSource heavy, mystery;
+    heavy.key = "heavy-guitar";
+    heavy.name = "Heavy Guitar";
+    heavy.format = "VST3";
+    heavy.file = "C:/Program Files/Common Files/VST3/Heavy Guitar.vst3";
+    mystery.key = "mystery-synth";
+    mystery.name = "Mystery Synth";
+    mystery.format = "CLAP";
+    context.sources = { heavy, mystery };
+    context.indexFolder = a.t.root.getChildFile ("sounds");
+    PartSoundsPanel panel (a.session, [&] { return context; });
+    panel.setSize (700, 600);
+    auto roles = [&]
+    {
+        juce::StringArray r;
+        for (const auto& p : panel.getParts())
+            r.add (p.role);
+        return r.joinIntoString (" ");
+    };
+    // Songs' summary: no parts until the user adds or asks for some.
+    panel.resetParts();
+    CHECK (panel.getParts().empty());
+    CHECK_FALSE (panel.chooseSounds());
+    CHECK (panel.getStatusText().contains ("Suggest parts"));
+
+    // A description names its parts.
+    auto described = context.summary;
+    described.getDynamicObject()->setProperty ("described", juce::JSON::parse (R"({"genreName": "rock",
+        "parts": [{"role": "rhythm-guitar", "name": "Guitar"}, {"role": "bass", "name": "Bass"},
+                  {"role": "drums", "name": "Drums"}],
+        "suggested": ["drums", "bass", "rhythm-guitar", "rhythm-guitar", "lead-guitar"]})"));
+    context.summary = described;
+    panel.resetParts ("A new description was read.");
+    CHECK (roles() == "rhythm-guitar bass drums");
+    CHECK (panel.getParts()[0].name == "Guitar");
+    CHECK (panel.getStatusText().startsWith ("A new description was read."));
+
+    // Suggest parts: the genre's, or a sketch or a full arrangement.
+    REQUIRE (panel.suggestParts ("genre"));
+    CHECK (roles() == "drums bass rhythm-guitar rhythm-guitar lead-guitar");
+    CHECK (panel.getParts()[3].name == "Rhythm guitar 2");
+    REQUIRE (panel.suggestParts ("sketch"));
+    CHECK (roles() == "drums bass chords lead");
+    REQUIRE (panel.suggestParts ("full"));
+    CHECK (roles() == "drums bass chords pad arp lead counter riser impact");
+    REQUIRE (panel.addPart ("piano"));
+    REQUIRE (panel.setRole (3, "strings"));
+    REQUIRE (panel.removePart (8)); // the impacts
+    CHECK (panel.getParts().size() == 9);
+    CHECK_FALSE (panel.addPart ("kazoo"));
+
+    // Any instrument, measured or not: a part from it takes the role its name says, and plays it.
+    parts::Choice guitar;
+    guitar.kind = parts::Choice::Kind::preset;
+    guitar.source = heavy;
+    guitar.instrument = heavy.key;
+    guitar.name = "Default sound";
+    guitar.why = { "chosen by you", "not measured" };
+    REQUIRE (panel.addPartFrom (guitar));
+    CHECK (panel.getParts().back().role == "rhythm-guitar");
+    const auto& row = panel.getRows().back();
+    REQUIRE (row.chosen() != nullptr);
+    CHECK (row.chosen()->source.name == "Heavy Guitar");
+    CHECK (row.picked.has_value());
+    // Picked for another part, it says what it is.
+    REQUIRE (panel.pickSound (0, guitar));
+    CHECK (panel.getRows()[0].note.contains ("rhythm guitar"));
+    CHECK (panel.makePlan().parts.front().choice.source.name == "Heavy Guitar"); // it wins
+
+    // A name that says nothing: the user marks the instrument, and that is its role from then on (kept beside
+    // the sound index, not in it).
+    auto synth = guitar;
+    synth.source = mystery;
+    synth.instrument = mystery.key;
+    REQUIRE (panel.markInstrument (mystery.key, "acoustic-guitar"));
+    CHECK (UserRoles::fileIn (context.indexFolder).existsAsFile());
+    REQUIRE (panel.addPartFrom (synth));
+    CHECK (panel.getParts().back().role == "acoustic-guitar");
+    UserRoles kept (context.indexFolder);
+    kept.load();
+    CHECK (kept.get (mystery.key) == "acoustic-guitar");
+    CHECK (kept.get (mystery.key, "any preset") == "acoustic-guitar");
+    REQUIRE (panel.markInstrument (mystery.key, {}));
+    kept.load();
+    CHECK (kept.get (mystery.key).isEmpty());
+
+    // An effect part may play any sound: no "change the role" for impacts on a drum instrument.
+    REQUIRE (panel.suggestParts ("full"));
+    SoundSource drumMachine;
+    drumMachine.key = "stock-spinus.drum-machine";
+    drumMachine.name = "Drum Machine";
+    drumMachine.stockType = "spinus.drum-machine";
+    parts::Choice kitChoice;
+    kitChoice.source = drumMachine;
+    kitChoice.instrument = drumMachine.key;
+    kitChoice.name = "Default sound";
+    const auto impacts = (int)panel.getParts().size() - 1;
+    REQUIRE (panel.getParts()[(size_t)impacts].role == "impact");
+    REQUIRE (panel.pickSound (impacts, kitChoice));
+    CHECK_FALSE (panel.getRows()[(size_t)impacts].note.contains ("change the role"));
+
+    // An organ preset filed under keys, for an Organ part: no warning either (nor an electric piano for it).
+    REQUIRE (panel.addPart ("organ"));
+    parts::Choice organ;
+    organ.source.key = organ.instrument = "a-synth";
+    organ.source.name = "A Synth";
+    organ.name = "House Organ";
+    organ.category = "Keys";
+    CHECK (parts::roleFromName ("A Synth House Organ Keys") == "organ"); // its name wins over its category
+    REQUIRE (panel.pickSound ((int)panel.getParts().size() - 1, organ));
+    CHECK_FALSE (panel.getRows().back().note.contains ("change the role"));
+    // No reference songs: their part's button (The songs') is not shown.
+    CHECK_FALSE (panel.hasReferences());
+
+    CHECK (parts::roleFromName ("Fingered Bass") == "bass");
+    CHECK (parts::roleFromName ("Electric Guitar") == "rhythm-guitar");
+    CHECK (parts::roleFromName ("Grand Piano") == "piano");
+    CHECK (parts::roleFromName ("Kick Drum Kit") == "drums");
+    CHECK (parts::roleFromName ("Nylon Guitar") == "acoustic-guitar");
+}
+
+TEST_CASE ("Track creator: a sound the user marked is chosen first for its role, and the mark survives a new scan",
+           "[ui][trackcreator]")
+{
+    TempFolder t;
+    const auto folder = t.root.getChildFile ("sounds");
+    SoundIndex index (folder);
+    SoundIndex::Instrument synth;
+    synth.source.key = "synth-x";
+    synth.source.name = "Synth X";
+    synth.source.format = "CLAP";
+    synth.complete = true;
+    for (const auto* name : { "Bright Lead", "Plain Patch" })
+        synth.sounds.add (juce::JSON::parse ("{\"id\": \"" + juce::String (name) + "\", \"name\": \"" + name +
+                                             "\", \"role\": \"lead\", \"low\": 36, \"high\": 96, "
+                                             "\"tracksPitch\": true, \"polyphonic\": true}"));
+    index.instruments[synth.source.key] = synth;
+    REQUIRE (index.saveInstrument (synth));
+    REQUIRE (index.saveIndex());
+
+    parts::SongPart guitar { "guitar", "Guitar", "rhythm-guitar" };
+    const auto target = parts::targetFor (guitar, 0, {});
+    UserRoles roles (folder);
+    roles.set ("synth-x", "Plain Patch", "rhythm-guitar");
+    REQUIRE (roles.save());
+    // A new scan writes the index again: the mark stays.
+    REQUIRE (index.saveInstrument (synth));
+    REQUIRE (index.saveIndex());
+    SoundIndex again (folder);
+    again.load();
+    const auto found = parts::choose (target, {}, again, 5);
+    REQUIRE_FALSE (found.empty());
+    CHECK (found.front().name == "Plain Patch");
+    CHECK (found.front().reasons().contains ("you marked it as rhythm guitar"));
+    // Marked as something else, it comes after.
+    roles.set ("synth-x", "Plain Patch", "strings");
+    REQUIRE (roles.save());
+    CHECK (parts::choose (target, {}, again, 5).front().name != "Plain Patch");
+}
+
+TEST_CASE ("Track creator describe a song screenshot for the manual", "[.screenshot][manual]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    a.service.setEnabled (true);
+    SpinusLookAndFeel look (Theme::dark());
+    TrackCreator creator (a.session, &a.service);
+    creator.setLookAndFeel (&look);
+    creator.setSize (720, 720);
+    creator.showPage (TrackCreator::Page::describe);
+    auto& describer = creator.getDescriber();
+    describer.setText ("A sunny, upbeat indie pop song at 118 BPM in G major, with acoustic guitar, handclaps and a "
+                       "catchy whistled lead");
+    REQUIRE (describer.read());
+    REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+    const auto file = juce::File (SPINUS_TEST_FILES_DIR)
+                          .getParentDirectory()
+                          .getChildFile ("docs/user/images/track-creator-describe.png");
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    REQUIRE (
+        juce::PNGImageFormat().writeImageToStream (creator.createComponentSnapshot (creator.getLocalBounds()), stream));
+    creator.setLookAndFeel (nullptr);
 }
 
 TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is found twice", "[ui][ai][trackcreator]")
@@ -810,8 +1091,9 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     PartSoundsPanel panel (session, [context] { return context; });
     panel.setSize (700, 600);
 
-    // Without AI: chosen by the measurements alone, and it says so.
+    // Without AI: chosen by the measurements alone, and it says so (for a sketch's parts).
     panel.setTune (false);
+    REQUIRE (panel.suggestParts ("sketch"));
     REQUIRE (panel.chooseSounds());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
     INFO (panel.getStatusText());
@@ -820,22 +1102,27 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     REQUIRE (rows.size() == 4);
     for (const auto& row : rows)
         CHECK_FALSE (row.choices.empty());
-    CHECK (rows[0].target.part == "bass");
-    CHECK (rows[0].measured >= 10);
-    REQUIRE (rows[0].chosen() != nullptr);
-    for (const auto& c : rows[0].choices)
+    // The sketch's parts, in its order: drums, bass, chords, lead.
+    CHECK (rows[0].part.role == "drums");
+    CHECK (rows[1].target.part == "bass");
+    CHECK (rows[1].measured >= 10);
+    REQUIRE (rows[1].chosen() != nullptr);
+    for (const auto& c : rows[1].choices)
         UNSCOPED_INFO (c.title() << " " << c.distance << ": " << c.reasons());
-    CHECK (rows[0].chosen()->name == "Dark Square"); // its own sound, measured back
-    CHECK (rows[3].chosen()->kind == parts::Choice::Kind::drumSamples);
-    CHECK (rows[3].chosen()->drums.at ("kick").endsWith ("Kick 1.wav"));
-    CHECK (panel.describe (0).contains ("attack"));
-    CHECK (rows[0].effects.isEmpty());
+    CHECK (rows[1].chosen()->name == "Dark Square"); // its own sound, measured back
+    CHECK (rows[0].chosen()->kind == parts::Choice::Kind::drumSamples);
+    CHECK (rows[0].chosen()->drums.at ("kick").endsWith ("Kick 1.wav"));
+    // Every kind of drum source there is can be picked: the sample set, Spinus's Drum Machine.
+    CHECK (std::any_of (rows[0].choices.begin(), rows[0].choices.end(),
+                        [] (const parts::Choice& c) { return c.source.stockType == "spinus.drum-machine"; }));
+    CHECK (panel.describe (1).contains ("attack"));
+    CHECK (rows[1].effects.isEmpty());
 
     // Heard: the chosen sound playing a phrase, and the song's part.
-    REQUIRE (panel.listen (0));
+    REQUIRE (panel.listen (1));
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 60000));
     CHECK (panel.getLastPlayed().existsAsFile());
-    REQUIRE (panel.listenToSongs (3));
+    REQUIRE (panel.listenToSongs (0));
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 60000));
     CHECK (panel.getLastPlayed().getFileName() == "drums-song.wav");
 
@@ -845,12 +1132,13 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     REQUIRE (a.installEngine());
     panel.setTune (true);
     panel.setTuneTries (30);
+    REQUIRE (panel.suggestParts ("sketch"));
     REQUIRE (panel.chooseSounds());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 240000));
     INFO (panel.getStatusText());
     CHECK (panel.getStatusText().contains ("CLAP model"));
-    REQUIRE (rows[0].tuned.has_value());
-    CHECK (rows[0].note.contains ("Tuned toward the song"));
+    REQUIRE (rows[1].tuned.has_value());
+    CHECK (rows[1].note.contains ("Tuned toward the song"));
     const auto plan = panel.makePlan();
     REQUIRE (plan.parts.size() == 4);
     CHECK_FALSE (plan.master.isEmpty());
@@ -859,11 +1147,11 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
         std::any_of (plan.parts.begin(), plan.parts.end(), [] (const auto& p) { return std::abs (p.volumeDb) > 0.0; }));
 
     // Swapped: its tuning and effects are dropped.
-    if (rows[1].choices.size() > 1)
+    if (rows[2].choices.size() > 1)
     {
-        REQUIRE (panel.select (1, 1));
-        CHECK (rows[1].effects.isEmpty());
-        CHECK_FALSE (rows[1].tuned.has_value());
+        REQUIRE (panel.select (2, 1));
+        CHECK (rows[2].effects.isEmpty());
+        CHECK_FALSE (rows[2].tuned.has_value());
     }
 
     // Added as one undo step.
@@ -877,12 +1165,63 @@ TEST_CASE ("Track creator: sounds for each part, chosen, heard, tuned, mixed and
     CHECK (session.getHistory().getUndoDescriptions().size() == steps + 1);
     CHECK (session.getHistory().getUndoDescriptions().strings.getLast() == "Track creator: sounds for 4 parts");
     REQUIRE (panel.getAddedChannels().size() == 4);
-    const auto* bassChannel = session.getProject().findChannel (panel.getAddedChannels()[0]);
+    const auto* bassChannel = session.getProject().findChannel (panel.getAddedChannels()[1]);
     REQUIRE (bassChannel != nullptr);
     CHECK (bassChannel->name == "Bass (Track creator)");
     CHECK_FALSE (bassChannel->instrument.value().parameters.empty()); // the tuned settings
     REQUIRE (session.getHistory().undo());
     CHECK (session.getProject().channels.size() == channels);
+}
+
+TEST_CASE ("Track creator: a written song's parts start at their roles' levels, measured with their sounds",
+           "[ui][trackcreator][sounds][parts]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    auto context = makePartSoundsContext (a);
+    Session session { a.host.getEngine(), makeDevices (a.host.getEngine()) };
+    PartSoundsPanel panel (session, [context] { return context; });
+    a.service.setEnabled (true);
+    panel.setTune (false);
+    panel.setEffects (false); // no level toward the songs: the starting balance sets them
+    panel.setListenCloser (false);
+    REQUIRE (panel.suggestParts ("sketch"));
+    REQUIRE (panel.chooseSounds());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+
+    SongWriterPanel writer (session,
+                            [&]
+                            {
+                                SongWriterPanel::Context c;
+                                c.summary = context.summary;
+                                c.service = &a.service;
+                                c.workFolder = a.t.root.getChildFile ("song");
+                                c.sounds = panel.makePlan();
+                                c.indexFolder = context.indexFolder;
+                                c.parts = panel.getParts();
+                                c.partsFromPage = true;
+                                c.helper = context.helper;
+                                return c;
+                            });
+    writer.setSeed (3);
+    REQUIRE (writer.write());
+    REQUIRE (waitFor ([&] { return ! writer.isBusy(); }, 240000));
+    INFO (writer.getStatusText());
+    CHECK (writer.getStatusText().contains ("Each part starts at its role's level"));
+
+    // The parts played with the test synth's presets were measured: their faders go in with Apply, the loudest
+    // at 0 dB, none turned up.
+    const auto proposal = writer.makeProposal();
+    REQUIRE (proposal.isObject());
+    int set = 0;
+    for (const auto& step : *proposal["steps"].getArray())
+        if (step["command"].toString() == "insert.set" && step["parameters"].hasProperty ("volumeDb"))
+        {
+            ++set;
+            CHECK ((double)step["parameters"]["volumeDb"] <= 0.0);
+        }
+    CHECK (set >= 2);
 }
 #endif
 
@@ -901,6 +1240,7 @@ TEST_CASE ("Track creator sounds for each part screenshot for the manual", "[.sc
     panel.setSize (700, 560);
     panel.setTune (true);
     panel.setTuneTries (30);
+    REQUIRE (panel.suggestParts ("sketch"));
     REQUIRE (panel.chooseSounds());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 240000));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
@@ -1012,6 +1352,7 @@ TEST_CASE ("Track creator: sounds for the parts of real songs (SPINUS_REALMUSIC_
     panel.setTuneTries (
         env ("SPINUS_REALSOUNDS_TRIES").getIntValue() > 0 ? env ("SPINUS_REALSOUNDS_TRIES").getIntValue() : 300);
     const auto chose = juce::Time::getMillisecondCounterHiRes();
+    REQUIRE (panel.suggestParts ("sketch"));
     REQUIRE (panel.chooseSounds());
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 4 * 3600000));
     lines.add ("Batch " + batch.getFileName() + ": " + juce::String (context.songs.size()) + " songs, " +

@@ -238,6 +238,8 @@ add_library (spinus_core STATIC
     session/PartSounds.cpp
     session/PartSounds.h
     session/SongWriter.cpp
+    session/UserRoles.cpp
+    session/UserRoles.h
     session/SongWriter.h
     session/InstrumentPresets.cpp
     session/PresetPreviews.cpp
@@ -259,6 +261,8 @@ add_library (spinus_core STATIC
     ui/AiSettingsDialog.h
     ui/Analyzer.cpp
     ui/TrackCreator.cpp
+    ui/DescribeSongPanel.cpp
+    ui/DescribeSongPanel.h
     ui/PartSoundsPanel.cpp
     ui/PartSoundsPanel.h
     ui/SongWriterPanel.cpp

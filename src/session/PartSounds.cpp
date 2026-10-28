@@ -3,11 +3,13 @@
 #include "PresetPreviews.h"
 #include "ProgramFolder.h"
 #include "StemSamples.h"
+#include "UserRoles.h"
 #include "dsp/sampler/SampleStorage.h"
 #include "engine/EngineAdapter.h"
 #include "model/Model.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <set>
 #include <tuple>
@@ -96,6 +98,326 @@ juce::String displayName (const juce::String& part)
     return part.substring (0, 1).toUpperCase() + part.substring (1);
 }
 
+const juce::StringArray& songRoles()
+{
+    static const juce::StringArray roles { "drums",           "percussion",   "bass",        "sub",     "rhythm-guitar",
+                                           "acoustic-guitar", "clean-guitar", "lead-guitar", "chords",  "piano",
+                                           "organ",           "pad",          "strings",     "choir",   "brass",
+                                           "woodwinds",       "arp",          "lead",        "counter", "riser",
+                                           "impact" };
+    return roles;
+}
+
+juce::String roleName (const juce::String& role)
+{
+    static const std::map<juce::String, juce::String> names {
+        { "drums", "Drums" },
+        { "percussion", "Percussion" },
+        { "bass", "Bass" },
+        { "sub", "Sub bass" },
+        { "rhythm-guitar", "Rhythm guitar" },
+        { "acoustic-guitar", "Acoustic guitar" },
+        { "clean-guitar", "Clean guitar (picked)" },
+        { "lead-guitar", "Lead guitar" },
+        { "chords", "Synth chords" },
+        { "piano", "Piano / keys" },
+        { "organ", "Organ" },
+        { "pad", "Pad" },
+        { "strings", "Strings" },
+        { "choir", "Choir / vocal pad" },
+        { "brass", "Brass" },
+        { "woodwinds", "Woodwinds" },
+        { "arp", "Arpeggio" },
+        { "lead", "Lead melody" },
+        { "counter", "Counter-melody" },
+        { "riser", "Riser (effect)" },
+        { "impact", "Impacts (effect)" },
+    };
+    const auto found = names.find (role);
+    return found != names.end() ? found->second : role;
+}
+
+namespace
+{
+juce::String defaultName (const juce::String& role)
+{
+    static const std::map<juce::String, juce::String> names { { "chords", "Chords" },
+                                                              { "piano", "Piano" },
+                                                              { "lead", "Lead" },
+                                                              { "riser", "Riser" },
+                                                              { "impact", "Impacts" },
+                                                              { "choir", "Choir" },
+                                                              { "clean-guitar", "Clean guitar" } };
+    const auto found = names.find (role);
+    return found != names.end() ? found->second : roleName (role);
+}
+
+/** Words a sound's name has when it is an instrument of the role (a guitar part wants "Guitar", "Metal"...). */
+juce::StringArray nameWords (const juce::String& role)
+{
+    if (role.endsWith ("guitar"))
+        return role == "acoustic-guitar"
+                   ? juce::StringArray { "acoustic", "nylon", "steel", "folk", "guitar", "uke" }
+                   : juce::StringArray { "guitar", "gtr", "riff", "distort", "overdrive", "electric" };
+    if (role == "piano")
+        return { "piano", "grand", "upright", "keys", "e.piano", "electric piano" };
+    if (role == "organ")
+        return { "organ", "drawbar", "church" };
+    if (role == "strings")
+        return { "string", "violin", "viola", "cello", "ensemble", "orchestra", "spiccato", "pizz" };
+    if (role == "brass")
+        return { "brass", "horn", "trumpet", "trombone", "tuba", "section" };
+    if (role == "woodwinds")
+        return { "flute", "clarinet", "oboe", "bassoon", "sax", "wood", "recorder" };
+    if (role == "choir")
+        return { "choir", "vox", "voice", "vocal", "aah", "ooh", "chant" };
+    if (role == "percussion")
+        return { "perc", "conga", "bongo", "shaker", "tamb", "hand" };
+    return {};
+}
+} // namespace
+
+juce::String roleFromName (const juce::String& name)
+{
+    const auto n = name.toLowerCase();
+    auto any = [&n] (std::initializer_list<const char*> words)
+    { return std::any_of (words.begin(), words.end(), [&n] (const char* w) { return n.contains (w); }); };
+    if (any ({ "bass drum", "kick" }))
+        return "drums";
+    if (any ({ "bass" }) && ! any ({ "bassoon" }))
+        return n.contains ("sub") ? "sub" : "bass";
+    if (any ({ "drum", "kit", "beat", "808 kit", "trap kit" }))
+        return "drums";
+    if (any ({ "perc", "conga", "bongo", "shaker", "tambourine" }))
+        return "percussion";
+    if (any ({ "acoustic", "nylon", "steel string", "ukulele", "banjo" }))
+        return "acoustic-guitar";
+    if (any ({ "guitar", "gtr", "riff" }))
+        return n.contains ("lead") || n.contains ("solo")    ? "lead-guitar"
+               : n.contains ("clean") || n.contains ("pick") ? "clean-guitar"
+                                                             : "rhythm-guitar";
+    if (any ({ "organ", "drawbar" })) // before "keys": an organ preset is often filed under Keys
+        return "organ";
+    if (any ({ "piano", "grand", "upright", "e.piano", "keys" }))
+        return "piano";
+    if (any ({ "string", "violin", "viola", "cello", "ensemble", "orchestra" }))
+        return "strings";
+    if (any ({ "brass", "horn", "trumpet", "trombone", "tuba" }))
+        return "brass";
+    if (any ({ "flute", "clarinet", "oboe", "bassoon", "sax", "woodwind" }))
+        return "woodwinds";
+    if (any ({ "choir", "vox", "voice", "vocal", "aah", "ooh" }))
+        return "choir";
+    if (any ({ "riser", "sweep", "fx", "noise" }))
+        return "riser";
+    if (any ({ "pad" }))
+        return "pad";
+    if (any ({ "pluck", "arp", "bell", "mallet", "marimba" }))
+        return "arp";
+    if (any ({ "lead" }))
+        return "lead";
+    return {};
+}
+
+std::vector<SongPart> describedParts (const juce::var& summary)
+{
+    std::vector<SongPart> list;
+    if (const auto* named = summary["described"]["parts"].getArray())
+        for (const auto& p : *named)
+            if (songRoles().contains (p["role"].toString()))
+            {
+                auto part = newPart (list, p["role"].toString());
+                if (const auto name = p["name"].toString();
+                    name.isNotEmpty() &&
+                    std::none_of (list.begin(), list.end(), [&] (const SongPart& o) { return o.name == name; }))
+                    part.name = name;
+                list.push_back (part);
+            }
+    return list;
+}
+
+std::vector<SongPart> suggestedParts (const juce::String& which, const juce::var& summary)
+{
+    if (which != "genre")
+        return defaultParts (which, summary);
+    std::vector<SongPart> list;
+    if (const auto* roles = summary["described"]["suggested"].getArray())
+        for (const auto& role : *roles)
+            if (songRoles().contains (role.toString()))
+                list.push_back (newPart (list, role.toString()));
+    return list;
+}
+
+std::vector<Choice> vary (std::vector<Choice> candidates, const std::set<juce::String>& avoid, juce::uint32 seed,
+                          int most)
+{
+    auto keyOf = [] (const Choice& c)
+    {
+        return c.kind == Choice::Kind::drumSamples ? juce::String ("samples")
+               : c.kind == Choice::Kind::sample    ? juce::String ("sampler")
+               : c.kind == Choice::Kind::loop      ? juce::String ("loop")
+               : c.instrument.isNotEmpty()         ? c.instrument
+                                                   : c.source.key + c.source.name;
+    };
+    struct Scored
+    {
+        Choice choice;
+        double score;
+    };
+    std::vector<Scored> scored;
+    const bool measured =
+        std::any_of (candidates.begin(), candidates.end(), [] (const Choice& c) { return c.compared; });
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        const auto& c = candidates[i];
+        const auto key = keyOf (c);
+        // The order it came in (closest first), the other parts' instruments later, near ones shuffled by the seed;
+        // compared with the songs, the closest stays first and the sounds not compared come after.
+        juce::Random random ((juce::int64)(seed ^ (juce::uint32)(key + c.name).hashCode()));
+        auto score = (double)i * 0.1 + (avoid.contains (key) ? 0.6 : 0.0) + random.nextDouble() * 0.35;
+        if (measured)
+            score = i == 0 && c.compared ? -1.0 : score + (c.compared ? c.distance : 2.0);
+        scored.push_back ({ c, score });
+    }
+    std::stable_sort (scored.begin(), scored.end(),
+                      [] (const Scored& a, const Scored& b) { return a.score < b.score; });
+    // The first few from different instruments, then different preset families, then the rest.
+    std::vector<Choice> result;
+    std::set<juce::String> instruments, families;
+    for (int pass = 0; pass < 3 && (int)result.size() < most; ++pass)
+        for (const auto& s : scored)
+        {
+            if ((int)result.size() >= most)
+                break;
+            const auto key = keyOf (s.choice);
+            const auto family = key + "/" + s.choice.category;
+            const bool taken =
+                std::any_of (result.begin(), result.end(), [&] (const Choice& r)
+                             { return keyOf (r) == key && r.name == s.choice.name && r.preset == s.choice.preset; });
+            if (taken || (pass == 0 && instruments.contains (key)) || (pass == 1 && families.contains (family)))
+                continue;
+            instruments.insert (key);
+            families.insert (family);
+            result.push_back (s.choice);
+        }
+    return result;
+}
+
+std::vector<SongPart> defaultParts (const juce::String& arrangement, const juce::var& summary)
+{
+    std::vector<SongPart> list;
+    juce::StringArray roles { "drums", "bass", "chords", "lead" };
+    if (arrangement == "full")
+    {
+        roles = { "drums", "bass", "chords", "pad", "arp", "lead", "counter", "riser", "impact" };
+        // A sub bass when the bass sits high enough to leave room under it (as spinus_ai.songwriter.has_sub).
+        if ((int)summary["parts"]["bass"]["median"] >= 40)
+            roles.insert (2, "sub");
+    }
+    for (const auto& role : roles)
+        list.push_back (newPart (list, role));
+    return list;
+}
+
+SongPart newPart (const std::vector<SongPart>& list, const juce::String& role)
+{
+    auto taken = [&list] (const juce::String& id, const juce::String& name)
+    {
+        return std::any_of (list.begin(), list.end(), [&] (const SongPart& p) { return p.id == id || p.name == name; });
+    };
+    SongPart part { role, defaultName (role), role };
+    for (int n = 2; taken (part.id, part.name); ++n)
+        part = { role + "-" + juce::String (n), defaultName (role) + " " + juce::String (n), role };
+    return part;
+}
+
+Target targetFor (const SongPart& part, int instance, const juce::var& summary)
+{
+    const auto& role = part.role;
+    static const juce::StringArray drums { "drums", "impact", "percussion" }, bass { "bass", "sub" },
+        lead { "lead", "counter", "lead-guitar", "woodwinds" };
+    const auto stem = drums.contains (role)  ? juce::String ("drums")
+                      : bass.contains (role) ? juce::String ("bass")
+                      : lead.contains (role) ? juce::String ("vocals")
+                      : role == "riser"      ? juce::String ("fx")
+                                             : juce::String ("other");
+    Target t;
+    for (auto& found : targetsFromSummary (summary))
+        if (found.part == stem)
+            t = found;
+    if (t.part.isEmpty()) // the summary has no such part: a usual one
+    {
+        t.part = stem;
+        t.tempo = (double)summary["tempo"]["median"];
+        t.low = stem == "bass" ? 28 : stem == "vocals" ? 55 : 48;
+        t.median = stem == "bass" ? 38 : stem == "vocals" ? 64 : 60;
+        t.high = stem == "bass" ? 50 : stem == "vocals" ? 76 : 72;
+        t.notesPerBar = 4.0;
+        t.roles = { stem == "drums" ? "drums" : stem == "bass" ? "bass" : stem == "vocals" ? "lead" : "keys" };
+    }
+    t.id = part.id;
+    t.name = part.name;
+    t.role = role;
+    t.measure = instance == 0 && (role == "drums" || role == "bass" || role == "chords" || role == "lead");
+    const auto up = instance % 2 == 1 && role != "drums" && role != "impact" && role != "sub" ? 12 : 0;
+    if (role == "sub")
+    {
+        t.low = 24, t.median = 31, t.high = 40;
+        t.roles = { "bass" };
+    }
+    else if (role == "pad")
+    {
+        t.median = juce::jlimit (55, 67, t.median + 3);
+        t.low = t.median - 9, t.high = t.median + 12;
+        t.roles = { "pad", "keys" };
+        t.chords = true, t.voices = 3.0;
+    }
+    else if (role == "arp")
+    {
+        t.low = juce::jlimit (52, 72, t.median + 5), t.median = t.low + 9, t.high = t.low + 18;
+        t.roles = { "pluck", "keys", "lead" };
+        t.chords = false, t.voices = 1.0;
+    }
+    else if (role == "counter")
+    {
+        t.median = juce::jmax (52, t.median - 7), t.low = t.median - 7, t.high = t.median + 7;
+        t.roles = { "lead", "keys", "pad" };
+    }
+    else if (role == "riser")
+    {
+        t.low = 60, t.median = 66, t.high = 71;
+        t.roles = { "fx", "pad" };
+        t.measure = false;
+    }
+    else if (role == "impact" || role == "percussion")
+        t.roles = { "drums" };
+    else if (role.endsWith ("guitar") || role == "piano" || role == "organ" || role == "strings" || role == "brass" ||
+             role == "woodwinds" || role == "choir")
+    {
+        // Their ranges (as spinus_ai.songwriter.layer_register), and the roles of sound that fit.
+        static const std::map<juce::String, std::array<int, 3>> ranges {
+            { "rhythm-guitar", { 40, 50, 64 } },   { "lead-guitar", { 55, 67, 79 } },
+            { "acoustic-guitar", { 40, 55, 76 } }, { "clean-guitar", { 45, 57, 76 } },
+            { "piano", { 33, 60, 76 } },           { "organ", { 40, 62, 74 } },
+            { "strings", { 45, 65, 79 } },         { "brass", { 55, 63, 72 } },
+            { "woodwinds", { 60, 72, 84 } },       { "choir", { 52, 62, 74 } }
+        };
+        const auto& r = ranges.at (role);
+        t.low = r[0], t.median = r[1], t.high = r[2];
+        t.roles = role == "lead-guitar" || role == "woodwinds" || role == "brass"
+                      ? juce::StringArray { "lead", "keys", "pluck" }
+                  : role == "strings" || role == "choir"                ? juce::StringArray { "pad", "keys" }
+                  : role == "acoustic-guitar" || role == "clean-guitar" ? juce::StringArray { "pluck", "keys", "lead" }
+                                                                        : juce::StringArray { "keys", "lead", "pluck" };
+        t.chords = role != "lead-guitar" && role != "woodwinds";
+        t.voices = t.chords ? 3.0 : 1.0;
+        t.measure = false;
+    }
+    t.names = nameWords (role);
+    t.low += up, t.median += up, t.high += up;
+    return t;
+}
+
 std::vector<Target> targetsFromSummary (const juce::var& summary)
 {
     std::vector<Target> targets;
@@ -108,6 +430,9 @@ std::vector<Target> targetsFromSummary (const juce::var& summary)
             continue;
         Target t;
         t.part = name;
+        t.id = name;
+        t.name = displayName (name);
+        t.role = juce::String (name) == "other" ? "chords" : juce::String (name) == "vocals" ? "lead" : name;
         t.songs = (int)p["songs"];
         t.low = (int)p["low"];
         t.median = (int)p["median"];
@@ -445,11 +770,17 @@ std::vector<Choice> chooseMelodic (const Target& target, const Reference& refere
     };
     std::vector<Ranked> ranked;
     const bool compare = reference.notes.count() >= 3;
+    UserRoles marked (index.getFolder());
+    marked.load();
     for (const auto& [key, instrument] : index.instruments)
         for (const auto& sound : instrument.sounds)
         {
-            if (sound.hasProperty ("problem") || (bool)sound["silent"] || (bool)sound["invalid"] ||
-                ! (bool)sound["tracksPitch"])
+            // What the user marked it as comes first: a sound marked for the part's role is offered even when it
+            // could not be measured.
+            const auto mine = marked.get (key, sound["id"].toString());
+            const bool forThis = mine.isNotEmpty() && mine == target.role;
+            if (! forThis && (sound.hasProperty ("problem") || (bool)sound["silent"] || (bool)sound["invalid"] ||
+                              ! (bool)sound["tracksPitch"]))
                 continue;
             const auto role = sound["role"].toString();
             const auto rank = target.roles.indexOf (role);
@@ -487,6 +818,28 @@ std::vector<Choice> chooseMelodic (const Target& target, const Reference& refere
                 c.compared = true;
             }
             r.score = c.distance + 0.25 * juce::jmax (0, rank) + (c.roleFrom == "name" ? 0.0 : 0.15);
+            if (mine.isNotEmpty())
+            {
+                c.why.insert (0, "you marked it as " + roleName (mine).toLowerCase());
+                r.tier = forThis ? 0 : r.tier + 3;
+                r.score += forThis ? -3.0 : 1.0;
+            }
+            // A part of an instrument (a guitar, strings...) wants a sound whose name says so: first, whatever
+            // role its sound was guessed.
+            else if (! target.names.isEmpty())
+            {
+                const auto text = (c.name + " " + c.category + " " + c.source.name).toLowerCase();
+                const auto word = std::find_if (target.names.begin(), target.names.end(),
+                                                [&text] (const juce::String& w) { return text.contains (w); });
+                if (word != target.names.end())
+                {
+                    r.tier = juce::jmax (0, r.tier - 4);
+                    r.score -= 1.0;
+                    c.why.insert (0, "its name says " + word->trim());
+                }
+                else
+                    r.tier += 1;
+            }
             ranked.push_back (std::move (r));
         }
 
@@ -656,6 +1009,46 @@ std::vector<Choice> chooseDrums (const Target& target, const Reference& referenc
             break; // one kit per instrument
         }
 
+    // Instruments the user marked as drums (or percussion): a kit on General MIDI's notes, unless measured above.
+    UserRoles marked (index.getFolder());
+    marked.load();
+    for (const auto& [key, instrument] : index.instruments)
+    {
+        const auto mine = marked.get (key);
+        if ((mine != "drums" && mine != "percussion") ||
+            std::any_of (result.begin(), result.end(), [&key] (const Choice& c) { return c.instrument == key; }))
+            continue;
+        Choice c;
+        c.kind = Choice::Kind::kit;
+        c.instrument = key;
+        c.source = instrument.source;
+        c.role = "drums";
+        c.drumNotes = { { "kick", 36 },   { "snare", 38 },  { "hat", 42 },     { "openHat", 46 },
+                        { "tomLow", 45 }, { "tomMid", 47 }, { "tomHigh", 50 }, { "crash", 49 } };
+        c.why.add ("you marked it as " + roleName (mine).toLowerCase() + "; General MIDI's drum notes");
+        c.distance = -0.5;
+        result.push_back (std::move (c));
+    }
+
+    // Spinus's own Drum Machine with its own kit, always there (unless the index has a kit of it already).
+    if (std::none_of (result.begin(), result.end(),
+                      [] (const Choice& c) { return c.source.stockType == "spinus.drum-machine"; }))
+    {
+        Choice c;
+        c.kind = Choice::Kind::kit;
+        c.instrument = "stock-spinus.drum-machine";
+        c.source.key = c.instrument;
+        c.source.name = "Drum Machine";
+        c.source.format = "Spinus";
+        c.source.stockType = "spinus.drum-machine";
+        c.role = "drums";
+        c.drumNotes = { { "kick", 60 },   { "snare", 61 },  { "hat", 63 },     { "openHat", 64 },
+                        { "tomLow", 65 }, { "tomMid", 66 }, { "tomHigh", 67 }, { "crash", 70 } };
+        c.why.add ("Spinus's own Drum Machine, with its own kit");
+        c.distance = reference.hits.empty() ? -1.0 : 1.0; // first when there are no songs' drums to compare
+        result.push_back (std::move (c));
+    }
+
     // Drum loops near the songs' tempo (or twice or half of it).
     for (const auto& sample : index.samples)
     {
@@ -686,9 +1079,20 @@ std::vector<Choice> chooseDrums (const Target& target, const Reference& referenc
 
     std::stable_sort (result.begin(), result.end(),
                       [] (const Choice& a, const Choice& b) { return a.distance < b.distance; });
-    if ((int)result.size() > most)
-        result.resize ((size_t)most);
-    return result;
+    // Each kind there is among the first (a sample set, a kit, a loop), so the user can pick any of them.
+    std::vector<Choice> kept;
+    for (const auto& c : result)
+        if (std::none_of (kept.begin(), kept.end(), [&] (const Choice& k) { return k.kind == c.kind; }))
+            kept.push_back (c);
+    for (const auto& c : result)
+        if ((int)kept.size() < most && std::none_of (kept.begin(), kept.end(), [&] (const Choice& k)
+                                                     { return k.title() == c.title() && k.kind == c.kind; }))
+            kept.push_back (c);
+    std::stable_sort (kept.begin(), kept.end(),
+                      [] (const Choice& a, const Choice& b) { return a.distance < b.distance; });
+    if ((int)kept.size() > most)
+        kept.resize ((size_t)most);
+    return kept;
 }
 } // namespace
 
@@ -701,13 +1105,16 @@ std::vector<Choice> choose (const Target& target, const Reference& reference, co
 //==============================================================================
 namespace
 {
-/** The key's tonic (pitch class) and whether it is minor, from the summary's commonest key ("D minor"). */
+/** The key's tonic (pitch class) and whether it is minor, from the summary's commonest key ("D minor", "Bb minor"
+    or, from older analyses, "A# minor"). */
 std::pair<int, bool> keyOf (const juce::var& summary)
 {
     const auto* keys = summary["keys"].getArray();
     const auto name = keys != nullptr && ! keys->isEmpty() ? keys->getReference (0)["name"].toString() : juce::String();
-    static const juce::StringArray notes { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    const auto tonic = notes.indexOf (name.upToFirstOccurrenceOf (" ", false, false));
+    static const juce::StringArray sharps { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    static const juce::StringArray flats { "C", "Db", "D", "Eb", "Fb", "F", "Gb", "G", "Ab", "A", "Bb", "Cb" };
+    const auto note = name.upToFirstOccurrenceOf (" ", false, false);
+    const auto tonic = sharps.contains (note) ? sharps.indexOf (note) : flats.indexOf (note);
     return { tonic < 0 ? 0 : tonic, name.containsIgnoreCase ("minor") };
 }
 } // namespace
@@ -863,8 +1270,9 @@ juce::var makeProposal (const Plan& plan)
     for (const auto& part : plan.parts)
     {
         const auto& c = part.choice;
-        const auto name =
-            displayName (part.target.part).upToFirstOccurrenceOf (" (", false, false) + " (Track creator)";
+        const auto name = (part.target.name.isNotEmpty() ? part.target.name : displayName (part.target.part))
+                              .upToFirstOccurrenceOf (" (", false, false) +
+                          " (Track creator)";
         if (c.kind == Choice::Kind::loop)
         {
             const auto lane = step ("lane.add", object ({ { "name", name } }));
@@ -1052,7 +1460,8 @@ juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<m
         if (result.wasOk() && part.tuned)
             SynthMatcher::apply (session, channel, *part.tuned);
         if (result.failed())
-            problems.add (displayName (part.target.part) + ": " + result.getErrorMessage());
+            problems.add ((part.target.name.isNotEmpty() ? part.target.name : displayName (part.target.part)) + ": " +
+                          result.getErrorMessage());
     }
     return problems.isEmpty() ? juce::Result::ok() : juce::Result::fail (problems.joinIntoString (" "));
 }
