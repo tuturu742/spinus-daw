@@ -71,6 +71,7 @@ class Usage:
     reasoning_tokens: int = 0  # of output_tokens, how many the model spent thinking (when the provider says)
     cost: float | None = None  # only when the provider reports it
     cached_tokens: int = 0  # of input_tokens' kind, read from the provider's cache (cheaper), when it says
+    cleared_tokens: int = 0  # input the provider cleared from the conversation before reading it (context editing)
 
 
 @dataclass
@@ -115,9 +116,13 @@ class Request:
     max_tokens: int | None = 4096  # None: the model's whole output allowance (ANSWER_ROOM where one is required)
     effort: str = ""  # "low", "medium" or "high": how hard the model reasons; "" leaves the provider's default
     cache: bool = False  # ask the provider to cache the request's start (tools, system, earlier turns) for the next
+    # Anthropic's context editing (beta CONTEXT_EDITING): what the provider may clear from the conversation on its side
+    # (old tool results), which does not count as an edit of the history.
+    context_edits: list[dict[str, Any]] = field(default_factory=list)
 
 
 EFFORTS = ("low", "medium", "high")
+CONTEXT_EDITING = "context-management-2025-06-27"
 # The answer's room when the provider requires a number and none is known (Anthropic): the most every current
 # model writes; a model that allows less says so (400) and is asked again with what it names, or SMALLER_ROOM.
 ANSWER_ROOM = 64000
@@ -201,6 +206,8 @@ def anthropic_body(request: Request) -> dict[str, Any]:
         ]
     if request.effort:
         body["output_config"] = {"effort": request.effort}
+    if request.context_edits:
+        body["context_management"] = {"edits": request.context_edits}
     if request.cache:
         body["cache_control"] = {"type": "ephemeral"}  # the prefix up to the last turn, read back next time
     return body
@@ -213,25 +220,12 @@ def anthropic_reasoning(usage: dict[str, Any]) -> int | None:
     return int(value) if isinstance(value, int) else None
 
 
-async def count_anthropic(client: httpx.AsyncClient, connection: Connection, key: str, request: Request) -> int:
-    """The request's input tokens as the model counts them (POST /v1/messages/count_tokens), free of charge."""
-    headers = {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
-    body = anthropic_body(request)
-    for unused in ("max_tokens", "stream"):
-        body.pop(unused, None)
-    try:
-        response = await client.post(f"{connection.base_url}/v1/messages/count_tokens", headers=headers, json=body)
-    except httpx.TransportError as error:
-        raise ProviderError("network", f"Could not reach {connection.base_url}: {error}") from error
-    if response.status_code != 200:
-        raise error_for_status(response.status_code, response.text)
-    return int(response.json()["input_tokens"])
-
-
 async def complete_anthropic(
     client: httpx.AsyncClient, connection: Connection, key: str, request: Request, on_text: OnText
 ) -> Completion:
     headers = {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+    if request.context_edits:
+        headers["anthropic-beta"] = CONTEXT_EDITING
     blocks: list[Block] = []
     partial_json: dict[int, str] = {}
     usage = Usage()
@@ -306,6 +300,10 @@ async def complete_anthropic(
             elif kind == "message_delta":
                 stop_reason = payload.get("delta", {}).get("stop_reason") or stop_reason
                 usage.output_tokens = payload.get("usage", {}).get("output_tokens", usage.output_tokens)
+                applied = (payload.get("context_management") or {}).get("applied_edits") or []
+                usage.cleared_tokens += sum(
+                    int(e.get("cleared_input_tokens") or 0) for e in applied if isinstance(e, dict)
+                )
                 thought = anthropic_reasoning(payload.get("usage", {}))
                 usage.reasoning_tokens = usage.reasoning_tokens if thought is None else thought
             elif kind == "error":

@@ -19,11 +19,14 @@ Tools (TOOLS; each answers in a few lines of text):
 - finish: the song is checked a last time and goes to the Track creator's page, where the user hears it and
   Applies it (one undo step; the Replace question as for every written song).
 
-The loop is the assistant's (spinus_ai.assistant.tool_loop). The request's start (tools, system prompt, brief) is
-cached on Anthropic between turns. History is never edited (models that reason refuse an edited history), so tool
-results are kept short instead. There is no token cap (an answer is never cut short on purpose): the cost is set by
-the reasoning level and the rounds, shown before as an estimate and live as the running total. "Stop now" keeps the
-best checked version so far; a model that never calls finish is stopped after MOST_TURNS with the same.
+The loop is the assistant's (spinus_ai.assistant.tool_loop). On Anthropic the request's start (tools, system prompt,
+brief) is cached between turns, and once a request's input passes CLEAR_AFTER tokens, the provider clears the oldest
+tool calls and results on its side (context editing, CONTEXT_EDITS: the working copy here holds what they did, and
+read shows it again). The history is never trimmed here: a model that reasons signs its reasoning against the
+conversation as sent, and the provider refuses (or drops) that reasoning once earlier turns were edited; its own
+clearing does not count as an edit. There is no token cap (an answer is never cut short on purpose): the cost is set
+by the reasoning level and the rounds; the tokens used are shown live and per round after. "Stop now" keeps the best
+checked version so far; a model that never calls finish is stopped after MOST_TURNS with the same.
 
 The same tools are served outside Spinus for development and evaluation (`python -m spinus_ai.harness mcp`, an MCP
 server over stdio), so a coding agent can compose through the identical harness from a saved brief.
@@ -56,6 +59,29 @@ from .usage import UsageLog
 
 MOST_TURNS = 150  # generous: a model that never calls finish is stopped here, with the best checked version
 MOST_LINES = 24  # a tool's answer is cut to this many issue lines ("and N more")
+# Anthropic's context editing: once a request's input passes CLEAR_AFTER tokens, the provider clears the oldest tool
+# calls and their results (all but the last KEEP_CALLS), at least CLEAR_AT_LEAST tokens at a time so the cache is
+# rewritten seldom (each clearing starts it again). The calls' arguments go too (clear_tool_inputs): the notes a write
+# sent are in the working copy, and read shows them again. finish is kept.
+CLEAR_AFTER = 30000
+KEEP_CALLS = 8
+CLEAR_AT_LEAST = 8000
+
+
+def context_edits(clear_after: int) -> list[dict[str, Any]]:
+    if clear_after <= 0:
+        return []
+    return [
+        {
+            "type": "clear_tool_uses_20250919",
+            "trigger": {"type": "input_tokens", "value": clear_after},
+            "keep": {"type": "tool_uses", "value": KEEP_CALLS},
+            "clear_at_least": {"type": "input_tokens", "value": min(CLEAR_AT_LEAST, clear_after // 2)},
+            "clear_tool_inputs": True,
+            "exclude_tools": ["finish"],
+        }
+    ]
+
 
 SYSTEM = """You are a songwriter and arranger composing inside Spinus, a digital audio workstation, through a \
 music harness: tools that read and edit a working copy of the song, check it, and finish it. Work like a good \
@@ -870,6 +896,7 @@ async def session(
         None,
         effort,
         cache=True,
+        context_edits=context_edits(CLEAR_AFTER),
     )
 
     async def on_turn(completion: Completion, route: Route) -> None:
@@ -881,6 +908,7 @@ async def session(
                 "output": completion.usage.output_tokens,
                 "reasoning": completion.usage.reasoning_tokens,
                 "cached": completion.usage.cached_tokens,
+                "cleared": completion.usage.cleared_tokens,
             }
         )
 
@@ -942,6 +970,7 @@ def result_song(
     requests = before + [{"round": round_number, **r} for r in run.requests]
     usage = compose.usage_of(requests)
     usage["cached"] = compose.total_of(requests, "cached")
+    usage["cleared"] = compose.total_of(requests, "cleared")
     filled = [p["id"] for p in setup.written() if not any(ws.notes.get(p["id"], {}).values())]
     composed = {
         "by": run.by,
@@ -970,7 +999,6 @@ async def write(
     connections: ConnectionStore,
     routing: Routing,
     usage_log: UsageLog,
-    records: compose.UsageRecords,
     setup: compose.Setup,
     seed: int,
     size: str,
@@ -1010,13 +1038,6 @@ async def write(
         await say({"kind": "status", "text": "Writing: the AI is composing with the harness..."})
     run = Run(ws)
     await session(client, connections, routes, usage_log, run, effort, say, stop, revising, spent)
-    records.add(
-        run.model or routes[0].model,
-        effort,
-        len(setup.written()),
-        "harness-revise" if song else "harness",
-        run.requests,
-    )
     return result_song(run, setup, effort, round_number, before)
 
 
@@ -1157,8 +1178,10 @@ def serve_mcp(
 
 class FakeModel:
     """A scripted model for the comparison and the tests (no API call): Anthropic's streaming answers, the
-    one-shot writer's write_song call or the harness's tool calls turn by turn, with made-up token counts that
-    grow as a real conversation's do."""
+    one-shot writer's write_song call or the harness's tool calls turn by turn. Its token counts are the request's
+    characters over four, after the request's context edits as Anthropic documents clear_tool_uses_20250919 (past the
+    trigger, the oldest tool calls but `keep` cleared, if that clears at least `clear_at_least`). It does not
+    simulate the provider's cache."""
 
     def __init__(self, harness_script: list[list[tuple[str, dict[str, Any]]]], one_shot: dict[str, Any]) -> None:
         self.script, self.one_shot = harness_script, one_shot
@@ -1168,7 +1191,7 @@ class FakeModel:
         if request.url.path.endswith("/count_tokens"):
             return httpx.Response(200, json={"input_tokens": len(json.dumps(body)) // 4})
         names = [t["name"] for t in body.get("tools", [])]
-        size_in = len(json.dumps(body)) // 4
+        size_in, cleared = cleared_size(body)
         turn = 0
         if "write_song" in names:
             calls = [("write_song", self.one_shot)]
@@ -1205,15 +1228,53 @@ class FakeModel:
                 {"type": "content_block_stop", "index": 0},
             ]
             out = 3
+        report = {"applied_edits": [{"type": "clear_tool_uses_20250919", "cleared_input_tokens": cleared}]}
         events.append(
             {
                 "type": "message_delta",
+                "context_management": report if cleared else {},
                 "delta": {"stop_reason": "tool_use" if calls else "end_turn"},
                 "usage": {"output_tokens": out},
             }
         )
         data = "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events).encode()
         return httpx.Response(200, content=data, headers={"content-type": "text/event-stream"})
+
+
+def cleared_size(body: dict[str, Any]) -> tuple[int, int]:
+    """A request's size in tokens (characters over four) after its clear_tool_uses edit, and what that cleared."""
+    messages = json.loads(json.dumps(body.get("messages", [])))
+
+    def size() -> int:
+        return len(json.dumps({**body, "messages": messages})) // 4
+
+    total = size()
+    for edit in (body.get("context_management") or {}).get("edits", []):
+        if edit.get("type") != "clear_tool_uses_20250919" or total <= int(edit["trigger"]["value"]):
+            continue
+        calls = [
+            block
+            for m in messages
+            if m["role"] == "assistant" and isinstance(m["content"], list)
+            for block in m["content"]
+            if block.get("type") == "tool_use" and block.get("name") not in edit.get("exclude_tools", [])
+        ]
+        keep = int(edit.get("keep", {}).get("value", 3))
+        old = calls[: max(0, len(calls) - keep)]
+        before = json.dumps(messages)
+        ids = {block["id"] for block in old}
+        for block in old:
+            if edit.get("clear_tool_inputs"):
+                block["input"] = {}
+        for m in messages:
+            for block in m["content"] if isinstance(m["content"], list) else []:
+                if block.get("type") == "tool_result" and block.get("tool_use_id") in ids:
+                    block["content"] = "[cleared]"
+        after = size()
+        if total - after >= int((edit.get("clear_at_least") or {}).get("value", 0)):
+            return after, total - after
+        messages = json.loads(before)
+    return total, 0
 
 
 def fake_runs(setup: compose.Setup, ws: Workspace) -> FakeModel:
@@ -1297,7 +1358,7 @@ async def compare_ways(
     used, as the provider reported them, and the checks' score of each song."""
     setup = setup_of(brief)
     seed, size = int(brief.get("seed", 0)), str(brief.get("arrangement") or "sketch")
-    usage_log, records = UsageLog(folder), compose.UsageRecords(folder)
+    usage_log = UsageLog(folder)
 
     async def quiet(_: dict[str, Any]) -> None:
         pass
@@ -1305,18 +1366,11 @@ async def compare_ways(
     rows = []
     for effort in efforts:
         for way in ("one-shot", "harness"):
-            harnessed = None
-            if way == "harness":
-                ws = Workspace.start(setup, seed, size)
-                harnessed = compose.Harnessed(SYSTEM, first_message(ws), list(TOOLS), len(ws.sections))
-            guess = await compose.estimate(client, connections, routing, records, setup, effort, 0, harnessed)
             if way == "one-shot":
-                song = await compose.compose(
-                    client, connections, routing, usage_log, records, setup, seed, size, effort, quiet
-                )
+                song = await compose.compose(client, connections, routing, usage_log, setup, seed, size, effort, quiet)
                 usage = song.get("composed", {}).get("usage") or song.get("usage") or {}
             else:
-                song = await write(client, connections, routing, usage_log, records, setup, seed, size, effort, quiet)
+                song = await write(client, connections, routing, usage_log, setup, seed, size, effort, quiet)
                 usage = song["composed"]["usage"]
             rows.append(
                 {
@@ -1325,11 +1379,10 @@ async def compare_ways(
                     "requests": len(usage.get("requests", [])),
                     "input": usage.get("input", 0),
                     "cached": usage.get("cached", 0),
+                    "cleared": usage.get("cleared", 0),
                     "output": usage.get("output", 0),
                     "reasoning": usage.get("reasoning", 0),
                     "total": int(usage.get("input", 0)) + int(usage.get("output", 0)),
-                    "estimate": f"{guess.get('low', 0)}-{guess.get('high', 0)}"
-                    + (" (runs)" if guess.get("fromRuns") else ""),
                     "usedAi": bool(song.get("composedBy")),
                     **score(song, setup),
                 }
@@ -1344,10 +1397,10 @@ def table(rows: list[dict[str, Any]]) -> str:
         "requests",
         "input",
         "cached",
+        "cleared",
         "output",
         "reasoning",
         "total",
-        "estimate",
         "issues",
         "notesInKey",
         "notesFitChords",
@@ -1379,6 +1432,12 @@ def main(argv: list[str] | None = None) -> None:
     e.add_argument("--base-url")
     e.add_argument("--model", default="")
     e.add_argument("--key-env", default="ANTHROPIC_API_KEY", help="the environment variable holding the key")
+    e.add_argument(
+        "--clear-after",
+        type=int,
+        default=CLEAR_AFTER,
+        help=f"input tokens after which old tool calls are cleared (Anthropic; 0: never; default {CLEAR_AFTER})",
+    )
     e.add_argument("--efforts", default="", help="reasoning levels to compare, e.g. ',low,medium,high' ('' default)")
     args = parser.parse_args(argv)
 
@@ -1394,6 +1453,9 @@ def main(argv: list[str] | None = None) -> None:
 
 async def run_eval(args: argparse.Namespace) -> None:
     import os
+
+    global CLEAR_AFTER
+    CLEAR_AFTER = args.clear_after
 
     from .connections import MemoryKeyStore
 
@@ -1419,7 +1481,10 @@ async def run_eval(args: argparse.Namespace) -> None:
             rows = await compare_ways(brief, client, store, routing, Path(folder), efforts)
     print(table(rows))
     if args.fake:
-        print("\nA scripted model: this shows the comparison works; its token numbers mean nothing.")
+        print(
+            "\nA scripted model: this shows the comparison works. Its tokens are the requests' characters over four, "
+            "after clearing as Anthropic documents it; it does not simulate the provider's cache."
+        )
 
 
 if __name__ == "__main__":

@@ -104,8 +104,7 @@ async def test_a_good_run_composes_through_the_tools_and_finishes(tmp_path: Path
     assert any(s.startswith("Checking: ") and "tokens so far" in s for s in steps)
     usage = composed["usage"]
     assert usage["input"] == sum(r["input"] for r in usage["requests"]) and len(usage["requests"]) == len(sent)
-    records = json.loads((tmp_path / "config" / "compose-usage.json").read_text())
-    assert records["runs"][-1]["kind"] == "harness" and records["runs"][-1]["effort"] == "medium"
+    assert all(r["context_management"]["edits"][0]["type"] == "clear_tool_uses_20250919" for r in sent)
 
     # A revision starts from what Spinus heard, on the same working copy.
     sent.clear()
@@ -209,7 +208,6 @@ async def test_stop_now_keeps_the_best_checked_version(tmp_path: Path) -> None:
             store,
             routing,
             UsageLog(Path(folder)),
-            compose.UsageRecords(Path(folder)),
             setup(),
             5,
             "sketch",
@@ -345,3 +343,54 @@ def test_a_brief_from_a_description(tmp_path: Path) -> None:
     assert brief["summary"]["kind"] == "spinus.style-summary" and brief["parts"][1]["role"] == "rhythm-guitar"
     with pytest.raises(SystemExit):
         harness.main(["eval", "--brief", str(tmp_path / "b.json"), "--key-env", "SPINUS_NO_SUCH_KEY"])
+
+
+def test_old_tool_calls_are_cleared_by_the_provider_past_the_threshold() -> None:
+    """The fake applies Anthropic's documented clear_tool_uses_20250919 rule; the gateway reads its report."""
+    calls, results = [], []
+    for k in range(20):
+        calls.append({"type": "tool_use", "id": f"u{k}", "name": "write", "input": {"notes": "0 60 4 90; " * 60}})
+        results.append({"type": "tool_result", "tool_use_id": f"u{k}", "content": "bass: 60 notes." * 20})
+    messages: list[dict[str, Any]] = [{"role": "user", "content": [{"type": "text", "text": "brief"}]}]
+    for call, result in zip(calls, results, strict=True):
+        messages += [{"role": "assistant", "content": [call]}, {"role": "user", "content": [result]}]
+    body: dict[str, Any] = {"messages": messages, "context_management": {"edits": harness.context_edits(3000)}}
+    whole, nothing = harness.cleared_size({**body, "context_management": {"edits": harness.context_edits(10**9)}})
+    cut, cleared = harness.cleared_size(body)
+    assert nothing == 0 and cleared > whole / 3 and abs(cut - (whole - cleared)) <= 2  # the trigger's digits differ
+    assert harness.context_edits(0) == []
+
+
+async def test_the_gateway_sends_context_editing_and_reads_what_was_cleared() -> None:
+    from spinus_ai.connections import Connection
+    from spinus_ai.gateway import Message, Request, Text, complete
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        events = [
+            {"type": "message_start", "message": {"model": "m", "usage": {"input_tokens": 100}}},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 1},
+                "context_management": {
+                    "applied_edits": [
+                        {"type": "clear_tool_uses_20250919", "cleared_tool_uses": 8, "cleared_input_tokens": 5000}
+                    ]
+                },
+            },
+        ]
+        data = "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events).encode()
+        return httpx.Response(200, content=data, headers={"content-type": "text/event-stream"})
+
+    async def no_text(_: str) -> None:
+        pass
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = Request("m", "s", [Message("user", [Text("hi")])], [], None, context_edits=harness.context_edits(30000))
+    done = await complete(client, Connection("a", "A", "anthropic", "https://y.test"), "k", request, no_text)
+    assert done.usage.cleared_tokens == 5000
+    assert seen[0].headers["anthropic-beta"] == "context-management-2025-06-27"
+    assert json.loads(seen[0].content)["context_management"]["edits"][0]["trigger"]["value"] == 30000

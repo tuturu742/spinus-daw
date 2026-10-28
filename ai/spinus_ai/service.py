@@ -155,7 +155,7 @@ class Service:
             "ai.v1.song.describe": self.song_describe,
             "ai.v1.song.prompt": self.song_prompt,
             "ai.v1.song.compose": self.song_compose,
-            "ai.v1.song.composeEstimate": self.song_compose_estimate,
+            "ai.v1.song.composer": self.song_composer,
             "ai.v1.song.composeStop": self.song_compose_stop,
         }
         handler = handlers.get(method)
@@ -1037,7 +1037,6 @@ class Service:
             if not isinstance(previous.get("composed"), dict):
                 raise RpcError(-32602, "Only a song the AI wrote can be revised.")
             way = "harness" if previous["composed"].get("harness") else "one-shot"
-        records = compose.UsageRecords(self.config)
         flag = {"stop": False}
 
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
@@ -1048,7 +1047,6 @@ class Service:
                         self.connections,
                         self.routing,
                         self.usage,
-                        records,
                         setup,
                         seed,
                         size,
@@ -1065,7 +1063,6 @@ class Service:
                         self.connections,
                         self.routing,
                         self.usage,
-                        records,
                         setup,
                         previous,
                         params.get("levels"),
@@ -1074,7 +1071,7 @@ class Service:
                         say,
                     )
                 return await compose.compose(
-                    self.client, self.connections, self.routing, self.usage, records, setup, seed, size, effort, say
+                    self.client, self.connections, self.routing, self.usage, setup, seed, size, effort, say
                 )
             except NoConnection:
                 note = "no AI connection is set up"
@@ -1099,29 +1096,14 @@ class Service:
         flag["stop"] = True
         return {"stopping": True}
 
-    async def song_compose_estimate(self, params: dict[str, Any], notify: Notify) -> Any:
-        """What the AI writer would use (spinus_ai.compose.estimate): {summary, parts, arrangement, candidates,
-        effort, rounds, way} -> {available, connection, model, input (the first request's, counted by the provider
-        when inputCounted), low, high (the whole song's tokens, a range), fromRuns (how many of the user's own runs
-        it is from), cached (most input read from the provider's cache), ...}."""
-        from . import compose, harness
+    async def song_composer(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Who would write the song for the AI writer: {} -> {available, connection, model, reason}."""
+        from .compose import FEATURE
 
-        setup, effort = self.compose_setup(params)
-        try:
-            rounds = int(params.get("rounds", 1))
-            seed = int(params.get("seed", 0) or 0) & 0x7FFFFFFF
-        except (TypeError, ValueError) as error:
-            raise RpcError(-32602, "rounds and seed are numbers.") from error
-        records = compose.UsageRecords(self.config)
-        harnessed = None
-        if str(params.get("way") or "harness") == "harness":
-            ws = harness.Workspace.start(setup, seed, str(params.get("arrangement") or "sketch"))
-            harnessed = compose.Harnessed(
-                harness.SYSTEM, harness.first_message(ws), list(harness.TOOLS), len(ws.sections)
-            )
-        return await compose.estimate(
-            self.client, self.connections, self.routing, records, setup, effort, rounds, harnessed
-        )
+        routes = self.routing.resolve(FEATURE)
+        if not routes:
+            return {"available": False, "reason": "No AI connection is set up: add one in Options > AI."}
+        return {"available": True, "connection": routes[0].connection.name, "model": routes[0].model, "reason": ""}
 
     async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read

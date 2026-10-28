@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Are the Track creator's token estimates right on a real model, and does the music harness use fewer tokens
-# than writing the song in one answer?
+# How many tokens does the Track creator's AI writer really use on a real model, and does the music harness use
+# fewer than writing the song in one answer?
 #
 # What it does:
 #   1. Makes a small brief (a short song with drums, bass, chords and a lead) from a description.
 #   2. For each reasoning level (the model's own, low, medium, high) writes that song twice with your AI
 #      provider: once in one answer ("one-shot") and once with the music harness's tools ("harness").
-#   3. Prints, for each: what Spinus estimated before sending, and what the provider reported it used
-#      (input, the part read from its cache, output, reasoning), plus the checks' score of the song.
+#   3. Prints, for each, what the provider reported it used (input, the part read from its cache, what it cleared
+#      from old tool calls, output, reasoning), plus the checks' score of the song.
 #
 # Your key is asked for here and kept only in this run's memory: it is not saved, logged or printed.
 # It uses real tokens on your account (8 small songs; more at high reasoning); the table shows exactly how
@@ -50,6 +50,6 @@ uv run --python 3.12 python -m spinus_ai.harness eval "${ARGS[@]}"
 STATUS=$?
 unset SPINUS_CHECK_KEY
 echo
-echo "Columns: total = input + output tokens as your provider reported them; estimate = Spinus's range before"
-echo "sending (\"(runs)\" once it is from this check's earlier runs); issues = what Spinus's checks still find."
+echo "Columns: total = input + output tokens as your provider reported them; cached = input read from its cache"
+echo "(cheaper); cleared = old tool calls it cleared; issues = what Spinus's checks still find."
 exit $STATUS

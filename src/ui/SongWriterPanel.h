@@ -30,9 +30,9 @@ namespace spinus::ui
 
     Who writes the notes: Spinus (offline, the default) or, opt-in, the user's AI connection. The AI composes
     through the music harness (ai.v1.song.compose, spinus_ai/harness.py): tools that read and edit a working copy of
-    the song and check it, then finish. Before it is sent, the page shows the expected tokens as a range (from the
-    user's own past runs once there are some); while it works, each step in plain words and the running total;
-    after, the tokens each round used as the provider reported them. "Stop now" keeps the best checked version;
+    the song and check it, then finish. While it works, the page shows each step in plain words and the running total
+    of tokens; after, the tokens each round used as the provider reported them (no estimate before: nobody knows
+    how long a model will think). "Stop now" keeps the best checked version;
     Cancel keeps the song shown before. After it finishes, each part is played with its sound (balance) and, as many
     times as "Fix what Spinus hears" says, what was heard goes back to the AI for a revision round. The AI may pick
     each part's sound from a few candidates of the sound index; the Sounds page's choices always win.
@@ -88,9 +88,9 @@ public:
     /** How many times what Spinus hears goes back to the AI (0 to 3; 1 by default). */
     void setRounds (int rounds);
     int getRounds() const { return roundsBox.getSelectedId() - 1; }
-    /** Asks the AI service what the AI writer would use (asynchronously; the page shows it). */
-    void refreshEstimate();
-    juce::String getEstimateText() const { return estimateLabel.getText(); }
+    /** Asks the AI service which connection would write (asynchronously; the page names it). */
+    void refreshConnection();
+    juce::String getInfoText() const { return infoLabel.getText(); }
     /** Stops the AI after its current step, keeping its best checked version. */
     bool stopNow();
     bool isComposing() const noexcept { return composing; }
@@ -166,7 +166,7 @@ private:
     juce::ToggleButton refineButton { "Let the AI vary the plan (uses your AI connection)" };
     juce::Label writerLabel { {}, "Who writes the notes:" };
     juce::ComboBox writerBox, effortBox, roundsBox;
-    juce::Label estimateLabel;
+    juce::Label infoLabel;
     juce::TextButton stopNowButton { "Stop now, keep the best" };
     bool aiAvailable = false, composing = false, stopRequested = false;
     int roundsLeft = 0;

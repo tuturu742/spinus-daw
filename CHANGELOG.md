@@ -14,14 +14,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   step and the tokens so far; nothing changes in the project until you Apply (one undo step).
 - **Then fix what Spinus hears**: after the AI finishes, each part is played with its sound, and what was heard
   (a silent part, the balance) goes back to the AI to fix (once by default, up to 3 times).
-- **Tokens, honestly**: a range before you send, from your own past runs once there are some (the input
-  counted by your provider where it can); after, what each round really used, as your provider reported it
-  (input, the part read from its cache, output, reasoning). **Reasoning** sets how hard the model thinks
-  (higher can cost several times more). No token cap: an answer cut off at the model's own limit is
+- **Tokens, as your provider reports them**: no guess before you send; while it works, the tokens so far;
+  after, each round's input (and the part read from the provider's cache), output and reasoning. **Reasoning**
+  sets how hard the model thinks (higher uses more). No token cap: an answer cut off at the model's own limit is
   continued and joined. **Stop now, keep the best** keeps the best checked version; **Cancel** keeps the song
   shown before.
-- For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on
-  tokens and the checks' scores (`python -m spinus_ai.harness`).
+- For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the
+  tokens each really used and the checks' scores (`python -m spinus_ai.harness`).
 
 ## 0.1.0-alpha.3 (2026-10-28)
 

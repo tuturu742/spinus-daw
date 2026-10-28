@@ -1,7 +1,7 @@
 """The Track creator's AI song writer (spinus_ai.compose) with fake providers, no real API calls: the model's song
 is checked note by note, a part it botches or leaves out is written by the rules, an answer cut off at the length
 limit is continued and joined, a revision changes only what it names, every request's tokens (reasoning too) are
-recorded, and the estimates come from those records once there are some."""
+reported as the provider gave them."""
 
 from __future__ import annotations
 
@@ -150,10 +150,7 @@ async def test_the_ais_song_is_checked_and_what_it_left_out_written_by_the_rules
     usage = song["composed"]["usage"]
     assert (usage["input"], usage["output"], usage["reasoning"]) == (1200, 3000, 900)
     assert "1,200 in, 3,000 out (of them 900 reasoning)" in song["note"]
-    records = json.loads((tmp_path / "config" / "compose-usage.json").read_text())
-    assert records["runs"][0]["model"] == "claude-sonnet-5-5" and records["runs"][0]["effort"] == "high"
-    assert records["runs"][0]["requests"] == [{"input": 1200, "output": 3000, "reasoning": 900}]
-    assert "song" not in json.dumps(records) and "sk-test" not in json.dumps(records)  # numbers only
+    assert not (tmp_path / "config" / "compose-usage.json").exists()  # nothing kept beyond the song itself
 
     # Redo part on the AI's song: only that part is written again.
     again = await run_job(service, "ai.v1.song.write", {"summary": summary(), "seed": 3, "song": song,
@@ -187,8 +184,8 @@ async def test_without_a_connection_nothing_is_sent_and_the_rules_write(tmp_path
     service = fake(tmp_path, [], sent)
     song = await run_job(service, "ai.v1.song.compose", params())
     assert "no AI connection" in song["note"] and not sent
-    estimate = await service.handle("ai.v1.song.composeEstimate", params(), no_notify)
-    assert estimate["available"] is False
+    who = await service.handle("ai.v1.song.composer", {}, no_notify)
+    assert who["available"] is False and "Options > AI" in who["reason"]
 
 
 async def test_an_answer_cut_off_is_continued_and_joined(tmp_path: Path) -> None:
@@ -240,26 +237,11 @@ async def test_a_revision_changes_what_it_names_and_counts_every_round(tmp_path:
     assert kept["composed"]["usage"]["input"] == 2400
 
 
-async def test_the_estimate_is_a_range_and_then_comes_from_the_users_runs(tmp_path: Path) -> None:
-    sent: list[dict[str, Any]] = []
-    service = fake(tmp_path, [anthropic_tool(json.dumps(song_answer()))], sent, counted=1500)
+async def test_the_composer_names_the_connection(tmp_path: Path) -> None:
+    service = fake(tmp_path, [], [])
     await connect(service)
-    before = await service.handle("ai.v1.song.composeEstimate", params(effort="high", rounds=1), no_notify)
-    assert before["inputCounted"] and before["input"] == 1500 and before["fromRuns"] == 0
-    guess = compose.answer_guess(compose.Setup.make(summary(), PARTS, "sketch"))
-    low, high = compose.REASONING_RANGE["high"]
-    assert before["output"] == [round(guess * low), round(guess * high)] and before["low"] < before["high"]
-    low_level = await service.handle("ai.v1.song.composeEstimate", params(effort="low", rounds=1), no_notify)
-    assert low_level["high"] < before["high"]  # high reasoning can use several times more
-
-    await run_job(service, "ai.v1.song.compose", params(effort="high"))
-    after = await service.handle("ai.v1.song.composeEstimate", params(effort="high", rounds=0), no_notify)
-    # One run of 3000 output tokens for four parts: 750 a part, from 0.8 to 1.25 times that.
-    assert after["fromRuns"] == 1 and after["output"] == [2400, 3750]
-    # Its input too (1200): 0.8 to 1.25 times it.
-    assert after["inputRange"] == [960, 1500] and after["low"] == 960 + 2400 and after["high"] == 1500 + 3750
-    other = await service.handle("ai.v1.song.composeEstimate", params(effort="medium", rounds=0), no_notify)
-    assert other["fromRuns"] == 0  # another level: not from these runs
+    who = await service.handle("ai.v1.song.composer", {}, no_notify)
+    assert who == {"available": True, "connection": "Claude", "model": "claude-sonnet-5-5", "reason": ""}
 
 
 def test_effort_and_the_whole_allowance_reach_each_kind_of_provider() -> None:

@@ -434,8 +434,8 @@ summary's numbers (not your songs) to your AI provider.
 
 ### Let your AI connection write it
 
-![Write a song with "Your AI connection" chosen: the reasoning level, the fix rounds, the expected tokens, and after
-the run the tokens each round used and what Spinus's checks still find](images/track-creator-ai-writer.png)
+![Write a song with "Your AI connection" chosen: the reasoning level, the fix rounds, and after the run the tokens
+each round used and what Spinus's checks still find](images/track-creator-ai-writer.png)
 
 **Who writes the notes** (at the top of the page) is **Spinus (offline, nothing is sent)** at first. Choose
 **Your AI connection** (shown with its name; greyed out until you set one up in Options › AI) and the AI
@@ -462,19 +462,22 @@ and the page says so. A part it never wrote is written by Spinus's rules, and th
 When it's done, Spinus plays each part with its sound to set its level (as for its own songs). **Then fix
 what Spinus hears** (once, at first; no, twice or 3 times) sends what it heard back to the AI: a part that
 made no sound (its notes may be outside the instrument's range) and the balance. The AI fixes it the same way,
-on the same working copy.
+on the same working copy. If no part could be played (Spinus's sound helper isn't there), there's nothing new to
+tell the AI, so no fix round runs.
 
 **Reasoning** (the model's own, low, medium or high) is how hard the model thinks before it writes. Higher
-levels can use several times more tokens.
+levels use more tokens.
 
-**How many tokens**: before you click **Write**, the page shows a range, for example "About 30 to 120
-thousand tokens for the song". The first request's input is counted by your provider where it can (Anthropic
-does this for free); the rest can't be known in advance, since nobody knows how long the model will think. After
-your first runs, the range comes from what your own runs really used with that model and reasoning level
-("from your last 3 runs like it"). After every run, the page lists the tokens each round used, as your
-provider reported them: input (and how much of it was read from the provider's cache, which costs less),
-output, and of that the reasoning. Spinus keeps those numbers, and only those (no song, description or key), in
-`compose-usage.json` in its settings folder.
+**How many tokens**: Spinus doesn't guess in advance, since nobody knows how long a model will think. While the
+AI works, the page shows the tokens used so far. When it's done, it lists each round's tokens as your provider
+reported them:
+
+- input, and how much of it was read from the provider's cache, which costs less;
+- output, and of that the reasoning.
+
+Nothing about it is kept beyond the song itself. With an Anthropic connection, a long session also lets
+the provider clear the oldest tool calls from what it reads (the working copy on your computer keeps everything).
+The page counts what was cleared.
 
 There's no token limit that could cut a song short when it's almost finished. If an answer still reaches
 the model's own length limit, Spinus asks it to go on and joins the pieces. You control the cost with the

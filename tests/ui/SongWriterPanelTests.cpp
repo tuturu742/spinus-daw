@@ -315,8 +315,8 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     panel.setSeed (3);
 
     // Without a connection the AI can't be chosen, and Spinus writes as before.
-    panel.refreshEstimate();
-    REQUIRE (waitFor ([&] { return panel.getEstimateText().isNotEmpty(); }));
+    panel.refreshConnection();
+    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("Options > AI"); }));
     panel.setAiWriter (true);
     CHECK_FALSE (panel.isAiWriter());
 
@@ -331,12 +331,12 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
                   [&] (const juce::var&, const juce::String&) { tested = true; });
     REQUIRE (waitFor ([&] { return tested; }));
 
-    // With one: the expected tokens as a range before anything is sent.
-    panel.refreshEstimate();
-    REQUIRE (waitFor ([&] { return panel.getEstimateText().contains ("tokens for the song"); }));
-    INFO (panel.getEstimateText());
-    CHECK (panel.getEstimateText().contains ("My local model"));
-    CHECK (panel.getEstimateText().contains ("a rough range until you have run it"));
+    // With one: the page names it, and says the tokens are shown as it works (no estimate before).
+    panel.refreshConnection();
+    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My local model"); }));
+    INFO (panel.getInfoText());
+    CHECK (panel.getInfoText().contains ("shown as it works"));
+    CHECK_FALSE (panel.getInfoText().contains ("About"));
     panel.setAiWriter (true);
     REQUIRE (panel.isAiWriter());
     panel.setEffort ("high");
@@ -367,9 +367,6 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     CHECK (session.getProject() == before); // nothing before Apply
     REQUIRE (panel.apply());
     CHECK (session.getHistory().getUndoDescriptions().size() == 1);
-
-    // From the real numbers now: the estimate says it is from this run.
-    REQUIRE (waitFor ([&] { return panel.getEstimateText().contains ("from your last 1 run"); }));
 }
 
 TEST_CASE ("Track creator: without the AI service, the song page says so", "[ui][trackcreator][song]")
@@ -464,14 +461,12 @@ TEST_CASE ("Track creator AI writer screenshot for the manual", "[.screenshot][m
     panel.setLookAndFeel (&look);
     panel.setSize (860, 560);
     panel.setSeed (3);
-    panel.refreshEstimate();
-    REQUIRE (waitFor ([&] { return panel.getEstimateText().contains ("tokens for the song"); }));
+    panel.refreshConnection();
+    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My AI"); }));
     panel.setAiWriter (true);
     panel.setEffort ("medium");
     REQUIRE (panel.write());
     REQUIRE (waitFor ([&] { return ! panel.isBusy() && ! panel.isComposing(); }, 120000));
-    panel.refreshEstimate();
-    REQUIRE (waitFor ([&] { return panel.getEstimateText().contains ("from your last"); }));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
     const auto file = juce::File (SPINUS_TEST_FILES_DIR)
                           .getParentDirectory()
