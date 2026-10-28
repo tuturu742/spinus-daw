@@ -738,6 +738,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
     progress.current = source.name;
     report (progress);
 
+    bool defaultOnly = false;
     for (int attempt = 0;; ++attempt)
     {
         auto* known = new juce::DynamicObject();
@@ -753,7 +754,8 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
                                        { "uniqueId", source.uniqueId },
                                        { "stockType", source.stockType },
                                        { "known", juce::var (known) },
-                                       { "skip", skip } });
+                                       { "skip", skip },
+                                       { "defaultOnly", defaultOnly } });
         const auto run = SoundIndexer::runHelper (
             options, request, source.hostLibraries,
             [&] (const juce::var& line)
@@ -813,6 +815,17 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
             core::Logs::warning ("sounds", source.name + " " + why + " on the preset " + run.stuckOn);
             entry.problemPresets.addIfNotAlreadyThere (run.stuckOn);
             ++result.problems;
+            continue;
+        }
+        if (run.stuckOn.isEmpty() && ! defaultOnly && attempt < options.retries)
+        {
+            // It crashed or hung before any preset was played (loading, finding its presets, or its own
+            // loading in the background): tried once more with only its sound as it opens, so it can still
+            // be chosen.
+            core::Logs::warning ("sounds", source.name + " " + why +
+                                               " before its first preset: trying its "
+                                               "default sound only");
+            defaultOnly = true;
             continue;
         }
         entry.problem = run.stuckOn.isNotEmpty() ? source.name + " " + why + " on too many presets"

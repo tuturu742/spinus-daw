@@ -432,7 +432,9 @@ void TrackCreator::showSounds() { SoundIndexView::show (soundIndexFolder, this);
 juce::StringArray TrackCreator::getIncludedPlugins() const
 {
     juce::StringArray keys;
-    if (const auto* saved = juce::JSON::parse (soundIndexFolder.getChildFile ("plugins.json"))["include"].getArray())
+    // Kept in a variable: the array lives in the parsed file, which must outlive the loop.
+    const auto file = juce::JSON::parse (soundIndexFolder.getChildFile ("plugins.json"));
+    if (const auto* saved = file["include"].getArray())
         for (const auto& k : *saved)
             keys.add (k.toString());
     return keys;

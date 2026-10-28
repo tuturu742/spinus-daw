@@ -12,23 +12,36 @@
 
    Built with MISBEHAVING=1 it is "Spinus Misbehaving Synth" (misbehaving-synth.clap), for the sound index's
    tests: two more presets, "Crashes" (its sound crashes the process) and "Hangs" (its sound never comes:
-   processing stops answering). */
+   processing stops answering).
+
+   Built with DIFFICULT=1 it is "Spinus Difficult Synth" (difficult-synth.clap), behaving as some big sample
+   instruments do: it crashes when its presets are listed, and stays silent for its first 3 seconds (as if
+   loading its samples in the background). */
 
 #include <clap/clap.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if MISBEHAVING
+#if MISBEHAVING || DIFFICULT
     #ifdef _WIN32
         #include <windows.h>
         #define CRASH() (*(volatile int*)0 = 0)
         #define PAUSE() Sleep (1000)
+        #define NOW() ((double)GetTickCount64() / 1000.0)
     #else
         #include <signal.h>
+        #include <time.h>
         #include <unistd.h>
         #define CRASH() raise (SIGSEGV)
         #define PAUSE() sleep (1)
+static double now_seconds (void)
+{
+    struct timespec t;
+    clock_gettime (CLOCK_MONOTONIC, &t);
+    return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
+}
+        #define NOW() now_seconds()
     #endif
 #endif
 
@@ -103,6 +116,9 @@ static const char* const features[] = { CLAP_PLUGIN_FEATURE_INSTRUMENT, CLAP_PLU
 #if MISBEHAVING
     #define SYNTH_ID "io.github.tuturu742.spinus.test.misbehaving-synth"
     #define SYNTH_NAME "Spinus Misbehaving Synth"
+#elif DIFFICULT
+    #define SYNTH_ID "io.github.tuturu742.spinus.test.difficult-synth"
+    #define SYNTH_NAME "Spinus Difficult Synth"
 #else
     #define SYNTH_ID "io.github.tuturu742.spinus.test.synth"
     #define SYNTH_NAME "Spinus Test Synth"
@@ -140,6 +156,7 @@ typedef struct
     int note, gate; /* the note playing (-1: none), whether its key is down */
     int stage;      /* 0 attack, 1 decay, 2 sustain, 3 release */
     int misbehave;  /* MISBEHAVING: 1 crash, 2 hang while processing */
+    double created; /* DIFFICULT: when (NOW()), to stay silent for 3 seconds after */
 } synth_t;
 
 static synth_t* self (const clap_plugin_t* p) { return (synth_t*)p->plugin_data; }
@@ -437,6 +454,16 @@ static clap_process_status process (const clap_plugin_t* p, const clap_process_t
     while (s->misbehave == 2)
         PAUSE();
 #endif
+#if DIFFICULT
+    if (NOW() - s->created < 3.0)
+    {
+        /* Still "loading its samples": silence. */
+        const clap_audio_buffer_t* silent = &process->audio_outputs[0];
+        for (uint32_t c = 0; c < silent->channel_count; ++c)
+            memset (silent->data32[c], 0, sizeof (float) * process->frames_count);
+        return CLAP_PROCESS_CONTINUE;
+    }
+#endif
     const uint32_t frames = process->frames_count;
     const uint32_t events = process->in_events->size (process->in_events);
     uint32_t next = 0;
@@ -500,6 +527,9 @@ static const clap_plugin_t* factory_create (const clap_plugin_factory_t* f, cons
         s->values[i] = s->infos[i].value;
     s->rate = 48000.0;
     s->note = -1;
+#if DIFFICULT
+    s->created = NOW();
+#endif
     s->plugin.desc = organ ? &organ_descriptor : &synth_descriptor;
     s->plugin.plugin_data = s;
     s->plugin.init = init;
@@ -537,6 +567,9 @@ static bool provider_metadata (const clap_preset_discovery_provider_t* provider,
     (void)location;
     if (kind != CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN)
         return false;
+#if DIFFICULT
+    CRASH(); /* listing its presets crashes it */
+#endif
     const clap_universal_plugin_id_t id = { "clap", SYNTH_ID };
     for (int i = 0; i < PRESETS; ++i)
     {

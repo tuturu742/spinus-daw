@@ -23,6 +23,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- **Track creator's sound index and big sample instruments:** instruments that load their samples in the
+  background after opening (big sampled guitars and basses, for example) were measured before they made a
+  sound, filed as silent and never suggested; Spinus now waits for them (up to 40 seconds). One that crashes
+  while its presets are listed is tried again with only its sound as it opens, so it can still be chosen.
+- **Track creator: choosing which plugins to scan for the sound index crashed Spinus** once some had been
+  ticked before: it read the saved list from memory already freed.
 - **Spinus froze, and every program crackled, when a webcam microphone was chosen to record from:** Spinus
   kept the microphone open all the time, and through PipeWire a webcam's microphone can become the clock
   of the whole system's sound, with small buffers for every program. Spinus now opens the microphone only
@@ -150,7 +156,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Model downloads try again** after a server error or a dropped connection (three more tries, a few
   seconds apart), instead of failing at the first hiccup. If the model's own server is still down, Spinus
   says so ("its authors' server isn't answering... please try again later"): each model comes only from
-  its authors.
+  its authors. If they give a new link for a model, **Sources and licences... › Download from another
+  link** in the Analyzer takes it (the file must match the model's checksum).
 
 ## 0.1.0-alpha.2 (2026-10-26)
 

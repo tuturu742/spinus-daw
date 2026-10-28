@@ -9,6 +9,7 @@
 #include "plugins/PluginCatalog.h"
 
 #include <set>
+#include <utility>
 
 namespace spinus
 {
@@ -107,6 +108,24 @@ model::Device deviceOf (const juce::var& request)
     return device;
 }
 
+/** Some instruments load their samples in the background after opening (big sampled guitars, basses and
+    drum libraries), silent until then: the test notes are played again, a second apart, until something
+    sounds or `seconds` pass (each wait is a line, so Spinus doesn't take the helper for hung). */
+bool waitUntilAudible (OfflineInstrument& player, Lines& out, double seconds)
+{
+    const auto until = juce::Time::getMillisecondCounterHiRes() + seconds * 1000.0;
+    for (;;)
+    {
+        const auto audio = player.render ({ { 48, 0.0, 0.4, 0.8f }, { 60, 0.0, 0.4, 0.8f } }, 0.3);
+        if (audio.getMagnitude (0, audio.getNumSamples()) > 1.0e-4f)
+            return true;
+        if (juce::Time::getMillisecondCounterHiRes() > until)
+            return false;
+        out.write ("waiting", "its sounds to load");
+        juce::Thread::sleep (1000);
+    }
+}
+
 int runInstrument (const juce::var& request, Lines& out)
 {
     juce::String error;
@@ -118,7 +137,10 @@ int runInstrument (const juce::var& request, Lines& out)
         return 0;
     }
     OfflineInstrument player (*instance);
-    auto presets = InstrumentPresets::find (*instance, deviceOf (request));
+    // "defaultOnly": a second try for an instrument that crashed after loading (while its presets were
+    // found or right after): only its sound as it opens.
+    auto presets = (bool)request["defaultOnly"] ? std::vector<InstrumentPreset> {}
+                                                : InstrumentPresets::find (*instance, deviceOf (request));
     const bool hasPresets = ! presets.empty();
     if (! hasPresets)
     {
@@ -159,6 +181,7 @@ int runInstrument (const juce::var& request, Lines& out)
         return player.renderStereo (converted, tail); // the width is measured too
     };
 
+    double firstWait = 40.0; // seconds an instrument may take to load its sounds, then for each preset
     for (const auto& preset : presets)
     {
         if (skip.contains (preset.id))
@@ -173,8 +196,15 @@ int runInstrument (const juce::var& request, Lines& out)
             if (const auto loaded = player.loadPreset (preset); loaded.failed())
                 problem = loaded.getErrorMessage();
         if (problem.isEmpty())
-            sound = sounds::toVar (
-                sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category));
+        {
+            auto described =
+                sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
+            // Silent: perhaps still loading (the first sound, or a preset that loads other samples).
+            if (described.silent && waitUntilAudible (player, out, std::exchange (firstWait, 10.0)))
+                described =
+                    sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
+            sound = sounds::toVar (described);
+        }
         else
         {
             sound = juce::var (new juce::DynamicObject());
@@ -299,7 +329,9 @@ juce::AudioBuffer<float> readStereo (const juce::File& file, double from = 0.0, 
       start, length, velocity}], tail, output}`: the instrument playing the notes;
     - `{id, cut: {file, from, length}, output}`: part of an audio file;
     - `{id, mix: [{file, at, gain}], length, output}`: audio files played at those times (a beat of drum samples).
-    Writes `{"begin": id}` and `{"rendered": {id, output, peak}}` (or `{rendered: {id, problem}}`) per item. */
+    Writes `{"begin": id}` and `{"rendered": {id, output, peak}}` (or `{rendered: {id, problem}}`) per item. An
+    item that comes out silent is played again once the instrument sounds (it may load its samples late), as in
+    "instrument" mode; presets are found only when an item names one. */
 int runRender (const juce::var& request, Lines& out)
 {
     const auto* items = request["items"].getArray();
@@ -319,8 +351,12 @@ int runRender (const juce::var& request, Lines& out)
             return 0;
         }
         player = std::make_unique<OfflineInstrument> (*instance);
-        presets = InstrumentPresets::find (*instance, deviceOf (request));
+        // Presets are found only when an item asks for one: finding them crashes some instruments.
+        if (std::any_of (items->begin(), items->end(),
+                         [] (const juce::var& i) { return i["preset"].toString().isNotEmpty(); }))
+            presets = InstrumentPresets::find (*instance, deviceOf (request));
     }
+    double wait = 40.0;               // seconds an instrument may take to load its sounds (as runInstrument), then 10
     juce::String loadedPreset = "\n"; // none yet
     bool changed = false;             // settings were set over the loaded preset
     if (items != nullptr)
@@ -353,8 +389,13 @@ int runRender (const juce::var& request, Lines& out)
                         for (const auto& [key, value] : settings->getProperties())
                             if (auto* parameter = SynthMatcher::findParameter (*instance, key.toString()))
                                 parameter->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, (float)(double)value));
-                    audio = player->renderStereo (notesOf (item["notes"]),
-                                                  item.hasProperty ("tail") ? (double)item["tail"] : 0.5);
+                    const auto notes = notesOf (item["notes"]);
+                    const auto tail = item.hasProperty ("tail") ? (double)item["tail"] : 0.5;
+                    audio = player->renderStereo (notes, tail);
+                    // Silent: perhaps still loading its samples; played again once it sounds.
+                    if (! notes.empty() && audio.getMagnitude (0, audio.getNumSamples()) <= 1.0e-4f &&
+                        waitUntilAudible (*player, out, std::exchange (wait, 10.0)))
+                        audio = player->renderStereo (notes, tail);
                 }
             }
             else if (const auto& cut = item["cut"]; cut.isObject())
@@ -433,6 +474,7 @@ int runTune (const juce::var& request, Lines& out)
             return 0;
         }
     }
+    waitUntilAudible (player, out, 40.0); // an instrument that loads its sounds late is tuned once it sounds
     auto profile =
         request["profile"].isObject() ? SynthProfile::fromJson (request["profile"]) : std::optional<SynthProfile> {};
     if (! profile)

@@ -250,6 +250,19 @@ set_target_properties (spinus_test_misbehaving_clap PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
 add_dependencies (spinus_tests spinus_test_misbehaving_clap)
 
+# The same synth as some big sample instruments behave: listing its presets crashes it, and it is silent for its
+# first seconds (SoundIndexTests.cpp).
+add_library (spinus_test_difficult_clap MODULE plugins/TestSynthClap.c)
+target_include_directories (spinus_test_difficult_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+target_compile_definitions (spinus_test_difficult_clap PRIVATE DIFFICULT=1)
+if (NOT WIN32)
+    target_link_libraries (spinus_test_difficult_clap PRIVATE m)
+endif()
+set_target_properties (spinus_test_difficult_clap PROPERTIES
+    PREFIX "" OUTPUT_NAME "difficult-synth" SUFFIX ".clap"
+    LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
+add_dependencies (spinus_tests spinus_test_difficult_clap)
+
 # A small LV2 plugin with X11 UIs that misbehave as real ones do (Lv2UiTestPlugin.c), for Lv2GuiTests.cpp.
 if (UNIX AND NOT APPLE)
     set (lv2TestBundle "${SPINUS_BROKEN_PLUGINS_DIR}/spinus-test-lv2-ui.lv2")
