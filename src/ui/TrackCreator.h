@@ -152,8 +152,11 @@ public:
         the installed plugins the user ticked. */
     std::vector<SoundSource> getAllSoundSources() const;
     std::vector<SoundSource> getIndexedSoundSources() const;
-    /** Opens the menu of installed plugins to tick. */
+    /** Opens the menu of installed plugins to tick, with Measure again for those already measured. */
     void choosePlugins();
+    /** Measure again: forgets what the index has of this instrument (an installed plugin is ticked too) and
+        updates the index, so it is measured anew. An empty key: every silent or failed one. Returns how many. */
+    int measureAgain (const juce::String& key);
 
     //==============================================================================
     // Sounds for each part (milestone 3).

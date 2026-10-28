@@ -217,6 +217,16 @@ extension (an AIFF called .wav) is still read.
 - **Plugins can't crash Spinus here**: the listening happens in a separate helper program. A preset that
   makes it crash or freeze is skipped and counted as a problem; so is a plugin that doesn't load (it is
   tried again once it's updated).
+- **Measured again by a newer Spinus:** when a newer version of Spinus listens better (it now waits for
+  instruments that load their sounds slowly, as big sampled guitars and basses do), the plugins an older
+  version found silent, or that failed, are listened to again at the next update. The ones that worked are
+  kept as they were, so the update stays quick.
+- **Measure again**: to listen to a plugin anew yourself, click **Your plugins...**, then **Measure again**
+  and the plugin, or **Measure again every silent or failed one**. Spinus forgets what it heard from it and
+  updates the index at once (an installed plugin you hadn't ticked is ticked for it).
+- Some plugins stay silent until you choose a sound in their own window: a drum player that needs a kit
+  picked first, for example. Spinus can't hear those yet. A way to save the sound you set up in a plugin's
+  window, so the Track creator can use it, is planned for the next alpha.
 - **Show sounds...** lists everything Spinus measured, with its guess and a few details ("attack 5 ms,
   sustained, brightness 820 Hz, C1-C7, chords"), and a search box: type "bass", "pad", "Surge" or "kick
   sample" to check its guesses. When a name says one thing and the sound another, both are shown ("sounds

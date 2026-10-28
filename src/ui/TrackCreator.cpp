@@ -493,7 +493,71 @@ void TrackCreator::choosePlugins()
     }
     if (count == 0)
         menu.addItem ("No other instrument plugins are installed", false, false, [] {});
+
+    // Measure again: an instrument measured before (silent, say, or one that failed) measured anew.
+    SoundIndex index (soundIndexFolder);
+    index.load();
+    juce::PopupMenu again;
+    int failed = 0;
+    for (const auto& [key, instrument] : index.instruments)
+    {
+        const bool bad = instrument.silentOrFailed();
+        failed += bad ? 1 : 0;
+        again.addItem (instrument.source.name + (instrument.problem.isNotEmpty() ? " (did not load)"
+                                                 : bad                           ? " (silent or failed sounds)"
+                                                                                 : juce::String()),
+                       ! isIndexingSounds(), false,
+                       [safe = juce::Component::SafePointer (this), key]
+                       {
+                           if (safe != nullptr)
+                               safe->measureAgain (key);
+                       });
+    }
+    if (! index.instruments.empty())
+    {
+        menu.addSeparator();
+        menu.addItem ("Measure again every silent or failed one (" + juce::String (failed) + ")",
+                      failed > 0 && ! isIndexingSounds(), false,
+                      [safe = juce::Component::SafePointer (this)]
+                      {
+                          if (safe != nullptr)
+                              safe->measureAgain ({});
+                      });
+        menu.addSubMenu ("Measure again", again, ! isIndexingSounds());
+    }
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&pluginsButton));
+}
+
+int TrackCreator::measureAgain (const juce::String& key)
+{
+    if (isIndexingSounds())
+        return 0;
+    SoundIndex index (soundIndexFolder);
+    index.load();
+    juce::StringArray keys;
+    if (key.isNotEmpty())
+    {
+        if (index.instruments.count (key) > 0)
+            keys.add (key);
+    }
+    else
+        for (const auto& [k, instrument] : index.instruments)
+            if (instrument.silentOrFailed())
+                keys.add (k);
+    if (keys.isEmpty())
+        return 0;
+
+    // An installed plugin is measured only when ticked: ticked now, so the update reaches it.
+    auto included = getIncludedPlugins();
+    for (const auto& k : keys)
+    {
+        index.measureAgain (k);
+        if (index.instruments[k].source.stockType.isEmpty())
+            included.addIfNotAlreadyThere (k);
+    }
+    setIncludedPlugins (included);
+    updateSoundIndex();
+    return keys.size();
 }
 
 void TrackCreator::showPage (Page shown)

@@ -18,6 +18,14 @@ namespace
 {
 constexpr double pi = 3.14159265358979323846;
 
+juce::var object (std::initializer_list<std::pair<const char*, juce::var>> properties)
+{
+    auto* o = new juce::DynamicObject();
+    for (auto& [name, value] : properties)
+        o->setProperty (name, value);
+    return juce::var (o);
+}
+
 struct TempFolder
 {
     TempFolder() { folder.createDirectory(); }
@@ -202,6 +210,7 @@ TEST_CASE ("Sound index: only what changed is measured again", "[sounds][index]"
     SoundIndex::Instrument i;
     i.source = source;
     i.complete = true;
+    i.measuredWith = SoundIndex::helperRevision;
     index.instruments[source.key] = i;
     CHECK_FALSE (index.needsVisit (source)); // unchanged
     auto changed = source;
@@ -237,6 +246,88 @@ TEST_CASE ("Sound index: only what changed is measured again", "[sounds][index]"
     const auto changedFiles = index.changedSamples (touched);
     REQUIRE (changedFiles.size() == 1);
     CHECK (changedFiles[0].file.getFileName() == "k1.wav");
+}
+
+TEST_CASE ("Sound index: silent or failed with an older helper is measured again, a healthy one is not",
+           "[sounds][index]")
+{
+    TempFolder temp;
+    SoundIndex index (temp.folder);
+    const auto source = threeOsc();
+    SoundIndex::Instrument i;
+    i.source = source;
+    i.complete = true;
+    i.sounds.add (object ({ { "id", "a" }, { "name", "Lead" }, { "silent", false } }));
+    index.instruments[source.key] = i; // measured by an older helper (measuredWith 0)
+    CHECK_FALSE (index.instruments[source.key].silentOrFailed());
+    CHECK_FALSE (index.needsVisit (source)); // healthy: kept, so an update stays quick
+
+    index.instruments[source.key].sounds.add (object ({ { "id", "b" }, { "name", "Pad" }, { "silent", true } }));
+    CHECK (index.instruments[source.key].silentOrFailed());
+    CHECK (index.needsVisit (source)); // a silent sound from an older helper
+    index.instruments[source.key].measuredWith = SoundIndex::helperRevision;
+    CHECK_FALSE (index.needsVisit (source)); // silent with this helper too: as it is
+
+    index.instruments[source.key].sounds.remove (1);
+    index.instruments[source.key].problem = "crashed while listing its presets";
+    CHECK_FALSE (index.needsVisit (source)); // failed with this helper: not again until it changes
+    index.instruments[source.key].measuredWith = 1;
+    CHECK (index.needsVisit (source)); // failed with an older one: tried again
+
+    index.instruments[source.key].problem.clear();
+    index.instruments[source.key].problemPresets.add ("Crashy");
+    CHECK (index.needsVisit (source)); // a preset an older helper gave up on
+
+    // measuredWith is kept on disk; an index without it is from before revision 2.
+    index.instruments[source.key].measuredWith = SoundIndex::helperRevision;
+    REQUIRE (index.saveInstrument (index.instruments[source.key]));
+    REQUIRE (index.saveIndex());
+    SoundIndex again (temp.folder);
+    again.load();
+    CHECK (again.instruments.at (source.key).measuredWith == SoundIndex::helperRevision);
+}
+
+TEST_CASE ("Sound index: Measure again forgets one instrument, or every silent or failed one", "[sounds][index]")
+{
+    TempFolder temp;
+    SoundIndex index (temp.folder);
+    auto healthy = threeOsc();
+    auto silent = testSynth();
+    auto failed = testSynth ("crash.clap", "Crash");
+    for (const auto* s : { &healthy, &silent, &failed })
+    {
+        SoundIndex::Instrument i;
+        i.source = *s;
+        i.complete = true;
+        i.measuredWith = SoundIndex::helperRevision;
+        i.sounds.add (object ({ { "id", "a" }, { "name", "One" }, { "silent", s == &silent } }));
+        if (s == &failed)
+            i.problem = "crashed while loading";
+        index.instruments[s->key] = i;
+        REQUIRE (index.saveInstrument (i));
+    }
+    REQUIRE (index.saveIndex());
+    for (const auto* s : { &healthy, &silent, &failed })
+        CHECK_FALSE (index.needsVisit (*s));
+
+    CHECK_FALSE (index.measureAgain ("not-in-the-index"));
+    REQUIRE (index.measureAgain (healthy.key));
+    {
+        SoundIndex read (temp.folder);
+        read.load();
+        CHECK (read.instruments.at (healthy.key).sounds.isEmpty());
+        CHECK_FALSE (read.instruments.at (healthy.key).complete);
+        CHECK (read.needsVisit (healthy));
+        CHECK (read.instruments.at (silent.key).sounds.size() == 1); // the others as they were
+        CHECK_FALSE (read.needsVisit (silent));
+    }
+
+    CHECK (index.measureAgainSilentOrFailed() == 2);
+    SoundIndex read (temp.folder);
+    read.load();
+    CHECK (read.needsVisit (silent));
+    CHECK (read.needsVisit (failed));
+    CHECK (read.instruments.at (failed.key).problem.isEmpty());
 }
 
 //==============================================================================
@@ -374,6 +465,29 @@ TEST_CASE ("Sound index: presets that crash or hang the helper are left out", "[
     SoundIndex again (temp.folder);
     again.load();
     CHECK (again.instruments.at (source.key).problemPresets.size() == 2);
+}
+
+TEST_CASE ("Sound index: a sound an older helper found silent is measured again, and sounds now",
+           "[sounds][index][helper]")
+{
+    // As an instrument that loads its sounds late was measured before the helper waited for it: silent.
+    TempFolder temp;
+    SoundIndex index (temp.folder);
+    const auto source = testSynth ("difficult-synth.clap", "Spinus Difficult Synth");
+    SoundIndex::Instrument old;
+    old.source = source;
+    old.complete = true;
+    old.sounds.add (object ({ { "id", "default" }, { "name", "Default sound" }, { "silent", true } }));
+    index.instruments[source.key] = old;
+    REQUIRE (index.needsVisit (source));
+
+    SoundIndexer::update (index, helperOptions(), { source }, {}, {}, {});
+    const auto& entry = index.instruments.at (source.key);
+    CHECK (entry.measuredWith == SoundIndex::helperRevision);
+    CHECK (entry.problem.isEmpty());
+    REQUIRE (entry.sounds.size() == 1);
+    CHECK_FALSE ((bool)entry.sounds[0]["silent"]);
+    CHECK_FALSE (index.needsVisit (source));
 }
 
 TEST_CASE ("Sound index: an instrument that crashes listing its presets and loads its sounds late is still measured",
