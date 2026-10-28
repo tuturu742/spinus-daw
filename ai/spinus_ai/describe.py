@@ -1148,7 +1148,7 @@ async def read_with_ai(
         SYSTEM,
         [Message("user", [Text(f"Genres: {genres}\n\nThe description:\n{text[:2000]}")])],
         [READ_DESCRIPTION],
-        1000,
+        None,  # the model's whole allowance: a reasoning model can think past a small cap and give no answer
     )
     failed: list[str] = []
     completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say, failed)
