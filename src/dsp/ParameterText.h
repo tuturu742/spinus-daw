@@ -205,6 +205,18 @@ inline std::optional<float> normalisedForText (const juce::AudioProcessorParamet
     return juce::jlimit (0.0f, 1.0f, p.getValueForText (trimmed));
 }
 
+/** A choice's or switch's values by name, in order ("Bell", "Low cut"...); empty for a number setting or one
+    with too many steps to list. Message thread. */
+inline juce::StringArray choicesOf (const juce::AudioProcessorParameter& p)
+{
+    juce::StringArray names;
+    const auto steps = p.getNumSteps();
+    if ((p.isDiscrete() || p.isBoolean()) && steps >= 2 && steps <= 64)
+        for (int k = 0; k < steps; ++k)
+            names.add (p.getText ((float)k / (float)(steps - 1), 200).trim());
+    return names;
+}
+
 inline float FloatSetting::getValueForText (const juce::String& text) const
 {
     const juce::AudioProcessorParameter& self = *this; // AudioParameterFloat's own are private

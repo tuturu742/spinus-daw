@@ -5,14 +5,20 @@
 #include "dsp/drums/StarterPack.h"
 #include "dsp/loudness/LoudnessEngine.h"
 #include "dsp/sampler/SamplerProcessor.h"
+#include "dsp/ParameterText.h"
 #include "dsp/threeosc/ThreeOscPresets.h"
 #include "engine/EngineAdapter.h"
+#include "engine/Exporter.h"
+#include "engine/ParameterIds.h"
+#include "model/ModelJson.h"
 #include "model/StockDevices.h"
 #include "session/Session.h"
 
 #include <tracktion_engine/tracktion_engine.h>
 
+#include <map>
 #include <optional>
+#include <set>
 
 namespace spinus::cli
 {
@@ -147,6 +153,72 @@ juce::String keyName (const model::Key& key)
     return juce::String (noteNames[((key.tonic % 12) + 12) % 12]) + " " + key.scale;
 }
 
+/** Automation points given as `text` ("-6 dB", "30% L", "1.2 kHz") instead of `value`, read for the clip's
+    target as the control shows it (Session::parseTargetValue). The params as they were when nothing needs it. */
+juce::var readPointTexts (Session& session, const juce::String& command, const juce::var& params, juce::String& error)
+{
+    if (command != "clip.addAutomation" && command != "clip.setPoints")
+        return params;
+    const auto* points = params["points"].getArray();
+    if (points == nullptr)
+        return params;
+    bool any = false;
+    for (auto& point : *points)
+        any = any || point.hasProperty ("text");
+    if (! any)
+        return params;
+
+    model::ParameterTarget target;
+    if (command == "clip.addAutomation")
+    {
+        if (auto e = model::targetFromJson (params["target"], target); e.isNotEmpty())
+            return params; // the command says what is wrong with it
+    }
+    else
+    {
+        const auto* clip = session.getProject().findClip (model::ClipId { (uint32_t)(int)params["clip"] });
+        const auto* automation = clip != nullptr ? std::get_if<model::AutomationClip> (&clip->content) : nullptr;
+        if (automation == nullptr)
+            return params;
+        target = automation->target;
+    }
+
+    // A pan as "30% L", "20% R", "C" (or "-30" to "30", left negative): 0 is left, 0.5 the middle, 1 right.
+    const auto readPan = [] (const juce::String& text) -> std::optional<float>
+    {
+        const auto t = text.trim().toUpperCase();
+        if (t == "C" || t == "CENTER" || t == "CENTRE" || t == "0" || t == "0%")
+            return 0.5f;
+        if (! t.containsAnyOf ("0123456789"))
+            return std::nullopt;
+        auto amount = t.retainCharacters ("0123456789.").getFloatValue();
+        if (t.endsWith ("L") || t.startsWith ("-"))
+            amount = -amount;
+        else if (! t.endsWith ("R") && ! t.startsWith ("+"))
+            return std::nullopt; // "30%": which side?
+        return juce::jlimit (0.0f, 1.0f, 0.5f + amount / 200.0f);
+    };
+    const bool pan = target.kind == model::ParameterTarget::Kind::channelPan ||
+                     target.kind == model::ParameterTarget::Kind::insertPan;
+
+    auto copy = juce::JSON::parse (juce::JSON::toString (params));
+    for (auto& point : *copy["points"].getArray())
+        if (auto* o = point.getDynamicObject(); o != nullptr && o->hasProperty ("text"))
+        {
+            const auto text = o->getProperty ("text").toString();
+            const auto value = pan ? readPan (text) : session.parseTargetValue (target, text);
+            if (! value)
+            {
+                error = "cannot read point text \"" + text + "\" for " + session.describeTarget (target) +
+                        " (it shows values like \"" + session.describeTargetValue (target, 0.75f) + "\")";
+                return params;
+            }
+            o->removeProperty ("text");
+            o->setProperty ("value", *value);
+        }
+    return copy;
+}
+
 juce::var deviceSummary (const model::Device& d)
 {
     return object ({ { "device", (int)d.id.value },
@@ -251,6 +323,9 @@ int runSteps (Session& session, const juce::var& steps, const RunOptions& option
         }
         else if (command.isEmpty())
             error = "a step needs \"command\" (or \"action\")";
+        else if (params = readPointTexts (session, command, params, error); error.isNotEmpty())
+        {
+        }
         else if (auto made = commands::CommandRegistry::get().create (command, params, error))
         {
             auto* raw = made.get();
@@ -289,7 +364,26 @@ juce::var summarize (Session& session, const juce::File& projectFolder)
     model::Ticks end = 0;
     juce::Array<juce::var> problems;
 
-    juce::Array<juce::var> channels;
+    // The channels something plays: a pattern clip (Playlist or launcher) with notes for it, or an audio clip.
+    std::set<model::ChannelId> used;
+    const auto playedBy = [&] (const auto& content)
+    {
+        if (const auto* clip = std::get_if<model::PatternClip> (&content))
+        {
+            if (const auto* pattern = p.findPattern (clip->pattern))
+                for (auto& [channel, notes] : pattern->notes)
+                    if (! notes.empty())
+                        used.insert (channel);
+        }
+        else if (const auto* audio = std::get_if<model::AudioClip> (&content))
+            used.insert (audio->channel);
+    };
+    for (auto& clip : p.playlist.clips)
+        playedBy (clip.content);
+    for (auto& clip : p.launcher.clips)
+        playedBy (clip.content);
+
+    juce::Array<juce::var> channels, unused;
     for (auto& c : p.channels)
     {
         auto instrument = c.instrument ? deviceSummary (*c.instrument) : juce::var();
@@ -308,7 +402,10 @@ juce::var summarize (Session& session, const juce::File& projectFolder)
                                 { "instrument", instrument },
                                 { "audioTrack", c.audioTrack },
                                 { "insert", (int)c.targetInsert.value },
-                                { "volumeDb", c.volumeDb } }));
+                                { "volumeDb", c.volumeDb },
+                                { "used", used.count (c.id) > 0 } }));
+        if (used.count (c.id) == 0)
+            unused.add (c.name);
     }
 
     juce::Array<juce::var> inserts;
@@ -390,6 +487,7 @@ juce::var summarize (Session& session, const juce::File& projectFolder)
           { "clips",
             object ({ { "pattern", patternClips }, { "audio", audioClips }, { "automation", automationClips } }) },
           { "markers", markers },
+          { "unusedChannels", unused }, // channels no clip plays: not a problem, but often a mistake
           { "problems", problems } });
 }
 
@@ -401,6 +499,24 @@ juce::StringArray describableTypes (Session& session)
         if (e.origin != plugins::DeviceList::Origin::installed && e.available && e.device.stockType.isNotEmpty())
             types.addIfNotAlreadyThere (e.device.stockType);
     return types;
+}
+
+juce::var notInstalled (Session& session)
+{
+    juce::Array<juce::var> missing;
+    juce::StringArray seen;
+    for (auto& e : session.getDeviceList().getEntries())
+        if (e.origin != plugins::DeviceList::Origin::installed && ! e.available && e.device.stockType.isNotEmpty() &&
+            ! seen.contains (e.device.stockType))
+        {
+            seen.add (e.device.stockType);
+            missing.add (
+                object ({ { "type", e.device.stockType }, { "name", e.name }, { "instrument", e.instrument } }));
+        }
+    return object ({ { "notInstalled", missing },
+                     { "hint", "Free plugins Spinus can download: in Spinus, Options > Get free plugins. Spinus's own "
+                               "effects have no reverb or delay; the Dragonfly reverbs and Surge XT Effects (delay, "
+                               "chorus) are among these." } });
 }
 
 juce::var describe (Session& session, const juce::String& stockType)
@@ -434,6 +550,9 @@ juce::var describe (Session& session, const juce::String& stockType)
     auto* instance = instanceOf (session, id);
 
     juce::Array<juce::var> parameters;
+    std::optional<engine::ParameterFinder> finder;
+    if (instance != nullptr)
+        finder.emplace (*instance);
     for (auto& [pid, name] : session.getDeviceParameters (id))
     {
         model::ParameterTarget target;
@@ -443,7 +562,17 @@ juce::var describe (Session& session, const juce::String& stockType)
         auto* values = new juce::DynamicObject();
         for (const auto at : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
             values->setProperty (juce::String (at, 2), session.describeTargetValue (target, at));
-        parameters.add (object ({ { "id", pid }, { "name", name }, { "at", juce::var (values) } }));
+        auto parameter = object ({ { "id", pid }, { "name", name }, { "at", juce::var (values) } });
+        // A choice or switch: every value by name, as device.setParameters' text takes it.
+        if (auto* p = finder ? finder->find (pid) : nullptr)
+            if (const auto choices = dsp::param::choicesOf (*p); ! choices.isEmpty())
+            {
+                juce::Array<juce::var> names;
+                for (auto& c : choices)
+                    names.add (c);
+                parameter.getDynamicObject()->setProperty ("choices", names);
+            }
+        parameters.add (parameter);
     }
 
     auto result = object ({ { "type", stockType },
@@ -498,73 +627,161 @@ juce::var measureFile (const juce::File& file)
     if (reader == nullptr)
         return object ({ { "file", file.getFullPathName() } });
 
+    // In 100 ms steps: the integrated loudness (gated: only where it sounds), and how long it sounds
+    // (momentary loudness above -60 LUFS), so a short hit doesn't read as a loud part.
     dsp::LoudnessEngine meter;
     meter.prepare (reader->sampleRate);
-    const int block = 4096;
+    const int block = juce::jmax (1, (int)std::round (reader->sampleRate / 10.0));
     juce::AudioBuffer<float> buffer ((int)juce::jmin (2u, reader->numChannels), block);
+    int steps = 0, sounding = 0;
     for (juce::int64 at = 0; at < reader->lengthInSamples; at += block)
     {
         const auto n = (int)juce::jmin ((juce::int64)block, reader->lengthInSamples - at);
         buffer.setSize (buffer.getNumChannels(), n, false, false, true);
         reader->read (&buffer, 0, n, at, true, true);
         meter.process (buffer);
+        ++steps;
+        if (meter.getMomentary() > -60.0f)
+            ++sounding;
     }
-    const auto round1 = [] (float v) { return std::round ((double)v * 10.0) / 10.0; };
+    const auto round1 = [] (double v) { return std::isfinite (v) ? std::round (v * 10.0) / 10.0 : -100.0; };
+    const auto seconds = (double)reader->lengthInSamples / reader->sampleRate;
     return object ({ { "file", file.getFullPathName() },
-                     { "seconds", std::round ((double)reader->lengthInSamples / reader->sampleRate * 100.0) / 100.0 },
+                     { "seconds", std::round (seconds * 100.0) / 100.0 },
                      { "lufs", round1 (meter.getIntegrated()) },
-                     { "truePeakDb", round1 (meter.getTruePeakDb()) } });
+                     { "truePeakDb", round1 (meter.getTruePeakDb()) },
+                     { "soundingSeconds", round1 (seconds * (double)sounding / (double)juce::jmax (1, steps)) } });
 }
 
 int render (Session& session, const juce::File& audioFolder, const juce::File& out, const juce::File& stems,
             double tailSeconds, const Say& say)
 {
-    const auto exportTo = [&] (const juce::File& destination, bool asStems) -> std::optional<engine::ExportJob::Result>
+    const auto extension = out.getFileExtension().toLowerCase();
+    engine::ExportSettings settings;
+    settings.format = extension == ".flac"   ? engine::ExportSettings::Format::flac
+                      : extension == ".opus" ? engine::ExportSettings::Format::opus
+                      : extension == ".mp3"  ? engine::ExportSettings::Format::mp3
+                                             : engine::ExportSettings::Format::wav24;
+    const bool encoded = engine::ExportJob::isEncodedFormat (settings.format);
+    const auto failed = [&] (const juce::String& error)
     {
-        engine::ExportSettings settings;
-        const auto extension = destination.getFileExtension().toLowerCase();
-        settings.format = extension == ".flac"   ? engine::ExportSettings::Format::flac
-                          : extension == ".opus" ? engine::ExportSettings::Format::opus
-                          : extension == ".mp3"  ? engine::ExportSettings::Format::mp3
-                                                 : engine::ExportSettings::Format::wav24;
-        settings.stems = asStems;
-        settings.tailSeconds = tailSeconds;
-        settings.audioFolder = audioFolder;
-        destination.getParentDirectory().createDirectory();
-        std::optional<engine::ExportJob::Result> result;
-        auto job =
-            session.createExportJob (destination, settings, [&] (const engine::ExportJob::Result& r) { result = r; });
-        if (job == nullptr)
-            return engine::ExportJob::Result { .error = "nothing to export" };
-        job->start();
-        while (! result)
-            settle (20);
-        return result;
+        say (line (object ({ { "ok", false }, { "error", error } })));
+        return 1;
     };
 
-    const auto mix = exportTo (out, false);
-    if (! mix || ! mix->ok)
+    // One render for the mix and its stems, as WAV into a scratch folder; then each file is encoded (or
+    // moved) to where it goes: the mix to `out`, the stems straight into `stems` as "NN <insert>.<ext>".
+    const auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                             .getChildFile ("spinus-render-" + juce::Uuid().toString());
+    struct Cleanup
     {
-        say (line (object ({ { "ok", false }, { "error", mix ? mix->error : juce::String ("export failed") } })));
-        return 1;
-    }
-    auto report = object ({ { "ok", true }, { "mix", measureFile (out) } });
+        juce::File folder;
+        ~Cleanup() { folder.deleteRecursively(); }
+    } cleanup { scratch };
+    scratch.createDirectory();
+    const auto mixWav = scratch.getChildFile ("Mix.wav");
+
+    auto wavSettings = settings;
+    wavSettings.format = engine::ExportSettings::Format::wav24;
+    wavSettings.stems = stems != juce::File();
+    wavSettings.tailSeconds = tailSeconds;
+    wavSettings.audioFolder = audioFolder;
+    std::optional<engine::ExportJob::Result> result;
+    auto job = session.createExportJob (mixWav, wavSettings, [&] (const engine::ExportJob::Result& r) { result = r; });
+    if (job == nullptr)
+        return failed ("nothing to export");
+    job->start();
+    while (! result)
+        settle (20);
+    job = nullptr;
+    if (! result->ok)
+        return failed (result->error);
+
+    const auto place = [&] (const juce::File& wav, const juce::File& target) -> juce::String
+    {
+        target.getParentDirectory().createDirectory();
+        if (! encoded && settings.format == engine::ExportSettings::Format::wav24)
+            return target.deleteFile() && wav.moveFileTo (target) ? juce::String()
+                                                                  : "could not write " + target.getFullPathName();
+        return engine::ExportJob::encodeFile (wav, target, settings, session.getProject().settings);
+    };
+
+    // An encoded file's peaks can be about 1 dB above the render's: both are reported.
+    const auto unencodedPeak = encoded ? measureFile (mixWav)["truePeakDb"] : juce::var();
+    if (const auto e = place (mixWav, out); e.isNotEmpty())
+        return failed (e);
+    auto mixReport = measureFile (out);
+    if (encoded)
+        mixReport.getDynamicObject()->setProperty ("unencodedTruePeakDb", unencodedPeak);
+    auto report = object ({ { "ok", true }, { "mix", mixReport } });
+
     if (stems != juce::File())
     {
-        const auto parts = exportTo (stems.getChildFile ("Mix" + out.getFileExtension()), true);
-        if (! parts || ! parts->ok)
-        {
-            say (
-                line (object ({ { "ok", false }, { "error", parts ? parts->error : juce::String ("stems failed") } })));
-            return 1;
-        }
         juce::Array<juce::var> files;
-        for (auto& f : parts->files)
-            files.add (measureFile (f));
+        for (size_t i = 1; i < result->files.size(); ++i) // the mix first, then the stems
+        {
+            const auto& wav = result->files[i];
+            const auto target = stems.getChildFile (wav.getFileNameWithoutExtension() + extension);
+            if (const auto e = place (wav, target); e.isNotEmpty())
+                return failed (e);
+            files.add (measureFile (target));
+        }
         report.getDynamicObject()->setProperty ("stems", files);
     }
     say (line (report));
     return 0;
+}
+
+//==============================================================================
+namespace
+{
+/** Spinus's options, and whether each takes a value after it. */
+const std::map<juce::String, bool>& knownOptions()
+{
+    static const std::map<juce::String, bool> options {
+        { "--help", false },     { "-h", false },         { "--version", false },    { "--run", true },
+        { "--open", true },      { "--save", true },      { "--keep-going", false }, { "--check", true },
+        { "--render", true },    { "--out", true },       { "--stems", true },       { "--tail", true },
+        { "--describe", true },  { "--commands", false }, { "--self-test", false },  { "--scan-plugins", false },
+        { "--no-audio", false }, { "--snapshot", true },  { "--choose-file", true },
+    };
+    return options;
+}
+} // namespace
+
+juce::String usage()
+{
+    return "Spinus DAW, from the command line (no window, no sound card):\n"
+           "  spinus [<project.spn or folder>]           Open Spinus (with that project)\n"
+           "  spinus --run <script.json> [--open <project>] [--save <folder>] [--keep-going]\n"
+           "                                              Run a script of commands; without --save, a dry run\n"
+           "  spinus --check <project>                   What a project holds, and what is missing here\n"
+           "  spinus --render <project> --out <file.wav|.flac|.opus|.mp3> [--stems <folder>] [--tail <seconds>]\n"
+           "                                              Render the song (and one file per mixer insert)\n"
+           "  spinus --describe <device>|all             A device's settings, choices, presets, pads and kits\n"
+           "  spinus --commands                          Every command and its parameters (JSON Schema)\n"
+           "  spinus --self-test [<folder>]              Check that Spinus works on this computer\n"
+           "  spinus --version                           The version\n"
+           "  spinus --help                              This\n"
+           "Each option prints JSON lines. The manual's page \"Spinus from the command line\" (command-line.md)\n"
+           "explains scripts, with an example song.\n";
+}
+
+juce::String unknownOption (const juce::StringArray& args)
+{
+    const auto& options = knownOptions();
+    for (int i = 0; i < args.size(); ++i)
+    {
+        const auto arg = args[i].unquoted();
+        if (arg == "--" || ! (arg.startsWith ("--") || arg == "-h"))
+            continue; // a project, or the value of the option before it
+        const auto found = options.find (arg);
+        if (found == options.end())
+            return arg;
+        if (found->second)
+            ++i; // its value, whatever it looks like
+    }
+    return {};
 }
 
 } // namespace spinus::cli

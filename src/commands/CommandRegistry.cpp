@@ -1465,9 +1465,13 @@ protected:
                 return juce::Result::fail (effectName (d) + " has no setting " + quoted (key));
             const auto value = dsp::param::normalisedForText (*parameter, text);
             if (! value)
-                return juce::Result::fail ("cannot read " + quoted (text) + " for " +
-                                           quoted (parameter->getName (200)) + " (it shows values like " +
-                                           quoted (parameter->getCurrentValueAsText()) + ")");
+            {
+                const auto choices = dsp::param::choicesOf (*parameter);
+                return juce::Result::fail (
+                    "cannot read " + quoted (text) + " for " + quoted (parameter->getName (200)) +
+                    (choices.isEmpty() ? " (it shows values like " + quoted (parameter->getCurrentValueAsText()) + ")"
+                                       : " (its choices: " + choices.joinIntoString (", ") + ")"));
+            }
             values[engine::getParameterId (*parameter)] = *value;
         }
         return juce::Result::ok();
@@ -3102,13 +3106,16 @@ juce::var noteSchema()
 
 juce::var deviceSchema()
 {
-    return schemaObject (
-        { { "type", "object" },
-          { "properties",
-            schemaObject ({ { "kind", schemaObject ({ { "enum", juce::Array<juce::var> { "stock", "plugin" } } }) },
-                            { "stockType", schemaObject ({ { "type", "string" } }) },
-                            { "plugin", schemaObject ({ { "type", "object" } }) } }) },
-          { "required", juce::Array<juce::var> { "kind" } } });
+    return juce::JSON::parse (R"json({"type": "object", "properties": {
+        "kind": {"enum": ["stock", "plugin"], "description": "\"stock\": Spinus's own or a bundled device, by stockType; \"plugin\": a plugin installed on this computer"},
+        "stockType": {"type": "string", "description": "For kind \"stock\": e.g. \"spinus.3x-osc\", \"spinus.drum-machine\", \"spinus.eq\", \"bundled.dragonfly.hall\" (spinus --describe all lists them)"},
+        "plugin": {"type": "object", "description": "For kind \"plugin\": the plugin as Spinus's plugin list names it (a saved project shows it)", "properties": {
+            "format": {"type": "string", "description": "\"VST3\", \"CLAP\", \"LV2\" or \"VST\""},
+            "name": {"type": "string"},
+            "manufacturer": {"type": "string"},
+            "fileOrIdentifier": {"type": "string", "description": "The plugin's file, or its identifier (LV2's URI)"},
+            "uniqueId": {"type": "integer"}}}},
+        "required": ["kind"]})json");
 }
 
 void addChannelCommands (std::vector<CommandInfo>& list)
@@ -3770,15 +3777,17 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
                                                                 p.string ("description").value_or (""));
                           }));
 
-    const auto pointsSchema = juce::JSON::parse (R"({"type": "array", "items": {"type": "object", "properties": {
+    const auto pointsSchema = juce::JSON::parse (R"json({"type": "array", "items": {"type": "object", "properties": {
         "time": {"type": "integer", "minimum": 0, "description": "Ticks from the clip's start"},
-        "value": {"type": "number", "minimum": 0, "maximum": 1, "description": "0..1 of the parameter's range"},
+        "value": {"type": "number", "minimum": 0, "maximum": 1, "description": "0..1 of the parameter's range (scripts run with spinus --run may give \"text\" instead: \"-6 dB\", \"1.2 kHz\")"},
         "curve": {"type": "number", "minimum": -1, "maximum": 1, "description": "Shape of the segment that starts here; 0 = straight"}},
-        "required": ["time", "value"], "additionalProperties": false}})");
-    const auto targetSchema = juce::JSON::parse (R"({"type": "object", "properties": {
-        "kind": {"enum": ["channelVolume", "channelPan", "insertVolume", "insertPan", "deviceParameter"]},
-        "channel": {"type": "integer"}, "insert": {"type": "integer"}, "device": {"type": "integer"},
-        "parameterId": {"type": "string"}}, "required": ["kind"], "additionalProperties": false})");
+        "required": ["time", "value"], "additionalProperties": false}})json");
+    const auto targetSchema = juce::JSON::parse (R"json({"type": "object", "properties": {
+        "kind": {"enum": ["channelVolume", "channelPan", "insertVolume", "insertPan", "deviceParameter"], "description": "channelVolume and channelPan need channel; insertVolume and insertPan need insert; deviceParameter needs device and parameterId"},
+        "channel": {"type": "integer", "description": "Channel ID, for channelVolume and channelPan"},
+        "insert": {"type": "integer", "description": "Mixer insert ID, 1 for the master, for insertVolume and insertPan"},
+        "device": {"type": "integer", "description": "Device ID, for deviceParameter"},
+        "parameterId": {"type": "string", "description": "The setting's ID as spinus --describe lists it, for deviceParameter"}}, "required": ["kind"], "additionalProperties": false})json");
 
     auto readPoints = [] (Params& p) -> std::vector<AutomationPoint>
     {

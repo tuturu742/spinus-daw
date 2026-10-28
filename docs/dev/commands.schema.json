@@ -91,13 +91,35 @@
                 "enum": [
                   "stock",
                   "plugin"
-                ]
+                ],
+                "description": "\"stock\": Spinus's own or a bundled device, by stockType; \"plugin\": a plugin installed on this computer"
               },
               "stockType": {
-                "type": "string"
+                "type": "string",
+                "description": "For kind \"stock\": e.g. \"spinus.3x-osc\", \"spinus.drum-machine\", \"spinus.eq\", \"bundled.dragonfly.hall\" (spinus --describe all lists them)"
               },
               "plugin": {
-                "type": "object"
+                "type": "object",
+                "description": "For kind \"plugin\": the plugin as Spinus's plugin list names it (a saved project shows it)",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "description": "\"VST3\", \"CLAP\", \"LV2\" or \"VST\""
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "manufacturer": {
+                    "type": "string"
+                  },
+                  "fileOrIdentifier": {
+                    "type": "string",
+                    "description": "The plugin's file, or its identifier (LV2's URI)"
+                  },
+                  "uniqueId": {
+                    "type": "integer"
+                  }
+                }
               }
             },
             "required": [
@@ -582,13 +604,35 @@
                 "enum": [
                   "stock",
                   "plugin"
-                ]
+                ],
+                "description": "\"stock\": Spinus's own or a bundled device, by stockType; \"plugin\": a plugin installed on this computer"
               },
               "stockType": {
-                "type": "string"
+                "type": "string",
+                "description": "For kind \"stock\": e.g. \"spinus.3x-osc\", \"spinus.drum-machine\", \"spinus.eq\", \"bundled.dragonfly.hall\" (spinus --describe all lists them)"
               },
               "plugin": {
-                "type": "object"
+                "type": "object",
+                "description": "For kind \"plugin\": the plugin as Spinus's plugin list names it (a saved project shows it)",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "description": "\"VST3\", \"CLAP\", \"LV2\" or \"VST\""
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "manufacturer": {
+                    "type": "string"
+                  },
+                  "fileOrIdentifier": {
+                    "type": "string",
+                    "description": "The plugin's file, or its identifier (LV2's URI)"
+                  },
+                  "uniqueId": {
+                    "type": "integer"
+                  }
+                }
               }
             },
             "required": [
@@ -1535,19 +1579,24 @@
                   "insertVolume",
                   "insertPan",
                   "deviceParameter"
-                ]
+                ],
+                "description": "channelVolume and channelPan need channel; insertVolume and insertPan need insert; deviceParameter needs device and parameterId"
               },
               "channel": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Channel ID, for channelVolume and channelPan"
               },
               "insert": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Mixer insert ID, 1 for the master, for insertVolume and insertPan"
               },
               "device": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Device ID, for deviceParameter"
               },
               "parameterId": {
-                "type": "string"
+                "type": "string",
+                "description": "The setting's ID as spinus --describe lists it, for deviceParameter"
               }
             },
             "required": [
@@ -1570,7 +1619,7 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1,
-                  "description": "0..1 of the parameter's range"
+                  "description": "0..1 of the parameter's range (scripts run with spinus --run may give \"text\" instead: \"-6 dB\", \"1.2 kHz\")"
                 },
                 "curve": {
                   "type": "number",
@@ -1621,7 +1670,7 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1,
-                  "description": "0..1 of the parameter's range"
+                  "description": "0..1 of the parameter's range (scripts run with spinus --run may give \"text\" instead: \"-6 dB\", \"1.2 kHz\")"
                 },
                 "curve": {
                   "type": "number",

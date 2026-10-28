@@ -49,13 +49,24 @@ int runSteps (Session&, const juce::var& steps, const RunOptions&, const Say& sa
     `problems`. `projectFolder` is where its audio/ folder is (none for an unsaved project). */
 juce::var summarize (Session&, const juce::File& projectFolder);
 
-/** A device for --describe: its parameters (ID, name, the value it shows at 0, 0.25, 0.5, 0.75 and 1), its
+/** A device for --describe: its parameters (ID, name, the value it shows at 0, 0.25, 0.5, 0.75 and 1, and for
+    a choice or switch every value by name, `choices`), its
     presets (3x Osc), its pads and kits (Drum Machine). Made on the session's project for a moment and removed
     again (undone). An object with `error` when the type is unknown or its plugin is not installed. */
 juce::var describe (Session&, const juce::String& stockType);
 
 /** The stock types --describe all covers: Spinus's own devices and the bundled ones installed here. */
 juce::StringArray describableTypes (Session&);
+
+/** The bundled (free) devices that are not installed here, with how to get them: --describe all's last line. */
+juce::var notInstalled (Session&);
+
+/** The command-line usage, one option per line, for --help. */
+juce::String usage();
+
+/** The first argument that looks like an option ("--x", "-h") but is not one of Spinus's; empty when there is
+    none. Values after an option (a file, a number) are not options. */
+juce::String unknownOption (const juce::StringArray& args);
 
 /** A rendered file's length, integrated loudness (LUFS) and true peak (dBTP): WAV or FLAC. */
 juce::var measureFile (const juce::File&);

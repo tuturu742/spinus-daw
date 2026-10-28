@@ -5,6 +5,7 @@
 #include "engine/BundledDevices.h"
 #include "engine/DeviceFactory.h"
 #include "engine/EngineHost.h"
+#include "model/Model.h"
 #include "session/AgentCommandLine.h"
 #include "session/ProjectDocument.h"
 #include "session/Session.h"
@@ -222,5 +223,137 @@ TEST_CASE ("Command line: a script's song is saved, checked and rendered with so
     INFO (said[0]);
     CHECK ((double)report["mix"]["seconds"] > 4.0);
     CHECK ((double)report["mix"]["lufs"] > -40.0); // not silent
-    CHECK (report["stems"].size() >= 3);           // the mix and a stem per insert with sound
+    CHECK ((double)report["mix"]["soundingSeconds"] > 2.0);
+    CHECK_FALSE (report["mix"].hasProperty ("unencodedTruePeakDb")); // a WAV is not encoded
+    // A stem per insert with sound, straight in the folder ("NN <insert>.wav"), and no copy of the mix there.
+    REQUIRE (report["stems"].size() >= 2);
+    const auto stems = t.root.getChildFile ("stems").findChildFiles (juce::File::findFiles, false, "*.wav");
+    CHECK (stems.size() == report["stems"].size());
+    for (auto& stem : stems)
+    {
+        CHECK (stem.getFileName().substring (0, 2).containsOnly ("0123456789"));
+        CHECK_FALSE (stem.getFileNameWithoutExtension().equalsIgnoreCase ("Mix"));
+    }
+    CHECK (t.root.getChildFile ("stems").findChildFiles (juce::File::findDirectories, false).isEmpty());
+
+    // Lossy: the encoded file's peak, and the render's before encoding.
+    said.clear();
+    const auto opus = t.root.getChildFile ("song.opus");
+    REQUIRE (cli::render (f.session, document.getFolder().getChildFile ("audio"), opus, {}, 1.0,
+                          [&] (const juce::String& line) { said.push_back (line); }) == 0);
+    const auto lossy = juce::JSON::parse (said.back());
+    INFO (said.back());
+    CHECK (opus.existsAsFile());
+    CHECK (lossy["mix"].hasProperty ("unencodedTruePeakDb"));
+}
+
+TEST_CASE ("Command line: --help and unknown options are told apart from projects", "[cli]")
+{
+    CHECK (cli::usage().contains ("--run"));
+    CHECK (cli::usage().contains ("--render"));
+    CHECK (cli::usage().contains ("command-line.md"));
+    CHECK (cli::unknownOption ({ "--help" }).isEmpty());
+    CHECK (cli::unknownOption ({ "-h" }).isEmpty());
+    CHECK (cli::unknownOption ({ "Song/Song.spn" }).isEmpty());
+    CHECK (cli::unknownOption ({ "--render", "Song", "--out", "mix.opus", "--stems", "s", "--tail", "3" }).isEmpty());
+    CHECK (cli::unknownOption ({ "--run", "song.json", "--keep-going", "--save", "Out" }).isEmpty());
+    CHECK (cli::unknownOption ({ "--tail", "--weird-but-a-value" }).isEmpty()); // the value of --tail
+    CHECK (cli::unknownOption ({ "--hepl" }) == "--hepl");
+    CHECK (cli::unknownOption ({ "--check", "Song", "--verbose" }) == "--verbose");
+    CHECK (cli::unknownOption ({ "\"--list\"" }) == "--list");
+}
+
+TEST_CASE ("Command line: describe lists every choice of a choice setting", "[cli]")
+{
+    Fixture f;
+    const auto eq = cli::describe (f.session, "spinus.eq");
+    juce::StringArray choices;
+    bool numbersHaveNone = true;
+    for (auto& p : *eq["parameters"].getArray())
+    {
+        if (p["name"].toString().containsIgnoreCase ("type") && choices.isEmpty())
+            for (auto& c : *p["choices"].getArray())
+                choices.add (c.toString());
+        if (p["name"].toString().containsIgnoreCase ("freq") && p.hasProperty ("choices"))
+            numbersHaveNone = false;
+    }
+    INFO (choices.joinIntoString (", "));
+    CHECK (choices.contains ("Low cut")); // between the 0, 0.25... samples, so they missed it
+    CHECK (choices.contains ("Bell"));
+    CHECK (numbersHaveNone);
+
+    // A wrong name says what the choices are.
+    std::vector<juce::var> said;
+    CHECK (
+        f.run (
+            R"([{"command": "insert.addEffect", "params": {"insert": 1, "device": {"kind": "stock", "stockType": "spinus.eq"}}, "as": "eq"},
+                      {"command": "device.setParameters", "params": {"device": "$eq.device", "text": {"Band 1 type": "High pass"}}}])",
+            said) == 2);
+    CHECK (said.back()["error"].toString().contains ("Low cut"));
+
+    const auto missing = cli::notInstalled (f.session);
+    CHECK (missing["notInstalled"].isArray());
+    CHECK (missing["hint"].toString().contains ("Get free plugins"));
+}
+
+TEST_CASE ("Command line: automation points given as text, in the control's units", "[cli]")
+{
+    Fixture f;
+    std::vector<juce::var> said;
+    REQUIRE (f.run (R"([
+        {"command": "channel.add", "params": {"name": "Pad", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}, "as": "pad"},
+        {"command": "insert.addEffect", "params": {"insert": "$pad.insert", "device": {"kind": "stock", "stockType": "spinus.filter"}}, "as": "filter"},
+        {"command": "clip.addAutomation", "params": {"laneName": "Fade", "start": 0, "length": 3840,
+          "target": {"kind": "channelVolume", "channel": "$pad.channel"},
+          "points": [{"time": 0, "text": "-6 dB"}, {"time": 3840, "value": 0.2}]}, "as": "fade"},
+        {"command": "clip.addAutomation", "params": {"laneName": "Sweep", "start": 0, "length": 3840,
+          "target": {"kind": "deviceParameter", "device": "$filter.device", "parameterId": "cutoff"},
+          "points": [{"time": 0, "text": "200 Hz"}, {"time": 3840, "text": "5 kHz"}]}, "as": "sweep"},
+        {"command": "clip.setPoints", "params": {"clip": "$fade.clip", "points": [{"time": 0, "text": "-12 dB"}]}}
+    ])",
+                    said) == 0);
+    const auto& clips = f.session.getProject().playlist.clips;
+    REQUIRE (clips.size() == 2);
+    const auto& fade = std::get<model::AutomationClip> (clips[0].content);
+    REQUIRE (fade.points.size() == 1);
+    CHECK (f.session.describeTargetValue (fade.target, fade.points[0].value).contains ("-12"));
+    const auto& sweep = std::get<model::AutomationClip> (clips[1].content);
+    REQUIRE (sweep.points.size() == 2);
+    CHECK (sweep.points[0].value < sweep.points[1].value);
+    CHECK (f.session.describeTargetValue (sweep.target, sweep.points[1].value).containsIgnoreCase ("k"));
+
+    said.clear();
+    REQUIRE (f.run (R"([{"command": "clip.addAutomation", "params": {"start": 0, "length": 960,
+                         "target": {"kind": "channelPan", "channel": 2}, "points": [{"time": 0, "text": "30% L"}]}}])",
+                    said) == 0);
+    const auto& pan = std::get<model::AutomationClip> (f.session.getProject().playlist.clips.back().content);
+    CHECK (pan.points[0].value == Catch::Approx (0.35f)); // 30% left of the middle
+    said.clear();
+    CHECK (f.run (R"([{"command": "clip.setPoints", "params": {"clip": 999, "points": [{"time": 0, "text": "30%"}]}}])",
+                  said) == 2); // no such clip: the command says so
+
+    said.clear();
+    CHECK (f.run (R"([{"command": "clip.addAutomation", "params": {"start": 0, "length": 960,
+                       "target": {"kind": "channelVolume", "channel": 2}, "points": [{"time": 0, "text": "loud"}]}}])",
+                  said) == 2);
+    CHECK (said.back()["error"].toString().contains ("loud"));
+}
+
+TEST_CASE ("Command line: check says which channels nothing plays", "[cli]")
+{
+    Fixture f;
+    std::vector<juce::var> said;
+    REQUIRE (f.run (songScript, said) == 0);
+    REQUIRE (
+        f.run (
+            R"([{"command": "channel.add", "params": {"name": "Forgotten", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}}])",
+            said) == 0);
+    const auto summary = cli::summarize (f.session, {});
+    REQUIRE (summary["channels"].size() == 3);
+    CHECK ((bool)summary["channels"][0]["used"]);
+    CHECK ((bool)summary["channels"][1]["used"]);
+    CHECK_FALSE ((bool)summary["channels"][2]["used"]);
+    REQUIRE (summary["unusedChannels"].size() == 1);
+    CHECK (summary["unusedChannels"][0].toString() == "Forgotten");
+    CHECK (summary["problems"].size() == 0); // a warning, not a problem
 }
