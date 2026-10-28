@@ -7,6 +7,7 @@ one-shot writer reports both ways' tokens and scores."""
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +98,7 @@ async def test_a_good_run_composes_through_the_tools_and_finishes(tmp_path: Path
     assert all(r.get("cache_control") == {"type": "ephemeral"} for r in sent)
     assert all(r["output_config"] == {"effort": "medium"} for r in sent)
     assert [len(r["messages"]) for r in sent] == [1 + 2 * k for k in range(len(sent))]
-    assert {t["name"] for t in sent[0]["tools"]} == set(harness.TOOL_NAMES)
+    assert {t["name"] for t in sent[0]["tools"]} == {t.name for t in harness.tools_for(harness.DEFAULT_DEPTH)}
     assert "The brief:" in sent[0]["messages"][0]["content"][0]["text"]
     # Live progress in plain words, with the running total.
     steps = [u["step"] for u in updates if u.get("kind") == "progress"]
@@ -672,3 +673,98 @@ async def test_arrangement_tools_through_a_run_and_not_at_basic(tmp_path: Path) 
     assert "add_part" not in {t["name"] for t in sent[0]["tools"]}
     result = sent[1]["messages"][-1]["content"][0]
     assert result["is_error"] and "Arrangement tools, which are not allowed" in result["content"]
+
+
+# ---------------------------------------------------------------------------------------------------
+# Transitions and automation
+
+
+def transitioned() -> harness.Workspace:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    ws.groups = harness.DEPTHS["transitions"]
+    return ws
+
+
+def test_automation_values_are_read_as_spinus_reads_them() -> None:
+    assert harness.normalised("volume", 6.0) == 1.0 and harness.normalised("volume", -100.0) == 0.0
+    assert abs(harness.normalised("volume", 0.0) - math.exp(-6 / 20)) < 1e-9
+    assert harness.normalised("pan", -1.0) == 0.0 and harness.normalised("pan", 0.0) == 0.5
+    assert abs(harness.normalised("filter", 1000.0) - 0.5) < 1e-9  # the cutoff's middle
+    assert harness.normalised("filter", 20.0) == 0.0 and abs(harness.normalised("filter", 20000.0) - 1.0) < 1e-9
+
+
+def test_automation_clips_go_into_the_song() -> None:
+    ws = transitioned()
+    said = ws.call("automate", {"part": "bass", "what": "filter", "points": "1 300; 4.5 8000", "filter": "high-pass"})
+    assert "from bar 1 to 4.5" in said
+    ws.call("automate", {"part": "lead", "what": "volume", "points": "5 -30; 9 0", "shape": "ease-in"})
+    song = ws.song()
+    clips = song["production"]["automation"]
+    assert clips[0]["part"] == "bass" and clips[0]["filter"] == "high-pass"
+    assert clips[0]["points"][1] == {"bar": 3.5, "value": round(harness.normalised("filter", 8000), 4), "curve": 0.0}
+    assert clips[1]["points"][0]["curve"] == 0.5
+    assert "bass filter (high-pass)" in ws.call("automation", {})
+    assert "Removed 1" in ws.call("remove_automation", {"part": "lead"})
+    for bad, why in [
+        ({"part": "bass", "what": "volume", "points": "1 0"}, "two points"),
+        ({"part": "bass", "what": "volume", "points": "1 0; 999 0"}, "a point's bar is 1 to"),
+        ({"part": "bass", "what": "volume", "points": "1 loud; 2 0"}, "'bar value'"),
+        ({"part": "bass", "what": "volume", "points": "1 0; 2 40"}, "-100 to 6 dB"),
+        ({"part": "bass", "what": "pan", "points": "1 0; 2 nan"}, "a point's bar"),
+        ({"part": "bass", "what": "tempo", "points": "1 0; 2 1"}, "automate one of"),
+        ({"part": "bass", "what": "filter", "points": "1 0; 2 1", "filter": "comb"}, "low-pass or high-pass"),
+    ]:
+        with pytest.raises(harness.Mistake, match=why):
+            ws.call("automate", bad)
+
+
+def test_transitions_lead_into_and_out_of_sections() -> None:
+    ws = transitioned()
+    chorus = next(sid for sid, s in ws.sections.items() if s["kind"] == "chorus")
+    starts, at = [], 0
+    for sid in ws.order:
+        if sid == chorus:
+            starts.append(at)
+        at += ws.sections[sid]["bars"]
+    said = ws.call("transition", {"kind": "riser", "section": chorus, "bars": 2})
+    assert said.endswith(", ".join(f"bar {b - 1}" for b in starts) + ".")
+    ws.call("transition", {"kind": "impact", "section": chorus, "sample": True})
+    ws.call("transition", {"kind": "downlifter", "section": chorus, "bars": 2})
+    ws.call("transition", {"kind": "swell", "section": chorus})
+    song = ws.song()
+    assert song["fx"]["riser"]["at"] == [b - 2 for b in starts] and song["fx"]["riser"]["bars"] == 2
+    assert song["fx"]["impact"]["at"] == starts
+    assert {layer["id"] for layer in song["layers"]} >= {"riser", "impact", "downlifter", "swell"}
+    swell = next(x for x in song["layers"] if x["id"] == "swell")
+    assert swell["part"] == "fx" and swell["family"] == "FX"
+    kinds = [(a["part"], a["what"]) for a in song["production"]["automation"]]
+    assert ("riser", "volume") in kinds and ("riser", "filter") in kinds and ("downlifter", "filter") in kinds
+    rise = next(a for a in song["production"]["automation"] if a["part"] == "riser" and a["what"] == "volume")
+    assert rise["points"][0]["value"] < rise["points"][1]["value"]  # it rises
+    assert [x["file"] for x in song["production"]["samples"][:2]] == [
+        "Drums/Cymbals/Crash Wide.flac", "Drums/808s/808 Long.flac"]  # fmt: skip
+    first = ws.order[0]
+    with pytest.raises(harness.Mistake, match="starts the song"):
+        ws.call("transition", {"kind": "riser", "section": first, "bars": 2})
+    with pytest.raises(harness.Mistake, match="are 2 bars"):
+        ws.call("transition", {"kind": "riser", "section": chorus, "bars": 4})
+    with pytest.raises(harness.Mistake, match="one of riser"):
+        ws.call("transition", {"kind": "laser", "section": chorus})
+
+
+async def test_transition_tools_only_with_their_group(tmp_path: Path) -> None:
+    sent: list[dict[str, Any]] = []
+    script: Script = [
+        [("automate", {"part": "bass", "what": "volume", "points": "1 -20; 3 0"})],
+        [("finish", {"summary": "s"})],
+    ]
+    service = scripted(tmp_path, script, sent)
+    await connect(service)
+    song = await run_job(service, "ai.v1.song.compose", params(tools="arrangement"))
+    assert "automate" not in {t["name"] for t in sent[0]["tools"]} and "production" not in song
+    sent.clear()
+    service = scripted(tmp_path / "b", script, sent)
+    await connect(service)
+    song = await run_job(service, "ai.v1.song.compose", params(tools="transitions"))
+    assert "Transition and automation tools:" in sent[0]["system"]
+    assert song["production"]["automation"][0]["part"] == "bass"

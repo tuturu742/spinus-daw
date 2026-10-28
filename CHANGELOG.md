@@ -29,6 +29,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   family, or a family and colour it chooses), varies a motif (its rhythm or notes, upside down, or moved later)
   instead of repeating it, puts drum fills at phrase ends with a crash after, lets layers enter and leave so
   sections build and drop, and checks the song's energy section by section against your songs' sections.
+- **Transition and automation tools** for the AI: automation clips on the Playlist for a part's volume, pan or a
+  filter sweep (Spinus adds a Spinus Filter to the part's insert), and transitions into and out of a section
+  wherever it plays: a riser (noise rising and opening over the bars before it), a downlifter, a swell into its
+  first beat, an impact on it (the kit's kick and crash, or the starter pack's crash and 808). They go on tracks
+  of their own under the song's Automation and Samples tracks, in the same undo step.
 - For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the
   tokens each really used and the checks' scores (`python -m spinus_ai.harness`).
 

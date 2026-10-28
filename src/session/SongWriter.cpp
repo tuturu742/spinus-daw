@@ -1,6 +1,7 @@
 #include "SongWriter.h"
 
 #include "PartSounds.h"
+#include "dsp/drums/StarterPack.h"
 
 #include <optional>
 #include <set>
@@ -399,7 +400,7 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
 
     // A channel per layer, coloured and grouped by family, each on an insert of its own. A part's channel the
     // Sounds page added is written into (its drums channel by the three drum layers).
-    std::map<juce::String, juce::var> channels;
+    std::map<juce::String, juce::var> channels, inserts; // layer id -> its channel and its insert
     std::map<juce::String, std::map<juce::String, int>> drums;
     std::map<juce::String, juce::Array<juce::var>> familyInserts;
     juce::StringArray families;
@@ -412,6 +413,7 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
         if (existing != nullptr)
         {
             channels[layer.id] = (int)existing->id.value;
+            inserts[layer.id] = (int)existing->targetInsert.value;
             if (layer.drums)
                 drums[layer.id] = ! options.drums.empty() ? options.drums : drumNotesFor (*existing);
             continue;
@@ -430,6 +432,7 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
         if (sound.preset.isNotEmpty())
             step ("device.loadPreset", object ({ { "device", channel + ".device" }, { "preset", sound.preset } }));
         channels[layer.id] = channel + ".channel";
+        inserts[layer.id] = channel + ".insert";
         familyInserts[layer.family].add (channel + ".insert");
         if (layer.drums)
             drums[layer.id] = drumsOfSound (sound);
@@ -533,6 +536,91 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
                                                    { "start", offset + (juce::int64)bar * barTicks },
                                                    { "length", bars * barTicks } }));
         }
+
+    // The AI's automation clips and samples (its Transitions and automation tools), on tracks of their own.
+    if (const auto& production = song["production"]; production.isObject())
+    {
+        std::map<juce::String, juce::var> filters; // layer id -> the filter added on its insert
+        juce::var folder;
+        for (const auto& entry : arrayOf (production["automation"]))
+        {
+            const auto id = entry["part"].toString();
+            const auto points = arrayOf (entry["points"]);
+            if (! inserts.contains (id) || points.size() < 2)
+                continue;
+            const auto what = entry["what"].toString();
+            juce::var target;
+            if (what == "volume" || what == "pan")
+                target =
+                    object ({ { "kind", what == "volume" ? "insertVolume" : "insertPan" }, { "insert", inserts[id] } });
+            else if (what == "filter")
+            {
+                if (! filters.contains (id))
+                {
+                    const auto added = step (
+                        "insert.addEffect",
+                        object ({ { "insert", inserts[id] },
+                                  { "device", object ({ { "kind", "stock" }, { "stockType", "spinus.filter" } }) } }));
+                    filters[id] = added + ".device";
+                    step ("device.setParameters",
+                          object ({ { "device", filters[id] },
+                                    { "text", object ({ { "type", entry["filter"].toString() == "high-pass"
+                                                                      ? "High pass"
+                                                                      : "Low pass" } }) } }));
+                }
+                target =
+                    object ({ { "kind", "deviceParameter" }, { "device", filters[id] }, { "parameterId", "cutoff" } });
+            }
+            else
+                continue;
+            if (folder.isVoid())
+            {
+                folder = step ("lane.add", object ({ { "name", options.name + ": Automation" } })) + ".lane";
+                step ("lane.set", object ({ { "lane", folder }, { "colour", familyColour ("FX") } }));
+            }
+            juce::String name = id;
+            for (const auto& layer : layers)
+                if (layer.id == id)
+                    name = layer.name;
+            const auto lane = step ("lane.add", object ({ { "name", name + " " + what } }));
+            step ("lane.set", object ({ { "lane", lane + ".lane" }, { "group", folder } }));
+            const auto first = (double)points.getFirst()["bar"], last = (double)points.getLast()["bar"];
+            juce::Array<juce::var> curve;
+            for (const auto& p : points)
+                curve.add (object ({ { "time", juce::roundToInt (((double)p["bar"] - first) * (double)barTicks) },
+                                     { "value", juce::jlimit (0.0, 1.0, (double)p["value"]) },
+                                     { "curve", juce::jlimit (-1.0, 1.0, (double)p["curve"]) } }));
+            step (
+                "clip.addAutomation",
+                object ({ { "lane", lane + ".lane" },
+                          { "start", offset + juce::roundToInt (first * (double)barTicks) },
+                          { "length", std::max<juce::int64> (1, juce::roundToInt ((last - first) * (double)barTicks)) },
+                          { "target", target },
+                          { "points", curve } }));
+        }
+        // Samples from the Spinus Starter Pack (an impact's crash and 808), through one channel.
+        const auto pack = dsp::starter::findPack();
+        juce::var sampleLane, sampleChannel;
+        for (const auto& entry : arrayOf (production["samples"]))
+        {
+            const auto file = pack.getChildFile (entry["file"].toString());
+            if (! file.existsAsFile() || ! file.isAChildOf (pack))
+                continue;
+            if (sampleLane.isVoid())
+                sampleLane = step ("lane.add", object ({ { "name", options.name + ": Samples" } })) + ".lane";
+            auto clip = object ({ { "lane", sampleLane },
+                                  { "file", file.getFullPathName() },
+                                  { "start", offset + juce::roundToInt ((double)entry["bar"] * (double)barTicks) },
+                                  { "length", 2 * barTicks } });
+            if (sampleChannel.isVoid())
+                clip.getDynamicObject()->setProperty ("name", options.name + ": Samples");
+            else
+                clip.getDynamicObject()->setProperty ("channel", sampleChannel);
+            const auto added = step ("clip.addAudio", clip);
+            if (sampleChannel.isVoid())
+                sampleChannel = added + ".channel";
+        }
+    }
 
     const auto tempo = juce::jlimit (20.0, 999.0, (double)song["tempo"]);
     return object (

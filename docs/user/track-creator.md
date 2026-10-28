@@ -474,8 +474,11 @@ tell the AI, so no fix round runs.
   later), drum fills at phrase ends with a crash after, layers entering and leaving per section, and a check
   of the song's energy section by section against your songs' sections. Parts it adds can be removed by it;
   yours always stay.
-- **Transitions and automation**: automation clips (filter sweeps, volume fades, effect sends), risers,
-  impacts and swells.
+- **Transitions and automation**: automation clips on the Playlist (a part's volume, pan, or a filter sweep:
+  Spinus adds a Spinus Filter to that part's insert), and transitions into and out of a section wherever it
+  plays: a riser before it, a downlifter after it starts, a swell into its first beat, an impact on it (the
+  kit's kick and crash, or the starter pack's crash and 808). They go on tracks of their own, under the song's
+  **Automation** and **Samples** tracks.
 - **Effects and mix**: effects on each part's insert, sends to reverb and delay, sidechain ducking from the
   kick, and family buses.
 

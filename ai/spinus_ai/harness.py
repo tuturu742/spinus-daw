@@ -378,6 +378,75 @@ parts and layers the song needs (add_part, with set_look for its family and colo
 repeating them unchanged (vary, then place), put drum fills at phrase ends (fill), and let layers enter and \
 leave so sections build and drop (play_only). Check the energy curve against the references (energy)."""
 
+# ---------------------------------------------------------------------------------------------------
+# Transitions and automation
+
+AUTOMATABLE = ("volume", "pan", "filter")
+SHAPES = ("linear", "ease-in", "ease-out")
+TRANSITIONS = ("riser", "downlifter", "swell", "impact")
+TRANSITIONS_TOOLS = [
+    Tool(
+        "automate",
+        "A Playlist automation clip for a part: volume (dB), pan (-1 left to 1 right) or a filter's cutoff (Hz; "
+        "Spinus adds a filter to the part's insert, low-pass or high-pass). Points are 'bar value' on the song's "
+        "bars (1 is the first; 16.5 is half way through bar 16), separated by semicolons: '17 -30; 21 0' fades in "
+        "over four bars.",
+        schema(
+            {
+                "part": PART,
+                "what": {"type": "string", "enum": list(AUTOMATABLE)},
+                "points": {"type": "string", "description": "'bar value; bar value; ...'"},
+                "filter": {"type": "string", "enum": ["low-pass", "high-pass"]},
+                "shape": {"type": "string", "enum": list(SHAPES)},
+            },
+            ["part", "what", "points"],
+        ),
+    ),
+    Tool(
+        "transition",
+        "Into or out of every play of a section: a riser (noise rising over the bars before it), a downlifter "
+        "(falling away over the bars after it starts), a swell (a cymbal-like swell into its first beat) or an "
+        "impact (a hit on its first beat: the kit's kick and crash, or with sample, the starter pack's).",
+        schema(
+            {
+                "kind": {"type": "string", "enum": list(TRANSITIONS)},
+                "section": SECTION,
+                "bars": {"type": "integer", "description": "How long, 1 to 8 (a riser: 2 or 4; a swell: 1)"},
+                "sample": {"type": "boolean", "description": "impact: the starter pack's crash and 808"},
+            },
+            ["kind", "section"],
+        ),
+    ),
+    Tool("automation", "The song's automation clips and transitions so far.", schema({}, [])),
+    Tool(
+        "remove_automation",
+        "Remove a part's automation clips (all, or of one kind).",
+        schema({"part": PART, "what": {"type": "string", "enum": list(AUTOMATABLE)}}, ["part"]),
+    ),
+]
+TOOLS += TRANSITIONS_TOOLS
+TOOL_GROUP.update({t.name: "transitions" for t in TRANSITIONS_TOOLS})
+GROUP_SYSTEM["transitions"] = """Transition and automation tools: lead into big sections and out of them \
+(transition: risers before a chorus, an impact on its first beat, a downlifter after a drop, a swell into a \
+new section), and shape parts over time with automation clips (automate: fades, filter sweeps opening a build, \
+a pan moving). Keep them few and purposeful."""
+# Spinus's own effects as automation reads them: the Spinus Filter's cutoff (src/dsp/filter/FilterProcessor.cpp:
+# 20 Hz to 20 kHz, 1 kHz in the middle) and the faders (Tracktion's fader position, exp((dB - 6) / 20)).
+CUTOFF = (20.0, 20000.0, 1000.0)
+STARTER_SAMPLES = {"crash": "Drums/Cymbals/Crash Wide.flac", "boom": "Drums/808s/808 Long.flac"}
+
+
+def normalised(what: str, value: float) -> float:
+    """A volume (dB), pan (-1..1) or cutoff (Hz) as the automation's 0..1."""
+    if what == "volume":
+        return 0.0 if value <= -100 else min(1.0, math.exp((value - 6.0) / 20.0))
+    if what == "pan":
+        return (max(-1.0, min(1.0, value)) + 1.0) / 2.0
+    low, high, centre = CUTOFF
+    skew = math.log(0.5) / math.log((centre - low) / (high - low))
+    return float(((max(low, min(high, value)) - low) / (high - low)) ** skew)
+
+
 TOOL_NAMES = [t.name for t in TOOLS]
 
 
@@ -541,6 +610,19 @@ class Workspace:
         for layer in song["layers"]:
             look = (self.extra.get("looks") or {}).get(layer["id"]) or {}
             layer.update({k: v for k, v in look.items() if k in ("family", "colour")})
+        # The transitions placed with the tools take the rules' place for their parts.
+        for pid, fx in (self.extra.get("fx") or {}).items():
+            if any(x["id"] == pid for x in song["layers"]) or any(p["id"] == pid for p in self.setup.parts):
+                song["fx"][pid] = {"bars": fx["bars"], "at": list(fx["at"]), "notes": list(fx["notes"])}
+                if not any(x["id"] == pid for x in song["layers"]):
+                    part = next(p for p in self.setup.parts if p["id"] == pid)
+                    role = part["role"]
+                    song["layers"].append({"id": pid, "name": part["name"], "role": role, "family": sw.ROLES[role][1],
+                                           "part": sw.ROLES[role][2], "soundRole": sw.ROLES[role][3],
+                                           "drums": sw.ROLES[role][4], "instance": 0})  # fmt: skip
+        production = self.production()
+        if production["automation"] or production["samples"]:
+            song["production"] = production
         return song
 
     # --- notation -----------------------------------------------------------------------------------
@@ -824,6 +906,147 @@ class Workspace:
             self.by_rules.add((p["id"], sid))
         count = sum(len(written.get(sid, [])) for sid in ids)
         return f"The rules wrote {p['id']} in {', '.join(ids)}: {count} notes."
+
+    # --- transitions and automation -------------------------------------------------------------------
+
+    def song_bars(self) -> int:
+        return sum(int(self.sections[s]["bars"]) for s in self.order)
+
+    def tool_automate(self, part: str, what: str, points: str, filter: str = "low-pass", shape: str = "linear") -> str:
+        pid = self.part(part)["id"]
+        if what not in AUTOMATABLE:
+            raise Mistake(f"automate one of {', '.join(AUTOMATABLE)}")
+        if shape not in SHAPES:
+            raise Mistake(f"a shape is one of {', '.join(SHAPES)}")
+        if filter not in ("low-pass", "high-pass"):
+            raise Mistake("a filter is low-pass or high-pass")
+        total = self.song_bars()
+        read: list[tuple[float, float]] = []
+        for raw in re.split(r"[;\n]+", str(points)):
+            fields = raw.replace(",", " ").split()
+            if not fields:
+                continue
+            try:
+                bar, value = float(fields[0]), float(fields[1])
+            except (ValueError, IndexError):
+                raise Mistake(f"a point is 'bar value', not '{raw.strip()}'") from None
+            if not (math.isfinite(bar) and math.isfinite(value)) or not 1 <= bar <= total + 1:
+                raise Mistake(f"a point's bar is 1 to {total + 1} (the song's end)")
+            read.append((bar - 1, value))
+        if len(read) < 2:
+            raise Mistake("an automation clip needs two points or more")
+        read.sort()
+        units = {"volume": (-100.0, 6.0, "dB"), "pan": (-1.0, 1.0, ""), "filter": (CUTOFF[0], CUTOFF[1], "Hz")}[what]
+        if any(not units[0] <= v <= units[1] for _, v in read):
+            raise Mistake(f"{what} values are {units[0]:g} to {units[1]:g} {units[2]}".rstrip())
+        self.extra.setdefault("automation", []).append(
+            {"part": pid, "what": what, "points": read, "filter": filter, "shape": shape}
+        )
+        return f"Automation: {pid} {what} from bar {read[0][0] + 1:g} to {read[-1][0] + 1:g} ({len(read)} points)."
+
+    def fx_part(self, kind: str) -> str:
+        """The part a transition plays on: the user's of its role, else one the AI adds for it."""
+        role = "impact" if kind == "impact" else "riser"
+        if kind in ("riser", "impact"):
+            mine = next((p["id"] for p in self.setup.written() if p["role"] == role), None)
+            if mine is None:
+                mine = next((p["id"] for p in self.setup.parts if p["role"] == role), None)
+            if mine is not None:
+                return mine
+        if not any(p["id"] == kind for p in self.setup.parts):
+            part = {"id": kind, "name": kind.capitalize(), "role": role}
+            self.setup.parts.append(part)
+            self.extra.setdefault("added", []).append(part)
+        return kind
+
+    def tool_transition(self, kind: str, section: str, bars: int = 0, sample: bool = False) -> str:
+        if kind not in TRANSITIONS:
+            raise Mistake(f"a transition is one of {', '.join(TRANSITIONS)}")
+        s = self.section(section)
+        bars = int(bars) or {"riser": 2, "downlifter": 2, "swell": 1, "impact": 1}[kind]
+        if not 1 <= bars <= 8:
+            raise Mistake("a transition is 1 to 8 bars")
+        starts, at = [], 0
+        for sid in self.order:
+            if sid == s["id"]:
+                starts.append(at)
+            at += int(self.sections[sid]["bars"])
+        before = kind in ("riser", "swell")
+        places = [b - bars if before else b for b in starts if (b - bars >= 0 if before else True)]
+        if not places:
+            raise Mistake(f"there are not {bars} bars before the {s['id']}: it starts the song")
+        pid = self.fx_part(kind)
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        if kind == "impact":
+            notes = [
+                {"start": 0, "length": sw.TICKS_PER_STEP // 2, "drum": d, "velocity": 1.0} for d in ("kick", "crash")
+            ]
+        else:
+            pitch = 60 + int(self.key["tonic"])
+            notes = [{"start": 0, "length": bars * bar_ticks - sw.TICKS_PER_STEP, "pitch": pitch, "velocity": 0.8}]
+        fx = self.extra.setdefault("fx", {})
+        entry = fx.setdefault(pid, {"bars": bars, "at": [], "notes": notes})
+        if entry["bars"] != bars:
+            raise Mistake(f"{pid}'s transitions are {entry['bars']} bars: use that length, or another kind")
+        entry["at"] = sorted(set(entry["at"]) | set(places))
+
+        # Each riser opens and rises, a downlifter closes and falls, a swell rises sharply into the beat.
+        def ramp(what: str, a: float, b: float, at: int, shape: str) -> None:
+            self.extra.setdefault("automation", []).append(
+                {"part": pid, "what": what, "points": [(at, a), (at + bars, b)], "filter": "low-pass", "shape": shape}
+            )
+
+        for place in places:
+            if kind == "riser":
+                ramp("volume", -30.0, 0.0, place, "ease-in")
+                ramp("filter", 300.0, 12000.0, place, "ease-in")
+            elif kind == "downlifter":
+                ramp("volume", 0.0, -40.0, place, "ease-out")
+                ramp("filter", 12000.0, 200.0, place, "ease-out")
+            elif kind == "swell":
+                ramp("volume", -50.0, 0.0, place, "ease-in")
+            elif sample:
+                self.extra.setdefault("samples", []).extend(
+                    {"file": STARTER_SAMPLES[k], "bar": place, "name": f"Impact {k}"} for k in ("crash", "boom")
+                )
+        where = ", ".join(f"bar {p + 1}" for p in places)
+        return f"{kind.capitalize()} on {pid}, {bars} bar{'s' if bars > 1 else ''}, at {where}."
+
+    def tool_automation(self) -> str:
+        lines = []
+        for a in self.extra.get("automation", []):
+            values = ", ".join(f"bar {b + 1:g}: {v:g}" for b, v in a["points"])
+            lines.append(
+                f"{a['part']} {a['what']}" + (f" ({a['filter']})" if a["what"] == "filter" else "") + f": {values}"
+            )
+        for pid, fx in (self.extra.get("fx") or {}).items():
+            lines.append(f"{pid}: {fx['bars']}-bar transition at bars " + ", ".join(str(b + 1) for b in fx["at"]))
+        for smp in self.extra.get("samples", []):
+            lines.append(f"sample {smp['file']} at bar {smp['bar'] + 1}")
+        return "\n".join(lines) or "No automation or transitions yet."
+
+    def tool_remove_automation(self, part: str, what: str = "") -> str:
+        pid = self.part(part)["id"]
+        kept = [
+            a for a in self.extra.get("automation", []) if not (a["part"] == pid and (not what or a["what"] == what))
+        ]
+        gone = len(self.extra.get("automation", [])) - len(kept)
+        self.extra["automation"] = kept
+        if not what:
+            (self.extra.get("fx") or {}).pop(pid, None)
+        return f"Removed {gone} automation clip{'s' if gone != 1 else ''} of {pid}."
+
+    def production(self) -> dict[str, Any]:
+        """The automation clips and samples for Apply: values as the automation reads them (0 to 1)."""
+        out: dict[str, Any] = {"automation": [], "samples": list(self.extra.get("samples", []))}
+        for a in self.extra.get("automation", []):
+            curve = {"linear": 0.0, "ease-in": 0.5, "ease-out": -0.5}[a.get("shape", "linear")]
+            out["automation"].append({
+                "part": a["part"], "what": a["what"], "filter": a.get("filter", "low-pass"),
+                "points": [{"bar": round(b, 4), "value": round(normalised(a["what"], v), 4), "curve": curve}
+                           for b, v in a["points"]],
+            })  # fmt: skip
+        return out
 
     # --- arrangement ----------------------------------------------------------------------------------
 

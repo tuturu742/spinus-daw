@@ -4,6 +4,7 @@
 #include "ai/Proposal.h"
 #include "commands/CommandHistory.h"
 #include "session/PartSounds.h"
+#include "dsp/drums/StarterPack.h"
 #include "session/SongWriter.h"
 
 using namespace spinus;
@@ -610,4 +611,74 @@ TEST_CASE ("Song writer: a layer's own colour, as the AI chose it, colours its c
     const auto* other = channelNamed (history.getProject(), layers[1].name);
     REQUIRE (other != nullptr);
     CHECK (other->colour == (juce::uint32)song::familyColour (layers[1].family).substring (1).getHexValue64());
+}
+
+TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of their own, one undo step", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    const auto layers = song::layersOf (song);
+    const auto& first = layers[0];
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "automation": [
+            {"part": ")" + first.id + R"(", "what": "volume", "points": [
+                {"bar": 0, "value": 0.1, "curve": 0.5}, {"bar": 2, "value": 0.8, "curve": 0}]},
+            {"part": ")" + first.id + R"(", "what": "filter", "filter": "high-pass", "points": [
+                {"bar": 1, "value": 0.2, "curve": 0}, {"bar": 1.5, "value": 0.9, "curve": 0}]},
+            {"part": "nobody", "what": "pan", "points": [{"bar": 0, "value": 0}, {"bar": 1, "value": 1}]}],
+        "samples": [{"file": "Drums/Cymbals/Crash Wide.flac", "bar": 4, "name": "Impact crash"},
+                    {"file": "../../etc/passwd", "bar": 4, "name": "outside the pack"}]
+    })"));
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    const auto json = song::makeProposal (song, history.getProject(), options, &error);
+    INFO (error);
+    auto proposal = ai::Proposal::prepare (json, history);
+    INFO (proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    CHECK (history.getUndoDescriptions().size() == 1);
+    const auto& project = history.getProject();
+    const auto* channel = channelNamed (project, first.name);
+    REQUIRE (channel != nullptr);
+    const auto* insert = project.findInsert (channel->targetInsert);
+    REQUIRE (insert != nullptr);
+
+    // A Spinus Filter on its insert, high-pass, and two automation clips under the song's Automation folder.
+    REQUIRE (insert->effects.size() == 1);
+    CHECK (insert->effects[0].device.stockType == "spinus.filter");
+    std::vector<const model::Clip*> automation;
+    for (const auto& clip : project.playlist.clips)
+        if (std::holds_alternative<model::AutomationClip> (clip.content))
+            automation.push_back (&clip);
+    auto curveOf = [] (const model::Clip* c) { return std::get<model::AutomationClip> (c->content); };
+    REQUIRE (automation.size() == 2); // the unknown part's is left out
+    const auto barTicks = (model::Ticks)(int)song["barTicks"];
+    const auto volume = curveOf (automation[0]), cutoff = curveOf (automation[1]);
+    CHECK (volume.target.kind == model::ParameterTarget::Kind::insertVolume);
+    CHECK (volume.target.insert == channel->targetInsert);
+    CHECK (automation[0]->length == 2 * barTicks);
+    REQUIRE (volume.points.size() == 2);
+    CHECK (volume.points[1].time == 2 * barTicks);
+    CHECK (std::abs (volume.points[1].value - 0.8f) < 1e-4f);
+    CHECK (volume.points[0].curve == 0.5f);
+    CHECK (cutoff.target.kind == model::ParameterTarget::Kind::deviceParameter);
+    CHECK (cutoff.target.device == insert->effects[0].device.id);
+    CHECK (cutoff.target.parameterId == "cutoff");
+    CHECK (automation[1]->start - automation[0]->start == barTicks);
+    const auto* lane = project.findLane (automation[0]->lane);
+    REQUIRE (lane != nullptr);
+    const auto* folder = project.findLane (lane->group);
+    REQUIRE (folder != nullptr);
+    CHECK (folder->name == options.name + ": Automation");
+
+    // The starter pack's crash, only from inside the pack.
+    int samples = 0;
+    for (const auto& clip : project.playlist.clips)
+        if (std::holds_alternative<model::AudioClip> (clip.content))
+        {
+            ++samples;
+            CHECK (clip.start == automation[0]->start + 4 * barTicks);
+        }
+    CHECK (samples == (dsp::starter::findPack().isDirectory() ? 1 : 0));
 }
