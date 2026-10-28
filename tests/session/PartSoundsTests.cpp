@@ -604,6 +604,26 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
     CHECK (problem.contains ("no settings"));
 }
 
+TEST_CASE ("Sounds per part: an instrument that loads its sounds late is played once it sounds", "[sounds][helper]")
+{
+    // Silent for its first seconds, and finding its presets crashes it: the part's notes are still heard (presets
+    // are not looked for when none is asked for), as when the parts of a written song are measured for the mix.
+    Temp temp;
+    const auto synth = testSynth ("difficult-synth.clap", "Spinus Difficult Synth");
+    juce::Array<juce::var> list;
+    list.add (object ({ { "note", 48 }, { "start", 0.0 }, { "length", 0.5 } }));
+    juce::Array<juce::var> items;
+    items.add (object ({ { "id", "part" },
+                         { "notes", list },
+                         { "output", temp.folder.getChildFile ("part.wav").getFullPathName() } }));
+    juce::String problem;
+    const auto rendered = renderInHelper (helper(), synth, items, {}, problem);
+    INFO (problem);
+    CHECK (problem.isEmpty());
+    REQUIRE (rendered.size() == 1);
+    CHECK ((double)rendered[0]["peak"] > 0.01);
+}
+
 TEST_CASE ("Sounds per part: a synth that crashes or hangs while tuned takes only the helper down",
            "[sounds][parts][helper]")
 {

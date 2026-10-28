@@ -23,6 +23,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- **Track creator's sound index and big sample instruments:** instruments that load their samples in the
+  background after opening (big sampled guitars and basses, for example) were measured before they made a
+  sound, filed as silent and never suggested; Spinus now waits for them (up to 40 seconds). One that crashes
+  while its presets are listed is tried again with only its sound as it opens, so it can still be chosen.
 - **Track creator: choosing which plugins to scan for the sound index crashed Spinus** once some had been
   ticked before: it read the saved list from memory already freed.
 - **Spinus froze, and every program crackled, when a webcam microphone was chosen to record from:** Spinus
