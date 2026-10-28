@@ -198,9 +198,12 @@ async def complete_with_fallback(
         route = routes[index]
         request.model = route.model
         try:
-            return await complete(
+            completion = await complete(
                 client, route.connection, connections.key_for(route.connection), request, on_text
-            ), index
+            )
+            if completion.notice:
+                await say({"kind": "status", "text": completion.notice})
+            return completion, index
         except ProviderError as error:
             last = error
             if failed is not None:

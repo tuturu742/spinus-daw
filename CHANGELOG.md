@@ -22,6 +22,18 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the
   tokens each really used and the checks' scores (`python -m spinus_ai.harness`).
 
+### Fixes
+
+- **OpenAI's newest models (GPT-5.5 and later) work with the assistant and the pattern generator:** they
+  refused every request that offered Spinus's tools ("Function tools with reasoning_effort are not
+  supported"), because they think before answering and OpenAI's older chat API doesn't allow tools while they
+  do. Spinus now talks to OpenAI's own service through its newer Responses API, which does; the model's
+  reasoning carries on between its tool calls, and nothing is kept on OpenAI's side. Other OpenAI-compatible
+  services (OpenRouter, local servers, your own address) keep the chat API; if one gives the same refusal,
+  Spinus asks again once with the model's reasoning turned off, and the assistant says so. A model that
+  can't turn its reasoning off (gpt-6.1-sol) gets a clear message there instead: use it through OpenAI's own
+  address. The highest reasoning level some models offer, "xhigh", is passed on as it is.
+
 ## 0.1.0-alpha.3 (2026-10-28)
 
 ### Starter pack

@@ -221,9 +221,7 @@ async def test_openai_compatible_streams_tool_calls_and_cost(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     ("url", "refused"),
     [
-        ("https://api.openai.com/v1", None),  # newer OpenAI models: only max_completion_tokens
-        ("https://other.example/v1", None),  # most other services: max_tokens
-        ("https://api.openai.com/v1", "max_completion_tokens"),  # an older model asks for max_tokens
+        ("https://other.example/v1", None),  # most services: max_tokens
         ("https://other.example/v1", "max_tokens"),  # a service that wants max_completion_tokens
     ],
 )
@@ -247,8 +245,7 @@ async def test_openai_compatible_sends_the_length_cap_the_service_takes(
     c = store.upsert("O", "openai", url, "k")
     result = await complete(client_for(handler), c, "k", Request("m", "s", [Message("user", [Text("hi")])]), no_text)
     assert result.text == "Hi"
-    first = "max_completion_tokens" if "api.openai.com" in url else "max_tokens"
-    assert sent[0] == first and len(sent) == (2 if refused else 1)
+    assert sent[0] == "max_tokens" and len(sent) == (2 if refused else 1)
 
 
 async def test_openai_compatible_does_not_retry_other_bad_requests(tmp_path: Path) -> None:

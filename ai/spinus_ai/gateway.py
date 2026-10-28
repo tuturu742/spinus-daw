@@ -1,5 +1,6 @@
-"""One way to talk to every provider: Anthropic's Messages API, and the OpenAI-compatible
-chat API used by OpenRouter, other services and local servers (Ollama, llama.cpp). Both stream."""
+"""One way to talk to every provider: Anthropic's Messages API, OpenAI's Responses API (OpenAI's own
+service), and the OpenAI-compatible chat API used by OpenRouter, other services and local servers (Ollama,
+llama.cpp). All stream."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 
@@ -48,7 +50,16 @@ class Thinking:
     data: str = ""  # redacted_thinking
 
 
-Block = Text | ToolUse | ToolResult | Thinking
+@dataclass
+class ProviderItems:
+    """A turn's output items from OpenAI's Responses API (its reasoning, messages and tool calls), passed back
+    unchanged on the next request of a tool loop, as OpenAI asks: the reasoning carries on between tool calls.
+    The turn's Text and ToolUse blocks hold the same answer for every other provider, which skips these."""
+
+    items: list[dict[str, Any]]
+
+
+Block = Text | ToolUse | ToolResult | Thinking | ProviderItems
 
 
 @dataclass
@@ -80,6 +91,7 @@ class Completion:
     stop_reason: str
     usage: Usage
     model: str
+    notice: str = ""  # something the user should know about how this answer was made
 
     @property
     def text(self) -> str:
@@ -114,14 +126,15 @@ class Request:
     messages: list[Message]
     tools: list[Tool] = field(default_factory=list)
     max_tokens: int | None = 4096  # None: the model's whole output allowance (ANSWER_ROOM where one is required)
-    effort: str = ""  # "low", "medium" or "high": how hard the model reasons; "" leaves the provider's default
+    effort: str = ""  # "low", "medium", "high" (or "xhigh" where offered): how hard the model reasons; "" leaves
+    # the provider's default
     cache: bool = False  # ask the provider to cache the request's start (tools, system, earlier turns) for the next
     # Anthropic's context editing (beta CONTEXT_EDITING): what the provider may clear from the conversation on its side
     # (old tool results), which does not count as an edit of the history.
     context_edits: list[dict[str, Any]] = field(default_factory=list)
 
 
-EFFORTS = ("low", "medium", "high")
+EFFORTS = ("low", "medium", "high", "xhigh")
 CONTEXT_EDITING = "context-management-2025-06-27"
 # The answer's room when the provider requires a number and none is known (Anthropic): the most every current
 # model writes; a model that allows less says so (400) and is asked again with what it names, or SMALLER_ROOM.
@@ -168,7 +181,7 @@ def anthropic_body(request: Request) -> dict[str, Any]:
     """Anthropic refuses empty text anywhere ("text content blocks must be non-empty"): a model's turn
     that was only tool calls may come back with an empty text block, and a tool may return nothing."""
 
-    def block(b: Block) -> dict[str, Any]:
+    def block(b: Text | ToolUse | ToolResult | Thinking) -> dict[str, Any]:
         if isinstance(b, Text):
             return {"type": "text", "text": b.text}
         if isinstance(b, Thinking):
@@ -188,9 +201,10 @@ def anthropic_body(request: Request) -> dict[str, Any]:
         blocks = [
             block(b)
             for b in m.blocks
-            if not (isinstance(b, Text) and not b.text.strip()) and not (isinstance(b, Thinking) and not b.signature
-                                                                          and not b.data)
-        ]  # fmt: skip
+            if not isinstance(b, ProviderItems)
+            and not (isinstance(b, Text) and not b.text.strip())
+            and not (isinstance(b, Thinking) and not b.signature and not b.data)
+        ]
         return blocks or [{"type": "text", "text": "(no answer)"}]
 
     body: dict[str, Any] = {
@@ -324,8 +338,8 @@ async def complete_anthropic(
 
 
 def openai_body(request: Request, connection: Connection, limit: str = "max_tokens") -> dict[str, Any]:
-    """`limit` names the answer-length cap: OpenAI's newer models only take "max_completion_tokens", while
-    many other services only know the older "max_tokens"."""
+    """`limit` names the answer-length cap: most services know the older "max_tokens", some only take
+    "max_completion_tokens" (as OpenAI's newer models do)."""
     messages: list[dict[str, Any]] = [{"role": "system", "content": request.system}]
     for m in request.messages:
         texts = "".join(b.text for b in m.blocks if isinstance(b, Text))
@@ -383,26 +397,44 @@ async def complete_openai(
     usage = Usage()
     stop_reason = ""
     model = request.model
-    limits = ["max_tokens", "max_completion_tokens"]
-    if "api.openai.com" in connection.base_url:
-        limits.reverse()
+    limits = ["max_tokens", "max_completion_tokens"]  # OpenAI's own service is asked through complete_responses
+    limit, no_reasoning, notice = limits[0], False, ""
     async with contextlib.AsyncExitStack() as stack:
-        for limit in limits:
+        for _ in range(3):
+            body = openai_body(request, connection, limit)
+            if no_reasoning:
+                body.pop("reasoning", None)
+                body["reasoning_effort"] = "none"
             response = await stack.enter_async_context(
-                client.stream(
-                    "POST",
-                    f"{connection.base_url}/chat/completions",
-                    headers=headers,
-                    json=openai_body(request, connection, limit),
-                )
+                client.stream("POST", f"{connection.base_url}/chat/completions", headers=headers, json=body)
             )
             if response.status_code == 200:
                 break
-            body = (await response.aread()).decode(errors="replace")
+            error = (await response.aread()).decode(errors="replace")
             other = limits[1] if limit == limits[0] else ""
-            if not (response.status_code == 400 and other and f"'{limit}'" in body and other in body):
-                raise error_for_status(response.status_code, body)
-            # The service named the other length cap: ask again with it.
+            if response.status_code == 400 and other and f"'{limit}'" in error and other in error:
+                limit = other  # the service named the other length cap: ask again with it
+            elif response.status_code == 400 and request.tools and "reasoning_effort" in error and not no_reasoning:
+                # Some models take tools only without reasoning on this API (OpenAI's gpt-5.5 and newer, through
+                # a service other than OpenAI's own): ask again with reasoning off, and say so.
+                no_reasoning = True
+                notice = (
+                    f"{connection.name} does not let {request.model} use tools while it reasons, so its reasoning "
+                    "was turned off for this answer."
+                )
+            elif response.status_code == 400 and no_reasoning:
+                # Asked once with reasoning off, and the model can't turn it off either (gpt-6.1-sol: "does not
+                # support 'none'"): no way to use tools with it here. Never asked a third time.
+                raise ProviderError(
+                    "bad_request",
+                    f"{connection.name} does not let {request.model} use tools while it reasons, and the model "
+                    "can't turn its reasoning off. Use the model through OpenAI's own address "
+                    f"(api.openai.com), or another model or connection. {error.strip()[:300]}",
+                )
+            else:
+                raise error_for_status(response.status_code, error)
+        if response.status_code != 200:
+            raise error_for_status(response.status_code, (await response.aread()).decode(errors="replace"))
         async for _, data in sse_events(response):
             if data == "[DONE]":
                 break
@@ -446,6 +478,139 @@ async def complete_openai(
                                   call["arguments"]))  # fmt: skip
             continue
         blocks.append(ToolUse(call["id"] or f"call_{index}", call["name"], arguments))
+    return Completion(blocks, "tool_use" if calls else (stop_reason or "end_turn"), usage, model, notice)
+
+
+# ---------------------------------------------------------------------------------------------------
+# OpenAI's Responses API (OpenAI's own service: its newer models take tools only there while they reason)
+
+
+def uses_responses_api(connection: Connection) -> bool:
+    return connection.provider == "openai" and urlparse(connection.base_url).hostname == "api.openai.com"
+
+
+def responses_body(request: Request) -> dict[str, Any]:
+    """Nothing is kept on OpenAI's side (store false): the reasoning comes back encrypted with each answer and is
+    sent again with the next request of a tool loop, in the turn's ProviderItems."""
+    items: list[dict[str, Any]] = []
+    for m in request.messages:
+        texts = "".join(b.text for b in m.blocks if isinstance(b, Text))
+        if m.role == "assistant":
+            kept = [i for b in m.blocks if isinstance(b, ProviderItems) for i in b.items]
+            if kept:
+                items.extend(kept)
+                continue
+            if texts:
+                items.append({"role": "assistant", "content": texts})
+            items.extend(
+                {"type": "function_call", "call_id": b.id, "name": b.name, "arguments": json.dumps(b.input)}
+                for b in m.blocks
+                if isinstance(b, ToolUse)
+            )
+        else:
+            items.extend(
+                {"type": "function_call_output", "call_id": b.tool_use_id, "output": b.content or "(nothing)"}
+                for b in m.blocks
+                if isinstance(b, ToolResult)
+            )
+            if texts:
+                items.append({"role": "user", "content": texts})
+    body: dict[str, Any] = {
+        "model": request.model,
+        "instructions": request.system,
+        "input": items,
+        "stream": True,
+        "store": False,
+        "include": ["reasoning.encrypted_content"],
+    }
+    if request.max_tokens is not None:  # None: the model's whole allowance
+        body["max_output_tokens"] = request.max_tokens
+    if request.tools:
+        body["tools"] = [
+            {
+                "type": "function",
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.input_schema,
+                "strict": False,
+            }
+            for t in request.tools
+        ]
+    if request.effort:
+        body["reasoning"] = {"effort": request.effort}
+    return body
+
+
+def responses_usage(usage: dict[str, Any]) -> Usage:
+    return Usage(
+        input_tokens=int(usage.get("input_tokens") or 0),
+        output_tokens=int(usage.get("output_tokens") or 0),
+        reasoning_tokens=int((usage.get("output_tokens_details") or {}).get("reasoning_tokens") or 0),
+        cached_tokens=int((usage.get("input_tokens_details") or {}).get("cached_tokens") or 0),
+    )
+
+
+def responses_error(error: dict[str, Any] | None) -> ProviderError:
+    error = error or {}
+    code = str(error.get("code") or "")
+    kind: ErrorKind = "outage" if code == "server_error" else "rate_limit" if "rate_limit" in code else "bad_request"
+    return ProviderError(kind, str(error.get("message") or "The provider reported an error."))
+
+
+async def complete_responses(
+    client: httpx.AsyncClient, connection: Connection, key: str | None, request: Request, on_text: OnText
+) -> Completion:
+    headers = {"content-type": "application/json"}
+    if key:
+        headers["authorization"] = f"Bearer {key}"
+    text = ""
+    items: dict[int, dict[str, Any]] = {}
+    usage = Usage()
+    stop_reason = ""
+    model = request.model
+    async with client.stream(
+        "POST", f"{connection.base_url}/responses", headers=headers, json=responses_body(request)
+    ) as response:
+        if response.status_code != 200:
+            raise error_for_status(response.status_code, (await response.aread()).decode(errors="replace"))
+        async for event, data in sse_events(response):
+            payload = json.loads(data)
+            kind = payload.get("type", event)
+            if kind == "response.output_text.delta":
+                text += payload.get("delta", "")
+                await on_text(payload.get("delta", ""))
+            elif kind == "response.output_item.done":
+                # The finished item: a reasoning item's encrypted content is complete only here.
+                items[int(payload.get("output_index", len(items)))] = payload["item"]
+            elif kind in ("response.created", "response.completed", "response.incomplete"):
+                done = payload.get("response") or {}
+                model = done.get("model") or model
+                if done.get("usage"):
+                    usage = responses_usage(done["usage"])
+                if kind == "response.incomplete":
+                    reason = (done.get("incomplete_details") or {}).get("reason")
+                    stop_reason = "max_tokens" if reason == "max_output_tokens" else str(reason or "incomplete")
+            elif kind == "response.failed":
+                raise responses_error((payload.get("response") or {}).get("error"))
+            elif kind == "error":
+                raise responses_error(payload)
+
+    kept = [items[i] for i in sorted(items)]
+    blocks: list[Block] = [Text(text)] if text else []
+    for index, item in enumerate(kept):
+        if item.get("type") != "function_call":
+            continue
+        try:
+            arguments = json.loads(item.get("arguments") or "{}")
+        except json.JSONDecodeError:
+            raw = str(item.get("arguments") or "")
+            blocks.append(ToolUse(str(item.get("call_id") or f"call_{index}"), str(item.get("name") or ""),
+                                  {"_unparsed": raw}, raw))  # fmt: skip
+            continue
+        blocks.append(ToolUse(str(item.get("call_id") or f"call_{index}"), str(item.get("name") or ""), arguments))
+    if kept:
+        blocks.append(ProviderItems(kept))
+    calls = any(isinstance(b, ToolUse) for b in blocks)
     return Completion(blocks, "tool_use" if calls else (stop_reason or "end_turn"), usage, model)
 
 
@@ -462,6 +627,8 @@ async def complete(
             return await complete_anthropic(client, connection, key, request, on_text)
         if connection.provider != "local" and not key:
             raise ProviderError("auth", f"The connection '{connection.name}' has no key.")
+        if uses_responses_api(connection):
+            return await complete_responses(client, connection, key, request, on_text)
         return await complete_openai(client, connection, key, request, on_text)
     except httpx.TransportError as error:
         raise ProviderError("network", f"Could not reach {connection.base_url}: {error}") from error
