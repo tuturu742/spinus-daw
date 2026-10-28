@@ -167,6 +167,8 @@ class Setup:
     parts: list[dict[str, str]]
     candidates: dict[str, list[dict[str, str]]] = field(default_factory=dict)  # part id -> [{id, name}]
     current: dict[str, str] = field(default_factory=dict)  # part id -> the sound it has now, in words
+    # Effects the user has that Spinus has none of its own of: "reverb" or "delay" -> their names (plugins).
+    effects: dict[str, list[str]] = field(default_factory=dict)
 
     @staticmethod
     def make(
@@ -175,6 +177,7 @@ class Setup:
         size: str,
         candidates: Any = None,
         current: Any = None,
+        effects: Any = None,
     ) -> Setup:
         style = sw.Style.from_summary(summary)
         chosen = sw.check_parts(parts) if parts is not None else sw.default_parts(style, size)
@@ -188,7 +191,13 @@ class Setup:
                         if isinstance(c, dict) and c.get("id")
                     ]
         now = {str(k): str(v)[:120] for k, v in current.items()} if isinstance(current, dict) else {}
-        return Setup(summary, style, chosen, found, now)
+        have: dict[str, list[str]] = {}
+        if isinstance(effects, dict):
+            for kind in ("reverb", "delay"):
+                names = effects.get(kind)
+                if isinstance(names, list):
+                    have[kind] = [str(n)[:120] for n in names[:MOST_CANDIDATES] if str(n).strip()]
+        return Setup(summary, style, chosen, found, now, have)
 
     def written(self) -> list[dict[str, str]]:
         """The parts the model writes (the effects are the rules')."""

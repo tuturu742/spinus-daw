@@ -2,6 +2,7 @@
 
 #include "ai/AnalysisJobs.h"
 #include "ai/Proposal.h"
+#include "model/ModelJson.h"
 #include "session/SoundIndex.h"
 
 #include <array>
@@ -548,6 +549,9 @@ song::Options SongWriterPanel::optionsFor (const model::Project& project, const 
         song::isFull (song) ? song::findLayerChannels (project, song::layersOf (song)) : song::findChannels (project);
     options.replace = replace;
     options.name = replace.isNotEmpty() ? replace : song::nextSongName (project);
+    options.withoutEffectSettings = effectSettingsOff;
+    for (const auto& [name, device] : userSendEffects())
+        options.effectDevices[name] = device;
     for (const auto& layer : song::layersOf (song))
         if (const auto chosen = chosenForLayer (layer))
             if (auto sound = soundOf (chosen->choice))
@@ -654,7 +658,22 @@ bool SongWriterPanel::applyNow (const juce::String& replace)
     const auto options = optionsFor (project, replace);
     auto proposal = ai::Proposal::prepare (json, session.getHistory());
     proposal.undoName = "Track creator: " + proposal.summary;
-    if (const auto result = proposal.apply (session.getHistory()); result.failed())
+    auto result = proposal.apply (session.getHistory());
+    juce::String settingsNote;
+    if (result.failed() && wholeSong && ! effectSettingsOff &&
+        (song["production"]["effects"].isArray() || song["production"]["ducks"].isObject()))
+    {
+        // A setting of the AI's effects that a device would not take: the song with its effects as they come.
+        settingsNote = " Some of the AI's effect settings were not accepted (" + result.getErrorMessage() +
+                       "), so its effects start as they come.";
+        effectSettingsOff = true;
+        const auto again = makeProposal (&error, replace);
+        effectSettingsOff = false;
+        proposal = ai::Proposal::prepare (again, session.getHistory());
+        proposal.undoName = "Track creator: " + proposal.summary;
+        result = proposal.apply (session.getHistory());
+    }
+    if (result.failed())
     {
         status.setText ("The song could not be applied: " + result.getErrorMessage(), juce::dontSendNotification);
         return false;
@@ -696,7 +715,7 @@ bool SongWriterPanel::applyNow (const juce::String& replace)
     status.setText ("Applied " + proposal.summary +
                         " as one undo step (Edit > Undo takes it away). Mix it... "
                         "balances the parts toward the songs." +
-                        loaded,
+                        loaded + settingsNote,
                     juce::dontSendNotification);
     updateButtons();
     return true;
@@ -826,6 +845,16 @@ juce::var SongWriterPanel::candidatesFor (juce::var& current)
     return juce::var (candidates);
 }
 
+std::map<juce::String, juce::var> SongWriterPanel::userSendEffects() const
+{
+    // The user's reverbs and delays (Spinus has none of its own), by the words in their names.
+    std::map<juce::String, juce::var> found;
+    for (const auto& entry : session.getDeviceList().getEntries())
+        if (! entry.instrument && entry.available && song::sendEffectKind (entry.name).isNotEmpty())
+            found.emplace (entry.name, model::deviceToJson (entry.device));
+    return found;
+}
+
 juce::var SongWriterPanel::composeParams (int seed)
 {
     juce::Array<juce::var> list;
@@ -840,6 +869,21 @@ juce::var SongWriterPanel::composeParams (int seed)
                             { "effort", getEffort() },
                             { "rounds", getRounds() },
                             { "tools", juce::var (getToolGroups()) },
+                            { "effects",
+                              [this]
+                              {
+                                  auto* kinds = new juce::DynamicObject();
+                                  for (const auto& [name, device] : userSendEffects())
+                                  {
+                                      const auto kind = song::sendEffectKind (name);
+                                      auto list = kinds->getProperty (kind);
+                                      if (! list.isArray())
+                                          list = juce::Array<juce::var>();
+                                      list.getArray()->add (name);
+                                      kinds->setProperty (kind, list);
+                                  }
+                                  return juce::var (kinds);
+                              }() },
                             { "way", "harness" } });
     if (! list.isEmpty())
         params.getDynamicObject()->setProperty ("parts", list);

@@ -682,3 +682,88 @@ TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of t
         }
     CHECK (samples == (dsp::starter::findPack().isDirectory() ? 1 : 0));
 }
+
+TEST_CASE ("Song writer: the AI's effects, buses, sends and ducking are part of the one undo step", "[song]")
+{
+    CHECK (song::sendEffectKind ("Dragon Hall Reverb") == "reverb");
+    CHECK (song::sendEffectKind ("Big-Room") == "reverb");
+    CHECK (song::sendEffectKind ("Tape Echo") == "delay");
+    CHECK (song::sendEffectKind ("Ping Pong Delay") == "delay");
+    CHECK (song::sendEffectKind ("Bass Compressor").isEmpty());
+    CHECK (song::sendEffectKind ("Roomba").isEmpty()); // a word, not a part of one
+
+    auto song = makeFullSong();
+    const auto layers = song::layersOf (song);
+    REQUIRE (layers.size() >= 3);
+    const auto& a = layers[0];
+    const auto& b = layers[1];
+    const auto& c = layers[2];
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "effects": [{"id": "x-eq", "part": ")" + a.id + R"(", "effect": "eq", "plugin": "",
+                     "settings": {"band3_freq": "250 Hz", "band3_gain": "-4 dB"}},
+                    {"id": "x-c", "part": ")" + a.id + R"(", "effect": "compressor", "plugin": "",
+                     "settings": {"threshold": "-18 dB", "ratio": "4:1"}}],
+        "buses": {"Glue": [")" + b.id + R"(", ")" + c.id + R"("]},
+        "returns": {"reverb": "Test Hall Reverb", "delay": "Missing Echo"},
+        "sends": {")" + a.id + R"(": {"reverb": -12, "delay": -6}},
+        "ducks": {")" + b.id + R"(": {"source": ")" + a.id + R"(", "amount": 60, "release": "120 ms"}}
+    })"));
+    auto apply = [&] (bool withoutSettings, commands::CommandHistory& history)
+    {
+        song::Options options;
+        options.name = song::nextSongName (history.getProject());
+        // A stand-in for the user's reverb plugin: any device insert.addEffect takes.
+        options.effectDevices["Test Hall Reverb"] =
+            juce::JSON::parse (R"({"kind": "stock", "stockType": "spinus.stereo-utility"})");
+        options.withoutEffectSettings = withoutSettings;
+        juce::String error;
+        const auto json = song::makeProposal (song, history.getProject(), options, &error);
+        INFO (error);
+        auto proposal = ai::Proposal::prepare (json, history);
+        return proposal.canApply() ? proposal.apply (history) : juce::Result::fail (proposal.error);
+    };
+    commands::CommandHistory history { model::Project {} };
+    const auto result = apply (false, history);
+    INFO (result.getErrorMessage());
+    REQUIRE (result.wasOk());
+    CHECK (history.getUndoDescriptions().size() == 1);
+    const auto& project = history.getProject();
+    const auto insertOf = [&] (const song::Layer& layer)
+    {
+        const auto* channel = channelNamed (project, layer.name);
+        REQUIRE (channel != nullptr);
+        return project.findInsert (channel->targetInsert);
+    };
+    const auto* ia = insertOf (a);
+    REQUIRE (ia->effects.size() == 2);
+    CHECK (ia->effects[0].device.stockType == "spinus.eq");
+    CHECK (ia->effects[1].device.stockType == "spinus.compressor");
+    // A reverb bus with the user's effect, sent to at -12 dB; the delay the user hasn't is left out.
+    const auto reverb = std::find_if (project.mixer.inserts.begin(), project.mixer.inserts.end(),
+                                      [] (const model::Insert& i) { return i.name.endsWith (" Reverb"); });
+    REQUIRE (reverb != project.mixer.inserts.end());
+    REQUIRE (reverb->effects.size() == 1);
+    CHECK (reverb->effects[0].device.stockType == "spinus.stereo-utility");
+    REQUIRE (ia->sends.size() == 1);
+    CHECK (ia->sends[0].target == reverb->id);
+    CHECK (ia->sends[0].levelDb == Catch::Approx (-12.0f));
+    CHECK (std::none_of (project.mixer.inserts.begin(), project.mixer.inserts.end(),
+                         [] (const model::Insert& i) { return i.name.endsWith (" Delay"); }));
+    // Ducking: a ducker on b's insert, its sidechain from a's.
+    const auto* ib = insertOf (b);
+    REQUIRE (! ib->effects.empty());
+    CHECK (ib->effects.back().device.stockType == "spinus.ducker");
+    CHECK (ib->sidechainSources == std::vector<model::InsertId> { ia->id });
+    // b and c on the Glue bus.
+    const auto* glue = project.findInsert (ib->output);
+    REQUIRE (glue != nullptr);
+    CHECK (glue->name == "Glue");
+    CHECK (insertOf (c)->output == glue->id);
+
+    // A setting no device takes fails the proposal; without the settings the song goes in.
+    song["production"]["effects"][0]["settings"].getDynamicObject()->setProperty ("band3_freq", "very low");
+    commands::CommandHistory other { model::Project {} };
+    CHECK (apply (false, other).failed());
+    CHECK (other.getUndoDescriptions().isEmpty());
+    CHECK (apply (true, other).wasOk());
+}

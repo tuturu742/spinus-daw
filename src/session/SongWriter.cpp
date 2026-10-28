@@ -194,6 +194,18 @@ juce::String familyColour (const juce::String& family)
     return found != colours.end() ? found->second : juce::String ("#ff9b5cff");
 }
 
+juce::String sendEffectKind (const juce::String& name)
+{
+    const auto words = " " + name.toLowerCase().replaceCharacters ("-_.()", "     ") + " ";
+    for (const auto* word : { "reverb", "hall", "room", "plate", "chamber" })
+        if (words.contains (juce::String (" ") + word + " ") || words.contains (juce::String (word) + "verb"))
+            return "reverb";
+    for (const auto* word : { "delay", "echo" })
+        if (words.contains (juce::String (" ") + word))
+            return "delay";
+    return {};
+}
+
 juce::String layerColour (const Layer& layer)
 {
     return layer.colour.isNotEmpty() ? layer.colour : familyColour (layer.family);
@@ -379,6 +391,20 @@ juce::String nextSongName (const model::Project& project)
 
 namespace
 {
+/** The device type of one of Spinus's own effects as the AI names it ("eq"), or empty. */
+juce::String stockEffectType (const juce::String& name)
+{
+    static const std::map<juce::String, juce::String> types { { "eq", "spinus.eq" },
+                                                              { "compressor", "spinus.compressor" },
+                                                              { "gate", "spinus.gate" },
+                                                              { "limiter", "spinus.limiter" },
+                                                              { "filter", "spinus.filter" },
+                                                              { "ducker", "spinus.ducker" },
+                                                              { "stereo", "spinus.stereo-utility" } };
+    const auto found = types.find (name);
+    return found != types.end() ? found->second : juce::String();
+}
+
 /** The full arrangement's channels, patterns and Playlist tracks (see SongWriter.h), after the tempo and key
     steps already in `steps`. */
 juce::var makeFullProposal (const juce::var& song, const model::Project& project, const Options& options,
@@ -404,6 +430,13 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
     std::map<juce::String, std::map<juce::String, int>> drums;
     std::map<juce::String, juce::Array<juce::var>> familyInserts;
     juce::StringArray families;
+    // The parts the AI put on buses of its own (its Effects and mix tools) leave their family's.
+    const auto& production = song["production"];
+    std::set<juce::String> onOwnBus;
+    if (auto* buses = production["buses"].getDynamicObject())
+        for (const auto& bus : buses->getProperties())
+            for (const auto& part : arrayOf (bus.value))
+                onOwnBus.insert (part.toString());
     for (const auto& layer : layers)
     {
         families.addIfNotAlreadyThere (layer.family);
@@ -433,7 +466,8 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
             step ("device.loadPreset", object ({ { "device", channel + ".device" }, { "preset", sound.preset } }));
         channels[layer.id] = channel + ".channel";
         inserts[layer.id] = channel + ".insert";
-        familyInserts[layer.family].add (channel + ".insert");
+        if (! onOwnBus.contains (layer.id))
+            familyInserts[layer.family].add (channel + ".insert");
         if (layer.drums)
             drums[layer.id] = drumsOfSound (sound);
     }
@@ -537,8 +571,90 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
                                                    { "length", bars * barTicks } }));
         }
 
+    // The AI's mix (its Effects and mix tools): its buses, effects, the reverb and delay buses with their sends,
+    // and ducking.
+    if (production.isObject())
+    {
+        if (auto* buses = production["buses"].getDynamicObject())
+            for (const auto& bus : buses->getProperties())
+            {
+                juce::Array<juce::var> members;
+                for (const auto& part : arrayOf (bus.value))
+                    if (inserts.contains (part.toString()))
+                        members.add (inserts[part.toString()]);
+                if (! members.isEmpty())
+                    step ("insert.addBus", object ({ { "name", bus.name.toString() }, { "inserts", members } }));
+            }
+        auto settings = [&] (const juce::var& device, const juce::var& text)
+        {
+            if (auto* o = text.getDynamicObject(); o != nullptr && ! o->getProperties().isEmpty())
+                if (! options.withoutEffectSettings)
+                    step ("device.setParameters", object ({ { "device", device }, { "text", text } }));
+        };
+        auto userDevice = [&] (const juce::String& name) -> juce::var
+        {
+            const auto found = options.effectDevices.find (name);
+            return found != options.effectDevices.end() ? found->second : juce::var();
+        };
+        for (const auto& e : arrayOf (production["effects"]))
+        {
+            const auto part = e["part"].toString();
+            if (! inserts.contains (part))
+                continue;
+            juce::var device;
+            if (const auto type = e["effect"].toString(); type == "reverb" || type == "delay")
+                device = userDevice (e["plugin"].toString());
+            else if (const auto stock = stockEffectType (type); stock.isNotEmpty())
+                device = object ({ { "kind", "stock" }, { "stockType", stock } });
+            if (! device.isObject())
+                continue;
+            const auto added =
+                step ("insert.addEffect", object ({ { "insert", inserts[part] }, { "device", device } }));
+            settings (added + ".device", e["settings"]);
+        }
+        std::map<juce::String, juce::var> returns; // "reverb", "delay" -> the bus's insert
+        if (auto* chosen = production["returns"].getDynamicObject())
+            for (const auto& r : chosen->getProperties())
+                if (const auto device = userDevice (r.value.toString()); device.isObject())
+                {
+                    const auto bus =
+                        step ("insert.add",
+                              object ({ { "name", options.name + " " +
+                                                      (r.name.toString() == "reverb" ? "Reverb" : "Delay") } }));
+                    step ("insert.addEffect", object ({ { "insert", bus + ".insert" }, { "device", device } }));
+                    returns[r.name.toString()] = bus + ".insert";
+                }
+        if (auto* sends = production["sends"].getDynamicObject())
+            for (const auto& part : sends->getProperties())
+                if (auto* each = part.value.getDynamicObject();
+                    each != nullptr && inserts.contains (part.name.toString()))
+                    for (const auto& send : each->getProperties())
+                        if (returns.contains (send.name.toString()))
+                            step ("insert.setSend",
+                                  object ({ { "insert", inserts[part.name.toString()] },
+                                            { "target", returns[send.name.toString()] },
+                                            { "levelDb", juce::jlimit (-100.0, 12.0, (double)send.value) } }));
+        if (auto* ducks = production["ducks"].getDynamicObject())
+            for (const auto& duck : ducks->getProperties())
+            {
+                const auto part = duck.name.toString(), source = duck.value["source"].toString();
+                if (! inserts.contains (part) || ! inserts.contains (source))
+                    continue;
+                const auto ducker = step (
+                    "insert.addEffect",
+                    object ({ { "insert", inserts[part] },
+                              { "device", object ({ { "kind", "stock" }, { "stockType", "spinus.ducker" } }) } }));
+                settings (ducker + ".device",
+                          object ({ { "trigger", "Sidechain" },
+                                    { "amount",
+                                      juce::String (juce::jlimit (0.0, 100.0, (double)duck.value["amount"]), 0) + "%" },
+                                    { "release", duck.value["release"].toString() } }));
+                step ("insert.setSidechain", object ({ { "insert", inserts[part] }, { "source", inserts[source] } }));
+            }
+    }
+
     // The AI's automation clips and samples (its Transitions and automation tools), on tracks of their own.
-    if (const auto& production = song["production"]; production.isObject())
+    if (production.isObject())
     {
         std::map<juce::String, juce::var> filters; // layer id -> the filter added on its insert
         juce::var folder;

@@ -768,3 +768,89 @@ async def test_transition_tools_only_with_their_group(tmp_path: Path) -> None:
     song = await run_job(service, "ai.v1.song.compose", params(tools="transitions"))
     assert "Transition and automation tools:" in sent[0]["system"]
     assert song["production"]["automation"][0]["part"] == "bass"
+
+
+# ---------------------------------------------------------------------------------------------------
+# Effects and mix
+
+
+def mixed(effects: dict[str, list[str]] | None = None) -> harness.Workspace:
+    brief = {**BRIEF, "effects": effects if effects is not None else {"reverb": ["Hall One", "Plate Two"]}}
+    ws = harness.Workspace.start(harness.setup_of(brief), 5, "sketch")
+    ws.groups = harness.GROUP_ORDER
+    return ws
+
+
+def test_effects_are_spinus_own_with_their_controls_checked() -> None:
+    ws = mixed()
+    said = ws.call(
+        "add_effect", {"part": "bass", "effect": "eq", "settings": {"band3_freq": "250 Hz", "band3_type": "low CUT"}}
+    )
+    assert said.startswith("Effect bass-eq on bass") and "band3_type Low cut" in said
+    ws.call("add_effect", {"part": "bass", "effect": "compressor", "settings": {"Threshold": "-18 dB", "ratio": "4:1"}})
+    ws.call("set_effect", {"effect": "bass-compressor", "settings": {"makeup": "3 dB"}})
+    assert "bass-eq2" in ws.call("add_effect", {"part": "bass", "effect": "eq"})
+    ws.call("remove_effect", {"effect": "bass-eq2"})
+    production = ws.song()["production"]
+    assert [e["id"] for e in production["effects"]] == ["bass-eq", "bass-compressor"]
+    assert production["effects"][1]["settings"] == {"threshold": "-18 dB", "ratio": "4:1", "makeup": "3 dB"}
+    bads: list[tuple[dict[str, Any], str]] = [
+        ({"part": "bass", "effect": "chorus"}, "an effect is one of"),
+        ({"part": "bass", "effect": "eq", "settings": {"warmth": "lots"}}, "has no control 'warmth'"),
+        ({"part": "bass", "effect": "filter", "settings": {"type": "Comb"}}, "Low pass, High pass"),
+        ({"part": "bass", "effect": "compressor", "settings": {"threshold": "quiet"}}, "not a value Spinus reads"),
+        ({"part": "bass", "effect": "eq", "settings": "loud"}, "settings are control ID"),
+        ({"part": "bass", "effect": "reverb", "settings": {"size": "big"}}, "set by its send level"),
+    ]
+    for bad, why in bads:
+        with pytest.raises(harness.Mistake, match=why):
+            ws.call("add_effect", bad)
+    with pytest.raises(harness.Mistake, match="no effect 'nope'"):
+        ws.call("set_effect", {"effect": "nope", "settings": {}})
+
+
+def test_sends_go_to_the_users_reverb_and_never_to_one_it_lacks() -> None:
+    ws = mixed()
+    assert "(Hall One)" in ws.call("send", {"part": "lead", "to": "reverb", "level": "-12 dB"})
+    assert "(Plate Two)" in ws.call("send", {"part": "keys", "to": "reverb", "level": "-18", "plugin": "plate two"})
+    production = ws.song()["production"]
+    assert production["returns"] == {"reverb": "Plate Two"} and production["sends"]["lead"] == {"reverb": -12.0}
+    assert "no longer" in ws.call("send", {"part": "lead", "to": "reverb", "level": "off"})
+    with pytest.raises(harness.Mistake, match="has no delay"):
+        ws.call("send", {"part": "lead", "to": "delay", "level": "-12 dB"})
+    with pytest.raises(harness.Mistake, match="-60 to 6 dB"):
+        ws.call("send", {"part": "lead", "to": "reverb", "level": "loud"})
+    with pytest.raises(harness.Mistake, match="reverbs: Hall One, Plate Two"):
+        ws.call("send", {"part": "lead", "to": "reverb", "level": "-6", "plugin": "Cathedral"})
+    assert "none (Spinus has none of its own)" in mixed({}).call("mix", {})
+
+
+def test_ducking_and_buses() -> None:
+    ws = mixed()
+    assert "by 60 %" in ws.call("duck", {"part": "bass", "source": "drums", "amount": 60})
+    ws.call("bus", {"name": "Low end", "parts": ["bass", "keys"]})
+    production = ws.song()["production"]
+    assert production["ducks"]["bass"] == {"source": "drums", "amount": 60.0, "release": "150 ms"}
+    assert production["buses"] == {"Low end": ["bass", "keys"]}
+    with pytest.raises(harness.Mistake, match="already play through the Low end bus"):
+        ws.call("bus", {"name": "Other", "parts": ["keys"]})
+    with pytest.raises(harness.Mistake, match="under itself"):
+        ws.call("duck", {"part": "bass", "source": "bass"})
+    with pytest.raises(harness.Mistake, match="0 to 100"):
+        ws.call("duck", {"part": "bass", "source": "drums", "amount": 300})
+    assert "removed" in ws.call("bus", {"name": "Low end", "parts": []})
+    said = ws.call("mix", {})
+    assert "bass ducks under drums by 60 %" in said and "The user's reverbs: Hall One, Plate Two" in said
+
+
+def test_measure_gives_each_parts_level_per_section_with_the_mix() -> None:
+    ws = mixed()
+    first = next(iter(ws.sections))
+    ws.call("write", {"part": "bass", "section": first, "notes": "0 40 4 100; 8 40 4 100", "loop_bars": 1})
+    ws.call("write", {"part": "drums", "section": first, "notes": "0 kick 1 127; 4 snare 1 127", "loop_bars": 1})
+    ws.call("add_effect", {"part": "bass", "effect": "compressor", "settings": {"makeup": "6 dB"}})
+    said = ws.call("measure", {})
+    line = next(x for x in said.splitlines() if x.startswith(f"{first}: loudness"))
+    assert "bass 0 dB" in line  # with its 6 dB of makeup, the loudest
+    ws.groups = ("basic",)
+    assert "Per section" not in ws.call("measure", {})

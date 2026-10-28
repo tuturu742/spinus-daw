@@ -447,6 +447,108 @@ def normalised(what: str, value: float) -> float:
     return float(((max(low, min(high, value)) - low) / (high - low)) ** skew)
 
 
+# ---------------------------------------------------------------------------------------------------
+# Effects and mix
+
+# Spinus's own effects: their device, and each control by ID (and name) with its choices where it has them.
+STOCK_EFFECTS: dict[str, tuple[str, dict[str, tuple[str, ...]]]] = {
+    "eq": ("spinus.eq", {
+        **{f"band{b}_{part}": () for b in range(1, 9) for part in ("on", "freq", "gain", "q")},
+        **{f"band{b}_type": ("Bell", "Low shelf", "High shelf", "Low cut", "High cut", "Notch") for b in range(1, 9)},
+        **{f"band{b}_slope": () for b in range(1, 9)},
+        "output": (),
+    }),
+    "compressor": ("spinus.compressor", {k: () for k in (
+        "threshold", "ratio", "knee", "attack", "release", "makeup", "auto_makeup", "mix")}),
+    "gate": ("spinus.gate", {k: () for k in ("threshold", "hysteresis", "attack", "hold", "release")}),
+    "limiter": ("spinus.limiter", {k: () for k in ("input", "ceiling", "release", "true_peak")}),
+    "filter": ("spinus.filter", {
+        "type": ("Low pass", "High pass", "Band pass", "Notch"), "slope": ("12 dB", "24 dB"), "cutoff": (),
+        "resonance": (), "mix": (), "gain": (),
+    }),
+    "ducker": ("spinus.ducker", {
+        "trigger": ("Sidechain", "Every beat", "Every half beat", "Every 2 beats"), "amount": (), "release": (),
+        "curve": (),
+    }),
+    "stereo": ("spinus.stereo-utility", {"gain": (), "pan": (), "width": ()}),
+}  # fmt: skip
+RETURNS = ("reverb", "delay")  # effects heard through a send: a plugin of the user's (Spinus has none of these)
+SETTING_TEXT = re.compile(r"^-?\d+(\.\d+)?\s*(dB|ms|s|Hz|kHz|%|:1)?$|^(on|off)$", re.IGNORECASE)
+MIX_TOOLS = [
+    Tool(
+        "add_effect",
+        "Add an effect to a part's insert, with its controls set by ID: "
+        + "; ".join(
+            f"{name} ({', '.join(sorted({k.split('_')[0] if k.startswith('band') else k for k in ctl}))})"
+            for name, (_, ctl) in STOCK_EFFECTS.items()
+        )
+        + ". EQ bands are band1..band8 with _on, _type, _freq, _gain, _q (band3_freq: '250 Hz'). Values as text: "
+        "'-18 dB', '4:1', '30 ms', '2.5 kHz', '40%', 'on', or a choice ('High pass'). A reverb or delay of the "
+        "user's (list them with mix) goes on a part too, usually through send instead.",
+        schema(
+            {
+                "part": PART,
+                "effect": {"type": "string", "enum": [*STOCK_EFFECTS, *RETURNS]},
+                "settings": {"type": "object", "additionalProperties": {"type": "string"}},
+                "plugin": {"type": "string", "description": "A reverb or delay: which of the user's, by name"},
+            },
+            ["part", "effect"],
+        ),
+    ),
+    Tool(
+        "set_effect",
+        "Change an effect's controls (its id from add_effect or mix).",
+        schema(
+            {"effect": {"type": "string"}, "settings": {"type": "object", "additionalProperties": {"type": "string"}}},
+            ["effect", "settings"],
+        ),
+    ),
+    Tool("remove_effect", "Remove an effect by its id.", schema({"effect": {"type": "string"}}, ["effect"])),
+    Tool(
+        "send",
+        "Send a part to the song's reverb or delay bus (made once, with the user's reverb or delay), at a level in "
+        "dB (-30 subtle, -12 clear, -6 wet); 'off' to stop.",
+        schema(
+            {
+                "part": PART,
+                "to": {"type": "string", "enum": list(RETURNS)},
+                "level": {"type": "string", "description": "'-12 dB', or 'off'"},
+                "plugin": {"type": "string", "description": "Which of the user's reverbs or delays, by name"},
+            },
+            ["part", "to", "level"],
+        ),
+    ),
+    Tool(
+        "duck",
+        "Sidechain ducking: a part dips each time another plays (the bass and pads under the kick), by `amount` "
+        "(0 to 100 %).",
+        schema(
+            {
+                "part": PART,
+                "source": {"type": "string", "description": "The part it ducks under (a drum part: its kick)"},
+                "amount": {"type": "number"},
+                "release": {"type": "string", "description": "How fast it comes back: '150 ms'"},
+            },
+            ["part", "source"],
+        ),
+    ),
+    Tool(
+        "bus",
+        "Play some parts through a bus of their own (one fader and one place for shared effects); 'parts' empty "
+        "removes it. Without one, parts of a family share a family bus.",
+        schema({"name": {"type": "string"}, "parts": {"type": "array", "items": PART}}, ["name", "parts"]),
+    ),
+    Tool(
+        "mix", "The effects, sends, ducking and buses so far, and the reverbs and delays the user has.", schema({}, [])
+    ),
+]
+TOOLS += MIX_TOOLS
+TOOL_GROUP.update({t.name: "mix" for t in MIX_TOOLS})
+GROUP_SYSTEM["mix"] = """Effects and mix tools: shape each part with Spinus's effects (add_effect: cut what \
+clashes with EQ, control peaks with a compressor), give space with sends to the reverb and delay buses (send), \
+duck the bass and pads under the kick (duck), and group parts on buses (bus). Use measure to see the balance. \
+Less is more: a few clear moves beat effects on every part."""
+
 TOOL_NAMES = [t.name for t in TOOLS]
 
 
@@ -621,7 +723,7 @@ class Workspace:
                                            "part": sw.ROLES[role][2], "soundRole": sw.ROLES[role][3],
                                            "drums": sw.ROLES[role][4], "instance": 0})  # fmt: skip
         production = self.production()
-        if production["automation"] or production["samples"]:
+        if any(production.get(k) for k in production):
             song["production"] = production
         return song
 
@@ -907,6 +1009,138 @@ class Workspace:
         count = sum(len(written.get(sid, [])) for sid in ids)
         return f"The rules wrote {p['id']} in {', '.join(ids)}: {count} notes."
 
+    # --- effects and mix -------------------------------------------------------------------------------
+
+    def check_settings(self, effect: str, settings: Any) -> dict[str, str]:
+        if settings is None:
+            return {}
+        if not isinstance(settings, dict):
+            raise Mistake('settings are control ID -> text, e.g. {"threshold": "-18 dB"}')
+        if effect in RETURNS:
+            if settings:
+                raise Mistake("a reverb or delay of the user's is set by its send level, not by settings")
+            return {}
+        controls = STOCK_EFFECTS[effect][1]
+        out = {}
+        for key, value in settings.items():
+            k, v = str(key).strip().lower().replace(" ", "_"), str(value).strip()
+            if k not in controls:
+                raise Mistake(
+                    f"the {effect} has no control '{key}' (its controls: {', '.join(list(controls)[:12])}...)"
+                )
+            choices = controls[k]
+            if choices:
+                match = next((c for c in choices if c.lower() == v.lower()), None)
+                if match is None:
+                    raise Mistake(f"{effect} {k} is one of {', '.join(choices)}")
+                v = match
+            elif not SETTING_TEXT.match(v):
+                raise Mistake(f"'{value}' is not a value Spinus reads: '-18 dB', '4:1', '30 ms', '2 kHz', '40%', 'on'")
+            out[k] = v
+        return out
+
+    def user_effect(self, kind: str, plugin: str) -> str:
+        have = self.setup.effects.get(kind) or []
+        if not have:
+            raise Mistake(
+                f"the user has no {kind}: Spinus has none of its own (Options > Get free plugins offers some)"
+            )
+        if not plugin:
+            return have[0]
+        found = next((h for h in have if h.lower() == plugin.lower()), None)
+        if found is None:
+            raise Mistake(f"the user's {kind}s: {', '.join(have)}")
+        return found
+
+    def tool_add_effect(self, part: str, effect: str, settings: Any = None, plugin: str = "") -> str:
+        pid = self.part(part)["id"]
+        if effect not in STOCK_EFFECTS and effect not in RETURNS:
+            raise Mistake(f"an effect is one of {', '.join([*STOCK_EFFECTS, *RETURNS])}")
+        checked = self.check_settings(effect, settings)
+        chosen = self.user_effect(effect, plugin) if effect in RETURNS else ""
+        effects = self.extra.setdefault("effects", [])
+        count = sum(1 for e in effects if e["part"] == pid and e["effect"] == effect)
+        eid = f"{pid}-{effect}" + (str(count + 1) if count else "")
+        effects.append({"id": eid, "part": pid, "effect": effect, "settings": checked, "plugin": chosen})
+        return f"Effect {eid} on {pid}" + (f" ({chosen})" if chosen else "") + (
+            ": " + ", ".join(f"{k} {v}" for k, v in checked.items()) if checked else "") + "."  # fmt: skip
+
+    def effect_named(self, eid: str) -> dict[str, Any]:
+        found: dict[str, Any] | None = next((e for e in self.extra.get("effects", []) if e["id"] == eid), None)
+        if found is None:
+            ids = ", ".join(e["id"] for e in self.extra.get("effects", [])) or "none yet"
+            raise Mistake(f"there is no effect '{eid}' (the effects: {ids})")
+        return found
+
+    def tool_set_effect(self, effect: str, settings: Any) -> str:
+        e = self.effect_named(effect)
+        e["settings"].update(self.check_settings(e["effect"], settings))
+        return f"{effect}: " + ", ".join(f"{k} {v}" for k, v in e["settings"].items()) + "."
+
+    def tool_remove_effect(self, effect: str) -> str:
+        self.effect_named(effect)
+        self.extra["effects"] = [e for e in self.extra["effects"] if e["id"] != effect]
+        return f"Effect {effect} removed."
+
+    def tool_send(self, part: str, to: str, level: str, plugin: str = "") -> str:
+        pid = self.part(part)["id"]
+        if to not in RETURNS:
+            raise Mistake("send to reverb or delay")
+        sends = self.extra.setdefault("sends", {})
+        if str(level).strip().lower() == "off":
+            sends.get(pid, {}).pop(to, None)
+            return f"{pid} no longer sends to the {to}."
+        match = re.fullmatch(r"\s*(-?\d+(?:\.\d+)?)\s*(dB)?\s*", str(level), re.IGNORECASE)
+        if match is None or not -60 <= float(match.group(1)) <= 6:
+            raise Mistake("a send level is -60 to 6 dB ('-12 dB'), or 'off'")
+        returns = self.extra.setdefault("returns", {})
+        returns[to] = self.user_effect(to, plugin) if plugin or to not in returns else returns[to]
+        sends.setdefault(pid, {})[to] = float(match.group(1))
+        return f"{pid} sends to the {to} ({returns[to]}) at {float(match.group(1)):g} dB."
+
+    def tool_duck(self, part: str, source: str, amount: float = 70.0, release: str = "150 ms") -> str:
+        pid, src = self.part(part)["id"], self.part(source)["id"]
+        if pid == src:
+            raise Mistake("a part can't duck under itself")
+        if not 0 <= float(amount) <= 100:
+            raise Mistake("amount is 0 to 100 (%)")
+        if not SETTING_TEXT.match(str(release).strip()):
+            raise Mistake("release is a time, '150 ms'")
+        self.extra.setdefault("ducks", {})[pid] = {"source": src, "amount": float(amount), "release": str(release)}
+        return f"{pid} ducks under {src} by {float(amount):g} %."
+
+    def tool_bus(self, name: str, parts: list[str]) -> str:
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 &-]{0,19}", str(name)):
+            raise Mistake("a bus's name is a short name")
+        buses = self.extra.setdefault("buses", {})
+        if not parts:
+            buses.pop(name, None)
+            return f"Bus {name} removed."
+        ids = [self.part(x)["id"] for x in parts]
+        for other, members in buses.items():
+            if other != name and set(members) & set(ids):
+                raise Mistake(f"{', '.join(sorted(set(members) & set(ids)))} already play through the {other} bus")
+        buses[name] = ids
+        return f"Bus {name}: {', '.join(ids)}."
+
+    def tool_mix(self) -> str:
+        lines = []
+        for e in self.extra.get("effects", []):
+            settings = ", ".join(f"{k} {v}" for k, v in e["settings"].items())
+            lines.append(f"{e['id']}: {e['effect']} on {e['part']}" + (f" ({e['plugin']})" if e["plugin"] else "")
+                         + (f": {settings}" if settings else ""))  # fmt: skip
+        for pid, sends in (self.extra.get("sends") or {}).items():
+            for to, db in sends.items():
+                lines.append(f"{pid} sends to the {to} at {db:g} dB")
+        for pid, d in (self.extra.get("ducks") or {}).items():
+            lines.append(f"{pid} ducks under {d['source']} by {d['amount']:g} %")
+        for name, members in (self.extra.get("buses") or {}).items():
+            lines.append(f"bus {name}: {', '.join(members)}")
+        for kind in RETURNS:
+            have = self.setup.effects.get(kind) or []
+            lines.append(f"The user's {kind}s: {', '.join(have) if have else 'none (Spinus has none of its own)'}")
+        return "\n".join(lines)
+
     # --- transitions and automation -------------------------------------------------------------------
 
     def song_bars(self) -> int:
@@ -1039,6 +1273,10 @@ class Workspace:
     def production(self) -> dict[str, Any]:
         """The automation clips and samples for Apply: values as the automation reads them (0 to 1)."""
         out: dict[str, Any] = {"automation": [], "samples": list(self.extra.get("samples", []))}
+        # Effects and mix (the Effects and mix tools).
+        for key in ("effects", "sends", "returns", "ducks", "buses"):
+            if self.extra.get(key):
+                out[key] = json.loads(json.dumps(self.extra[key]))
         for a in self.extra.get("automation", []):
             curve = {"linear": 0.0, "ease-in": 0.5, "ease-out": -0.5}[a.get("shape", "linear")]
             out["automation"].append({
@@ -1394,7 +1632,42 @@ class Workspace:
                     for pid, w in sorted(weights.items(), key=lambda kv: -kv[1])
                 )
             )
+        if "mix" in self.groups and not only:
+            lines += self.section_levels()
         return "\n".join(lines)
+
+    def section_levels(self) -> list[str]:
+        """Each section's parts, level from the notes (dB against the song's loudest part-in-a-section) with the
+        effects' gain where one is set, and the section's loudness (all its parts, against the loudest section)."""
+        gains: dict[str, float] = {}
+        for e in self.extra.get("effects", []):
+            for key in ("makeup", "gain", "output"):
+                match = re.match(r"^(-?\d+(?:\.\d+)?)\s*dB$", e["settings"].get(key, ""), re.IGNORECASE)
+                if match:
+                    gains[e["part"]] = gains.get(e["part"], 0.0) + float(match.group(1))
+        per: dict[str, dict[str, float]] = {}
+        for sid, s in self.sections.items():
+            bars = max(1, int(s["bars"]))
+            for pid, by in self.notes.items():
+                notes = by.get(sid) or []
+                if notes:
+                    weight = sum(
+                        float(n["velocity"]) ** 2 * min(4, int(n["length"]) // sw.TICKS_PER_STEP + 1) for n in notes
+                    )
+                    per.setdefault(sid, {})[pid] = 10 * math.log10(weight / bars) + gains.get(pid, 0.0)
+        if not per:
+            return []
+        top = max(v for parts in per.values() for v in parts.values())
+        loud = {sid: 10 * math.log10(sum(10 ** (v / 10) for v in parts.values())) for sid, parts in per.items()}
+        loudest = max(loud.values())
+        out = ["Per section (from the notes and the effects' gain; Spinus hears the real levels after finish):"]
+        for sid in self.sections:
+            if sid in per:
+                parts = ", ".join(
+                    f"{pid} {v - top:.0f} dB" for pid, v in sorted(per[sid].items(), key=lambda kv: -kv[1])
+                )
+                out.append(f"{sid}: loudness {loud[sid] - loudest:.0f} dB; {parts}")
+        return out
 
     def tool_finish(self, summary: str) -> str:
         self.summary = str(summary)[:400]
@@ -1716,6 +1989,7 @@ def setup_of(brief: dict[str, Any]) -> compose.Setup:
         str(brief.get("arrangement") or "sketch"),
         brief.get("candidates"),
         brief.get("current"),
+        brief.get("effects"),
     )
 
 

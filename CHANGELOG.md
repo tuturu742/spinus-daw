@@ -34,6 +34,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   wherever it plays: a riser (noise rising and opening over the bars before it), a downlifter, a swell into its
   first beat, an impact on it (the kit's kick and crash, or the starter pack's crash and 808). They go on tracks
   of their own under the song's Automation and Samples tracks, in the same undo step.
+- **Effects and mix tools** for the AI: Spinus's own effects on a part's insert with their controls set by name
+  (EQ, compressor, gate, limiter, filter, ducker, stereo), sends to a reverb and a delay bus made with the reverb
+  and delay you have (Spinus has none of its own; Get free plugins offers some), sidechain ducking (the bass and
+  pads under the kick), buses of its own, and measure giving each part's level and each section's loudness. If
+  a device won't take one of the AI's settings, Apply puts the song in with those effects as they come, and says so.
 - For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the
   tokens each really used and the checks' scores (`python -m spinus_ai.harness`).
 

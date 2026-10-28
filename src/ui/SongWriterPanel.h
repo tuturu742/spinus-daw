@@ -180,6 +180,9 @@ private:
     juce::ToggleButton basicTools { "Basic" }, arrangementTools { "Arrangement" },
         transitionsTools { "Transitions and automation" }, mixTools { "Effects and mix" };
     void depthChanged (bool remember);
+    /** The user's reverbs and delays by name, as insert.addEffect takes them (the AI's sends use them). */
+    std::map<juce::String, juce::var> userSendEffects() const;
+    bool effectSettingsOff = false; // Apply's second try: the AI's effects without their settings
     juce::TextButton stopNowButton { "Stop now, keep the best" };
     bool aiAvailable = false, composing = false, stopRequested = false;
     int roundsLeft = 0;

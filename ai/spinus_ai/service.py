@@ -1002,7 +1002,7 @@ class Service:
             raise RpcError(-32602, f"The reasoning level is {', '.join(EFFORTS)}, or none for the model's own.")
         try:
             setup = compose.Setup.make(summary, params.get("parts"), size, params.get("candidates"),
-                                       params.get("current"))  # fmt: skip
+                                       params.get("current"), params.get("effects"))  # fmt: skip
         except ValueError as error:
             raise RpcError(-32602, str(error)) from error
         return setup, effort
