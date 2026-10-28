@@ -69,6 +69,16 @@ what happened, and attach the project if you can.
   made for GTK or Qt only (some Calf and older plugins), and those whose window needs something Spinus
   doesn't offer yet or fails to open. The plugin itself works as usual.
 
+## Track creator (experimental)
+
+- **Guitar bands come out with synth chords instead of guitars** when written from reference songs: the
+  analysis doesn't yet tell guitars apart from other instruments. Add a guitar part yourself on the
+  **Parts** tab and pick its sound.
+- **Some plugins stay silent until a sound is chosen in their own window** (for example a drum plugin
+  that needs a kit picked first). The Track creator can't use them yet; a way to save the sound you set
+  up in the plugin's window is planned.
+- The parts list isn't remembered between runs.
+
 ## Projects
 
 - Projects saved by this version open in every later version of Spinus. A project saved by a newer

@@ -1,7 +1,10 @@
 #include "RealtimeRunner.h"
 
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace spinus::test
@@ -9,6 +12,12 @@ namespace spinus::test
 
 namespace
 {
+int64_t nowMs()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds> (steady_clock::now().time_since_epoch()).count();
+}
+
 /** Tracktion applies MIDI device changes (an input made or turned on, as Spinus's computer keyboard on a
     first start) on a 5 ms timer of its DeviceManager, and applying them stops every playhead. Whether that
     timer fires before or after a test presses Play depends on the machine; apply them now, until no more
@@ -106,6 +115,8 @@ void RealtimeRunner::start()
     applyPendingGraphChanges (engine);
     running = true;
     thread = std::thread ([this] { audioThreadLoop(); });
+    watching = true;
+    watchdog = std::thread ([this] { watchdogLoop(); });
 }
 
 void RealtimeRunner::stop()
@@ -114,6 +125,44 @@ void RealtimeRunner::stop()
 
     if (thread.joinable())
         thread.join();
+
+    watching = false;
+    if (watchdog.joinable())
+        watchdog.join();
+}
+
+void RealtimeRunner::watchdogLoop()
+{
+    auto last = samplesProcessed.load();
+    auto lastMoved = nowMs();
+
+    while (watching)
+    {
+        std::this_thread::sleep_for (std::chrono::milliseconds (100));
+        const auto now = nowMs();
+        if (const auto done = samplesProcessed.load(); done != last || ! running)
+        {
+            last = done;
+            lastMoved = now;
+            continue;
+        }
+        if ((double)(now - lastMoved) < stallSeconds * 1000.0)
+            continue;
+
+        const auto processing = processingSinceMs.load(), dispatching = dispatchingSinceMs.load();
+        const auto audio = processing != 0
+                               ? "inside processBlock for " + std::to_string ((now - processing) / 1000) + " s"
+                               : std::string ("not inside processBlock");
+        const auto message = dispatching != 0
+                                 ? "inside a message dispatch for " + std::to_string ((now - dispatching) / 1000) + " s"
+                                 : std::string ("not dispatching messages inside runUntil()");
+        std::fprintf (stderr,
+                      "RealtimeRunner: no sound processed for %.0f s (stuck at %.3f s).\n"
+                      "  Audio thread: %s\n  Message thread: %s\n",
+                      stallSeconds, getSecondsProcessed(), audio.c_str(), message.c_str());
+        std::fflush (stderr);
+        std::abort();
+    }
 }
 
 void RealtimeRunner::restartDevice()
@@ -133,7 +182,9 @@ void RealtimeRunner::runUntil (double secondsProcessed)
     while (running && getSecondsProcessed() < secondsProcessed)
     {
         const auto t0 = clock::now();
+        dispatchingSinceMs = nowMs();
         juce::MessageManager::getInstance()->runDispatchLoopUntil (2);
+        dispatchingSinceMs = 0;
         const auto ms = std::chrono::duration<double, std::milli> (clock::now() - t0).count();
         maxDispatchMs = std::max (maxDispatchMs, ms);
     }
@@ -168,7 +219,9 @@ void RealtimeRunner::audioThreadLoop()
             params.inputSource (block, params.inputChannels, start);
 
         const auto t0 = clock::now();
+        processingSinceMs = nowMs();
         device.processBlock (block, midi);
+        processingSinceMs = 0;
         const auto t1 = clock::now();
 
         blockTimesMs.push_back (std::chrono::duration<float, std::milli> (t1 - t0).count());
