@@ -357,6 +357,8 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     REQUIRE (song["composed"].isObject());
     CHECK ((bool)song["composed"]["harness"]);
     CHECK (song["composed"]["reason"].toString() == "A short test song.");
+    CHECK (song["composed"]["tools"].size() == 2); // Basic + arrangement, the default
+    CHECK (song["note"].toString().contains ("Tools: Basic + arrangement."));
     CHECK (panel.getStatusText().contains ("Written by the AI (fake-model, reasoning high)"));
     CHECK (panel.getText().contains ("Tokens used"));
     CHECK (panel.getText().contains ("7 requests")); // finish ends it: no turn after
@@ -371,6 +373,43 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     CHECK (session.getProject() == before); // nothing before Apply
     REQUIRE (panel.apply());
     CHECK (session.getHistory().getUndoDescriptions().size() == 1);
+}
+
+TEST_CASE ("Track creator: how deep the AI may go is a list with a Custom choice, remembered",
+           "[ui][trackcreator][song]")
+{
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine() };
+    auto& settings = session.getEdit().engine.getPropertyStorage().getPropertiesFile();
+    settings.removeValue ("trackCreatorAiTools");
+    SongWriterPanel::Context context;
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        panel.setSize (900, 600);
+        panel.setAiWriter (true);
+        // Basic + arrangement at first, with the cost said below the list.
+        CHECK (panel.getDepthChoice() == 2);
+        CHECK (panel.getToolGroups() == juce::StringArray { "basic", "arrangement" });
+        CHECK (panel.getDepthNoteText().contains ("costs more"));
+        CHECK (panel.getDepthNoteText().contains ("several times the tokens of Basic"));
+        // A list that is no preset is Custom; Basic stays on whatever is asked.
+        panel.setToolGroups ({ "mix" });
+        CHECK (panel.getDepthChoice() == 5);
+        CHECK (panel.getToolGroups() == juce::StringArray { "basic", "mix" });
+        panel.setToolGroups ({ "basic", "arrangement", "transitions", "mix" });
+        CHECK (panel.getDepthChoice() == 4);
+    }
+    // Remembered once the user changes it on the page.
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        CHECK (panel.getDepthChoice() == 2); // setToolGroups (from code) is not the user's choice
+    }
+    settings.setValue ("trackCreatorAiTools", "basic,arrangement,transitions");
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        CHECK (panel.getDepthChoice() == 3);
+    }
+    settings.removeValue ("trackCreatorAiTools");
 }
 
 TEST_CASE ("Track creator: without the AI service, the song page says so", "[ui][trackcreator][song]")
@@ -467,6 +506,7 @@ TEST_CASE ("Track creator AI writer screenshot for the manual", "[.screenshot][m
     panel.setSeed (3);
     panel.refreshConnection();
     REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My AI"); }));
+    panel.setToolGroups ({ "basic", "arrangement", "mix" }); // Custom: its checkboxes show
     panel.setAiWriter (true);
     REQUIRE (panel.write());
     REQUIRE (waitFor ([&] { return ! panel.isBusy() && ! panel.isComposing(); }, 120000));

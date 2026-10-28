@@ -1010,7 +1010,9 @@ class Service:
     async def song_compose(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song written by the AI, opt-in: {summary, seed, parts, arrangement, candidates (part id -> [{id, name}]:
         sounds from the sound index it may pick), current (part id -> its sound in words), effort ("low", "medium",
-        "high" or none: the model's own), way ("harness", the default: the model composes with the music harness's
+        "high", "xhigh" or none: the model's own), tools (the harness's groups of tools allowed: a depth, basic,
+        arrangement, transitions or full, or a list of groups; Basic + arrangement by default), way ("harness", the
+        default: the model composes with the music harness's
         tools, spinus_ai.harness; "one-shot": one answer with the whole song, spinus_ai.compose), song and
         levels/problems (a song it wrote, with how loud each part played and why one could not: one revision
         round)} -> the song, as ai.v1.song.write's, with `composed` (the model, each request's tokens, Spinus's
@@ -1028,6 +1030,10 @@ class Service:
         way = str(params.get("way") or "harness")
         if way not in ("harness", "one-shot"):
             raise RpcError(-32602, "way is harness or one-shot.")
+        try:
+            groups = harness.check_groups(params.get("tools"))
+        except ValueError as error:
+            raise RpcError(-32602, str(error)) from error
         previous = params.get("song")
         if previous is not None:
             try:
@@ -1056,6 +1062,7 @@ class Service:
                         previous,
                         params.get("levels"),
                         params.get("problems"),
+                        groups,
                     )
                 if previous is not None:
                     return await compose.revise(

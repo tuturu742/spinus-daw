@@ -86,6 +86,13 @@ public:
         offered). */
     void setEffort (const juce::String& effort);
     juce::String getEffort() const;
+    /** The groups of the harness's tools the AI may use ("basic" always; "arrangement", "transitions", "mix"):
+        Basic + arrangement at first, then as the user left it (remembered). */
+    void setToolGroups (const juce::StringArray& groups);
+    juce::StringArray getToolGroups() const;
+    /** The depth list's choice: 1 Basic, 2 + arrangement, 3 + transitions, 4 Full, 5 Custom (the checkboxes). */
+    int getDepthChoice() const { return depthBox.getSelectedId(); }
+    juce::String getDepthNoteText() const { return depthNote.getText(); }
     /** How many times what Spinus hears goes back to the AI (0 to 3; 1 by default). */
     void setRounds (int rounds);
     int getRounds() const { return roundsBox.getSelectedId() - 1; }
@@ -168,6 +175,11 @@ private:
     juce::Label writerLabel { {}, "Who writes the notes:" };
     juce::ComboBox writerBox, effortBox, roundsBox;
     juce::Label infoLabel;
+    juce::Label depthLabel { {}, "AI tools:" }, depthNote;
+    juce::ComboBox depthBox;
+    juce::ToggleButton basicTools { "Basic" }, arrangementTools { "Arrangement" },
+        transitionsTools { "Transitions and automation" }, mixTools { "Effects and mix" };
+    void depthChanged (bool remember);
     juce::TextButton stopNowButton { "Stop now, keep the best" };
     bool aiAvailable = false, composing = false, stopRequested = false;
     int roundsLeft = 0;

@@ -234,6 +234,66 @@ TOOLS = [
         ),
     ),
 ]
+BASIC_TOOLS = list(TOOLS)
+
+# ---------------------------------------------------------------------------------------------------
+# How deep the AI may go: groups of tools, chosen on the Write a song page (owner: more tools, more cost)
+
+# Group -> its name in words, and what it lets the AI do (said in the brief and the system prompt).
+GROUPS: dict[str, tuple[str, str]] = {
+    "basic": ("Basic", "the form, chords, every part's notes, motifs, sounds, check, measure and finish"),
+    "arrangement": (
+        "Arrangement",
+        "parts and layers of its own, motif variations, drum fills, layers entering and leaving, the energy check",
+    ),
+    "transitions": ("Transitions and automation", "automation clips (filter sweeps, fades, sends), risers, impacts"),
+    "mix": ("Effects and mix", "effects on each part's insert, sends to reverb and delay, sidechain ducking, buses"),
+}
+GROUP_ORDER = tuple(GROUPS)
+# The page's presets.
+DEPTHS: dict[str, tuple[str, ...]] = {
+    "basic": ("basic",),
+    "arrangement": ("basic", "arrangement"),
+    "transitions": ("basic", "arrangement", "transitions"),
+    "full": GROUP_ORDER,
+}
+DEFAULT_DEPTH = DEPTHS["arrangement"]  # owner: Basic + arrangement at first
+TOOL_GROUP: dict[str, str] = {t.name: "basic" for t in BASIC_TOOLS}
+GROUP_SYSTEM: dict[str, str] = {}  # what the system prompt adds for a group's tools
+
+
+def check_groups(value: Any) -> tuple[str, ...]:
+    """The groups allowed: a preset's name, a list, or "basic,arrangement"; Basic always, in GROUP_ORDER."""
+    if value is None or value == "":
+        return DEFAULT_DEPTH
+    if isinstance(value, str):
+        names = list(DEPTHS[value]) if value in DEPTHS else [v.strip() for v in value.split(",") if v.strip()]
+    elif isinstance(value, list | tuple):
+        names = [str(v) for v in value]
+    else:
+        raise ValueError("tools is a depth (basic, arrangement, transitions, full) or a list of groups.")
+    unknown = [n for n in names if n not in GROUPS]
+    if unknown:
+        raise ValueError(f"There is no group of tools '{unknown[0]}' (the groups: {', '.join(GROUP_ORDER)}).")
+    return tuple(g for g in GROUP_ORDER if g == "basic" or g in names)
+
+
+def tools_for(groups: tuple[str, ...]) -> list[Tool]:
+    """Only the allowed groups' tools are sent: the others' definitions cost no tokens."""
+    return [t for t in TOOLS if TOOL_GROUP.get(t.name, "basic") in groups]
+
+
+def system_for(groups: tuple[str, ...]) -> str:
+    return SYSTEM + "".join("\n\n" + GROUP_SYSTEM[g] for g in groups if g in GROUP_SYSTEM)
+
+
+def depth_words(groups: tuple[str, ...]) -> str:
+    """ "Basic + arrangement", or "Full"."""
+    if tuple(groups) == GROUP_ORDER:
+        return "Full"
+    return " + ".join(GROUPS[g][0] if i == 0 else GROUPS[g][0].lower() for i, g in enumerate(groups))
+
+
 TOOL_NAMES = [t.name for t in TOOLS]
 
 
@@ -272,6 +332,7 @@ class Workspace:
     summary: str = ""
     finished: bool = False
     calls: Counter[str] = field(default_factory=Counter)
+    groups: tuple[str, ...] = GROUP_ORDER  # the groups of tools allowed (the page's depth)
 
     # --- making one -------------------------------------------------------------------------------
 
@@ -411,6 +472,9 @@ class Workspace:
     def call(self, name: str, args: dict[str, Any]) -> str:
         if name not in TOOL_NAMES:
             raise Mistake(f"there is no tool '{name}'")
+        if TOOL_GROUP.get(name, "basic") not in self.groups:
+            group = GROUPS[TOOL_GROUP[name]][0]
+            raise Mistake(f"'{name}' belongs to the {group} tools, which are not allowed for this song")
         self.calls[name] += 1
         result: str = getattr(self, "tool_" + name)(**args)
         return result
@@ -867,7 +931,9 @@ class Run:
 
 
 def first_message(ws: Workspace, revising: str = "") -> str:
+    allowed = "; ".join(f"{GROUPS[g][0]}: {GROUPS[g][1]}" for g in ws.groups)
     text = "The brief:\n" + ws.tool_brief() + "\n\nThe form to start from (change it with set_form):\n" + ws.tool_form()
+    text += "\n\nThe tools you may use: " + allowed + "."
     if revising:
         text += "\n\n" + revising
     else:
@@ -891,9 +957,9 @@ async def session(
     ws = run.workspace
     request = Request(
         routes[0].model,
-        SYSTEM,
+        system_for(ws.groups),
         [Message("user", [Text(first_message(ws, revising))])],
-        list(TOOLS),
+        tools_for(ws.groups),
         None,
         effort,
         cache=True,
@@ -979,6 +1045,7 @@ def result_song(
         "by": run.by,
         "effort": effort,
         "harness": True,
+        "tools": list(ws.groups),
         "round": round_number,
         "turns": run.turns,
         "calls": dict(ws.calls),
@@ -991,7 +1058,12 @@ def result_song(
         "workspace": ws.export(),
         "answer": {"parts": {p: {} for p in ws.notes}},  # what the notes say "left out" against
     }
-    song["note"] = compose.written_note(setup, composed) + note + "".join(f" {n}" for n in run.notices)
+    song["note"] = (
+        compose.written_note(setup, composed)
+        + f" Tools: {depth_words(ws.groups)}."
+        + note
+        + "".join(f" {n}" for n in run.notices)
+    )
     if usage.get("cached"):
         song["note"] += f" {int(usage['cached']):,} of the input tokens were read from the provider's cache."
     return compose.finish(song, setup, composed)
@@ -1011,9 +1083,11 @@ async def write(
     song: dict[str, Any] | None = None,
     levels: Any = None,
     problems: Any = None,
+    groups: tuple[str, ...] = DEFAULT_DEPTH,
 ) -> dict[str, Any]:
-    """A song written through the harness; with `song` (one it wrote) and how its parts played (levels,
-    problems), a revision of it. NoConnection without a connection."""
+    """A song written through the harness with the groups of tools allowed; with `song` (one it wrote) and how its
+    parts played (levels, problems), a revision of it (with the groups it was written with). NoConnection without
+    a connection."""
     routes = routing.resolve(compose.FEATURE)
     if not routes:
         raise NoConnection("No AI connection is set up.")
@@ -1021,6 +1095,7 @@ async def write(
     if song is not None:
         ws = Workspace.from_song(setup, song)
         composed = song.get("composed") or {}
+        ws.groups = check_groups(composed.get("tools") or list(groups))
         round_number = int(composed.get("round", 0)) + 1
         before = list((composed.get("usage") or {}).get("requests") or [])
         spent = compose.total_of(before, "input") + compose.total_of(before, "output")
@@ -1038,6 +1113,7 @@ async def write(
         await say({"kind": "status", "text": f"Revising: the AI is fixing what Spinus heard (round {round_number})..."})
     else:
         ws = Workspace.start(setup, seed, size)
+        ws.groups = groups
         await say({"kind": "status", "text": "Writing: the AI is composing with the harness..."})
     run = Run(ws)
     await session(client, connections, routes, usage_log, run, effort, say, stop, revising, spent)
@@ -1122,11 +1198,13 @@ def serve_mcp(
     out: Path,
     read: Callable[[], str] = sys.stdin.readline,
     write: Callable[[str], None] = stdout_line,
+    groups: tuple[str, ...] = GROUP_ORDER,
 ) -> None:
-    """The harness's tools as an MCP server (JSON-RPC over stdio, one message a line), on a working copy made from
-    the brief; finish writes the song to `out`."""
+    """The harness's tools (the groups allowed) as an MCP server (JSON-RPC over stdio, one message a line), on a
+    working copy made from the brief; finish writes the song to `out`."""
     setup = setup_of(brief)
     ws = Workspace.start(setup, int(brief.get("seed", 0)), str(brief.get("arrangement") or "sketch"))
+    ws.groups = groups
 
     def reply(id_: Any, result: Any = None, error: dict[str, Any] | None = None) -> None:
         message: dict[str, Any] = {"jsonrpc": "2.0", "id": id_}
@@ -1151,7 +1229,7 @@ def serve_mcp(
                     "protocolVersion": "2025-06-18",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "spinus-music-harness", "version": "1"},
-                    "instructions": SYSTEM + "\n\n" + first_message(ws),
+                    "instructions": system_for(groups) + "\n\n" + first_message(ws),
                 },
             )
         elif method == "tools/list":
@@ -1159,7 +1237,8 @@ def serve_mcp(
                 id_,
                 {
                     "tools": [
-                        {"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in TOOLS
+                        {"name": t.name, "description": t.description, "inputSchema": t.input_schema}
+                        for t in tools_for(groups)
                     ]
                 },
             )
@@ -1358,10 +1437,13 @@ async def compare_ways(
     efforts: list[str],
     save: Path | None = None,
     label: str = "",
+    depths: list[tuple[str, ...]] | None = None,
 ) -> list[dict[str, Any]]:
-    """The same brief written one-shot (compose) and through the harness at each reasoning level: the tokens each
-    used, as the provider reported them, and the checks' score of each song. With `save`, each song is written
-    there as <label>-<way>-<effort>.song.json (a slash in the label, a model's name, becomes _)."""
+    """The same brief written one-shot (compose) and through the harness, at each reasoning level and with each
+    depth of tools: the tokens each used, as the provider reported them, and the checks' score of each song. With
+    `save`, each song is written there as <label>-<way>-<effort>.song.json (with several depths, the way is
+    harness-<groups>; a slash in the label, a model's name, becomes _)."""
+    depths = depths or [DEFAULT_DEPTH]
     setup = setup_of(brief)
     seed, size = int(brief.get("seed", 0)), str(brief.get("arrangement") or "sketch")
     usage_log = UsageLog(folder)
@@ -1371,20 +1453,25 @@ async def compare_ways(
 
     rows = []
     for effort in efforts:
-        for way in ("one-shot", "harness"):
+        runs: list[tuple[str, tuple[str, ...]]] = [("one-shot", ())] + [("harness", d) for d in depths]
+        for way, groups in runs:
             if way == "one-shot":
                 song = await compose.compose(client, connections, routing, usage_log, setup, seed, size, effort, quiet)
                 usage = song.get("composed", {}).get("usage") or song.get("usage") or {}
             else:
-                song = await write(client, connections, routing, usage_log, setup, seed, size, effort, quiet)
+                song = await write(
+                    client, connections, routing, usage_log, setup, seed, size, effort, quiet, groups=groups
+                )
                 usage = song["composed"]["usage"]
             if save is not None:
                 save.mkdir(parents=True, exist_ok=True)
-                name = "-".join(x for x in (label, way, effort or "default") if x).replace("/", "_")
+                named = way if len(depths) == 1 or not groups else f"{way}-{'+'.join(groups)}"
+                name = "-".join(x for x in (label, named, effort or "default") if x).replace("/", "_")
                 (save / f"{name}.song.json").write_text(json.dumps(song, indent=1), encoding="utf-8")
             rows.append(
                 {
                     "way": way,
+                    "tools": depth_words(groups) if groups else "-",
                     "effort": effort or "default",
                     "requests": len(usage.get("requests", [])),
                     "input": usage.get("input", 0),
@@ -1403,6 +1490,7 @@ async def compare_ways(
 def table(rows: list[dict[str, Any]]) -> str:
     keys = [
         "way",
+        "tools",
         "effort",
         "requests",
         "input",
@@ -1435,6 +1523,11 @@ def main(argv: list[str] | None = None) -> None:
     m = sub.add_parser("mcp", help="serve the harness's tools over stdio (MCP) on a brief")
     m.add_argument("--brief", type=Path, required=True)
     m.add_argument("--out", type=Path, required=True, help="where finish saves the song")
+    m.add_argument(
+        "--tools",
+        default="full",
+        help="the groups of tools: a depth (basic, arrangement, transitions, full) or groups, e.g. basic,arrangement",
+    )
     e = sub.add_parser("eval", help="compare one-shot and harness writing on tokens and the checks' score")
     e.add_argument("--brief", type=Path, required=True)
     e.add_argument("--fake", action="store_true", help="a scripted model, no API call (checks the comparison)")
@@ -1450,6 +1543,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     e.add_argument("--save", type=Path, help="a folder to save each song in (<model>-<way>-<effort>.song.json)")
     e.add_argument("--efforts", default="", help="reasoning levels to compare, e.g. ',low,medium,high' ('' default)")
+    e.add_argument(
+        "--tools",
+        default="arrangement",
+        help="the depths of tools to compare, separated by ';': each a "
+        "depth (basic, arrangement, transitions, full) or groups, e.g. 'basic;basic,arrangement;full'",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "brief":
@@ -1457,7 +1556,7 @@ def main(argv: list[str] | None = None) -> None:
         args.out.write_text(json.dumps(brief, indent=1), encoding="utf-8")
         print(f"Brief saved to {args.out}: {', '.join(p['id'] for p in brief['parts'])}.")
     elif args.command == "mcp":
-        serve_mcp(json.loads(args.brief.read_text(encoding="utf-8")), args.out)
+        serve_mcp(json.loads(args.brief.read_text(encoding="utf-8")), args.out, groups=check_groups(args.tools))
     else:
         asyncio.run(run_eval(args))
 
@@ -1490,7 +1589,15 @@ async def run_eval(args: argparse.Namespace) -> None:
             routing.set(compose.FEATURE, [{"connection": store.connections[0].id, "model": args.model}])
         async with client:
             rows = await compare_ways(
-                brief, client, store, routing, Path(folder), efforts, args.save, args.model or args.provider
+                brief,
+                client,
+                store,
+                routing,
+                Path(folder),
+                efforts,
+                args.save,
+                args.model or args.provider,
+                [check_groups(d) for d in args.tools.split(";") if d.strip()],
             )
     print(table(rows))
     if args.fake:

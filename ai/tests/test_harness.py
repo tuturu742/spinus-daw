@@ -18,6 +18,7 @@ from test_songwriter import summary
 from spinus_ai import compose, harness
 from spinus_ai.connections import ConnectionStore, MemoryKeyStore
 from spinus_ai.routing import Routing
+from spinus_ai.service import RpcError
 from spinus_ai.usage import UsageLog
 
 PARTS = [
@@ -494,3 +495,45 @@ async def test_the_harness_says_when_the_model_lacks_the_level_asked(tmp_path: P
     efforts = [r["output_config"]["effort"] for r in sent]
     assert efforts == ["low", "medium", "medium"]  # asked once at low; the rest of the loop at medium
     assert "does not reason at the level 'low', so 'medium', the lowest it offers, was used" in song["note"]
+
+
+def test_depths_are_groups_of_tools_with_basic_always() -> None:
+    assert harness.check_groups(None) == ("basic", "arrangement")  # the default
+    assert harness.check_groups("basic") == ("basic",)
+    assert harness.check_groups("full") == harness.GROUP_ORDER
+    assert harness.check_groups(["mix"]) == ("basic", "mix")  # Basic is always on
+    assert harness.check_groups("transitions,basic") == ("basic", "transitions")
+    with pytest.raises(ValueError, match="no group of tools 'kazoo'"):
+        harness.check_groups("basic,kazoo")
+    with pytest.raises(ValueError):
+        harness.check_groups(7)
+    assert harness.depth_words(("basic", "arrangement")) == "Basic + arrangement"
+    assert harness.depth_words(harness.GROUP_ORDER) == "Full"
+    basic = {t.name for t in harness.tools_for(("basic",))}
+    assert basic == {t.name for t in harness.BASIC_TOOLS} and basic <= set(harness.TOOL_NAMES)
+
+
+async def test_the_song_says_which_depth_wrote_it(tmp_path: Path) -> None:
+    sent: list[dict[str, Any]] = []
+    service = scripted(tmp_path, [[("finish", {"summary": "s"})]], sent)
+    await connect(service)
+    song = await run_job(service, "ai.v1.song.compose", params(tools="basic"))
+    assert song["composed"]["tools"] == ["basic"] and "Tools: Basic." in song["note"]
+    assert "The tools you may use: Basic:" in sent[0]["messages"][0]["content"][0]["text"]
+    assert {t["name"] for t in sent[0]["tools"]} == {t.name for t in harness.BASIC_TOOLS}
+    with pytest.raises(RpcError):
+        await service.handle("ai.v1.song.compose", params(tools=["basic", "kazoo"]), no_notify)
+
+
+def test_eval_compares_depths(tmp_path: Path, capsys: Any) -> None:
+    brief = tmp_path / "brief.json"
+    brief.write_text(json.dumps(BRIEF), encoding="utf-8")
+    harness.main(["eval", "--brief", str(brief), "--fake", "--tools", "basic;full", "--save", str(tmp_path / "s")])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].split()[:2] == ["way", "tools"]
+    assert [line.split()[1] for line in lines[1:4]] == ["-", "Basic", "Full"]
+    assert {p.name for p in (tmp_path / "s").iterdir()} == {
+        "anthropic-one-shot-default.song.json",
+        "anthropic-harness-basic-default.song.json",
+        "anthropic-harness-basic+arrangement+transitions+mix-default.song.json",
+    }

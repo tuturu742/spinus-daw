@@ -204,6 +204,36 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     roundsBox.setSelectedId (2, juce::dontSendNotification);
     roundsBox.setTooltip ("After the AI finishes, Spinus plays each part with its sound; what it hears (a part that "
                           "made no sound, the balance) goes back to the AI to fix, this many times");
+    depthBox.addItem ("Basic", 1);
+    depthBox.addItem ("Basic + arrangement", 2);
+    depthBox.addItem ("Basic + arrangement + transitions", 3);
+    depthBox.addItem ("Full (all the tools)", 4);
+    depthBox.addItem ("Custom...", 5);
+    depthBox.setTooltip ("How deep the AI may go: the groups of tools it gets. More groups let it do more, and cost "
+                         "more");
+    depthBox.onChange = [this] { depthChanged (true); };
+    basicTools.setToggleState (true, juce::dontSendNotification);
+    basicTools.setEnabled (false); // always on
+    basicTools.setTooltip ("The form, chords, every part's notes, motifs, sounds, the checks and finish");
+    arrangementTools.setTooltip ("Parts and layers of its own, motif variations, drum fills, layers entering and "
+                                 "leaving, the energy check");
+    transitionsTools.setTooltip ("Automation clips (filter sweeps, fades, sends), risers, impacts and swells");
+    mixTools.setTooltip ("Effects on each part's insert, sends to reverb and delay, sidechain ducking, family buses");
+    for (auto* b : { &arrangementTools, &transitionsTools, &mixTools })
+        b->onClick = [this] { depthChanged (true); };
+    depthNote.setText ("Each group of tools lets the AI do more, and costs more: more steps and more tokens per song. "
+                       "Full can use several times the tokens of Basic.",
+                       juce::dontSendNotification);
+    depthNote.setJustificationType (juce::Justification::topLeft);
+    depthNote.setMinimumHorizontalScale (1.0f);
+    {
+        // As the user left it (Basic + arrangement at first).
+        juce::StringArray remembered;
+        remembered.addTokens (session.getEdit().engine.getPropertyStorage().getPropertiesFile().getValue (
+                                  "trackCreatorAiTools", "basic,arrangement"),
+                              ",", {});
+        setToolGroups (remembered);
+    }
     stopNowButton.setTooltip ("Stop the AI after its current step and keep its best checked version of the song");
     stopNowButton.onClick = [this] { stopNow(); };
     infoLabel.setJustificationType (juce::Justification::topLeft);
@@ -217,8 +247,9 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
                                                    &applyButton, &mixButton, &status, &text, &writerLabel, &writerBox })
         addAndMakeVisible (component);
     addChildComponent (stopButton);
-    for (auto* component :
-         std::initializer_list<juce::Component*> { &effortBox, &roundsBox, &infoLabel, &stopNowButton })
+    for (auto* component : std::initializer_list<juce::Component*> { &effortBox, &roundsBox, &infoLabel, &stopNowButton,
+                                                                     &depthLabel, &depthBox, &depthNote, &basicTools,
+                                                                     &arrangementTools, &transitionsTools, &mixTools })
         addChildComponent (component);
     updateButtons();
 }
@@ -709,6 +740,45 @@ juce::String SongWriterPanel::getEffort() const
     return levels[juce::jlimit (0, levels.size() - 1, effortBox.getSelectedId() - 1)];
 }
 
+void SongWriterPanel::setToolGroups (const juce::StringArray& groups)
+{
+    arrangementTools.setToggleState (groups.contains ("arrangement"), juce::dontSendNotification);
+    transitionsTools.setToggleState (groups.contains ("transitions"), juce::dontSendNotification);
+    mixTools.setToggleState (groups.contains ("mix"), juce::dontSendNotification);
+    const auto a = groups.contains ("arrangement"), t = groups.contains ("transitions"), m = groups.contains ("mix");
+    const int preset = (! a && ! t && ! m) ? 1 : (a && ! t && ! m) ? 2 : (a && t && ! m) ? 3 : (a && t && m) ? 4 : 5;
+    depthBox.setSelectedId (preset, juce::dontSendNotification);
+    depthChanged (false);
+}
+
+juce::StringArray SongWriterPanel::getToolGroups() const
+{
+    juce::StringArray groups { "basic" };
+    if (arrangementTools.getToggleState())
+        groups.add ("arrangement");
+    if (transitionsTools.getToggleState())
+        groups.add ("transitions");
+    if (mixTools.getToggleState())
+        groups.add ("mix");
+    return groups;
+}
+
+void SongWriterPanel::depthChanged (bool remember)
+{
+    // A preset sets the checkboxes; Custom shows them to tick.
+    const auto choice = depthBox.getSelectedId();
+    if (choice >= 1 && choice <= 4)
+    {
+        arrangementTools.setToggleState (choice >= 2, juce::dontSendNotification);
+        transitionsTools.setToggleState (choice >= 3, juce::dontSendNotification);
+        mixTools.setToggleState (choice == 4, juce::dontSendNotification);
+    }
+    if (remember)
+        session.getEdit().engine.getPropertyStorage().getPropertiesFile().setValue (
+            "trackCreatorAiTools", getToolGroups().joinIntoString (","));
+    updateButtons();
+}
+
 void SongWriterPanel::setRounds (int rounds)
 {
     roundsBox.setSelectedId (juce::jlimit (0, 3, rounds) + 1, juce::dontSendNotification);
@@ -769,6 +839,7 @@ juce::var SongWriterPanel::composeParams (int seed)
                             { "current", current },
                             { "effort", getEffort() },
                             { "rounds", getRounds() },
+                            { "tools", juce::var (getToolGroups()) },
                             { "way", "harness" } });
     if (! list.isEmpty())
         params.getDynamicObject()->setProperty ("parts", list);
@@ -1048,6 +1119,16 @@ void SongWriterPanel::updateButtons()
     refineButton.setVisible (! ai);
     writerBox.setEnabled (! busy);
     effortBox.setVisible (ai);
+    const bool custom = ai && depthBox.getSelectedId() == 5;
+    for (auto* c : std::initializer_list<juce::Component*> { &depthLabel, &depthBox, &depthNote })
+        c->setVisible (ai);
+    for (auto* b : { &basicTools, &arrangementTools, &transitionsTools, &mixTools })
+    {
+        b->setVisible (custom);
+        if (b != &basicTools)
+            b->setEnabled (! busy);
+    }
+    depthBox.setEnabled (! busy);
     roundsBox.setVisible (ai);
     infoLabel.setVisible (ai);
     effortBox.setEnabled (! busy);
@@ -1063,6 +1144,23 @@ void SongWriterPanel::resized()
     auto area = getLocalBounds();
     intro.setBounds (area.removeFromTop (36));
     layoutAiRow (area.removeFromTop (26));
+    if (depthBox.isVisible())
+    {
+        auto row = area.removeFromTop (26);
+        depthLabel.setBounds (row.removeFromLeft (130));
+        depthBox.setBounds (row.removeFromLeft (juce::jmin (280, row.getWidth())).reduced (0, 1));
+        if (basicTools.isVisible())
+        {
+            // Custom: a checkbox per group, on a row of their own under the list.
+            auto boxes = area.removeFromTop (24).withTrimmedLeft (130);
+            for (auto* b : { &basicTools, &arrangementTools, &transitionsTools, &mixTools })
+                b->setBounds (boxes.removeFromLeft (juce::jmin (b == &transitionsTools ? 220
+                                                                : b == &mixTools       ? 150
+                                                                                       : 120,
+                                                                boxes.getWidth())));
+        }
+        depthNote.setBounds (area.removeFromTop (34));
+    }
     if (refineButton.isVisible())
         refineButton.setBounds (area.removeFromTop (26).removeFromLeft (420));
     if (infoLabel.isVisible())

@@ -21,6 +21,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   can be unreliable: listen before you keep a song. No token cap: an answer cut off at the model's own limit is
   continued and joined. **Stop now, keep the best** keeps the best checked version; **Cancel** keeps the song
   shown before.
+- **AI tools**: how deep the AI may go, as groups of tools: Basic (always), Arrangement, Transitions and
+  automation, Effects and mix. Pick Basic, Basic + arrangement (at first), Basic + arrangement + transitions,
+  Full or Custom (a checkbox per group). More groups let it do more, and cost more. Only the allowed tools are
+  sent; the choice is remembered, and the song's note says which tools wrote it.
 - For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the
   tokens each really used and the checks' scores (`python -m spinus_ai.harness`).
 

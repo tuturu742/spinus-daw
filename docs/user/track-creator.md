@@ -434,8 +434,9 @@ summary's numbers (not your songs) to your AI provider.
 
 ### Let your AI connection write it
 
-![Write a song with "Your AI connection" chosen: the reasoning level, the fix rounds, and after the run the tokens
-each round used and what Spinus's checks still find](images/track-creator-ai-writer.png)
+![Write a song with "Your AI connection" chosen: the reasoning level, the fix rounds, the AI tools set to Custom with
+their groups ticked, and after the run the tokens each round used and what Spinus's checks still
+find](images/track-creator-ai-writer.png)
 
 **Who writes the notes** (at the top of the page) is **Spinus (offline, nothing is sent)** at first. Choose
 **Your AI connection** (shown with its name; greyed out until you set one up in Options › AI) and the AI
@@ -464,6 +465,22 @@ what Spinus hears** (once, at first; no, twice or 3 times) sends what it heard b
 made no sound (its notes may be outside the instrument's range) and the balance. The AI fixes it the same way,
 on the same working copy. If no part could be played (Spinus's sound helper isn't there), there's nothing new to
 tell the AI, so no fix round runs.
+
+**AI tools** is how deep the AI may go: which groups of the harness's tools it gets.
+
+- **Basic**: the form, chords, every part's notes, motifs, sounds, the checks and finish. Always on.
+- **Arrangement**: parts and layers of its own, motif variations, drum fills, layers entering and leaving
+  per section, and a check of the song's energy against your songs' sections.
+- **Transitions and automation**: automation clips (filter sweeps, volume fades, effect sends), risers,
+  impacts and swells.
+- **Effects and mix**: effects on each part's insert, sends to reverb and delay, sidechain ducking from the
+  kick, and family buses.
+
+Choose **Basic**, **Basic + arrangement** (at first), **Basic + arrangement + transitions** or **Full**, or
+**Custom...** to tick the groups yourself. Spinus remembers your choice, and the song's note says which tools
+wrote it. Only the tools you allow are sent to the AI, so tools you leave off cost nothing. Each group lets
+the AI do more, and costs more: more steps and more tokens per song. Full can use several times the tokens
+of Basic.
 
 **Reasoning** is how hard the model thinks before each step: low at first, or the model's own, medium, high,
 or extra high where the model offers it. Higher levels use many more tokens, because the AI thinks again
