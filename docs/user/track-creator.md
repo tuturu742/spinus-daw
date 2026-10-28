@@ -481,10 +481,11 @@ tell the AI, so no fix round runs.
   kit's kick and crash, or the starter pack's crash and 808). They go on tracks of their own, under the song's
   **Automation** and **Samples** tracks.
 - **Effects and mix**: Spinus's own effects on a part's insert, with their controls set by name (EQ,
-  compressor, gate, limiter, filter, ducker, stereo); sends to a reverb bus and a delay bus; ducking a part
-  under another (the bass under the kick); buses of its own. Spinus has no reverb or delay of its own, so the
-  AI uses the ones you have, found by the words in their names ("reverb", "hall", "room", "plate"; "delay",
-  "echo"). **Get free plugins** (in Options) offers some, and without one the AI is told there's none. If
+  compressor, gate, limiter, filter, ducker, stereo), and on the song's master, whose chain ends with a limiter
+  (the check reminds the AI; writing again doesn't add a second one); sends to a reverb bus and a delay bus;
+  ducking a part under another (the bass under the kick); buses of its own. Spinus has no reverb or delay of its
+  own, so the AI uses the ones you have, found by the words in their names ("reverb", "hall", "room", "plate";
+  "delay", "echo"), leaving out plugins that take no audio in (a MIDI delay). **Get free plugins** (in Options) offers some, and without one the AI is told there's none. If
   a device won't take one of the AI's settings, Apply puts the song in with those effects as they come, and the
   page says so.
 

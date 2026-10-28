@@ -209,8 +209,11 @@ TOOLS = [
     ),
     Tool(
         "pick_sound",
-        "Choose a part's sound from list_sounds by its id.",
-        schema({"part": PART, "sound": {"type": "string"}}, ["part", "sound"]),
+        "Choose a part's sound by the number list_sounds shows (or its exact name).",
+        schema(
+            {"part": PART, "sound": {"type": "string", "description": 'list_sounds\' number, e.g. "3"'}},
+            ["part", "sound"],
+        ),
     ),
     Tool(
         "rules_write",
@@ -440,6 +443,23 @@ CUTOFF = (20.0, 20000.0, 1000.0)
 STARTER_SAMPLES = {"crash": "Drums/Cymbals/Crash Wide.flac", "boom": "Drums/808s/808 Long.flac"}
 
 
+def sound_named(candidates: list[dict[str, Any]], said: str) -> dict[str, Any] | None:
+    """The candidate a model meant: by list_sounds' number ("3", "#3", "3. Name"), its id, its exact name, or a
+    line of list_sounds copied whole."""
+    text = said.strip()
+    number = re.match(r"#?(\d+)\b", text)
+    if number and 1 <= int(number.group(1)) <= len(candidates):
+        return candidates[int(number.group(1)) - 1]
+    for c in candidates:
+        if text == c["id"]:
+            return c
+    named = [c for c in candidates if text.lower() == c["name"].lower()]
+    if len(named) == 1:
+        return named[0]
+    inside = [c for c in candidates if c["id"] in text]
+    return inside[0] if len(inside) == 1 else None
+
+
 def normalised(what: str, value: float) -> float:
     """A volume (dB), pan (-1..1) or cutoff (Hz) as the automation's 0..1."""
     if what == "volume":
@@ -481,7 +501,7 @@ SETTING_TEXT = re.compile(r"^-?\d+(\.\d+)?\s*(dB|ms|s|Hz|kHz|%|:1)?$|^(on|off)$"
 MIX_TOOLS = [
     Tool(
         "add_effect",
-        "Add an effect to a part's insert, with its controls set by ID: "
+        "Add an effect to a part's insert (or the song's master: part 'master'), with its controls set by ID: "
         + "; ".join(
             f"{name} ({', '.join(sorted({k.split('_')[0] if k.startswith('band') else k for k in ctl}))})"
             for name, (_, ctl) in STOCK_EFFECTS.items()
@@ -550,10 +570,12 @@ TOOLS += MIX_TOOLS
 TOOL_GROUP.update({t.name: "mix" for t in MIX_TOOLS})
 GROUP_SYSTEM["mix"] = """Effects and mix tools: shape each part with Spinus's effects (add_effect: cut what \
 clashes with EQ, control peaks with a compressor), give space with sends to the reverb and delay buses (send), \
-duck the bass and pads under the kick (duck), and group parts on buses (bus). Use measure to see the balance. \
-Less is more: a few clear moves beat effects on every part."""
+duck the bass and pads under the kick (duck), and group parts on buses (bus). The song's master is a part named \
+master for add_effect: end its chain with a limiter (ceiling about -1 dB) so the song never clips. Use measure to \
+see the balance. Less is more: a few clear moves beat effects on every part."""
 
 TOOL_NAMES = [t.name for t in TOOLS]
+MASTER = "master"  # add_effect's name for the song's master insert
 
 
 class Mistake(ValueError):
@@ -837,7 +859,8 @@ class Workspace:
 
     def tool_list_sounds(self, part: str, query: str = "") -> str:
         p = self.part(part)
-        found = [c for c in self.setup.candidates.get(p["id"], []) if query.lower() in c["name"].lower()]
+        everything = self.setup.candidates.get(p["id"], [])
+        found = [(n, c) for n, c in enumerate(everything, 1) if query.lower() in c["name"].lower()]
         current = self.setup.current.get(p["id"])
         if not found:
             return (
@@ -846,7 +869,9 @@ class Workspace:
                 + (f"; it plays {current}, chosen by the user." if current else ".")
             )
         picked = self.sounds.get(p["id"])
-        return "\n".join(f"{c['id']}: {c['name']}" + (" (picked)" if c["id"] == picked else "") for c in found)
+        # Short numbers: a sound's id is an internal key (its instrument and preset), long and easy to garble.
+        lines = [f"{n}. {c['name']}" + (" (picked)" if c["id"] == picked else "") for n, c in found]
+        return "\n".join(lines) + f"\npick_sound with the part and a number (1 to {len(everything)})."
 
     def tool_set_form(
         self, sections: list[dict[str, Any]], order: list[str], tempo: float | None = None, key: str | None = None
@@ -994,12 +1019,14 @@ class Workspace:
             self.put(pid, b["id"], out)
         return f"Copied {a['id']} to {b['id']} for {', '.join(ids) or 'no part (nothing there yet)'}."
 
-    def tool_pick_sound(self, part: str, sound: str) -> str:
+    def tool_pick_sound(self, part: str, sound: str | int) -> str:
         p = self.part(part)
-        if not any(c["id"] == sound for c in self.setup.candidates.get(p["id"], [])):
-            raise Mistake(f"'{sound}' is not one of {p['id']}'s sounds (list_sounds)")
-        self.sounds[p["id"]] = sound
-        return f"{p['id']} plays {sound}."
+        everything = self.setup.candidates.get(p["id"], [])
+        chosen = sound_named(everything, str(sound))
+        if chosen is None:
+            raise Mistake(f"'{sound}' is not one of {p['id']}'s sounds: give the number list_sounds shows")
+        self.sounds[p["id"]] = chosen["id"]
+        return f"{p['id']} plays {chosen['name']}."
 
     def tool_rules_write(self, part: str, section: str = "") -> str:
         p = self.part(part)
@@ -1057,7 +1084,7 @@ class Workspace:
         return found
 
     def tool_add_effect(self, part: str, effect: str, settings: Any = None, plugin: str = "") -> str:
-        pid = self.part(part)["id"]
+        pid = MASTER if str(part).strip().lower() == MASTER else self.part(part)["id"]
         if effect not in STOCK_EFFECTS and effect not in RETURNS:
             raise Mistake(f"an effect is one of {', '.join([*STOCK_EFFECTS, *RETURNS])}")
         checked = self.check_settings(effect, settings)
@@ -1604,6 +1631,10 @@ class Workspace:
                     out.append(f"{sid}: {s['bars']} bars, off the 4-bar phrases (the style's: {lengths})")
         if not only_part and not only_section and "arrangement" in self.groups:
             out += self.energy_issues()
+        if not only_part and not only_section and "mix" in self.groups:
+            on_master = [e["effect"] for e in self.extra.get("effects", []) if e["part"] == MASTER]
+            if "limiter" not in on_master:
+                out.append("master: no limiter (add_effect part master, effect limiter, ceiling '-1 dB')")
         return out
 
     def tool_check(self, part: str = "", section: str = "") -> str:

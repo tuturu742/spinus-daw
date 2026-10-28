@@ -598,9 +598,28 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
             const auto found = options.effectDevices.find (name);
             return found != options.effectDevices.end() ? found->second : juce::var();
         };
+        // The song's master (the AI's "master" part): its chain ends with a limiter. The master stays when a song is
+        // written again, so an effect it already has is not added a second time.
+        std::set<juce::String> onMaster;
+        if (const auto* master = project.findInsert (model::masterInsertId))
+            for (const auto& fx : master->effects)
+                onMaster.insert (fx.device.stockType);
         for (const auto& e : arrayOf (production["effects"]))
         {
             const auto part = e["part"].toString();
+            if (part == "master")
+            {
+                const auto stock = stockEffectType (e["effect"].toString());
+                if (stock.isEmpty() || onMaster.contains (stock))
+                    continue;
+                onMaster.insert (stock);
+                const auto added =
+                    step ("insert.addEffect",
+                          object ({ { "insert", (int)model::masterInsertId.value },
+                                    { "device", object ({ { "kind", "stock" }, { "stockType", stock } }) } }));
+                settings (added + ".device", e["settings"]);
+                continue;
+            }
             if (! inserts.contains (part))
                 continue;
             juce::var device;

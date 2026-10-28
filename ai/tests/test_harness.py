@@ -872,3 +872,38 @@ def test_measure_gives_each_parts_level_per_section_with_the_mix() -> None:
     assert "bass 0 dB" in line  # with its 6 dB of makeup, the loudest
     ws.groups = ("basic",)
     assert "Per section" not in ws.call("measure", {})
+
+
+def test_a_sound_is_picked_by_its_number_name_or_a_copied_line() -> None:
+    sounds = [
+        {"id": "stock-spinus.3x-osc|program:8", "name": "3x Osc: Bright Lead"},
+        {"id": "ob-xf|/some/long/path/OB-Xf.clap|42", "name": "OB-Xf: 8VM Lead"},
+    ]
+    ws = harness.Workspace.start(harness.setup_of({**BRIEF, "candidates": {"lead": sounds}}), 5, "sketch")
+    listed = ws.call("list_sounds", {"part": "lead"})
+    assert listed.splitlines()[:2] == ["1. 3x Osc: Bright Lead", "2. OB-Xf: 8VM Lead"]
+    assert "/some/long/path" not in listed  # no internal keys to garble
+    assert "OB-Xf: 8VM Lead" in ws.call("pick_sound", {"part": "lead", "sound": "2"})
+    assert ws.sounds["lead"] == sounds[1]["id"]
+    for said in (
+        "#1",
+        "1. 3x Osc: Bright Lead",
+        "3x osc: bright lead",
+        "stock-spinus.3x-osc|program:8: 3x Osc: Bright Lead",
+    ):
+        ws.call("pick_sound", {"part": "lead", "sound": said})
+        assert ws.sounds["lead"] == sounds[0]["id"], said
+    assert "(picked)" in ws.call("list_sounds", {"part": "lead", "query": "bright"})
+    with pytest.raises(harness.Mistake, match="number list_sounds shows"):
+        ws.call("pick_sound", {"part": "lead", "sound": "7"})
+
+
+def test_the_master_takes_effects_and_check_asks_for_its_limiter() -> None:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    ws.groups = {"basic", "mix"}
+    assert any("master: no limiter" in line for line in ws.issues())
+    said = ws.call("add_effect", {"part": "master", "effect": "limiter", "settings": {"ceiling": "-1 dB"}})
+    assert said.startswith("Effect master-limiter on master")
+    assert not any("master: no limiter" in line for line in ws.issues())
+    ws.groups = {"basic"}
+    assert not any("master" in line for line in ws.issues())  # without the mix tools it can't, so it isn't asked

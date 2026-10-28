@@ -3,6 +3,7 @@
 #include "ai/AnalysisJobs.h"
 #include "ai/Proposal.h"
 #include "model/ModelJson.h"
+#include "plugins/PluginCatalog.h"
 #include "session/SoundIndex.h"
 
 #include <array>
@@ -847,10 +848,24 @@ juce::var SongWriterPanel::candidatesFor (juce::var& current)
 
 std::map<juce::String, juce::var> SongWriterPanel::userSendEffects() const
 {
-    // The user's reverbs and delays (Spinus has none of its own), by the words in their names.
+    // The user's reverbs and delays (Spinus has none of its own), by the words in their names. A plugin that takes
+    // no audio in (a MIDI delay, say) is not one: a send to it would be silent.
+    const auto* catalog = session.getDeviceList().getCatalog();
+    const auto takesAudio = [catalog] (const plugins::DeviceList::Entry& entry)
+    {
+        if (entry.name.containsIgnoreCase ("midi"))
+            return false;
+        if (entry.device.kind != model::Device::Kind::plugin || catalog == nullptr)
+            return true;
+        for (const auto& d : catalog->getKnownPlugins().getTypes())
+            if (d.fileOrIdentifier == entry.device.plugin.fileOrIdentifier && d.name == entry.device.plugin.name)
+                return d.numInputChannels > 0 && ! d.category.containsIgnoreCase ("midi");
+        return true;
+    };
     std::map<juce::String, juce::var> found;
     for (const auto& entry : session.getDeviceList().getEntries())
-        if (! entry.instrument && entry.available && song::sendEffectKind (entry.name).isNotEmpty())
+        if (! entry.instrument && entry.available && song::sendEffectKind (entry.name).isNotEmpty() &&
+            takesAudio (entry))
             found.emplace (entry.name, model::deviceToJson (entry.device));
     return found;
 }

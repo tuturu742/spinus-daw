@@ -683,6 +683,30 @@ TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of t
     CHECK (samples == (dsp::starter::findPack().isDirectory() ? 1 : 0));
 }
 
+TEST_CASE ("Song writer: the AI's master chain ends with its limiter, once", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "effects": [{"id": "master-limiter", "part": "master", "effect": "limiter", "settings": {"ceiling": "-1 dB"},
+                     "plugin": ""}]
+    })"));
+    for (int time = 0; time < 2; ++time) // written again: the master keeps one limiter
+    {
+        song::Options options;
+        options.name = song::nextSongName (history.getProject());
+        juce::String error;
+        auto proposal =
+            ai::Proposal::prepare (song::makeProposal (song, history.getProject(), options, &error), history);
+        INFO (error << proposal.error);
+        REQUIRE (proposal.apply (history).wasOk());
+    }
+    const auto* master = history.getProject().findInsert (model::masterInsertId);
+    REQUIRE (master != nullptr);
+    REQUIRE (master->effects.size() == 1);
+    CHECK (master->effects[0].device.stockType == "spinus.limiter");
+}
+
 TEST_CASE ("Song writer: a reversed cymbal is the crash played backwards, ending on its bar", "[song]")
 {
     if (! dsp::starter::findPack().isDirectory())
