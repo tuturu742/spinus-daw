@@ -133,6 +133,9 @@ class Request:
     # Anthropic's context editing (beta CONTEXT_EDITING): what the provider may clear from the conversation on its side
     # (old tool results), which does not count as an edit of the history.
     context_edits: list[dict[str, Any]] = field(default_factory=list)
+    # The provider's tokens per Spinus's estimate (characters over four), from the last answer to this request: notes
+    # ("0 40 1 90; ...") count several times more tokens than prose. The clearing done here sizes with it.
+    token_ratio: float = 0.0
 
 
 EFFORTS = ("low", "medium", "high", "xhigh")
@@ -414,8 +417,10 @@ def clear_old_tool_calls(request: Request) -> int:
     cache holds between clearings. A plain chat history may be edited; nothing here preserves reasoning. Returns the
     tokens cleared now (characters over four)."""
 
+    ratio = min(4.0, max(0.5, request.token_ratio)) if request.token_ratio > 0 else 1.0
+
     def size(value: Any) -> int:
-        return len(json.dumps(value, default=lambda o: o.__dict__)) // 4
+        return int(len(json.dumps(value, default=lambda o: o.__dict__)) / 4 * ratio)
 
     cleared = 0
     for edit in request.context_edits:
@@ -552,6 +557,8 @@ async def complete_openai(
                                   call["arguments"]))  # fmt: skip
             continue
         blocks.append(ToolUse(call["id"] or f"call_{index}", call["name"], arguments))
+    if usage.input_tokens > 0:  # how the provider counts against the estimate, for the next clearing
+        request.token_ratio = usage.input_tokens / max(1.0, len(json.dumps(body)) / 4)
     return Completion(blocks, "tool_use" if calls else (stop_reason or "end_turn"), usage, model, notice)
 
 

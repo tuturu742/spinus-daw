@@ -933,6 +933,9 @@ def test_chat_services_clear_old_tool_calls_in_batches_as_anthropic_does() -> No
     for n in range(1, 3):
         turn(n)
     assert gateway.clear_old_tool_calls(request) == 0  # under the trigger: nothing
+    request.token_ratio = 2.5  # notes count more tokens than their characters suggest: the provider said so
+    assert gateway.clear_old_tool_calls(request) == 0  # past the trigger now, but too little to gain yet
+    request.token_ratio = 0.0
     for n in range(3, 9):
         turn(n)
     cleared = gateway.clear_old_tool_calls(request)
@@ -1024,3 +1027,49 @@ def test_sections_are_named_by_their_ids_when_those_say_more_than_the_kind() -> 
     )
     names = {s["id"]: s["name"] for s in ws.song()["sections"]}
     assert names == {"intro": "Intro", "buildup": "Buildup", "drop": "Drop", "verse2": "Verse", "drop2": "Drop 2"}
+
+
+def openai_tool_call(name: str, args: dict[str, Any], n: int, prompt_tokens: int = 10) -> bytes:
+    """A chat-completions stream answering with one tool call."""
+    chunks = [
+        {"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": f"call_{n}", "type": "function",
+                      "function": {"name": name, "arguments": json.dumps(args)}}]}}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
+         "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 5}},
+    ]  # fmt: skip
+    return b"".join(f"data: {json.dumps(c)}\n\n".encode() for c in chunks) + b"data: [DONE]\n\n"
+
+
+async def test_a_long_session_on_a_chat_service_has_its_old_tool_calls_cleared(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(harness, "CLEAR_AFTER", 8000)  # more than the conversation's characters over four reach
+    sections = list(harness.Workspace.start(setup(), 5, "sketch").sections)
+    big = "; ".join(f"{s % 16} {40 + s % 12} 1 {60 + s}" for s in range(48))
+    calls = [("write", {"part": "bass", "section": sections[i % len(sections)], "notes": big}) for i in range(30)]
+    calls += [("finish", {"summary": "Done."})]
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        turn = sum(1 for m in body["messages"] if m["role"] == "assistant")
+        name, args = calls[min(turn, len(calls) - 1)]
+        # Notes count about 2.5 tokens per 4 characters, as DeepSeek counted them.
+        tokens = int(len(request.content) / 4 * 2.5)
+        return httpx.Response(200, content=openai_tool_call(name, args, turn, tokens))
+
+    service = make_service(tmp_path, handler)
+    saved = await service.handle(
+        "ai.v1.connections.save",
+        {"name": "DeepSeek", "provider": "openai", "key": "sk-test", "baseUrl": "https://chat.test/v1"},
+        no_notify,
+    )
+    service.routing.set(compose.FEATURE, [{"connection": saved["id"], "model": "chat-model"}])  # as the user picks
+    song = await run_job(service, "ai.v1.song.compose", params(tools="basic"))
+    assert bodies, song.get("note")
+    last = bodies[-1]["messages"]
+    tool_messages = [m for m in last if m["role"] == "tool"]
+    assert any(m["content"] == "[cleared]" for m in tool_messages)
+    assert all(m["content"] != "[cleared]" for m in tool_messages[-8:])  # the newest are kept
+    assert song["composed"]["usage"]["cleared"] > 0
