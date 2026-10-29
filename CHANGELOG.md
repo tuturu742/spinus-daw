@@ -44,6 +44,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- **An export right after opening a project or applying a song could leave big sample instruments silent:** they
+  load their sounds in the background (Windows plugins through Wine, most of all) and the export renders faster
+  than real time. It now plays each plugin instrument a few test notes until it sounds (at most 20 seconds each,
+  a minute in all) before rendering.
 - **OpenAI's newest models (GPT-5.5 and later) work with the assistant and the pattern generator:** they
   refused every request that offered Spinus's tools ("Function tools with reasoning_effort are not
   supported"), because they think before answering and OpenAI's older chat API doesn't allow tools while they
