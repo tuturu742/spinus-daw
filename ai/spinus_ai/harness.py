@@ -621,6 +621,8 @@ def asked_sections(text: str) -> list[list[str]]:
 
 
 MASTER = "master"  # add_effect's name for the song's master insert
+# Parts the rules may write without a finding (with rules_finding on): the drums and the effects.
+RULES_ALLOWED = frozenset({"drums", "percussion", "riser", "impact"})
 
 
 class Mistake(ValueError):
@@ -660,6 +662,8 @@ class Workspace:
     finish_pushed_back: bool = False  # finish was refused once for open issues: a second finish is taken as meant
     calls: Counter[str] = field(default_factory=Counter)
     groups: tuple[str, ...] = GROUP_ORDER  # the groups of tools allowed (the page's depth)
+    # A part carrying the song (melodic or harmonic) the rules wrote is a finding: the model is to write it itself.
+    rules_finding: bool = False
     # The later groups' state: "added" (parts the AI added), "looks" (part -> family, colour), "stash" (part ->
     # section -> notes play_only took out).
     extra: dict[str, Any] = field(default_factory=dict)
@@ -1679,10 +1683,25 @@ class Workspace:
             out += self.energy_issues()
         if not only_part and not only_section:
             out += self.form_issues()
+        if self.rules_finding and not only_section:
+            out += self.rules_issues(only_part)
         if not only_part and not only_section and "mix" in self.groups:
             on_master = [e["effect"] for e in self.extra.get("effects", []) if e["part"] == MASTER]
             if "limiter" not in on_master:
                 out.append("master: no limiter (add_effect part master, effect limiter, ceiling '-1 dB')")
+        return out
+
+    def rules_issues(self, only_part: str = "") -> list[str]:
+        """The parts carrying the song (all but drums, percussion and effects) that Spinus's rules wrote."""
+        written_by_rules = {part for part, _ in self.by_rules}
+        out = []
+        for p in self.setup.written():
+            if (
+                p["id"] in written_by_rules
+                and p["role"] not in RULES_ALLOWED
+                and (not only_part or p["id"] == only_part)
+            ):
+                out.append(f"{p['id']} was written by Spinus's rules, not by you: write it")
         return out
 
     def form_issues(self) -> list[str]:
@@ -1980,6 +1999,7 @@ def result_song(
         "effort": effort,
         "harness": True,
         "tools": list(ws.groups),
+        "rulesFinding": ws.rules_finding,
         "round": round_number,
         "turns": run.turns,
         "calls": dict(ws.calls),
@@ -2018,10 +2038,12 @@ async def write(
     levels: Any = None,
     problems: Any = None,
     groups: tuple[str, ...] = DEFAULT_DEPTH,
+    rules_finding: bool = False,
 ) -> dict[str, Any]:
     """A song written through the harness with the groups of tools allowed; with `song` (one it wrote) and how its
-    parts played (levels, problems), a revision of it (with the groups it was written with). NoConnection without
-    a connection."""
+    parts played (levels, problems), a revision of it (with the groups it was written with). rules_finding: check
+    names each melodic or harmonic part the rules wrote, for the model to write itself. NoConnection without a
+    connection."""
     routes = routing.resolve(compose.FEATURE)
     if not routes:
         raise NoConnection("No AI connection is set up.")
@@ -2030,6 +2052,7 @@ async def write(
         ws = Workspace.from_song(setup, song)
         composed = song.get("composed") or {}
         ws.groups = check_groups(composed.get("tools") or list(groups))
+        ws.rules_finding = bool(composed.get("rulesFinding", rules_finding))
         round_number = int(composed.get("round", 0)) + 1
         before = list((composed.get("usage") or {}).get("requests") or [])
         spent = compose.total_of(before, "input") + compose.total_of(before, "output")
@@ -2048,6 +2071,7 @@ async def write(
     else:
         ws = Workspace.start(setup, seed, size)
         ws.groups = groups
+        ws.rules_finding = rules_finding
         await say({"kind": "status", "text": "Writing: the AI is composing with the harness..."})
     run = Run(ws)
     await session(client, connections, routes, usage_log, run, effort, say, stop, revising, spent)
