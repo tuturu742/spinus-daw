@@ -188,6 +188,14 @@ Spinus's own effects have no reverb or delay: those come from the free plugins (
 Surge XT Effects for delay and chorus). Get them in Spinus with Options › Get free plugins, then scripts
 can use them. Without them, Spinus's own effects still make a full mix.
 
+## For AI coding agents
+
+Spinus comes with a skill for coding agents (Claude Code, Codex, Cursor and others that read skill
+files): [`skills/spinus-songwriter/SKILL.md`](https://github.com/tuturu742/spinus-daw/blob/main/skills/spinus-songwriter/SKILL.md).
+It teaches an agent to plan, write, mix, check and render a whole song with these options, using only an
+installed Spinus. To use it, copy the `spinus-songwriter` folder into your agent's skills folder (for
+Claude Code: `~/.claude/skills/`), then ask the agent for a song.
+
 ## Things to know
 
 - Plugins you installed yourself work in scripts by their name and file, as `--describe` can't list them:

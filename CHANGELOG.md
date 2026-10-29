@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### A skill for AI coding agents
+
+- **`skills/spinus-songwriter/SKILL.md`** teaches a coding agent to write, arrange, mix, check and render a complete
+  song with Spinus's command line, from an installed Spinus alone. Two agents that had never seen Spinus's code each
+  made a full song with it. How to use it: Spinus from the command line, "For AI coding agents".
+
 ### Command line, after a first test by an AI agent
 
 - **`spinus --help`** lists the command-line options, and an option Spinus doesn't know is refused with
