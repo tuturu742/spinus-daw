@@ -5,8 +5,10 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include <algorithm>
 #include <optional>
 #include <set>
+#include <vector>
 
 namespace spinus::song
 {
@@ -856,11 +858,21 @@ std::map<juce::String, double> startingFaders (const std::vector<Layer>& layers,
             faders[layer.id] = roleLevelDb (layer.role) - m->second;
     if (faders.empty())
         return faders;
-    double loudest = -1000.0;
-    for (const auto& [id, db] : faders)
-        loudest = std::max (loudest, db);
+    // Anchored on the song's core, the drums and bass (else the middle part): they sit at 0 dB. A part that would
+    // need more than they do (a sparse percussion part measures quiet) only reaches 0 dB too, rather than pulling
+    // every other fader down with it.
+    std::vector<double> core, all;
+    for (const auto& layer : layers)
+        if (const auto f = faders.find (layer.id); f != faders.end())
+        {
+            all.push_back (f->second);
+            if (layer.drums || layer.role == "drums" || layer.role == "bass" || layer.role == "sub")
+                core.push_back (f->second);
+        }
+    std::sort (all.begin(), all.end());
+    const auto anchor = core.empty() ? all[all.size() / 2] : *std::max_element (core.begin(), core.end());
     for (auto& [id, db] : faders)
-        db = std::max (-30.0, std::round ((db - loudest) * 10.0) / 10.0);
+        db = juce::jlimit (-30.0, 0.0, std::round ((db - anchor) * 10.0) / 10.0);
     return faders;
 }
 

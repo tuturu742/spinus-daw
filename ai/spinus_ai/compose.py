@@ -575,9 +575,12 @@ def build_song(checked: Checked, setup: Setup, seed: int, size: str) -> dict[str
     for s in song["sections"]:
         s["energy"] = round(float(energy[s["id"]]), 2)
         kind = kinds[s["id"]]
-        counts[kind] = counts.get(kind, 0) + 1
-        if counts[kind] > 1:
-            s["name"] = f"{sw.KIND_WORDS[kind]} {counts[kind]}"
+        # A section whose id says what it is beyond its kind ("drop2", "buildup", "solo" as a bridge) is named by it,
+        # as the markers on the Playlist show; otherwise by its kind.
+        said = re.sub(r"[\d\s_-]+$", "", str(s["id"])).replace("_", " ").replace("-", " ").strip()
+        word = said.capitalize() if said and said.lower() != kind else sw.KIND_WORDS[kind]
+        counts[word] = counts.get(word, 0) + 1
+        s["name"] = word if counts[word] == 1 else f"{word} {counts[word]}"
 
     # The layers: every part of the list, each with the model's notes or the rules'.
     rules_layers = {layer["id"]: layer for layer in song["layers"]}

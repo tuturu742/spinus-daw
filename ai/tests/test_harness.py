@@ -1009,3 +1009,18 @@ def test_the_master_can_be_automated_for_a_fade_of_the_whole_mix() -> None:
     assert fade["what"] == "volume" and fade["points"][0]["value"] > fade["points"][-1]["value"]
     ws.call("remove_automation", {"part": "master"})
     assert not [a for a in ws.production()["automation"] if a["part"] == "master"]
+
+
+def test_sections_are_named_by_their_ids_when_those_say_more_than_the_kind() -> None:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    chords = next(iter(ws.sections.values()))["chords"]
+    form = [("intro", "intro"), ("buildup", "verse"), ("drop", "chorus"), ("verse2", "verse"), ("drop2", "chorus")]
+    ws.call(
+        "set_form",
+        {
+            "sections": [{"id": i, "kind": k, "bars": 8, "chords": chords} for i, k in form],
+            "order": [i for i, _ in form],
+        },
+    )
+    names = {s["id"]: s["name"] for s in ws.song()["sections"]}
+    assert names == {"intro": "Intro", "buildup": "Buildup", "drop": "Drop", "verse2": "Verse", "drop2": "Drop 2"}

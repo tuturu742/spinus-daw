@@ -569,6 +569,11 @@ TEST_CASE ("Song writer: each part starts at its role's level, from how loud its
     CHECK (loudest == Catch::Approx (0.0));
     CHECK (song::roleLevelDb ("pad") < song::roleLevelDb ("bass"));
     CHECK (song::startingFaders (layers, { { "drums", -100.0 } }).empty()); // silent: not measured
+    // A part that measures very quiet (sparse hits) reaches 0 dB at most: the drums and bass stay where they are.
+    const auto sparse = song::startingFaders (layers, { { "drums", -20.0 }, { "bass", -22.0 }, { "pad", -50.0 } });
+    CHECK (sparse.at ("pad") == Catch::Approx (0.0));
+    CHECK (sparse.at ("bass") == Catch::Approx (0.0));
+    CHECK (sparse.at ("drums") == Catch::Approx (faders.at ("drums")));
 
     // Apply sets them on the layers' inserts, in the same one undo step.
     commands::CommandHistory history { model::Project {} };
