@@ -708,9 +708,14 @@ Owner decision 2026-10-29: what was planned for alpha 4 and alpha 5 ships togeth
 - **Instrument settings tools:** "make the bass pluckier", checked with `measure`.
 - **Deeper mix checks:** parts masking each other, loudness per section.
 - **A live MCP interface for outside coding agents** (Claude Code, Codex, Cursor) into a running Spinus.
-  It is off until turned on in Options, listens on this computer only and needs a token. Agents read
-  the project and render previews freely; their changes arrive as a proposal the user Applies (one undo
-  step), with an optional "always allow". It uses the same tools as the assistant.
+  It is off until turned on in Options, listens on this computer only and needs a token. Owner decision
+  2026-10-29: an agent connected through it **applies its changes directly**, without a proposal to
+  approve each time, because an outside agent works in many small steps. Turning the interface on is the
+  user's consent. Its safeguards:
+  - each change is an ordinary undo step;
+  - Spinus shows that an agent is connected, with a button to disconnect it;
+  - **Undo the agent's changes** takes the project back to where it was when the agent connected.
+  - The in-app assistant and the Track creator keep proposals.
 
 Then 0.1.0-rc.1 (features frozen, polish), then 0.1.0 with a few modest posts.
 
