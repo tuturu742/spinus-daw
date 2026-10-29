@@ -107,18 +107,12 @@ async def ask(
         raise ValueError("The conversation must end with the user's message.")
 
     answer = Answer()
-    route_index = 0
 
     async def on_text(delta: str) -> None:
         answer.text += delta
         await say({"kind": "text", "text": delta})
 
-    for _ in range(MAX_TURNS):
-        request = Request(routes[route_index].model, SYSTEM, messages, [*tools.definitions(), WRITE_NOTES])
-        completion, route_index = await complete_with_fallback(
-            client, connections, routes, route_index, request, on_text, say
-        )
-        route = routes[route_index]
+    async def on_turn(completion: Completion, route: Route) -> None:
         answer.model, answer.connection = completion.model, route.connection.name
         answer.usage.input_tokens += completion.usage.input_tokens
         answer.usage.output_tokens += completion.usage.output_tokens
@@ -126,27 +120,66 @@ async def ask(
             answer.usage.cost = (answer.usage.cost or 0.0) + completion.usage.cost
         usage_log.add(route.connection.id, "assistant", completion.usage)
 
-        messages.append(Message("assistant", completion.blocks or [Text("")]))
+    async def call(use: ToolUse) -> tuple[str, bool]:
+        await say({"kind": "status", "text": describe_tool(use)})
+        if use.name == "write_notes":
+            return await write_notes(client, connections, routing, usage_log, tools.snapshot, use.input, answer, say)
+        return tools.call(use.name, use.input)
+
+    async def after_results() -> None:
+        if answer.text and not answer.text.endswith("\n"):
+            await on_text("\n\n")
+
+    request = Request(routes[0].model, SYSTEM, messages, [*tools.definitions(), WRITE_NOTES])
+    await tool_loop(client, connections, routes, request, call, on_turn, on_text, say, MAX_TURNS, after=after_results)
+
+    answer.text = answer.text.strip()
+    answer.proposals = tools.proposals
+    return answer
+
+
+ToolCall = Callable[[ToolUse], Awaitable[tuple[str, bool]]]
+OnTurn = Callable[[Completion, Route], Awaitable[None]]
+
+
+async def tool_loop(
+    client: httpx.AsyncClient,
+    connections: ConnectionStore,
+    routes: list[Route],
+    request: Request,
+    call: ToolCall,
+    on_turn: OnTurn,
+    on_text: Callable[[str], Awaitable[None]],
+    say: Say,
+    most_turns: int,
+    stop: Callable[[], bool] = lambda: False,
+    after: Callable[[], Awaitable[None]] | None = None,
+) -> int:
+    """The model's turns with tools: each answer is added to request.messages, its tool calls run (`call` gives
+    each result and whether it failed) and their results sent back, until it answers without a tool, `stop()`
+    says so (between turns) or `most_turns` have passed. A connection that fails gives way to the next route.
+    Returns how many turns were taken."""
+    route_index = 0
+    turns = 0
+    while turns < most_turns and not stop():
+        turns += 1
+        request.model = routes[route_index].model
+        completion, route_index = await complete_with_fallback(
+            client, connections, routes, route_index, request, on_text, say
+        )
+        await on_turn(completion, routes[route_index])
+        request.messages.append(Message("assistant", completion.blocks or [Text("")]))
         uses = completion.tool_uses
         if not uses:
             break
         results: list[ToolResult] = []
         for use in uses:
-            await say({"kind": "status", "text": describe_tool(use)})
-            if use.name == "write_notes":
-                content, is_error = await write_notes(
-                    client, connections, routing, usage_log, tools.snapshot, use.input, answer, say
-                )
-            else:
-                content, is_error = tools.call(use.name, use.input)
+            content, is_error = await call(use)
             results.append(ToolResult(use.id, content, is_error))
-        messages.append(Message("user", list(results)))
-        if answer.text and not answer.text.endswith("\n"):
-            await on_text("\n\n")
-
-    answer.text = answer.text.strip()
-    answer.proposals = tools.proposals
-    return answer
+        request.messages.append(Message("user", list(results)))
+        if after is not None:
+            await after()
+    return turns
 
 
 async def complete_with_fallback(

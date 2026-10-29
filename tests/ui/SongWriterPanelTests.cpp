@@ -282,6 +282,138 @@ TEST_CASE ("Track creator: the user's parts are written with the Sounds page's s
     CHECK (session.getHistory().getUndoDescriptions().size() == steps);
 }
 
+TEST_CASE ("Track creator: the AI connection composes the song with the harness's tools, opt-in",
+           "[ui][trackcreator][song][ai]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    TempFolder t;
+    // The fake model: looks at the form, lets the rules write two parts, writes the drums itself, checks, finishes
+    // (refused once while check finds issues, then again).
+    const auto replies = t.root.getChildFile ("replies.json");
+    replies.replaceWithText (R"([
+        {"tool": ["form", {}]},
+        {"tool": ["rules_write", {"part": "bass"}]},
+        {"tool": ["rules_write", {"part": "chords"}]},
+        {"tool": ["write", {"part": "drums", "section": "verse", "notes": "0 kick 1 110; 4 snare 1 100; 8 kick 1 100; 12 snare 1 100", "loop_bars": 1}]},
+        {"tool": ["write", {"part": "kazoo", "section": "verse", "notes": "0 60 1 90"}]},
+        {"tool": ["check", {}]},
+        {"tool": ["finish", {"summary": "A short test song."}]},
+        {"tool": ["finish", {"summary": "A short test song."}]},
+        {"text": "Done."}
+    ])");
+    test::FakeProvider provider (replies);
+    REQUIRE (provider.ready);
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine(), makeDevices (host.getEngine()) };
+    ai::AiService service { t.root, t.root.getChildFile ("models") };
+    service.setEnabled (true);
+    SongWriterPanel::Context context;
+    context.summary = testSummary();
+    context.service = &service;
+    context.workFolder = t.root.getChildFile ("song");
+    SongWriterPanel panel (session, [&context] { return context; });
+    panel.setSize (900, 600);
+    panel.setSeed (3);
+
+    // Without a connection the AI can't be chosen, and Spinus writes as before.
+    panel.refreshConnection();
+    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("Options > AI"); }));
+    panel.setAiWriter (true);
+    CHECK_FALSE (panel.isAiWriter());
+
+    juce::String id;
+    service.call ("ai.v1.connections.save",
+                  juce::JSON::parse (R"({"name": "My local model", "provider": "local", "baseUrl": ")" +
+                                     provider.url() + R"("})"),
+                  [&] (const juce::var& r, const juce::String&) { id = r["id"].toString(); });
+    REQUIRE (waitFor ([&] { return id.isNotEmpty(); }));
+    bool tested = false;
+    service.call ("ai.v1.connections.test", juce::JSON::parse (R"({"id": ")" + id + R"("})"),
+                  [&] (const juce::var&, const juce::String&) { tested = true; });
+    REQUIRE (waitFor ([&] { return tested; }));
+
+    // With one: the page names it, and says the tokens are shown as it works (no estimate before).
+    panel.refreshConnection();
+    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My local model"); }));
+    INFO (panel.getInfoText());
+    CHECK (panel.getInfoText().contains ("shown as it works"));
+    CHECK (panel.getInfoText().contains ("AI models can be unreliable"));
+    CHECK (panel.getEffort() == "low"); // the default
+    CHECK_FALSE (panel.getInfoText().contains ("About"));
+    panel.setAiWriter (true);
+    REQUIRE (panel.isAiWriter());
+    panel.setEffort ("xhigh"); // where the model offers it
+    CHECK (panel.getEffort() == "xhigh");
+    panel.setEffort ("high");
+    CHECK (panel.getEffort() == "high");
+    CHECK (panel.getRounds() == 1);
+
+    const auto before = session.getProject();
+    REQUIRE (panel.write());
+    CHECK (panel.isComposing());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy() && ! panel.isComposing(); }, 120000));
+    INFO (panel.getStatusText());
+    INFO (panel.getText());
+    const auto& song = panel.getSong();
+    REQUIRE (song["composed"].isObject());
+    CHECK ((bool)song["composed"]["harness"]);
+    CHECK (song["composed"]["reason"].toString() == "A short test song.");
+    CHECK (song["composed"]["tools"].size() == 2); // Basic + arrangement, the default
+    CHECK (song["note"].toString().contains ("Tools: Basic + arrangement."));
+    CHECK (panel.getStatusText().contains ("Written by the AI (fake-model, reasoning high)"));
+    CHECK (panel.getText().contains ("Tokens used"));
+    CHECK (panel.getText().contains ("8 requests")); // the second finish ends it: no turn after
+    // The drums as it wrote them, every bar of the verse; the lead (never written) by the rules.
+    int verseBars = 0;
+    for (const auto& section : *song["sections"].getArray())
+        if (section["id"] == "verse")
+            verseBars = (int)section["bars"];
+    REQUIRE (verseBars > 0);
+    CHECK (song["layerParts"]["drums"]["verse"].size() == 4 * verseBars);
+    CHECK (song["layerParts"]["lead"].isObject());
+    CHECK (session.getProject() == before); // nothing before Apply
+    REQUIRE (panel.apply());
+    CHECK (session.getHistory().getUndoDescriptions().size() == 1);
+}
+
+TEST_CASE ("Track creator: how deep the AI may go is a list with a Custom choice, remembered",
+           "[ui][trackcreator][song]")
+{
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine() };
+    auto& settings = session.getEdit().engine.getPropertyStorage().getPropertiesFile();
+    settings.removeValue ("trackCreatorAiTools");
+    SongWriterPanel::Context context;
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        panel.setSize (900, 600);
+        panel.setAiWriter (true);
+        // Basic + arrangement at first, with the cost said below the list.
+        CHECK (panel.getDepthChoice() == 2);
+        CHECK (panel.getToolGroups() == juce::StringArray { "basic", "arrangement" });
+        CHECK (panel.getDepthNoteText().contains ("costs more"));
+        CHECK (panel.getDepthNoteText().contains ("several times the tokens of Basic"));
+        // A list that is no preset is Custom; Basic stays on whatever is asked.
+        panel.setToolGroups ({ "mix" });
+        CHECK (panel.getDepthChoice() == 5);
+        CHECK (panel.getToolGroups() == juce::StringArray { "basic", "mix" });
+        panel.setToolGroups ({ "basic", "arrangement", "transitions", "mix" });
+        CHECK (panel.getDepthChoice() == 4);
+    }
+    // Remembered once the user changes it on the page.
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        CHECK (panel.getDepthChoice() == 2); // setToolGroups (from code) is not the user's choice
+    }
+    settings.setValue ("trackCreatorAiTools", "basic,arrangement,transitions");
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        CHECK (panel.getDepthChoice() == 3);
+    }
+    settings.removeValue ("trackCreatorAiTools");
+}
+
 TEST_CASE ("Track creator: without the AI service, the song page says so", "[ui][trackcreator][song]")
 {
     EngineHost host { { .openAudioDevice = false } };
@@ -322,6 +454,68 @@ TEST_CASE ("Track creator write a song screenshot for the manual", "[.screenshot
     const auto file = juce::File (SPINUS_TEST_FILES_DIR)
                           .getParentDirectory()
                           .getChildFile ("docs/user/images/track-creator-song.png");
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    juce::Image image (juce::Image::RGB, panel.getWidth() + 20, panel.getHeight() + 20, true);
+    {
+        juce::Graphics g (image);
+        g.fillAll (look.findColour (juce::ResizableWindow::backgroundColourId));
+        g.drawImageAt (panel.createComponentSnapshot (panel.getLocalBounds()), 10, 10);
+    }
+    REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
+    panel.setLookAndFeel (nullptr);
+}
+
+TEST_CASE ("Track creator AI writer screenshot for the manual", "[.screenshot][manual]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    TempFolder t;
+    const auto replies = t.root.getChildFile ("replies.json");
+    replies.replaceWithText (R"([
+        {"tool": ["form", {}]},
+        {"tool": ["write", {"part": "drums", "section": "verse", "notes": "0 kick 1 110; 4 snare 1 100; 8 kick 1 100; 10 kick 1 90; 12 snare 1 100", "loop_bars": 1}]},
+        {"tool": ["copy", {"from_section": "verse", "to_section": "chorus", "parts": ["drums"]}]},
+        {"tool": ["rules_write", {"part": "bass"}]},
+        {"tool": ["rules_write", {"part": "chords"}]},
+        {"tool": ["rules_write", {"part": "lead"}]},
+        {"tool": ["check", {}]},
+        {"tool": ["finish", {"summary": "A driving minor-key song: a busy kick under held chords, the lead answering the bass."}]}
+    ])");
+    test::FakeProvider provider (replies);
+    REQUIRE (provider.ready);
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine() };
+    ai::AiService service { t.root, t.root.getChildFile ("models") };
+    service.setEnabled (true);
+    juce::String id;
+    service.call (
+        "ai.v1.connections.save",
+        juce::JSON::parse (R"({"name": "My AI", "provider": "local", "baseUrl": ")" + provider.url() + R"("})"),
+        [&] (const juce::var& r, const juce::String&) { id = r["id"].toString(); });
+    REQUIRE (waitFor ([&] { return id.isNotEmpty(); }));
+    bool tested = false;
+    service.call ("ai.v1.connections.test", juce::JSON::parse (R"({"id": ")" + id + R"("})"),
+                  [&] (const juce::var&, const juce::String&) { tested = true; });
+    REQUIRE (waitFor ([&] { return tested; }));
+    SongWriterPanel::Context context;
+    context.summary = testSummary();
+    context.service = &service;
+    SpinusLookAndFeel look (Theme::dark());
+    SongWriterPanel panel (session, [&context] { return context; });
+    panel.setLookAndFeel (&look);
+    panel.setSize (860, 560);
+    panel.setSeed (3);
+    panel.refreshConnection();
+    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My AI"); }));
+    panel.setToolGroups ({ "basic", "arrangement", "mix" }); // Custom: its checkboxes show
+    panel.setAiWriter (true);
+    REQUIRE (panel.write());
+    REQUIRE (waitFor ([&] { return ! panel.isBusy() && ! panel.isComposing(); }, 120000));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+    const auto file = juce::File (SPINUS_TEST_FILES_DIR)
+                          .getParentDirectory()
+                          .getChildFile ("docs/user/images/track-creator-ai-writer.png");
     file.deleteFile();
     juce::FileOutputStream stream (file);
     juce::Image image (juce::Image::RGB, panel.getWidth() + 20, panel.getHeight() + 20, true);
