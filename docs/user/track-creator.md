@@ -442,6 +442,106 @@ note itself; if the AI isn't reachable or answers something unusable, the rules'
 says so. It names the model that answered, and why, when it wasn't your first choice. This sends the
 summary's numbers (not your songs) to your AI provider.
 
+### Let your AI connection write it
+
+![Write a song with "Your AI connection" chosen: the reasoning level, the fix rounds, the AI tools set to Custom with
+their groups ticked, and after the run the tokens each round used and what Spinus's checks still
+find](images/track-creator-ai-writer.png)
+
+**Who writes the notes** (at the top of the page) is **Spinus (offline, nothing is sent)** at first. Choose
+**Your AI connection** (shown with its name; greyed out until you set one up in Options › AI) and the AI
+composes the whole song: the form, the chords, every part's notes, and a sound for each part you didn't
+choose yourself in step 3 (from a few that fit in your sound index). Your own choices in step 3 always win.
+
+It works like a programmer with tools, which Spinus calls the **music harness**. The song is a working copy
+kept on your computer; the AI never sends it whole. It reads the brief (your style and your parts), looks at
+the form, writes each part (a loop once, repeated), names a riff and places it again, copies a section that
+repeats, lets Spinus's own rules write a part it doesn't need to shape by hand, and runs Spinus's checks, as a
+programmer runs tests:
+
+- notes outside the key, or rubbing against the chord on the beat (with the bar and step);
+- two parts in the same register;
+- notes a bar against your songs' parts;
+- the drums' groove against your songs';
+- a lead repeating one bar, a part with no notes, sections off the 4-bar phrases;
+- sections your description asks for that the form doesn't have: a pre-chorus, a solo, a breakdown, a build-up,
+  a drop, a double chorus, an outro ("a breakdown or bridge": either will do).
+
+It fixes what the checks find with small edits of a few bars, then says it's finished. If it tries to finish while the checks still find something, it is told what is open, once; asked again, it finishes as it is. While it works, the
+page shows each step in plain words ("Writing the bass for the chorus", "Checking: 2 issues") and the tokens
+used so far. A note it can't read, outside its instrument's range or off the grid is fixed or left out,
+and the page says so. A part it never wrote is written by Spinus's rules, and the page says which.
+
+When it's done, Spinus plays each part with its sound to set its level (as for its own songs). **Then fix
+what Spinus hears** (once, at first; no, twice or 3 times) sends what it heard back to the AI: a part that
+made no sound (its notes may be outside the instrument's range) and the balance. The AI fixes it the same way,
+on the same working copy. If no part could be played (Spinus's sound helper isn't there), there's nothing new to
+tell the AI, so no fix round runs.
+
+**AI tools** is how deep the AI may go: which groups of the harness's tools it gets.
+
+- **Basic**: the form, chords, every part's notes, motifs, sounds, the checks and finish. Always on.
+- **Arrangement**: parts and layers of its own (a channel each, grouped and coloured by family, or the family
+  and colour it chooses), a motif varied instead of repeated (its rhythm or notes, upside down, or moved
+  later), drum fills at phrase ends with a crash after, layers entering and leaving per section, and a check
+  of the song's energy section by section against your songs' sections. Parts it adds can be removed by it;
+  yours always stay.
+- **Transitions and automation**: automation clips on the Playlist (a part's volume, pan, or a filter sweep:
+  Spinus adds a Spinus Filter to that part's insert), and transitions into and out of a section wherever it
+  plays: a riser before it, a downlifter after it starts, a swell into its first beat (a noise swell, or a reversed
+  cymbal: the starter pack's crash played backwards), an impact on it (the
+  kit's kick and crash, or the starter pack's crash and 808). They go on tracks of their own, under the song's
+  **Automation** and **Samples** tracks.
+- **Effects and mix**: Spinus's own effects on a part's insert, with their controls set by name (EQ,
+  compressor, gate, limiter, filter, ducker, stereo), and on the song's master, whose chain ends with a limiter
+  (the check reminds the AI; writing again doesn't add a second one); sends to a reverb bus and a delay bus;
+  ducking a part under another (the bass under the kick); buses of its own. Spinus has no reverb or delay of its
+  own, so the AI uses the ones you have, found by the words in their names ("reverb", "hall", "room", "plate";
+  "delay", "echo"), leaving out plugins that take no audio in (a MIDI delay). **Get free plugins** (in Options) offers some, and without one the AI is told there's none. If
+  a device won't take one of the AI's settings, Apply puts the song in with those effects as they come, and the
+  page says so.
+
+Choose **Basic**, **Basic + arrangement** (at first), **Basic + arrangement + transitions** or **Full**, or
+**Custom...** to tick the groups yourself. Spinus remembers your choice, and the song's note says which tools
+wrote it. Only the tools you allow are sent to the AI, so tools you leave off cost nothing. Each group lets
+the AI do more, and costs more: more steps and more tokens per song. Full can use several times the tokens
+of Basic.
+
+**Reasoning** is how hard the model thinks before each step: low at first, or the model's own, medium, high,
+or extra high where the model offers it. Higher levels use many more tokens, because the AI thinks again
+before every step. A model that can't reason at the level you chose uses the lowest it offers, and the page
+says so.
+
+**AI models can be unreliable.** A song may not match your references, and the tokens a song uses vary from
+one run to the next. Spinus checks the notes, but listen before you keep it.
+
+**How many tokens**: Spinus doesn't guess in advance, since nobody knows how long a model will think. While the
+AI works, the page shows the tokens used so far. When it's done, it lists each round's tokens as your provider
+reported them:
+
+- input, and how much of it was read from the provider's cache, which costs less;
+- output, and of that the reasoning.
+
+Nothing about it is kept beyond the song itself. In a long session the oldest tool calls are cleared from what
+the model reads, a batch at a time (the working copy on your computer keeps everything): Anthropic does this on its
+side; for OpenAI-compatible services such as DeepSeek or OpenRouter, Spinus does it before sending. The page counts
+what was cleared.
+
+There's no token limit that could cut a song short when it's almost finished. If an answer still reaches
+the model's own length limit, Spinus asks it to go on and joins the pieces. You control the cost with the
+reasoning level and the number of fix rounds. **Stop now, keep the best** stops the AI after its current step and
+keeps its best checked version so far. **Cancel** stops at once and keeps the song shown before.
+
+**What is sent** to your AI provider: your style's numbers (tempo, keys, chords, groove, the parts'
+ranges), your description, your parts' names and roles, and the names of the sounds it may choose from. Not
+your songs or their audio, and nothing else from your computer.
+
+**For developers**: the same tools run outside Spinus as an MCP server (`python -m spinus_ai.harness mcp
+--brief brief.json --out song.json`, after `python -m spinus_ai.harness brief --describe "..." -o
+brief.json`), so a coding agent can compose through the identical harness. `python -m spinus_ai.harness
+eval` writes the same brief once in one answer and once with the harness, at each reasoning level, and
+prints the tokens each way used and the checks' score of each song.
+
 The same click of **Write** with the same summary can give a different song; each song keeps its own
 random numbers, so **Redo part...** changes only what you asked for.
 

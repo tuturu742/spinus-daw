@@ -3,13 +3,60 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
-## Not released yet
+## 0.1.0-alpha.3 (2026-10-29)
+
+### Track creator: your AI connection writes the song (experimental)
+
+- **Who writes the notes** on Write a song: Spinus (offline, as before and the default) or, if you choose,
+  your AI connection. It composes the whole song with the **music harness**: tools that read and edit a
+  working copy of the song, Spinus's checks run as its tests (notes outside the key or the chords, parts in
+  one register, the groove and density against your songs), fixes with small edits, and finish. You see each
+  step and the tokens so far; nothing changes in the project until you Apply (one undo step).
+- **Then fix what Spinus hears**: after the AI finishes, each part is played with its sound, and what was heard
+  (a silent part, the balance) goes back to the AI to fix (once by default, up to 3 times).
+- **Tokens, as your provider reports them**: no guess before you send; while it works, the tokens so far;
+  after, each round's input (and the part read from the provider's cache), output and reasoning. **Reasoning**
+  sets how hard the model thinks before each step: low by default; higher levels (up to extra high, where the
+  model offers it) use many more tokens; a model without the level chosen uses the lowest it offers. AI models
+  can be unreliable: listen before you keep a song. No token cap: an answer cut off at the model's own limit is
+  continued and joined. **Stop now, keep the best** keeps the best checked version; **Cancel** keeps the song
+  shown before.
+- **AI tools**: how deep the AI may go, as groups of tools: Basic (always), Arrangement, Transitions and
+  automation, Effects and mix. Pick Basic, Basic + arrangement (at first), Basic + arrangement + transitions,
+  Full or Custom (a checkbox per group). More groups let it do more, and cost more. Only the allowed tools are
+  sent; the choice is remembered, and the song's note says which tools wrote it.
+- **Arrangement tools** for the AI: it adds parts and layers of its own (a channel each, grouped and coloured by
+  family, or a family and colour it chooses), varies a motif (its rhythm or notes, upside down, or moved later)
+  instead of repeating it, puts drum fills at phrase ends with a crash after, lets layers enter and leave so
+  sections build and drop, and checks the song's energy section by section against your songs' sections.
+- **Transition and automation tools** for the AI: automation clips on the Playlist for a part's volume, pan or a
+  filter sweep (Spinus adds a Spinus Filter to the part's insert), and transitions into and out of a section
+  wherever it plays: a riser (noise rising and opening over the bars before it), a downlifter, a swell into its
+  first beat (a noise swell, or a reversed cymbal from the starter pack's crash), an impact on it (the kit's kick and crash, or the starter pack's crash and 808). They go on tracks
+  of their own under the song's Automation and Samples tracks, in the same undo step.
+- **Effects and mix tools** for the AI: Spinus's own effects on a part's insert with their controls set by name
+  (EQ, compressor, gate, limiter, filter, ducker, stereo), sends to a reverb and a delay bus made with the reverb
+  and delay you have (Spinus has none of its own; Get free plugins offers some), sidechain ducking (the bass and
+  pads under the kick), buses of its own, and measure giving each part's level and each section's loudness. If
+  a device won't take one of the AI's settings, Apply puts the song in with those effects as they come, and says so.
+- For developers: the same tools as an MCP server, and a comparison of one-answer and harness writing on the
+  tokens each really used and the checks' scores (`python -m spinus_ai.harness`).
 
 ### A skill for AI coding agents
 
 - **`skills/spinus-songwriter/SKILL.md`** teaches a coding agent to write, arrange, mix, check and render a complete
   song with Spinus's command line, from an installed Spinus alone. Two agents that had never seen Spinus's code each
   made a full song with it. How to use it: Spinus from the command line, "For AI coding agents".
+
+### Spinus from the command line
+
+- **Scripts and AI agents can make songs with Spinus, without its window:** `spinus --run script.json --save
+  <folder>` runs a list of steps (the commands Spinus's own buttons use, plus loading a Drum Machine kit or
+  samples), and saves an ordinary project. `spinus --check <project>` says what a project holds and what is
+  missing, `spinus --render <project> --out song.wav` renders it and prints its loudness, `spinus --describe
+  <device>` lists a device's settings, presets, pads and kits, and `spinus --commands` lists every command.
+  None of them need a sound card, and they leave your settings alone. See
+  [Spinus from the command line](docs/user/command-line.md).
 
 ### Command line, after a first test by an AI agent
 
@@ -27,15 +74,21 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **`--render --stems`** writes the stems straight into the folder (`04 Bass.opus`), from the same render
   as the mix. Each file reports how long it sounds, and Opus or MP3 the true peak before encoding too.
 
-### Spinus from the command line
+### Starter pack
 
-- **Scripts and AI agents can make songs with Spinus, without its window:** `spinus --run script.json --save
-  <folder>` runs a list of steps (the commands Spinus's own buttons use, plus loading a Drum Machine kit or
-  samples), and saves an ordinary project. `spinus --check <project>` says what a project holds and what is
-  missing, `spinus --render <project> --out song.wav` renders it and prints its loudness, `spinus --describe
-  <device>` lists a device's settings, presets, pads and kits, and `spinus --commands` lists every command.
-  None of them need a sound card, and they leave your settings alone. See
-  [Spinus from the command line](docs/user/command-line.md).
+- **Spinus now comes with free samples:** the **Spinus Starter Pack**, 97 sounds from Signature Sounds
+  (free for any use): drum one-shots, drum and melodic loops with their tempo and key in the name, a
+  steel tongue drum, vocal stabs and textures. It is the first folder under **Samples** in the Browser;
+  it cannot be removed (it comes with Spinus) but can be hidden.
+- **Four more factory kits for the Drum Machine:** **Shrike** (hard and deep, with 808 bass),
+  **Starling** (dusty and warm), **Magpie** (pans, coins, cutlery and other collected sounds) and
+  **Raven** (dark and heavy metal hits), listed with the Spinus Synth Kit under **Kit**. They use the
+  Synth Kit's layout (kick on pad 1, snare on pad 2, hi-hats on pads 4 and 5...), so your patterns keep
+  working when you change kits.
+- **The Drum Machine's Kit button shows the kit's name** (a factory kit or your `.spinuskit` file), with a
+  `*` once you change a pad; it is saved with the project.
+- Projects that use these sounds keep them, so they open the same on any computer.
+- `spinus --self-test` checks the pack is installed and reads.
 
 ### Fixes
 
@@ -56,26 +109,6 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   Spinus asks again once with the model's reasoning turned off, and the assistant says so. A model that
   can't turn its reasoning off (gpt-6.1-sol) gets a clear message there instead: use it through OpenAI's own
   address. The highest reasoning level some models offer, "xhigh", is passed on as it is.
-
-## 0.1.0-alpha.3 (2026-10-28)
-
-### Starter pack
-
-- **Spinus now comes with free samples:** the **Spinus Starter Pack**, 97 sounds from Signature Sounds
-  (free for any use): drum one-shots, drum and melodic loops with their tempo and key in the name, a
-  steel tongue drum, vocal stabs and textures. It is the first folder under **Samples** in the Browser;
-  it cannot be removed (it comes with Spinus) but can be hidden.
-- **Four more factory kits for the Drum Machine:** **Shrike** (hard and deep, with 808 bass),
-  **Starling** (dusty and warm), **Magpie** (pans, coins, cutlery and other collected sounds) and
-  **Raven** (dark and heavy metal hits), listed with the Spinus Synth Kit under **Kit**. They use the
-  Synth Kit's layout (kick on pad 1, snare on pad 2, hi-hats on pads 4 and 5...), so your patterns keep
-  working when you change kits.
-- **The Drum Machine's Kit button shows the kit's name** (a factory kit or your `.spinuskit` file), with a
-  `*` once you change a pad; it is saved with the project.
-- Projects that use these sounds keep them, so they open the same on any computer.
-- `spinus --self-test` checks the pack is installed and reads.
-
-### Fixes
 
 - **Track creator's sound index and big sample instruments:** instruments that load their samples in the
   background after opening (big sampled guitars and basses, for example) were measured before they made a

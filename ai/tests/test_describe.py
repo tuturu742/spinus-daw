@@ -12,7 +12,7 @@ import httpx
 import pytest
 from test_service import anthropic_reply, make_service, no_notify, run_job
 
-from spinus_ai import describe, songwriter
+from spinus_ai import describe, gateway, songwriter
 from spinus_ai.service import RpcError
 
 
@@ -252,6 +252,8 @@ async def test_without_parts_from_the_ai_the_words_name_them(tmp_path: Path) -> 
     read = await run_job(service, "ai.v1.song.describe", {"text": "dreamy guitars and bass", "ai": True})
     assert [p["role"] for p in read["described"]["parts"]] == ["rhythm-guitar", "bass"]
     assert "parts" in sent[0]["tools"][0]["input_schema"]["properties"]
+    # No small cap on the answer: a reasoning model that thinks past 1000 tokens gave no reading at all.
+    assert sent[0]["max_tokens"] == gateway.ANSWER_ROOM
 
 
 async def test_an_unusable_ai_answer_leaves_the_rules_reading(tmp_path: Path) -> None:

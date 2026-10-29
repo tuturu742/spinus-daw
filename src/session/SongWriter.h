@@ -68,6 +68,7 @@ Sound defaultSound (const juce::String& part);
 struct Layer
 {
     juce::String id, name, family;     // a part of the user's list (parts::SongPart): its id and name
+    juce::String colour;               // its own colour (#AARRGGBB, the AI's choice), or empty: its family's
     juce::String part;                 // the song part it is made from ("fx" for the effects)
     juce::String role;                 // what it plays: parts::songRoles()
     juce::String soundRole;            // the role of sound it wants (the sound index's roles)
@@ -81,6 +82,8 @@ bool isFull (const juce::var& song);
 std::vector<Layer> layersOf (const juce::var& song);
 /** The colour of a family's channels, inserts and tracks (#AARRGGBB), as the demo songs have them. */
 juce::String familyColour (const juce::String& family);
+/** A layer's colour: its own, else its family's. */
+juce::String layerColour (const Layer&);
 /** Spinus's own sound for a layer: the Drum Machine for drums, 3x Osc with a preset of its role otherwise
     ("Sub Bass", "Warm Pad", "Pluck", "Bell", "Noise Riser"...). */
 Sound defaultSound (const Layer&);
@@ -103,7 +106,16 @@ struct Options
     std::map<juce::String, int> drums;                 // the drum channel's notes per drum, when known
     juce::String name = "Song 1";                      // names the patterns ("Song 1: Verse") and the track
     juce::String replace; // a song of the project the new one replaces, in its place ("Song 1"), or none
+    /** The user's effects the AI may name (its reverbs and delays, Spinus having none of its own): name -> the
+        device as insert.addEffect takes it (model::deviceToJson). */
+    std::map<juce::String, juce::var> effectDevices;
+    /** Leave out the AI's effect settings (the effects themselves stay): when a setting was refused. */
+    bool withoutEffectSettings = false;
 };
+
+/** What a user's effect is, from generic words in its name: "reverb" (reverb, hall, room, plate, chamber),
+    "delay" (delay, echo), or empty. No vendor or product names. */
+juce::String sendEffectKind (const juce::String& name);
 
 /** A name for the next song in the project: "Song 1", or "Song 2" when patterns of Song 1 are there, ... */
 juce::String nextSongName (const model::Project&);

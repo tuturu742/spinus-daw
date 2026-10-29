@@ -28,6 +28,15 @@ namespace spinus::ui
     parts or sections written again; that is how it is heard. Mix it opens the automixer toward the reference
     songs.
 
+    Who writes the notes: Spinus (offline, the default) or, opt-in, the user's AI connection. The AI composes
+    through the music harness (ai.v1.song.compose, spinus_ai/harness.py): tools that read and edit a working copy of
+    the song and check it, then finish. While it works, the page shows each step in plain words and the running total
+    of tokens; after, the tokens each round used as the provider reported them (no estimate before: nobody knows
+    how long a model will think). "Stop now" keeps the best checked version;
+    Cancel keeps the song shown before. After it finishes, each part is played with its sound (balance) and, as many
+    times as "Fix what Spinus hears" says, what was heard goes back to the AI for a revision round. The AI may pick
+    each part's sound from a few candidates of the sound index; the Sounds page's choices always win.
+
     Nothing changes the project before Apply (AGENTS rule 3). Without the AI service the panel says so; the rest
     of Spinus works as ever. Message thread only. */
 class SongWriterPanel final : public juce::Component
@@ -70,6 +79,29 @@ public:
     std::function<void (const juce::File& reference)> onMix;
 
     void setRefine (bool on) { refineButton.setToggleState (on, juce::dontSendNotification); }
+    /** Who writes: false, Spinus (offline); true, the AI connection (when there is one). */
+    void setAiWriter (bool on);
+    bool isAiWriter() const;
+    /** The AI's reasoning level: "" (the model's own), "low" (the default), "medium", "high", "xhigh" (where
+        offered). */
+    void setEffort (const juce::String& effort);
+    juce::String getEffort() const;
+    /** The groups of the harness's tools the AI may use ("basic" always; "arrangement", "transitions", "mix"):
+        Basic + arrangement at first, then as the user left it (remembered). */
+    void setToolGroups (const juce::StringArray& groups);
+    juce::StringArray getToolGroups() const;
+    /** The depth list's choice: 1 Basic, 2 + arrangement, 3 + transitions, 4 Full, 5 Custom (the checkboxes). */
+    int getDepthChoice() const { return depthBox.getSelectedId(); }
+    juce::String getDepthNoteText() const { return depthNote.getText(); }
+    /** How many times what Spinus hears goes back to the AI (0 to 3; 1 by default). */
+    void setRounds (int rounds);
+    int getRounds() const { return roundsBox.getSelectedId() - 1; }
+    /** Asks the AI service which connection would write (asynchronously; the page names it). */
+    void refreshConnection();
+    juce::String getInfoText() const { return infoLabel.getText(); }
+    /** Stops the AI after its current step, keeping its best checked version. */
+    bool stopNow();
+    bool isComposing() const noexcept { return composing; }
     /** "sketch" (four parts) or "full" (about a dozen layers): what Write writes next. Remembered. */
     /** The sound each layer of the full song gets that the Sounds page did not choose (layer id -> what was
         found in the sound index), worked out once per song. */
@@ -92,9 +124,22 @@ public:
 
     void resized() override;
     void paint (juce::Graphics&) override;
+    void visibilityChanged() override;
 
 private:
-    void run (const juce::var& params, const juce::String& words, std::function<void (const juce::var&)> then);
+    void run (const juce::var& params, const juce::String& words, std::function<void (const juce::var&)> then,
+              const juce::String& method = "ai.v1.song.write");
+    /** The AI writer's request: the summary, the parts, the candidate sounds, the reasoning level. */
+    juce::var composeParams (int seed);
+    /** For each part without a sound from the Sounds page, a few sounds of the index it may pick from (id ->
+        choice, kept for when the AI picks one). */
+    juce::var candidatesFor (juce::var& current);
+    void composeRound (const juce::var& params, const juce::String& words);
+    /** After the song is written and measured: another round with what was heard, or done. */
+    void afterMeasured (const std::map<juce::String, double>& levels,
+                        const std::map<juce::String, juce::String>& problems);
+    void finishComposing();
+    void layoutAiRow (juce::Rectangle<int> row);
     void show();
     void updateButtons();
     void showRedoMenu();
@@ -106,7 +151,9 @@ private:
     std::optional<parts::Plan::Part> chosenForLayer (const song::Layer&);
     /** After writing: each layer's busiest bars played with its sound in the sound helper, measured, and its
         starting fader set from that and its role (song::startingFaders), for Apply. */
-    void balance();
+    void
+    balance (std::function<void (const std::map<juce::String, double>&, const std::map<juce::String, juce::String>&)>
+                 then = {});
 
     Session& session;
     std::function<Context()> getContext;
@@ -125,8 +172,25 @@ private:
     MessageLabel status;
     MessageBoxHandler messageBox;
     juce::ToggleButton refineButton { "Let the AI vary the plan (uses your AI connection)" };
-    std::map<juce::String, parts::Choice> layerChoices; // for `song`
-    std::map<juce::String, double> faders;              // for `song`: its layers' starting faders (balance)
+    juce::Label writerLabel { {}, "Who writes the notes:" };
+    juce::ComboBox writerBox, effortBox, roundsBox;
+    juce::Label infoLabel;
+    juce::Label depthLabel { {}, "AI tools:" }, depthNote;
+    juce::ComboBox depthBox;
+    juce::ToggleButton basicTools { "Basic" }, arrangementTools { "Arrangement" },
+        transitionsTools { "Transitions and automation" }, mixTools { "Effects and mix" };
+    void depthChanged (bool remember);
+    /** The user's reverbs and delays by name, as insert.addEffect takes them (the AI's sends use them). */
+    std::map<juce::String, juce::var> userSendEffects() const;
+    bool effectSettingsOff = false; // Apply's second try: the AI's effects without their settings
+    juce::TextButton stopNowButton { "Stop now, keep the best" };
+    bool aiAvailable = false, composing = false, stopRequested = false;
+    int roundsLeft = 0;
+    juce::String connectionName;
+    juce::var composeRequest; // the AI writer's request, for its revision rounds
+    std::map<juce::String, std::map<juce::String, parts::Choice>> candidateChoices; // part -> sound id -> choice
+    std::map<juce::String, parts::Choice> layerChoices;                             // for `song`
+    std::map<juce::String, double> faders; // for `song`: its layers' starting faders (balance)
     std::unique_ptr<BackgroundTask> task;
     bool layerChoicesKnown = false;
     juce::TextButton writeButton { "Write" }, againButton { "Another version" }, redoButton { "Redo part..." },

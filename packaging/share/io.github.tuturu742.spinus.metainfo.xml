@@ -64,12 +64,14 @@
     <display_length compare="ge">1024</display_length>
   </requires>
   <releases>
-    <release version="0.1.0~alpha.3" date="2026-10-28" type="development">
+    <release version="0.1.0~alpha.3" date="2026-10-29" type="development">
       <description>
         <p>The third alpha: the experimental Track creator writes whole songs, from a description or from
         reference songs, with your installed instruments, grouped and colour-coded channels and parts you
-        choose. The Analyzer runs on Windows too, OpenAI-compatible connections work with newer models, and
-        fixes for plugin scanning and for plugins that load their sounds late.</p>
+        choose. With an AI connection it can also compose the song through a music harness of tools,
+        with arrangement, transitions, automation and mixing. Spinus also gains a command line for scripts
+        and AI coding agents. The Analyzer runs on Windows too, newer OpenAI models work, and fixes for
+        plugin scanning and for plugins that load their sounds late.</p>
       </description>
     </release>
     <release version="0.1.0~alpha.2" date="2026-10-26" type="development">

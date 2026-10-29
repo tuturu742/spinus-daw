@@ -78,6 +78,12 @@ what happened, and attach the project if you can.
   that needs a kit picked first). The Track creator can't use them yet; a way to save the sound you set
   up in the plugin's window is planned.
 - The parts list isn't remembered between runs.
+- **Rendering right after Apply can leave out a plugin that is still loading its sounds** (big sampled
+  guitars, for example, played through a Windows plugin). Save the project and export again, or wait a
+  few seconds after Apply before exporting.
+- **AI models can be unreliable** when the AI writes the song: one may leave parts to Spinus's own rules,
+  miss a section the description asks for, or stop with an error from its provider. Listen before you keep
+  it, and write again if needed.
 
 ## Projects
 

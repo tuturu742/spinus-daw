@@ -82,6 +82,7 @@ class Service:
         self.connections = ConnectionStore(config, keys)
         self.routing = Routing(config, self.connections)
         self.usage = UsageLog(config)
+        self.compose_stops: dict[str, dict[str, bool]] = {}  # an AI writer's job -> "stop now" said
         self.manual = Manual(docs)
         self.commands = load_commands(schema)
         self.models = ModelStore(config, models)
@@ -153,6 +154,9 @@ class Service:
             "ai.v1.song.write": self.song_write,
             "ai.v1.song.describe": self.song_describe,
             "ai.v1.song.prompt": self.song_prompt,
+            "ai.v1.song.compose": self.song_compose,
+            "ai.v1.song.composer": self.song_composer,
+            "ai.v1.song.composeStop": self.song_compose_stop,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -297,6 +301,7 @@ class Service:
                 await say({"kind": "error", "message": str(error)})
             finally:
                 self.jobs.pop(job, None)
+                self.compose_stops.pop(job, None)
 
         self.jobs[job] = asyncio.create_task(run())
         return job
@@ -961,9 +966,11 @@ class Service:
 
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
             if redo is not None:
+                from .compose import redo_kept
+
                 part, section = redo.get("part"), redo.get("section")
-                return songwriter.redo(dict(params["song"]), summary, seed,
-                                       str(part) if part else None, str(section) if section else None)  # fmt: skip
+                return redo_kept(dict(params["song"]), summary, seed,
+                                 str(part) if part else None, str(section) if section else None)  # fmt: skip
             song = songwriter.write(summary, seed, size, parts)
             if not params.get("refine"):
                 return song
@@ -978,6 +985,132 @@ class Service:
             return song
 
         return {"job": self.job(notify, work)}
+
+    def compose_setup(self, params: dict[str, Any]) -> tuple[Any, str]:
+        """The Setup (spinus_ai.compose) and reasoning level of an ai.v1.song.compose call, checked."""
+        from . import compose, songwriter
+        from .gateway import EFFORTS
+
+        summary = params.get("summary")
+        if not isinstance(summary, dict) or summary.get("kind") != "spinus.style-summary":
+            raise RpcError(-32602, "summary must be the Track creator's style summary.")
+        size = str(params.get("arrangement") or "sketch")
+        if size not in songwriter.SIZES:
+            raise RpcError(-32602, "arrangement is sketch or full.")
+        effort = str(params.get("effort") or "")
+        if effort and effort not in EFFORTS:
+            raise RpcError(-32602, f"The reasoning level is {', '.join(EFFORTS)}, or none for the model's own.")
+        try:
+            setup = compose.Setup.make(summary, params.get("parts"), size, params.get("candidates"),
+                                       params.get("current"), params.get("effects"))  # fmt: skip
+        except ValueError as error:
+            raise RpcError(-32602, str(error)) from error
+        return setup, effort
+
+    async def song_compose(self, params: dict[str, Any], notify: Notify) -> Any:
+        """A song written by the AI, opt-in: {summary, seed, parts, arrangement, candidates (part id -> [{id, name}]:
+        sounds from the sound index it may pick), current (part id -> its sound in words), effort ("low", "medium",
+        "high", "xhigh" or none: the model's own), tools (the harness's groups of tools allowed: a depth, basic,
+        arrangement, transitions or full, or a list of groups; Basic + arrangement by default), way ("harness", the
+        default: the model composes with the music harness's
+        tools, spinus_ai.harness; "one-shot": one answer with the whole song, spinus_ai.compose), song and
+        levels/problems (a song it wrote, with how loud each part played and why one could not: one revision
+        round)} -> the song, as ai.v1.song.write's, with `composed` (the model, each request's tokens, Spinus's
+        findings) and `sounds` (the picks). ai.v1.song.composeStop {job} stops it, keeping the best checked
+        version. Without a connection, or when the AI fails or its answer is not usable, the rules' song (or the
+        song before the revision) with a note saying so."""
+        from . import compose, harness, songwriter
+
+        setup, effort = self.compose_setup(params)
+        try:
+            seed = int(params.get("seed", 0)) & 0x7FFFFFFF
+        except (TypeError, ValueError) as error:
+            raise RpcError(-32602, "seed must be a number.") from error
+        size = str(params.get("arrangement") or "sketch")
+        way = str(params.get("way") or "harness")
+        if way not in ("harness", "one-shot"):
+            raise RpcError(-32602, "way is harness or one-shot.")
+        try:
+            groups = harness.check_groups(params.get("tools"))
+        except ValueError as error:
+            raise RpcError(-32602, str(error)) from error
+        previous = params.get("song")
+        if previous is not None:
+            try:
+                songwriter.check_song(previous)
+            except ValueError as error:
+                raise RpcError(-32602, str(error)) from error
+            if not isinstance(previous.get("composed"), dict):
+                raise RpcError(-32602, "Only a song the AI wrote can be revised.")
+            way = "harness" if previous["composed"].get("harness") else "one-shot"
+        flag = {"stop": False}
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            try:
+                if way == "harness":
+                    return await harness.write(
+                        self.client,
+                        self.connections,
+                        self.routing,
+                        self.usage,
+                        setup,
+                        seed,
+                        size,
+                        effort,
+                        say,
+                        lambda: flag["stop"],
+                        previous,
+                        params.get("levels"),
+                        params.get("problems"),
+                        groups,
+                    )
+                if previous is not None:
+                    return await compose.revise(
+                        self.client,
+                        self.connections,
+                        self.routing,
+                        self.usage,
+                        setup,
+                        previous,
+                        params.get("levels"),
+                        params.get("problems"),
+                        effort,
+                        say,
+                    )
+                return await compose.compose(
+                    self.client, self.connections, self.routing, self.usage, setup, seed, size, effort, say
+                )
+            except NoConnection:
+                note = "no AI connection is set up"
+            except ProviderError as error:
+                note = f"the AI failed ({error})"
+            if previous is not None:
+                kept = dict(previous)
+                kept["note"] = f"Not revised: {note}; the song before stands."
+                return kept
+            return compose.rules_song(setup, seed, size, f"Written by the rules: {note}.", [])
+
+        job = self.job(notify, work)
+        self.compose_stops[job] = flag
+        return {"job": job}
+
+    async def song_compose_stop(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Stops an AI writer's job after the model's current turn, keeping the best checked version: {job} ->
+        {stopping}."""
+        flag = self.compose_stops.get(str(params.get("job", "")))
+        if flag is None:
+            return {"stopping": False}
+        flag["stop"] = True
+        return {"stopping": True}
+
+    async def song_composer(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Who would write the song for the AI writer: {} -> {available, connection, model, reason}."""
+        from .compose import FEATURE
+
+        routes = self.routing.resolve(FEATURE)
+        if not routes:
+            return {"available": False, "reason": "No AI connection is set up: add one in Options > AI."}
+        return {"available": True, "connection": routes[0].connection.name, "model": routes[0].model, "reason": ""}
 
     async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read

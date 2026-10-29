@@ -4,6 +4,7 @@
 #include "ai/Proposal.h"
 #include "commands/CommandHistory.h"
 #include "session/PartSounds.h"
+#include "dsp/drums/StarterPack.h"
 #include "session/SongWriter.h"
 
 using namespace spinus;
@@ -568,6 +569,11 @@ TEST_CASE ("Song writer: each part starts at its role's level, from how loud its
     CHECK (loudest == Catch::Approx (0.0));
     CHECK (song::roleLevelDb ("pad") < song::roleLevelDb ("bass"));
     CHECK (song::startingFaders (layers, { { "drums", -100.0 } }).empty()); // silent: not measured
+    // A part that measures very quiet (sparse hits) reaches 0 dB at most: the drums and bass stay where they are.
+    const auto sparse = song::startingFaders (layers, { { "drums", -20.0 }, { "bass", -22.0 }, { "pad", -50.0 } });
+    CHECK (sparse.at ("pad") == Catch::Approx (0.0));
+    CHECK (sparse.at ("bass") == Catch::Approx (0.0));
+    CHECK (sparse.at ("drums") == Catch::Approx (faders.at ("drums")));
 
     // Apply sets them on the layers' inserts, in the same one undo step.
     commands::CommandHistory history { model::Project {} };
@@ -581,4 +587,277 @@ TEST_CASE ("Song writer: each part starts at its role's level, from how loud its
     CHECK (project.findInsert (channelNamed (project, "Pad")->targetInsert)->volumeDb ==
            Catch::Approx (faders.at ("pad")).margin (0.01));
     CHECK (project.findInsert (channelNamed (project, "Bass")->targetInsert)->volumeDb == Catch::Approx (0.0));
+}
+
+TEST_CASE ("Song writer: a layer's own colour, as the AI chose it, colours its channel", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    auto* first = song["layers"][0].getDynamicObject();
+    first->setProperty ("colour", "#336699");
+    first->setProperty ("family", "Percussion");                         // a family of the AI's own
+    song["layers"][1].getDynamicObject()->setProperty ("colour", "red"); // not #rrggbb: its family's
+    const auto layers = song::layersOf (song);
+    CHECK (layers[0].colour == "#ff336699");
+    CHECK (song::layerColour (layers[0]) == "#ff336699");
+    CHECK (layers[1].colour.isEmpty());
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    const auto json = song::makeProposal (song, history.getProject(), options, &error);
+    INFO (error);
+    auto proposal = ai::Proposal::prepare (json, history);
+    INFO (proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    const auto* c = channelNamed (history.getProject(), layers[0].name);
+    REQUIRE (c != nullptr);
+    CHECK (c->colour == 0xff336699u);
+    CHECK (c->group == "Percussion");
+    const auto* other = channelNamed (history.getProject(), layers[1].name);
+    REQUIRE (other != nullptr);
+    CHECK (other->colour == (juce::uint32)song::familyColour (layers[1].family).substring (1).getHexValue64());
+}
+
+TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of their own, one undo step", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    const auto layers = song::layersOf (song);
+    const auto& first = layers[0];
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "automation": [
+            {"part": ")" + first.id + R"(", "what": "volume", "points": [
+                {"bar": 0, "value": 0.1, "curve": 0.5}, {"bar": 2, "value": 0.8, "curve": 0}]},
+            {"part": ")" + first.id + R"(", "what": "filter", "filter": "high-pass", "points": [
+                {"bar": 1, "value": 0.2, "curve": 0}, {"bar": 1.5, "value": 0.9, "curve": 0}]},
+            {"part": "nobody", "what": "pan", "points": [{"bar": 0, "value": 0}, {"bar": 1, "value": 1}]}],
+        "samples": [{"file": "Drums/Cymbals/Crash Wide.flac", "bar": 4, "name": "Impact crash"},
+                    {"file": "../../etc/passwd", "bar": 4, "name": "outside the pack"}]
+    })"));
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    const auto json = song::makeProposal (song, history.getProject(), options, &error);
+    INFO (error);
+    auto proposal = ai::Proposal::prepare (json, history);
+    INFO (proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    CHECK (history.getUndoDescriptions().size() == 1);
+    const auto& project = history.getProject();
+    const auto* channel = channelNamed (project, first.name);
+    REQUIRE (channel != nullptr);
+    const auto* insert = project.findInsert (channel->targetInsert);
+    REQUIRE (insert != nullptr);
+
+    // A Spinus Filter on its insert, high-pass, and two automation clips under the song's Automation folder.
+    REQUIRE (insert->effects.size() == 1);
+    CHECK (insert->effects[0].device.stockType == "spinus.filter");
+    std::vector<const model::Clip*> automation;
+    for (const auto& clip : project.playlist.clips)
+        if (std::holds_alternative<model::AutomationClip> (clip.content))
+            automation.push_back (&clip);
+    auto curveOf = [] (const model::Clip* c) { return std::get<model::AutomationClip> (c->content); };
+    REQUIRE (automation.size() == 2); // the unknown part's is left out
+    const auto barTicks = (model::Ticks)(int)song["barTicks"];
+    const auto volume = curveOf (automation[0]), cutoff = curveOf (automation[1]);
+    CHECK (volume.target.kind == model::ParameterTarget::Kind::insertVolume);
+    CHECK (volume.target.insert == channel->targetInsert);
+    CHECK (automation[0]->length == 2 * barTicks);
+    REQUIRE (volume.points.size() == 2);
+    CHECK (volume.points[1].time == 2 * barTicks);
+    CHECK (std::abs (volume.points[1].value - 0.8f) < 1e-4f);
+    CHECK (volume.points[0].curve == Catch::Approx (0.5f));
+    CHECK (cutoff.target.kind == model::ParameterTarget::Kind::deviceParameter);
+    CHECK (cutoff.target.device == insert->effects[0].device.id);
+    CHECK (cutoff.target.parameterId == "cutoff");
+    CHECK (automation[1]->start - automation[0]->start == barTicks);
+    const auto* lane = project.findLane (automation[0]->lane);
+    REQUIRE (lane != nullptr);
+    const auto* folder = project.findLane (lane->group);
+    REQUIRE (folder != nullptr);
+    CHECK (folder->name == options.name + ": Automation");
+
+    // The starter pack's crash, only from inside the pack.
+    int samples = 0;
+    for (const auto& clip : project.playlist.clips)
+        if (std::holds_alternative<model::AudioClip> (clip.content))
+        {
+            ++samples;
+            CHECK (clip.start == automation[0]->start + 4 * barTicks);
+        }
+    CHECK (samples == (dsp::starter::findPack().isDirectory() ? 1 : 0));
+    if (samples > 0)
+        for (const auto& c : project.channels)
+            if (c.name.endsWith (": Samples"))
+                CHECK (project.findInsert (c.targetInsert)->volumeDb == Catch::Approx (-8.0)); // under the music
+}
+
+TEST_CASE ("Song writer: the AI's automation of the master fades the whole mix", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "automation": [{"part": "master", "what": "volume", "points": [
+            {"bar": 0, "value": 0.74, "curve": 0}, {"bar": 2, "value": 0.0, "curve": 0}]}]
+    })"));
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    auto proposal = ai::Proposal::prepare (song::makeProposal (song, history.getProject(), options, &error), history);
+    INFO (error << proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    int fades = 0;
+    for (const auto& clip : history.getProject().playlist.clips)
+        if (const auto* a = std::get_if<model::AutomationClip> (&clip.content))
+        {
+            ++fades;
+            CHECK (a->target.kind == model::ParameterTarget::Kind::insertVolume);
+            CHECK (a->target.insert == model::masterInsertId);
+        }
+    CHECK (fades == 1);
+}
+
+TEST_CASE ("Song writer: the AI's master chain ends with its limiter, once", "[song]")
+{
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "effects": [{"id": "master-limiter", "part": "master", "effect": "limiter", "settings": {"ceiling": "-1 dB"},
+                     "plugin": ""}]
+    })"));
+    for (int time = 0; time < 2; ++time) // written again: the master keeps one limiter
+    {
+        song::Options options;
+        options.name = song::nextSongName (history.getProject());
+        juce::String error;
+        auto proposal =
+            ai::Proposal::prepare (song::makeProposal (song, history.getProject(), options, &error), history);
+        INFO (error << proposal.error);
+        REQUIRE (proposal.apply (history).wasOk());
+    }
+    const auto* master = history.getProject().findInsert (model::masterInsertId);
+    REQUIRE (master != nullptr);
+    REQUIRE (master->effects.size() == 1);
+    CHECK (master->effects[0].device.stockType == "spinus.limiter");
+}
+
+TEST_CASE ("Song writer: a reversed cymbal is the crash played backwards, ending on its bar", "[song]")
+{
+    if (! dsp::starter::findPack().isDirectory())
+        SKIP ("the starter pack is not here");
+    commands::CommandHistory history { model::Project {} };
+    auto song = makeFullSong();
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "samples": [{"file": "Drums/Cymbals/Crash Wide.flac", "bar": 4, "name": "Reverse cymbal", "reversed": true}]
+    })"));
+    song::Options options;
+    options.name = song::nextSongName (history.getProject());
+    juce::String error;
+    auto proposal = ai::Proposal::prepare (song::makeProposal (song, history.getProject(), options, &error), history);
+    INFO (error << proposal.error);
+    REQUIRE (proposal.apply (history).wasOk());
+    CHECK (history.getUndoDescriptions().size() == 1);
+    const auto barTicks = (model::Ticks)(int)song["barTicks"];
+    model::Ticks songStart = -1;
+    for (const auto& clip : history.getProject().playlist.clips)
+        if (std::holds_alternative<model::PatternClip> (clip.content) && (songStart < 0 || clip.start < songStart))
+            songStart = clip.start;
+    int found = 0;
+    for (const auto& clip : history.getProject().playlist.clips)
+        if (const auto* audio = std::get_if<model::AudioClip> (&clip.content))
+        {
+            ++found;
+            CHECK (audio->reversed);
+            CHECK (clip.length > 0);
+            CHECK (clip.start + clip.length == songStart + 4 * barTicks); // it lands on bar 5's first beat
+        }
+    CHECK (found == 1);
+}
+
+TEST_CASE ("Song writer: the AI's effects, buses, sends and ducking are part of the one undo step", "[song]")
+{
+    CHECK (song::sendEffectKind ("Dragon Hall Reverb") == "reverb");
+    CHECK (song::sendEffectKind ("Big-Room") == "reverb");
+    CHECK (song::sendEffectKind ("Tape Echo") == "delay");
+    CHECK (song::sendEffectKind ("Ping Pong Delay") == "delay");
+    CHECK (song::sendEffectKind ("Bass Compressor").isEmpty());
+    CHECK (song::sendEffectKind ("Roomba").isEmpty());           // a word, not a part of one
+    CHECK (song::sendEffectKind ("Micro Delay Line").isEmpty()); // lines a sound up by milliseconds: no echo
+    CHECK (song::sendEffectKind ("MIDI Delayline").isEmpty());
+    CHECK (song::sendEffectKind ("Stereo Delay") == "delay");
+
+    auto song = makeFullSong();
+    const auto layers = song::layersOf (song);
+    REQUIRE (layers.size() >= 3);
+    const auto& a = layers[0];
+    const auto& b = layers[1];
+    const auto& c = layers[2];
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "effects": [{"id": "x-eq", "part": ")" + a.id + R"(", "effect": "eq", "plugin": "",
+                     "settings": {"band3_freq": "250 Hz", "band3_gain": "-4 dB"}},
+                    {"id": "x-c", "part": ")" + a.id + R"(", "effect": "compressor", "plugin": "",
+                     "settings": {"threshold": "-18 dB", "ratio": "4:1"}}],
+        "buses": {"Glue": [")" + b.id + R"(", ")" + c.id + R"("]},
+        "returns": {"reverb": "Test Hall Reverb", "delay": "Missing Echo"},
+        "sends": {")" + a.id + R"(": {"reverb": -12, "delay": -6}},
+        "ducks": {")" + b.id + R"(": {"source": ")" + a.id + R"(", "amount": 60, "release": "120 ms"}}
+    })"));
+    auto apply = [&] (bool withoutSettings, commands::CommandHistory& history)
+    {
+        song::Options options;
+        options.name = song::nextSongName (history.getProject());
+        // A stand-in for the user's reverb plugin: any device insert.addEffect takes.
+        options.effectDevices["Test Hall Reverb"] =
+            juce::JSON::parse (R"({"kind": "stock", "stockType": "spinus.stereo-utility"})");
+        options.withoutEffectSettings = withoutSettings;
+        juce::String error;
+        const auto json = song::makeProposal (song, history.getProject(), options, &error);
+        INFO (error);
+        auto proposal = ai::Proposal::prepare (json, history);
+        return proposal.canApply() ? proposal.apply (history) : juce::Result::fail (proposal.error);
+    };
+    commands::CommandHistory history { model::Project {} };
+    const auto result = apply (false, history);
+    INFO (result.getErrorMessage());
+    REQUIRE (result.wasOk());
+    CHECK (history.getUndoDescriptions().size() == 1);
+    const auto& project = history.getProject();
+    const auto insertOf = [&] (const song::Layer& layer)
+    {
+        const auto* channel = channelNamed (project, layer.name);
+        REQUIRE (channel != nullptr);
+        return project.findInsert (channel->targetInsert);
+    };
+    const auto* ia = insertOf (a);
+    REQUIRE (ia->effects.size() == 2);
+    CHECK (ia->effects[0].device.stockType == "spinus.eq");
+    CHECK (ia->effects[1].device.stockType == "spinus.compressor");
+    // A reverb bus with the user's effect, sent to at -12 dB; the delay the user hasn't is left out.
+    const auto reverb = std::find_if (project.mixer.inserts.begin(), project.mixer.inserts.end(),
+                                      [] (const model::Insert& i) { return i.name.endsWith (" Reverb"); });
+    REQUIRE (reverb != project.mixer.inserts.end());
+    REQUIRE (reverb->effects.size() == 1);
+    CHECK (reverb->effects[0].device.stockType == "spinus.stereo-utility");
+    REQUIRE (ia->sends.size() == 1);
+    CHECK (ia->sends[0].target == reverb->id);
+    CHECK (ia->sends[0].levelDb == Catch::Approx (-12.0f));
+    CHECK (std::none_of (project.mixer.inserts.begin(), project.mixer.inserts.end(),
+                         [] (const model::Insert& i) { return i.name.endsWith (" Delay"); }));
+    // Ducking: a ducker on b's insert, its sidechain from a's.
+    const auto* ib = insertOf (b);
+    REQUIRE (! ib->effects.empty());
+    CHECK (ib->effects.back().device.stockType == "spinus.ducker");
+    CHECK (ib->sidechainSources == std::vector<model::InsertId> { ia->id });
+    // b and c on the Glue bus.
+    const auto* glue = project.findInsert (ib->output);
+    REQUIRE (glue != nullptr);
+    CHECK (glue->name == "Glue");
+    CHECK (insertOf (c)->output == glue->id);
+
+    // A setting no device takes fails the proposal; without the settings the song goes in.
+    song["production"]["effects"][0]["settings"].getDynamicObject()->setProperty ("band3_freq", "very low");
+    commands::CommandHistory other { model::Project {} };
+    CHECK (apply (false, other).failed());
+    CHECK (other.getUndoDescriptions().isEmpty());
+    CHECK (apply (true, other).wasOk());
 }
