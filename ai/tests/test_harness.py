@@ -1099,3 +1099,26 @@ def test_finish_is_refused_once_while_check_finds_issues() -> None:
     assert not ws.finished
     assert ws.call("finish", {"summary": "As it is."}).startswith("Finished")  # asked again: taken as meant
     assert ws.finished
+
+
+def test_with_the_rules_finding_check_asks_the_model_to_write_the_parts_carrying_the_song() -> None:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    ws.call("rules_write", {"part": "bass"})
+    ws.call("rules_write", {"part": "drums"})
+    assert not any("written by Spinus's rules" in line for line in ws.issues())  # off by default
+    ws.rules_finding = True
+    found = [line for line in ws.issues() if "written by Spinus's rules" in line]
+    assert found == ["bass was written by Spinus's rules, not by you: write it"]  # the drums may stay the rules'
+    assert all("written by" not in line for line in ws.issues("drums"))
+
+
+async def test_the_rules_finding_reaches_the_harness_and_stays_for_the_revision(tmp_path: Path) -> None:
+    sent: list[dict[str, Any]] = []
+    script: Script = [[("rules_write", {"part": "bass"})], [("check", {})], [("finish", {"summary": "s"})]]
+    script += [[("finish", {"summary": "s"})]]
+    service = scripted(tmp_path, script, sent)
+    await connect(service)
+    song = await run_job(service, "ai.v1.song.compose", params(tools="basic", rulesFinding=True))
+    checked = sent[2]["messages"][-1]["content"][0]["content"]
+    assert "bass was written by Spinus's rules, not by you: write it" in checked
+    assert song["composed"]["rulesFinding"] is True

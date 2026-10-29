@@ -93,6 +93,10 @@ public:
     /** The depth list's choice: 1 Basic, 2 + arrangement, 3 + transitions, 4 Full, 5 Custom (the checkboxes). */
     int getDepthChoice() const { return depthBox.getSelectedId(); }
     juce::String getDepthNoteText() const { return depthNote.getText(); }
+    /** check names each melodic or harmonic part Spinus's rules wrote, for the AI to write itself (off by default; the
+        owner's A/B test of it against a higher reasoning level). */
+    void setRulesFinding (bool on) { rulesFinding = on; }
+    bool getRulesFinding() const noexcept { return rulesFinding; }
     /** How many times what Spinus hears goes back to the AI (0 to 3; 1 by default). */
     void setRounds (int rounds);
     int getRounds() const { return roundsBox.getSelectedId() - 1; }
@@ -159,6 +163,7 @@ private:
     std::function<Context()> getContext;
     Context context;
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
+    bool rulesFinding = false;
     bool busy = false;
     int fixedSeed = -1;
     juce::String job;
