@@ -921,10 +921,17 @@ void SongWriterPanel::composeRound (const juce::var& params, const juce::String&
                 return;
             if (! song["composed"].isObject())
             {
-                // The AI was not used after all (no connection, it failed): the rules' song, and why.
+                // The AI was not used after all (no connection, it failed): the rules' song, and why. Setting the
+                // levels writes its own status: the reason goes before it, so it isn't lost.
                 composing = false;
-                status.setText (song["note"].toString(), juce::dontSendNotification);
-                balance();
+                const auto why = song["note"].toString();
+                status.setText (why, juce::dontSendNotification);
+                balance (
+                    [this, why] (const auto&, const auto&)
+                    {
+                        if (! status.getText().startsWith (why))
+                            status.setText (why + " " + status.getText(), juce::dontSendNotification);
+                    });
                 return;
             }
             balance ([this] (const auto& levels, const auto& problems) { afterMeasured (levels, problems); });

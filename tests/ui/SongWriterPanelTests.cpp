@@ -288,7 +288,8 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     if (ai::AiService::findInstallation().python == juce::File())
         SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
     TempFolder t;
-    // The fake model: looks at the form, lets the rules write two parts, writes the drums itself, checks, finishes.
+    // The fake model: looks at the form, lets the rules write two parts, writes the drums itself, checks, finishes
+    // (refused once while check finds issues, then again).
     const auto replies = t.root.getChildFile ("replies.json");
     replies.replaceWithText (R"([
         {"tool": ["form", {}]},
@@ -297,6 +298,7 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
         {"tool": ["write", {"part": "drums", "section": "verse", "notes": "0 kick 1 110; 4 snare 1 100; 8 kick 1 100; 12 snare 1 100", "loop_bars": 1}]},
         {"tool": ["write", {"part": "kazoo", "section": "verse", "notes": "0 60 1 90"}]},
         {"tool": ["check", {}]},
+        {"tool": ["finish", {"summary": "A short test song."}]},
         {"tool": ["finish", {"summary": "A short test song."}]},
         {"text": "Done."}
     ])");
@@ -361,7 +363,7 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     CHECK (song["note"].toString().contains ("Tools: Basic + arrangement."));
     CHECK (panel.getStatusText().contains ("Written by the AI (fake-model, reasoning high)"));
     CHECK (panel.getText().contains ("Tokens used"));
-    CHECK (panel.getText().contains ("7 requests")); // finish ends it: no turn after
+    CHECK (panel.getText().contains ("8 requests")); // the second finish ends it: no turn after
     // The drums as it wrote them, every bar of the verse; the lead (never written) by the rules.
     int verseBars = 0;
     for (const auto& section : *song["sections"].getArray())
