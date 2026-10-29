@@ -121,6 +121,7 @@ SECTION_ITEM = schema(
         "chords": {"type": "array", "items": {"type": "string"}},
         "barsPerChord": {"type": "integer", "enum": [1, 2]},
         "energy": {"type": "number"},
+        "cue": {"type": "string", "description": "A short note on the section: 'drums fall away', 'guitar solo'"},
     },
     ["id", "kind", "bars", "chords"],
 )
@@ -141,9 +142,10 @@ TOOLS = [
     Tool(
         "set_form",
         "Set the sections and their order (and the tempo and key). Notes of sections that go are dropped; a "
-        "section that gets shorter keeps its first bars. A section's kind is one of intro, verse, chorus, bridge, "
-        "outro: name its id by what it is (prechorus, solo, breakdown, buildup, drop, interlude) so a pre-chorus, a "
-        "solo or a breakdown the description asks for is there by name.",
+        "section that gets shorter keeps its first bars. Kinds: "
+        + ", ".join(sw.KINDS)
+        + " (each plays as its base: a drop as a chorus, a breakdown as a bridge). A cue is a short note on the "
+        "section ('drums fall away').",
         schema(
             {
                 "sections": {"type": "array", "items": SECTION_ITEM},
@@ -582,42 +584,7 @@ see the balance. Less is more: a few clear moves beat effects on every part."""
 
 TOOL_NAMES = [t.name for t in TOOLS]
 
-# Sections a description can ask for, in generic words: the name the finding uses, how the text says it, and what a
-# section's id (or kind) shows when the form has one. Kinds are only intro, verse, chorus, bridge and outro, so the
-# others are found by the id the model gives the section.
-NAMED_SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
-    ("intro", r"\bintro(?:duction)?s?\b", ("intro",)),
-    ("verse", r"\bverses?\b", ("verse",)),
-    ("pre-chorus", r"\bpre[- ]?choruse?s?\b", ("pre",)),
-    ("chorus", r"\b(?<!pre-)(?<!pre)choruse?s?\b", ("chorus",)),
-    ("bridge", r"\bbridges?\b", ("bridge",)),
-    ("solo", r"\bsolos?\b", ("solo",)),
-    ("breakdown", r"\bbreak[- ]?downs?\b", ("breakdown",)),
-    ("build-up", r"\bbuild[- ]?ups?\b", ("build",)),
-    ("drop", r"\bdrops?\b(?!\s+(?:back|out|off|down|away|to)\b)", ("drop",)),
-    ("interlude", r"\binterludes?\b", ("interlude",)),
-    ("double chorus", r"\bdouble[- ]choruse?s?\b", ("double",)),
-    ("outro", r"\boutros?\b", ("outro",)),
-]
-
-
-def asked_sections(text: str) -> list[list[str]]:
-    """The sections the description names, each a group of names any one of which will do ("a breakdown or
-    bridge": either)."""
-    lowered = text.lower()
-    found = [(m.start(), m.end(), name) for name, pattern, _ in NAMED_SECTIONS for m in re.finditer(pattern, lowered)]
-    found.sort()
-    groups: list[list[str]] = []
-    for i, (start, _, name) in enumerate(found):
-        before = found[i - 1] if i else None
-        if before is not None and re.fullmatch(r"\s+or\s+(?:an?\s+)?", lowered[before[1] : start]):
-            group = next(g for g in groups if before[2] in g)
-            if name not in group:
-                group.append(name)
-            continue
-        if not any(name in g and len(g) == 1 for g in groups):
-            groups.append([name])
-    return groups
+NAMED_SECTIONS, asked_sections = sw.NAMED_SECTIONS, sw.asked_sections
 
 
 MASTER = "master"  # add_effect's name for the song's master insert
@@ -686,6 +653,7 @@ class Workspace:
                 "chords": loop,
                 "hold": hold,
                 "energy": float(s["energy"]),
+                "cue": str(s.get("cue") or ""),
             }
         ws.order = [e["section"] for e in rules["arrangement"]]
         return ws
@@ -889,8 +857,9 @@ class Workspace:
         ]
         for sid, s in self.sections.items():
             has = [p for p, by in self.notes.items() if by.get(sid)]
+            cue = f" ({s['cue']})" if s.get("cue") else ""
             lines.append(
-                f"{sid}: {s['kind']}, {s['bars']} bars, energy {s['energy']:g}, chords "
+                f"{sid}: {s['kind']}{cue}, {s['bars']} bars, energy {s['energy']:g}, chords "
                 f"{' '.join(s['chords'])} ({s['hold']} bar{'s' if s['hold'] > 1 else ''} each); notes: "
                 f"{', '.join(has) or 'none yet'}"
             )
@@ -1706,8 +1675,12 @@ class Workspace:
 
     def form_issues(self) -> list[str]:
         """Sections the description asks for that the form does not have (by its sections' ids and kinds)."""
-        text = str((self.setup.summary.get("described") or {}).get("text") or "")
-        if not text:
+        described = self.setup.summary.get("described") or {}
+        asked = described.get("sections")
+        text = str(described.get("text") or "")
+        if not isinstance(asked, list):
+            asked = asked_sections(text) if text else []
+        if not asked:
             return []
         markers = {name: shows for name, _, shows in NAMED_SECTIONS}
         kinds = [self.sections[sid]["kind"] for sid in self.order]
@@ -1715,17 +1688,21 @@ class Workspace:
         def has(name: str) -> bool:
             if name == "double chorus" and any(a == b == "chorus" for a, b in itertools.pairwise(kinds)):
                 return True  # a chorus played twice in a row
-            if name in ("intro", "verse", "chorus", "bridge", "outro") and name in kinds:
+            if sw.NAMED_KIND.get(name) in kinds and name != "double chorus":
                 return True
+            if name == "fade out" and any(k in kinds for k in ("outro", "end")):
+                return True  # an outro that fades: the outro's automation does it
             return any(m in sid.lower().replace("-", "").replace("_", "") for sid in self.order for m in markers[name])
 
         out = []
-        for group in asked_sections(text):
+        for group in asked:
             if not any(has(name) for name in group):
                 wanted = " or a ".join(group)
                 out.append(
-                    f"form: the description asks for a {wanted}, and no section is one (add it in set_form, its id "
-                    f"naming it, e.g. '{markers[group[0]][0]}'; its kind can be bridge)"
+                    f"form: the description asks for a {wanted}, and no section is one (add it in set_form: kind "
+                    f"'{sw.NAMED_KIND.get(group[0]) or 'chorus'}'"
+                    + (", played twice in a row" if group[0] == "double chorus" else "")
+                    + ")"
                 )
         return out
 
@@ -2096,6 +2073,7 @@ def score(song: dict[str, Any], setup: compose.Setup) -> dict[str, Any]:
             "hold": hold,
             "chords": [c["roman"] for c in s["chords"][::hold]][:8],
             "energy": s["energy"],
+            "cue": str(s.get("cue") or ""),
         }
     ws.order = [e["section"] for e in song["arrangement"]]
     ws.notes = {
@@ -2381,6 +2359,7 @@ def fake_runs(setup: compose.Setup, ws: Workspace) -> FakeModel:
                 "chords": s["chords"],
                 "barsPerChord": s["hold"],
                 "energy": s["energy"],
+                **({"cue": s["cue"]} if s.get("cue") else {}),
             }
             for s in ws.sections.values()
         ],

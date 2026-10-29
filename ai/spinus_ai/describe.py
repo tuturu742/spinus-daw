@@ -32,7 +32,7 @@ from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
 from .keynames import key_name, spelled
 from .routing import Routing
-from .songwriter import ROLES
+from .songwriter import ROLES, asked_sections
 from .style import SUMMARY_VERSION
 from .usage import UsageLog
 
@@ -788,6 +788,7 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
         "keyFixed": reading.tonic is not None and reading.scale is not None,
         "described": {
             "text": text,
+            "sections": asked_sections(text),  # the song sections it names ("a breakdown or bridge": either)
             "genre": genre.id,
             "genreName": genre.name if reading.genre_named else "",
             "understood": understood(reading, tempo, modes),
@@ -998,6 +999,7 @@ def with_references(
         understood += "; parts: " + ", ".join(reading.instruments)
     out["described"] = {
         "text": text,
+        "sections": asked_sections(text),
         "genre": genre.id if genre is not None else "",
         "genreName": genre.name if genre is not None else "",
         "understood": understood,
