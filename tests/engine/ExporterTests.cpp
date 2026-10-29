@@ -1,12 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "commands/CommandRegistry.h"
 #include "core/ChildProcess.h"
 #include "RealtimeRunner.h"
 #include "TestDevices.h"
 #include "engine/EngineHost.h"
+#include "engine/DeviceFactory.h"
 #include "engine/Exporter.h"
 #include "engine/OutputCapturePlugin.h"
+#include "plugins/clap/ClapPluginFormat.h"
 #include "session/LiveExport.h"
+#include "session/Session.h"
 #include "ui/ExportDialog.h"
 #include "ui/Theme.h"
 
@@ -846,4 +850,62 @@ TEST_CASE ("Exporting while playing with the master muted writes silence, as was
     for (auto x : card)
         sum += (double)x * x;
     CHECK (sum < 1.0e-6);
+}
+
+TEST_CASE ("An export waits for an instrument that loads its sounds in the background", "[engine][export]")
+{
+    // The difficult synth stays silent for its first 3 seconds, as big sample libraries do while they load. An
+    // export makes a fresh one and renders faster than real time: without waiting, the song's first note is lost.
+    EngineHost host ({ .openAudioDevice = false });
+    plugins::ClapPluginFormat clap;
+    juce::OwnedArray<juce::PluginDescription> found;
+    const auto file = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("difficult-synth.clap");
+    clap.findAllTypesForFile (found, file.getFullPathName());
+    const juce::PluginDescription* synth = nullptr;
+    for (auto* d : found)
+        if (d->name == "Spinus Difficult Synth")
+            synth = d;
+    REQUIRE (synth != nullptr);
+    host.getEngine().getPluginManager().knownPluginList.addType (*synth);
+    Session session (host.getEngine(), std::make_unique<engine::DefaultDeviceFactory>());
+    auto run = [&] (const juce::String& name, const juce::String& params)
+    {
+        juce::String error;
+        auto command = commands::CommandRegistry::get().create (name, juce::JSON::parse (params), error);
+        INFO (name << ": " << error);
+        REQUIRE (command != nullptr);
+        auto* raw = command.get();
+        REQUIRE (session.getHistory().perform (std::move (command)).wasOk());
+        return raw->getResult();
+    };
+    const auto channel = run (
+        "channel.add",
+        R"({"name": "Difficult", "instrument": {"kind": "plugin", "plugin": {"format": "CLAP", "name": "Spinus Difficult Synth", "manufacturer": )" +
+            juce::JSON::toString (synth->manufacturerName) + R"(, "fileOrIdentifier": )" +
+            juce::JSON::toString (file.getFullPathName()) + "}}}");
+    const auto pattern = run ("pattern.add", R"({"name": "P", "length": 3840})");
+    run ("pattern.setNotes", R"({"pattern": )" + pattern["pattern"].toString() + R"(, "channel": )" +
+                                 channel["channel"].toString() +
+                                 R"(, "notes": [{"start": 0, "length": 3600, "pitch": 60, "velocity": 0.9}]})");
+    const auto lane = run ("lane.add", "{}");
+    run ("clip.addPattern", R"({"lane": )" + lane["lane"].toString() + R"(, "pattern": )" +
+                                pattern["pattern"].toString() + R"(, "start": 0})");
+    session.getEdit().dispatchPendingUpdatesSynchronously();
+
+    juce::TemporaryFile folder;
+    REQUIRE (folder.getFile().createDirectory());
+    ExportSettings settings;
+    settings.format = ExportSettings::Format::wav24;
+    settings.sampleRate = 48000.0;
+    settings.tailSeconds = 0.5;
+    std::optional<ExportJob::Result> result;
+    auto job = session.createExportJob (folder.getFile().getChildFile ("song.wav"), settings,
+                                        [&] (const ExportJob::Result& r) { result = r; });
+    job->start();
+    for (int i = 0; i < 1200 && ! result; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    job = nullptr;
+    REQUIRE (result.has_value());
+    REQUIRE (result->ok);
+    CHECK (read (result->files.at (0)).rmsDb > -40.0f); // the note, from its first beat
 }
