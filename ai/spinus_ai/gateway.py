@@ -107,9 +107,12 @@ ErrorKind = Literal["auth", "rate_limit", "outage", "network", "bad_request", "c
 
 
 class ProviderError(Exception):
-    def __init__(self, kind: ErrorKind, message: str) -> None:
+    def __init__(self, kind: ErrorKind, message: str, passing: bool = False) -> None:
         super().__init__(message)
         self.kind = kind
+        # Worth asking the same connection again at once: a dropped connection, or a server's trouble in the middle
+        # of an answer. A refused request (a 5xx before the answer) goes to the next connection instead.
+        self.passing = passing or kind == "network"
 
     @property
     def worth_falling_back(self) -> bool:
@@ -148,7 +151,9 @@ SMALLER_ROOM = (32000, 8192)
 CUT_OFF = ("max_tokens", "length")
 # A model's answer: long conversations and reasoning can keep a provider quiet for minutes before it streams.
 ANSWER_TIMEOUT = httpx.Timeout(600.0, connect=15.0)
-NETWORK_RETRY_WAITS = (2.0, 8.0)  # a dropped connection is asked again twice, a step of a long tool loop not lost
+# A dropped connection, or a provider's passing trouble in the middle of an answer ("internal error" in its stream),
+# is asked again twice: a step of a long tool loop is not lost to one bad answer.
+NETWORK_RETRY_WAITS = (2.0, 8.0)
 
 
 def network_trouble(error: httpx.TransportError) -> str:
@@ -519,8 +524,7 @@ async def complete_openai(
                 break
             payload = json.loads(data)
             if "error" in payload:
-                message = payload["error"].get("message", "The provider reported an error.")
-                raise ProviderError("bad_request", str(message))
+                raise chat_error(payload["error"])
             model = payload.get("model") or model
             if payload.get("usage"):
                 u = payload["usage"]
@@ -629,6 +633,24 @@ def responses_usage(usage: dict[str, Any]) -> Usage:
         reasoning_tokens=int((usage.get("output_tokens_details") or {}).get("reasoning_tokens") or 0),
         cached_tokens=int((usage.get("input_tokens_details") or {}).get("cached_tokens") or 0),
     )
+
+
+TRANSIENT_WORDS = ("internal", "overloaded", "unavailable", "temporar", "try again", "timed out", "timeout")
+
+
+def chat_error(error: Any) -> ProviderError:
+    """An error a chat-completions service sends inside its stream (OpenRouter passes on the model provider's): a
+    server's trouble (a code of 500 or more, or words like "internal error") is an outage, asked again; the rest are
+    the request's."""
+    error = error if isinstance(error, dict) else {"message": str(error)}
+    message = str(error.get("message") or "The provider reported an error.")
+    code = error.get("code")
+    number = int(code) if isinstance(code, int) or (isinstance(code, str) and code.isdigit()) else 0
+    if number == 429 or "rate limit" in message.lower():
+        return ProviderError("rate_limit", message)
+    if number >= 500 or any(word in message.lower() for word in TRANSIENT_WORDS):
+        return ProviderError("outage", message, passing=True)
+    return ProviderError("bad_request", message)
 
 
 def responses_error(error: dict[str, Any] | None) -> ProviderError:
@@ -745,7 +767,7 @@ async def complete_retrying(
         try:
             return await complete_once(client, connection, key, request, on_text)
         except ProviderError as error:
-            if error.kind != "network" or wait is None:
+            if not error.passing or wait is None:
                 raise
             await asyncio.sleep(wait)
     raise AssertionError("unreachable")

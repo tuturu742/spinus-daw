@@ -407,3 +407,31 @@ async def test_a_dropped_connection_is_asked_again_and_named(monkeypatch: pytest
     async with httpx.AsyncClient(transport=httpx.MockTransport(down)) as client:
         with pytest.raises(gateway.ProviderError, match="no answer in time"):
             await gateway.complete(client, connection, "sk-test", request, quiet)
+
+
+async def test_a_providers_passing_trouble_in_its_stream_is_asked_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    from spinus_ai import gateway
+
+    monkeypatch.setattr(gateway, "NETWORK_RETRY_WAITS", (0.0, 0.0))
+    calls: list[int] = []
+    good = (
+        b'data: {"choices": [{"index": 0, "delta": {"content": "Hello"}}]}\n\n'
+        b'data: {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}\n\ndata: [DONE]\n\n'
+    )
+    bad = b'data: {"error": {"code": 502, "message": "Internal error during token generation"}}\n\n'
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, content=bad if len(calls) == 1 else good)
+
+    connection = Connection("x", "Router", "openrouter", "https://openrouter.ai/api/v1")
+    request = gateway.Request("x-ai/model", "system", [gateway.Message("user", [gateway.Text("hi")])])
+
+    async def quiet(_: str) -> None:
+        pass
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(flaky)) as client:
+        answer = await gateway.complete(client, connection, "sk-or-test", request, quiet)
+    assert len(calls) == 2 and any(getattr(b, "text", "") == "Hello" for b in answer.blocks)
+    assert gateway.chat_error({"code": 400, "message": "Unknown parameter"}).kind == "bad_request"
+    assert gateway.chat_error({"message": "Rate limit exceeded"}).kind == "rate_limit"
