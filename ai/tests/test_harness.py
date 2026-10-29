@@ -87,7 +87,8 @@ async def test_a_good_run_composes_through_the_tools_and_finishes(tmp_path: Path
     composed = song["composed"]
     assert composed["harness"] and song["composedBy"] == "fake-model" and composed["reason"] == "A plain test song."
     assert composed["calls"]["write"] == len(ws.sections) and composed["calls"]["place"] == len(ws.sections)
-    assert composed["calls"]["finish"] == 1 and composed["turns"] == len(fake.script)
+    # The plain song still has open issues: finish was refused once with them, and the second finish took it.
+    assert composed["calls"]["finish"] == 2 and composed["turns"] == len(fake.script)
     # The drums from a one-bar loop, over every bar; the bass from a motif fitted to the chords.
     first = next(iter(ws.sections))
     assert len(song["layerParts"]["drums"][first]) == 12 * ws.sections[first]["bars"]
@@ -264,8 +265,9 @@ async def test_reasoning_blocks_go_back_unchanged_in_the_loop(tmp_path: Path) ->
     song = await run_job(service, "ai.v1.song.compose", params())
     assert sent[1]["messages"][1]["content"][0] == {"type": "thinking", "thinking": "", "signature": "sig0"}
     usage = song["composed"]["usage"]
-    assert usage["input"] == 2 * 105 and usage["cached"] == 2 * 90  # all the input, the cache's part said
-    assert "180 of the input tokens were read from the provider's cache" in song["note"]
+    # form, then finish refused once (open issues), then finish: three requests.
+    assert usage["input"] == 3 * 105 and usage["cached"] == 3 * 90  # all the input, the cache's part said
+    assert "270 of the input tokens were read from the provider's cache" in song["note"]
 
 
 def test_the_mcp_server_serves_the_same_tools(tmp_path: Path) -> None:
@@ -295,13 +297,20 @@ def test_the_mcp_server_serves_the_same_tools(tmp_path: Path) -> None:
             "method": "tools/call",
             "params": {"name": "finish", "arguments": {"summary": "s"}},
         },
+        {  # refused once with the open issues: finish again
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {"name": "finish", "arguments": {"summary": "s"}},
+        },
     ]
     feed = [json.dumps(x) + "\n" for x in lines]
     out: list[dict[str, Any]] = []
     harness.serve_mcp(
         BRIEF, tmp_path / "song.json", lambda: feed.pop(0) if feed else "", lambda text: out.append(json.loads(text))
     )
-    assert [o["id"] for o in out] == [1, 2, 3, 4, 5]
+    assert [o["id"] for o in out] == [1, 2, 3, 4, 5, 6]
+    assert out[4]["result"]["isError"] is True and "check still finds" in out[4]["result"]["content"][0]["text"]
     assert "music harness" in out[0]["result"]["instructions"]
     assert [t["name"] for t in out[1]["result"]["tools"]] == harness.TOOL_NAMES
     assert out[2]["result"]["isError"] is False and "notes" in out[2]["result"]["content"][0]["text"]
@@ -416,6 +425,11 @@ async def test_openais_reasoning_goes_back_unchanged_in_the_harness_loop(tmp_pat
             {"type": "function_call", "id": "fc_2", "call_id": "call_2", "name": "finish",
              "arguments": json.dumps({"summary": "Through the Responses API."})},
         ],
+        [  # finish was refused once (open issues): asked again
+            {"type": "reasoning", "id": "rs_2", "summary": [], "encrypted_content": "secret-2"},
+            {"type": "function_call", "id": "fc_3", "call_id": "call_3", "name": "finish",
+             "arguments": json.dumps({"summary": "Through the Responses API."})},
+        ],
     ]  # fmt: skip
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -430,12 +444,12 @@ async def test_openais_reasoning_goes_back_unchanged_in_the_harness_loop(tmp_pat
     chain = [{"connection": saved["id"], "model": "gpt-6.1-sol"}]
     await service.handle("ai.v1.routing.set", {"feature": "patterns", "chain": chain}, no_notify)
     song = await run_job(service, "ai.v1.song.compose", params(effort="xhigh"))
-    assert len(sent) == 2 and sent[0]["reasoning"] == {"effort": "xhigh"} and "max_output_tokens" not in sent[0]
+    assert len(sent) == 3 and sent[0]["reasoning"] == {"effort": "xhigh"} and "max_output_tokens" not in sent[0]
     assert sent[1]["input"][1] == turns[0][0] and sent[1]["input"][2] == turns[0][1]  # the reasoning, unchanged
     assert sent[1]["input"][3]["type"] == "function_call_output" and sent[1]["input"][3]["call_id"] == "call_0"
     assert song["composed"]["reason"] == "Through the Responses API." and song["layerParts"]["bass"]
     usage = song["composed"]["usage"]
-    assert usage["reasoning"] == 2 * USAGE["output_tokens_details"]["reasoning_tokens"]  # type: ignore[index]
+    assert usage["reasoning"] == 3 * USAGE["output_tokens_details"]["reasoning_tokens"]  # type: ignore[index]
 
 
 def test_eval_saves_each_song(tmp_path: Path) -> None:
@@ -480,7 +494,8 @@ def test_a_refused_reasoning_level_becomes_the_lowest_offered() -> None:
 
 async def test_the_harness_says_when_the_model_lacks_the_level_asked(tmp_path: Path) -> None:
     sent: list[dict[str, Any]] = []
-    fake = harness.FakeModel([[("rules_write", {"part": "bass"})], [("finish", {"summary": "s"})]], {})
+    script = [[("rules_write", {"part": "bass"})], [("finish", {"summary": "s"})], [("finish", {"summary": "s"})]]
+    fake = harness.FakeModel(script, {})
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -494,7 +509,7 @@ async def test_the_harness_says_when_the_model_lacks_the_level_asked(tmp_path: P
     await connect(service)
     song = await run_job(service, "ai.v1.song.compose", params(effort="low"))
     efforts = [r["output_config"]["effort"] for r in sent]
-    assert efforts == ["low", "medium", "medium"]  # asked once at low; the rest of the loop at medium
+    assert efforts == ["low", "medium", "medium", "medium"]  # asked once at low; the rest of the loop at medium
     assert "does not reason at the level 'low', so 'medium', the lowest it offers, was used" in song["note"]
 
 
@@ -1073,3 +1088,14 @@ async def test_a_long_session_on_a_chat_service_has_its_old_tool_calls_cleared(
     assert any(m["content"] == "[cleared]" for m in tool_messages)
     assert all(m["content"] != "[cleared]" for m in tool_messages[-8:])  # the newest are kept
     assert song["composed"]["usage"]["cleared"] > 0
+
+
+def test_finish_is_refused_once_while_check_finds_issues() -> None:
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    open_issues = ws.issues()
+    assert open_issues  # nothing written yet
+    with pytest.raises(harness.Mistake, match=f"check still finds {len(open_issues)} issues"):
+        ws.call("finish", {"summary": "Too soon."})
+    assert not ws.finished
+    assert ws.call("finish", {"summary": "As it is."}).startswith("Finished")  # asked again: taken as meant
+    assert ws.finished

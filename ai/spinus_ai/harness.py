@@ -221,7 +221,8 @@ TOOLS = [
     ),
     Tool(
         "rules_write",
-        "Let Spinus's own rules write a part (in a section, or in all) from the form's chords.",
+        "Let Spinus's own rules write a part (in a section, or in all) from the form's chords: for routine parts. "
+        "Write the parts that carry the song (its hooks, melodies and guitars) yourself.",
         schema({"part": PART, "section": SECTION}, ["part"]),
     ),
     Tool(
@@ -656,6 +657,7 @@ class Workspace:
     problems: dict[str, str] = field(default_factory=dict)
     summary: str = ""
     finished: bool = False
+    finish_pushed_back: bool = False  # finish was refused once for open issues: a second finish is taken as meant
     calls: Counter[str] = field(default_factory=Counter)
     groups: tuple[str, ...] = GROUP_ORDER  # the groups of tools allowed (the page's depth)
     # The later groups' state: "added" (parts the AI added), "looks" (part -> family, colour), "stash" (part ->
@@ -1790,10 +1792,18 @@ class Workspace:
         return out
 
     def tool_finish(self, summary: str) -> str:
+        found = self.issues()
+        if found and not self.finish_pushed_back:
+            # As a build that fails its tests: refused once, with what is open. Asked again, it finishes.
+            self.finish_pushed_back = True
+            shown = "; ".join(found[:8]) + (f"; and {len(found) - 8} more" if len(found) > 8 else "")
+            raise Mistake(
+                f"check still finds {len(found)} issue{'s' if len(found) != 1 else ''}: {shown}. Fix them with small "
+                "edits; if one is what you want, call finish again to finish as it is"
+            )
         self.summary = str(summary)[:400]
         self.finished = True
         left = [p["id"] for p in self.setup.written() if not any(self.notes.get(p["id"], {}).values())]
-        found = self.issues()
         words = "Finished: the song goes to the user."
         if left:
             words += f" Spinus's rules write {', '.join(left)}."
@@ -2332,6 +2342,7 @@ def fake_runs(setup: compose.Setup, ws: Workspace) -> FakeModel:
         [("check", {})],
         [("copy", {"from_section": first, "to_section": first})],
         [("finish", {"summary": "A plain test song."})],
+        [("finish", {"summary": "A plain test song."})],  # finish is refused once while check finds issues
     ]
     one_shot = {
         "tempo": ws.tempo,

@@ -457,7 +457,7 @@ programmer runs tests:
 - sections your description asks for that the form doesn't have: a pre-chorus, a solo, a breakdown, a build-up,
   a drop, a double chorus, an outro ("a breakdown or bridge": either will do).
 
-It fixes what the checks find with small edits of a few bars, then says it's finished. While it works, the
+It fixes what the checks find with small edits of a few bars, then says it's finished. If it tries to finish while the checks still find something, it is told what is open, once; asked again, it finishes as it is. While it works, the
 page shows each step in plain words ("Writing the bass for the chorus", "Checking: 2 issues") and the tokens
 used so far. A note it can't read, outside its instrument's range or off the grid is fixed or left out,
 and the page says so. A part it never wrote is written by Spinus's rules, and the page says which.
