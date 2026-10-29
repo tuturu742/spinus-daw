@@ -15,6 +15,8 @@ namespace spinus::song
 
 namespace
 {
+constexpr double sampleLevelDb = -8.0; // the starter pack's hits (impacts, a reversed cymbal) under the music
+
 juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items)
 {
     auto* o = new juce::DynamicObject();
@@ -781,7 +783,11 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
                 clip.getDynamicObject()->setProperty ("channel", sampleChannel);
             const auto added = step ("clip.addAudio", clip);
             if (sampleChannel.isVoid())
+            {
                 sampleChannel = added + ".channel";
+                // The pack's hits are mastered loud: under the music, as a part's starting level would be.
+                step ("insert.set", object ({ { "insert", added + ".insert" }, { "volumeDb", sampleLevelDb } }));
+            }
             if (reversed)
                 step ("clip.setAudio", object ({ { "clip", added + ".clip" }, { "reversed", true } }));
         }

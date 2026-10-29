@@ -686,6 +686,10 @@ TEST_CASE ("Song writer: the AI's automation clips and samples go on tracks of t
             CHECK (clip.start == automation[0]->start + 4 * barTicks);
         }
     CHECK (samples == (dsp::starter::findPack().isDirectory() ? 1 : 0));
+    if (samples > 0)
+        for (const auto& c : project.channels)
+            if (c.name.endsWith (": Samples"))
+                CHECK (project.findInsert (c.targetInsert)->volumeDb == Catch::Approx (-8.0)); // under the music
 }
 
 TEST_CASE ("Song writer: the AI's automation of the master fades the whole mix", "[song]")
