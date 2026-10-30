@@ -13,7 +13,6 @@ namespace spinus::ui
 
 namespace
 {
-constexpr const char* separationModel = "htdemucs"; // the Track creator's stems
 
 juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items)
 {
@@ -347,14 +346,21 @@ bool PartSoundsPanel::chooseSounds()
                     if (shouldStop())
                         return juce::String ("Stopped.");
                     const auto entry = state->context.library.read (song.digest);
-                    const auto stems = state->context.library.findStems (song.digest, separationModel);
+                    // The Track creator's stems: 6 stems, or the 4 of a song analyzed before.
+                    juce::String model = parts::separationModel;
+                    auto stems = state->context.library.findStems (song.digest, model);
+                    if (stems.find (target.part) == stems.end())
+                    {
+                        model = parts::olderSeparationModel;
+                        stems = state->context.library.findStems (song.digest, model);
+                    }
                     const auto stem = stems.find (target.part);
                     if (! entry.isObject() || stem == stems.end())
                         continue;
                     std::vector<HiddenInstrument::Note> played;
                     if (target.part == "drums")
                     {
-                        const auto hits = parts::stemHitsFromVar (entry["drums"][separationModel]);
+                        const auto hits = parts::stemHitsFromVar (entry["drums"][juce::Identifier (model)]);
                         if (hits.empty())
                             continue;
                         const auto audio = parts::readMono (stem->second, OfflineInstrument::sampleRate);
@@ -370,8 +376,8 @@ bool PartSoundsPanel::chooseSounds()
                     }
                     else
                     {
-                        const auto stemNotes = parts::stemNotesFromVar (
-                            entry["notes"][juce::Identifier (juce::String (separationModel) + "/" + target.part)]);
+                        const auto stemNotes =
+                            parts::stemNotesFromVar (entry["notes"][juce::Identifier (model + "/" + target.part)]);
                         if (stemNotes.empty())
                             continue;
                         const auto audio = parts::readMono (stem->second, OfflineInstrument::sampleRate);

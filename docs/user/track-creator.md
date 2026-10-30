@@ -36,10 +36,14 @@ computer; nothing is sent anywhere.
 2. **The analysis engine** (PyTorch), installed once: the Track creator offers a **Set up the analysis
    engine...** button that opens [the analysis engine page](analysis-engine.md).
 3. **Model files**, downloaded once: Beat This! (8 MB on the CPU, 81 MB with a graphics card), Demucs for
-   4 stems (84 MB) and Basic Pitch (230 KB). The Track creator says what is missing and how big it is;
+   6 stems (55 MB: drums, bass, vocals, guitar, piano and the rest) and Basic Pitch (230 KB). The Track creator says what is missing and how big it is;
    click **Download** to agree, and it carries on. The Analyzer's **Sources and licences...** says where
    each comes from and under which licence, and can download one from another link its authors give (the
    models are shared, so the Track creator then has it too).
+
+   Songs analyzed by an older Spinus (with 4 stems, before guitars were told apart) are analyzed again the
+   next time you click **Analyze**: their tempo and key are kept, and only the stems and what follows are
+   found again.
 
 ## Adding songs
 
@@ -118,8 +122,16 @@ Once the songs are analyzed, **What the songs have in common** says it in plain 
   play, numbered as in the [Channel Rack](channel-rack.md), and whether the beat is straight or swung.
   Spinus listens to the drum part itself for this. Songs with different grooves are not mixed into one:
   you get the main groove (and in how many songs), and the other grooves beside it.
-- **Parts**: bass, vocals, other instruments: in how many of the songs, from which note to which, how
-  many notes a bar, and whether they play single notes or chords.
+- **Parts**: bass, vocals, guitar, piano, other instruments: in how many of the songs, from which note to
+  which, how many notes a bar, and whether they play single notes or chords.
+- **Guitars**: in how many songs, whether they sound distorted or clean, whether they play power chords,
+  and whether there is a lead guitar: "Guitars: in 3 of 4 songs, distorted, mostly power chords, with a lead
+  guitar in 2." Spinus listens to the guitar part on its own for this: a distorted guitar fills its sound
+  with harmonics and noise, a clean one rings with clear notes. A guitar too quiet in the mix, or one that
+  is really a synth (pure tones), is not counted. When at least half of your songs have guitars, the
+  description and **Suggest parts** name them (a rhythm guitar, a clean guitar, a lead guitar), and the
+  guitar parts follow your songs' guitar: its notes, and the sound **Tune toward the references** aims
+  for.
 - **Sections**: how long they usually are in bars (8 or 16, say), and how many a song has. Sections
   follow the song's 4-bar phrases, and a short fill does not count as a section of its own.
 - **Loudness**: about how loud the songs are (LUFS, as the [Loudness Meter](loudness-meter.md) shows),

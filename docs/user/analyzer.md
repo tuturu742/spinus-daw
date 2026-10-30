@@ -186,7 +186,9 @@ song's contents, whatever its name or project. When you drop a song that was ana
 the Track creator), the Analyzer says what it has and offers:
 
 - **Continue from the existing analysis**: the tempo, key and stems come back at once, without separating
-  again, and notes already found are not listened for again.
+  again, and notes already found are not listened for again. Stems come back for the same choice of stems:
+  the Track creator separates into **6 stems** (with guitar and piano), so choose 6 stems to reuse its
+  stems.
 - **Analyze anew**: everything is found again, as for a new song.
 
 **Saved analyses...** (at the bottom) shows how much space this takes and lets you delete stems or whole

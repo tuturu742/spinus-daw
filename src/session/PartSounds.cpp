@@ -95,6 +95,8 @@ juce::String displayName (const juce::String& part)
         return "Lead (the vocals' tune)";
     if (part == "drums")
         return "Drums";
+    if (part == "guitar")
+        return "Guitar";
     return part.substring (0, 1).toUpperCase() + part.substring (1);
 }
 
@@ -303,6 +305,23 @@ std::vector<Choice> vary (std::vector<Choice> candidates, const std::set<juce::S
     return result;
 }
 
+juce::StringArray guitarRoles (const juce::var& summary)
+{
+    // As spinus_ai.songwriter.guitar_roles: only when at least half the songs have guitars.
+    const auto& guitars = summary["guitars"];
+    const int songs = guitars["songs"], count = summary["songs"];
+    if (! guitars.isObject() || songs <= 0 || songs * 2 < count)
+        return {};
+    juce::StringArray roles;
+    if ((int)guitars["distorted"] * 2 >= songs)
+        roles.add ("rhythm-guitar");
+    if ((int)guitars["clean"] * 2 >= songs)
+        roles.add ("clean-guitar");
+    if ((int)guitars["lead"] * 2 >= songs)
+        roles.add ("lead-guitar");
+    return roles;
+}
+
 std::vector<SongPart> defaultParts (const juce::String& arrangement, const juce::var& summary)
 {
     std::vector<SongPart> list;
@@ -313,6 +332,20 @@ std::vector<SongPart> defaultParts (const juce::String& arrangement, const juce:
         // A sub bass when the bass sits high enough to leave room under it (as spinus_ai.songwriter.has_sub).
         if ((int)summary["parts"]["bass"]["median"] >= 40)
             roles.insert (2, "sub");
+    }
+    // Guitars in the reference songs take the chords' place, and a lead guitar joins the lead.
+    if (const auto guitars = guitarRoles (summary); ! guitars.isEmpty())
+    {
+        const auto at = roles.indexOf ("chords");
+        roles.remove (at);
+        int insertAt = at;
+        for (const auto& g : guitars)
+            if (g != "lead-guitar")
+                roles.insert (insertAt++, g);
+        if (insertAt == at)
+            roles.insert (at, "chords");
+        if (guitars.contains ("lead-guitar"))
+            roles.insert (roles.indexOf ("lead") + 1, "lead-guitar");
     }
     for (const auto& role : roles)
         list.push_back (newPart (list, role));
@@ -336,11 +369,14 @@ Target targetFor (const SongPart& part, int instance, const juce::var& summary)
     const auto& role = part.role;
     static const juce::StringArray drums { "drums", "impact", "percussion" }, bass { "bass", "sub" },
         lead { "lead", "counter", "lead-guitar", "woodwinds" };
-    const auto stem = drums.contains (role)  ? juce::String ("drums")
-                      : bass.contains (role) ? juce::String ("bass")
-                      : lead.contains (role) ? juce::String ("vocals")
-                      : role == "riser"      ? juce::String ("fx")
-                                             : juce::String ("other");
+    // Guitar parts follow the reference songs' guitar stem when they have one (a 6-stem analysis).
+    const bool guitarStem = role.endsWith ("guitar") && (int)summary["parts"]["guitar"]["songs"] > 0;
+    const auto stem = guitarStem              ? juce::String ("guitar")
+                      : drums.contains (role) ? juce::String ("drums")
+                      : bass.contains (role)  ? juce::String ("bass")
+                      : lead.contains (role)  ? juce::String ("vocals")
+                      : role == "riser"       ? juce::String ("fx")
+                                              : juce::String ("other");
     Target t;
     for (auto& found : targetsFromSummary (summary))
         if (found.part == stem)
@@ -403,7 +439,11 @@ Target targetFor (const SongPart& part, int instance, const juce::var& summary)
             { "woodwinds", { 60, 72, 84 } },       { "choir", { 52, 62, 74 } }
         };
         const auto& r = ranges.at (role);
-        t.low = r[0], t.median = r[1], t.high = r[2];
+        if (! guitarStem) // a guitar part with the songs' guitar keeps its measured range
+            t.low = r[0], t.median = r[1], t.high = r[2];
+        else if (role == "lead-guitar") // the lead above the songs' guitar's middle
+            t.low = juce::jmax (t.low, t.median - 3), t.median = juce::jmax (r[1], t.median + 5),
+            t.high = juce::jmax (r[2], t.high);
         t.roles = role == "lead-guitar" || role == "woodwinds" || role == "brass"
                       ? juce::StringArray { "lead", "keys", "pluck" }
                   : role == "strings" || role == "choir"                ? juce::StringArray { "pad", "keys" }
@@ -411,7 +451,8 @@ Target targetFor (const SongPart& part, int instance, const juce::var& summary)
                                                                         : juce::StringArray { "keys", "lead", "pluck" };
         t.chords = role != "lead-guitar" && role != "woodwinds";
         t.voices = t.chords ? 3.0 : 1.0;
-        t.measure = false;
+        // Tuned toward the songs' guitar (its stem and notes) when there is one: the first guitar part only.
+        t.measure = guitarStem && instance == 0 && role != "lead-guitar";
     }
     t.names = nameWords (role);
     t.low += up, t.median += up, t.high += up;
@@ -423,7 +464,7 @@ std::vector<Target> targetsFromSummary (const juce::var& summary)
     std::vector<Target> targets;
     const auto& parts = summary["parts"];
     const auto tempo = (double)summary["tempo"]["median"];
-    for (const auto* name : { "bass", "other", "vocals", "drums" })
+    for (const auto* name : { "bass", "other", "vocals", "drums", "guitar", "piano" })
     {
         const auto& p = parts[name];
         if (! p.isObject() || (int)p["songs"] <= 0)
@@ -432,7 +473,10 @@ std::vector<Target> targetsFromSummary (const juce::var& summary)
         t.part = name;
         t.id = name;
         t.name = displayName (name);
-        t.role = juce::String (name) == "other" ? "chords" : juce::String (name) == "vocals" ? "lead" : name;
+        t.role = juce::String (name) == "other"    ? juce::String ("chords")
+                 : juce::String (name) == "vocals" ? juce::String ("lead")
+                 : juce::String (name) == "guitar" ? juce::String ("rhythm-guitar")
+                                                   : juce::String (name);
         t.songs = (int)p["songs"];
         t.low = (int)p["low"];
         t.median = (int)p["median"];
@@ -441,7 +485,7 @@ std::vector<Target> targetsFromSummary (const juce::var& summary)
         t.voices = p.hasProperty ("voices") ? (double)p["voices"] : 1.0;
         // Chords are the other instruments' (Basic Pitch hears a bass's or a voice's overlapping notes as
         // more than one voice now and then).
-        t.chords = t.part == "other" && t.voices > 1.3;
+        t.chords = (t.part == "other" || t.part == "guitar" || t.part == "piano") && t.voices > 1.3;
         t.tempo = tempo;
         if (t.part == "bass")
             t.roles = { "bass" };
@@ -449,6 +493,13 @@ std::vector<Target> targetsFromSummary (const juce::var& summary)
             t.roles = { "lead" };
         else if (t.part == "drums")
             t.roles = { "drums" };
+        else if (t.part == "guitar") // guitar sounds by their names; else keys and plucks (sound roles)
+        {
+            t.roles = { "keys", "pluck", "lead" };
+            t.names = nameWords ("rhythm-guitar");
+        }
+        else if (t.part == "piano")
+            t.roles = { "keys", "pluck" };
         else if (t.chords) // the fewer notes per bar, the more a pad
             t.roles = t.notesPerBar < 6.0 ? juce::StringArray { "pad", "keys" } : juce::StringArray { "keys", "pad" };
         else

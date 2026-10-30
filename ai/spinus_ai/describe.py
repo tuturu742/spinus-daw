@@ -869,6 +869,25 @@ def describe(text: str, base: dict[str, Any] | None = None, generated: str = "")
 # With reference songs: their summary as words to edit, and the edits on top of it
 
 
+def guitar_names(summary: dict[str, Any]) -> list[str]:
+    """The guitars the reference songs have, in words read() reads back as guitar parts: "distorted rhythm
+    guitars" (a Rhythm guitar), "a clean guitar", "a lead guitar". Only when at least half the songs have
+    guitars; each kind when at least half of those have it."""
+    guitars = summary.get("guitars") or {}
+    songs, count = int(guitars.get("songs") or 0), int(summary.get("songs") or 0)
+    if not songs or songs * 2 < count:
+        return []
+    names = []
+    distorted, clean = int(guitars.get("distorted") or 0), int(guitars.get("clean") or 0)
+    if distorted * 2 >= songs:
+        names.append("distorted rhythm guitars")
+    if clean * 2 >= songs:
+        names.append("a clean guitar")
+    if int(guitars.get("lead") or 0) * 2 >= songs:
+        names.append("a lead guitar")
+    return names
+
+
 def prompt_from(summary: dict[str, Any]) -> str:
     """The reference songs' summary as a description the user can edit: "Like your songs: about 128 BPM, in A
     minor, four-on-the-floor drums; with drums, bass, synth chords and a lead melody." Only words this module
@@ -900,6 +919,7 @@ def prompt_from(summary: dict[str, Any]) -> str:
         named.append("drums")
     if has("bass"):
         named.append("bass")
+    named += guitar_names(summary)
     if has("other"):
         named.append("synth chords" if float(parts_found["other"].get("voices") or 1.0) > 1.3 else "plucks")
     if has("vocals"):

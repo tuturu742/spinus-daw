@@ -64,14 +64,16 @@ struct Analysis
         placeModel (models, "beat_this_small0", { { "small0.ckpt", 8451101 } });
         placeModel (models, "htdemucs", { { "htdemucs.yaml", 21 }, { "955717e8.safetensors", 84025440 } },
                     "models: ['955717e8']\n");
+        placeModel (models, "htdemucs_6s", { { "htdemucs_6s.yaml", 21 }, { "5c90dfd2.safetensors", 54885744 } },
+                    "models: ['5c90dfd2']\n");
         placeBasicPitch (models);
     }
 };
 
 using Notes = std::initializer_list<std::tuple<int, double, double>>;
 
-/** As if Demucs had split the song and Basic Pitch had found these notes in its bass and its other
-    instruments before (Basic Pitch's model is not in the repository); the drums are clicks. */
+/** As if Demucs (6 stems; none with a guitar here) had split the song and Basic Pitch had found these notes in its bass
+   and its other instruments before (Basic Pitch's model is not in the repository); the drums are clicks. */
 void placeFindings (const TrackCreator& creator, const juce::File& song, Notes bass, Notes other)
 {
     const auto digest = contentDigest (song);
@@ -86,7 +88,7 @@ void placeFindings (const TrackCreator& creator, const juce::File& song, Notes b
         { "other", makeStem (made.getChildFile ("other.wav"), 220.0, false) },
         { "vocals", makeStem (made.getChildFile ("vocals.wav"), 440.0, false) },
     };
-    placeSeparation (work, prepared, "htdemucs", "cbc8a9b1a87023b7fd74e7b3412e6321c0eab003", stems);
+    placeSeparation (work, prepared, "htdemucs_6s", "3c5ee475be622df764938de97e4281a7b07ffa58", stems);
     placeNotes (work, stems.at ("bass"), bass);
     placeNotes (work, stems.at ("other"), other);
     placeNotes (work, stems.at ("vocals"), { { 69, 0.5, 1.0 }, { 72, 1.0, 1.5 } });
@@ -219,7 +221,7 @@ TEST_CASE ("Track creator: says what is missing, analyzes a song, keeps it, sums
     creator.analyzeAgain();
     REQUIRE (waitFor ([&] { return allSettled (creator); }));
     CHECK (creator.getNeedsText().contains ("MB"));
-    CHECK (creator.getDownloadSize() == 84025440 + 21 + 8451101 + 230444); // Demucs, Beat This!, Basic Pitch
+    CHECK (creator.getDownloadSize() == 54885744 + 21 + 8451101 + 230444); // Demucs (6 stems), Beat This!, Basic Pitch
     CHECK (statusOf (creator, 0) == TrackCreator::Status::waiting);
 
     // With the model files there, and what Demucs and Basic Pitch found as if from before.
@@ -270,9 +272,9 @@ TEST_CASE ("Track creator: says what is missing, analyzes a song, keeps it, sums
     CHECK (entry["rhythm"].isObject());
     CHECK (entry["key"]["name"].toString() == "A minor");
     CHECK (entry["loudness"].isObject());
-    CHECK (entry["notes"]["htdemucs/bass"].isArray());
-    CHECK (entry["drums"]["htdemucs"].isArray());
-    CHECK (library.findStems (digest, "htdemucs").size() == 4);
+    CHECK (entry["notes"]["htdemucs_6s/bass"].isArray());
+    CHECK (entry["drums"]["htdemucs_6s"].isArray());
+    CHECK (library.findStems (digest, "htdemucs_6s").size() == 4);
     CHECK (! work.exists());
 
     // Removed and added again (a copy under another name): ready at once, from what was kept.
@@ -693,11 +695,11 @@ TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is fo
     INFO (analyzer.getStatusText());
     REQUIRE (analyzer.getRhythm().has_value());
     CHECK (! analyzer.hasEarlierAnalysis()); // the first time
-    REQUIRE (analyzer.separate (4));
+    REQUIRE (analyzer.separate (6));         // the Track creator's separation (6 stems)
     REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
-    REQUIRE (analyzer.getStems().size() == 4);
+    REQUIRE (analyzer.getStems().size() == 6);
     const auto library = analyzer.getLibrary();
-    REQUIRE (waitFor ([&] { return library.findStems (digest, "htdemucs").size() == 4; }, 30000));
+    REQUIRE (waitFor ([&] { return library.findStems (digest, "htdemucs_6s").size() == 6; }, 30000));
     CHECK (library.read (digest)["rhythm"].isObject());
     CHECK (library.read (digest)["key"].isObject());
 
@@ -705,7 +707,7 @@ TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is fo
     REQUIRE (analyzer.analyze (song));
     REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
     REQUIRE (analyzer.hasEarlierAnalysis());
-    CHECK (analyzer.getStatusText().contains ("analyzed this song before (tempo, key, 4 stems)"));
+    CHECK (analyzer.getStatusText().contains ("analyzed this song before (tempo, key, 6 stems)"));
     CHECK (analyzer.getStems().empty());
     REQUIRE (analyzer.continueFromEarlier());
     REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
@@ -713,19 +715,21 @@ TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is fo
     CHECK (analyzer.getStatusText().startsWith ("Continued from the earlier analysis"));
     CHECK (analyzer.getTempoText() == "120.0 BPM, 4 beats per bar");
     CHECK (analyzer.getKeyText().startsWith ("A minor"));
-    REQUIRE (analyzer.getStems().size() == 4);
+    REQUIRE (analyzer.getStems().size() == 6);
     CHECK (analyzer.getStems().at ("bass").getParentDirectory().getParentDirectory().getFileName() == "kept-stems");
     CHECK (analyzer.getStems().at ("bass").hasFileExtension ("wav"));
 
     // The Track creator takes all that from the library: only the loudness, the drums and the style are new.
     // (The notes, as if the Analyzer had found them with Basic Pitch, which is not in the repository.)
     auto lib = library;
-    lib.setIn (digest, {}, "notes", "htdemucs/bass",
+    lib.setIn (digest, {}, "notes", "htdemucs_6s/bass",
                juce::JSON::parse (R"([{"start": 0.1, "end": 1.9, "pitch": 45}])"));
-    lib.setIn (digest, {}, "notes", "htdemucs/other",
+    lib.setIn (digest, {}, "notes", "htdemucs_6s/other",
                juce::JSON::parse (R"([{"start": 0.1, "end": 1.9, "pitch": 57}, {"start": 0.1, "end": 1.9, "pitch": 60},
                                      {"start": 0.1, "end": 1.9, "pitch": 64}])"));
-    lib.setIn (digest, {}, "notes", "htdemucs/vocals", juce::JSON::parse ("[]"));
+    lib.setIn (digest, {}, "notes", "htdemucs_6s/vocals", juce::JSON::parse ("[]"));
+    lib.setIn (digest, {}, "notes", "htdemucs_6s/guitar", juce::JSON::parse ("[]"));
+    lib.setIn (digest, {}, "notes", "htdemucs_6s/piano", juce::JSON::parse ("[]"));
     TrackCreator creator (a.session, &a.service);
     REQUIRE (creator.addReferences ({ song }) == 1);
     REQUIRE (waitFor ([&] { return allSettled (creator); }, 240000));
