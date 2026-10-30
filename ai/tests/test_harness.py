@@ -17,6 +17,7 @@ from test_service import make_service, no_notify, run_job
 from test_songwriter import summary
 
 from spinus_ai import compose, harness
+from spinus_ai import songwriter as sw
 from spinus_ai.connections import ConnectionStore, MemoryKeyStore
 from spinus_ai.routing import Routing
 from spinus_ai.service import RpcError
@@ -139,7 +140,7 @@ async def test_malformed_calls_come_back_as_errors_to_fix(tmp_path: Path) -> Non
         [("write", {"part": "bass", "section": "verse", "notes": "x y z w"})],
         [("place", {"part": "bass", "section": "verse", "motif": "none", "bar": 1})],
         [("write", {"part": "bass", "section": "verse", "notes": "0 40 1 90", "colour": "red"})],
-        [("set_form", {"sections": [{"id": "a", "kind": "solo", "bars": 8, "chords": ["i"]}], "order": ["a"]})],
+        [("set_form", {"sections": [{"id": "a", "kind": "kazoo", "bars": 8, "chords": ["i"]}], "order": ["a"]})],
         [("dance", {})],
         [("finish", {"summary": "Done anyway."})],
     ]
@@ -152,7 +153,7 @@ async def test_malformed_calls_come_back_as_errors_to_fix(tmp_path: Path) -> Non
     assert "there is no part 'kazoo'" in words[0] and "there is no section 'nowhere'" in words[1]
     assert "the section has bars 1 to" in words[2] and "no note could be read" in words[3]
     assert "there is no motif 'none'" in words[4] and "Not done" in words[5]
-    assert "'solo' is not a kind of section" in words[6] and "there is no tool 'dance'" in words[7]
+    assert "'kazoo' is not a kind of section" in words[6] and "there is no tool 'dance'" in words[7]
     # The parts it never wrote are the rules'; the song is whole.
     assert song["composed"]["filled"] == ["drums", "bass", "keys", "lead"] and song["layerParts"]["bass"]
 
@@ -1122,3 +1123,56 @@ async def test_the_rules_finding_reaches_the_harness_and_stays_for_the_revision(
     checked = sent[2]["messages"][-1]["content"][0]["content"]
     assert "bass was written by Spinus's rules, not by you: write it" in checked
     assert song["composed"]["rulesFinding"] is True
+
+
+def test_section_kinds_cover_the_structure_tags_and_play_as_their_base() -> None:
+    from spinus_ai import songwriter as sw
+
+    for tag in ("pre-chorus", "post-chorus", "hook", "break", "breakdown", "build", "drop", "interlude"):
+        assert tag in sw.KINDS
+    for tag in ("instrumental", "solo", "end", "fade-out"):
+        assert tag in sw.KINDS
+    assert all(k in sw.KINDS for k in sw.BASE_KINDS)  # old songs' kinds are still kinds, unchanged
+    assert sw.base_kind("drop") == "chorus" and sw.base_kind("breakdown") == "bridge" and sw.base_kind("x") == "verse"
+    assert sw.ENERGY["drop"] > sw.ENERGY["verse"] > sw.ENERGY["breakdown"] and sw.ENERGY["break"] < 0.5
+    assert sw.KIND_CONTOUR["build"] == "rise" and sw.KIND_CONTOUR["fade-out"] == "fall"
+    assert sw.asked_sections("intro, a post-chorus, a drop, then a fade out") == [
+        ["intro"],
+        ["post-chorus"],
+        ["drop"],
+        ["fade out"],
+    ]
+    assert describe_sections("a drop, then a breakdown") == [["drop"], ["breakdown"]]
+
+
+def describe_sections(text: str) -> Any:
+    from spinus_ai import describe
+
+    return describe.describe(text)["described"]["sections"]
+
+
+async def test_new_kinds_and_cues_go_through_the_tools_into_the_song(tmp_path: Path) -> None:
+    ws = harness.Workspace.start(harness.setup_of(described("Intro, a build, a drop and a breakdown.")), 5, "sketch")
+    chords = next(iter(ws.sections.values()))["chords"]
+    form = [
+        ("intro", "intro", ""),
+        ("build", "build", "snare roll"),
+        ("drop", "drop", ""),
+        ("breakdown", "breakdown", "drums fall away"),
+    ]
+    said = ws.call(
+        "set_form",
+        {
+            "sections": [{"id": i, "kind": k, "bars": 8, "chords": chords, "cue": c} for i, k, c in form],
+            "order": [i for i, _, _ in form],
+        },
+    )
+    assert "form" in said.lower() or said
+    assert "breakdown (drums fall away)" in ws.call("form", {})
+    assert not [line for line in ws.issues() if line.startswith("form:")]  # the kinds are what was asked for
+    song = ws.song()
+    by_id = {s["id"]: s for s in song["sections"]}
+    assert by_id["breakdown"]["kind"] == "breakdown" and by_id["breakdown"]["cue"] == "drums fall away"
+    assert by_id["drop"]["name"] == "Drop" and by_id["build"]["contour"] == "rise"
+    assert by_id["drop"]["energy"] > by_id["breakdown"]["energy"]
+    assert any("drums fall away." in line for line in sw.describe(song))  # the page shows the cue

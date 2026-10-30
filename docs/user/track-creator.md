@@ -387,6 +387,12 @@ anywhere and no AI connection is needed.
 - **Sections**: an intro, verses, choruses, a bridge and an outro, about as many as your songs have and
   about as long, each 4, 8, 12, 16... bars as your songs' sections are. A chorus is the same each time
   (one pattern), so you can change it once.
+  When your AI connection writes the song, a section can be any of the kinds songwriters and song
+  generators name: **Intro, Verse, Pre-Chorus, Chorus, Post-Chorus, Hook, Bridge, Break, Breakdown, Build,
+  Drop, Interlude, Instrumental, Solo, Outro, End** and **Fade Out**. Each has its usual energy (a drop is as
+  big as a chorus, a break and a breakdown are quiet, a build rises, an end and a fade out fall away) and
+  can carry a short cue, as in "Breakdown: drums fall away", shown in the song's summary on Write a song.
+  Markers on the Playlist use these names.
 - **Chords**: loops of four chords, chosen from the chords your songs use and the way they move from one
   chord to the next: new combinations, not a copy of one of your songs (a loop that one song plays as its
   own is used at most once).
@@ -464,8 +470,9 @@ programmer runs tests:
 - notes a bar against your songs' parts;
 - the drums' groove against your songs';
 - a lead repeating one bar, a part with no notes, sections off the 4-bar phrases;
-- sections your description asks for that the form doesn't have: a pre-chorus, a solo, a breakdown, a build-up,
-  a drop, a double chorus, an outro ("a breakdown or bridge": either will do).
+- sections your description asks for that the form doesn't have, by the kinds above (a pre-chorus, a solo, a
+  breakdown, a build-up, a drop, an interlude, a double chorus, a fade out...); "a breakdown or bridge": either
+  will do.
 
 It fixes what the checks find with small edits of a few bars, then says it's finished. If it tries to finish while the checks still find something, it is told what is open, once; asked again, it finishes as it is. While it works, the
 page shows each step in plain words ("Writing the bass for the chorus", "Checking: 2 issues") and the tokens

@@ -54,6 +54,7 @@ MOST_CONTINUATIONS = 4  # an answer cut off at the model's length limit is conti
 MOST_CANDIDATES = 8
 MOST_SECTIONS = 10
 MOST_ORDER = 16
+MOST_CUE = 80  # characters of a section's cue
 NOTES_PER_BAR = 64  # most notes a bar a part may play (after the loop is repeated)
 
 # The notes a part of each role may play (MIDI), wider than its usual register (songwriter.layer_register).
@@ -126,6 +127,7 @@ WRITE_SONG = Tool(
                         "chords": {"type": "array", "items": {"type": "string"}, "description": "Its chord loop"},
                         "barsPerChord": {"type": "integer", "enum": [1, 2]},
                         "energy": {"type": "number", "description": "0 (quiet) to 1 (full)"},
+                        "cue": {"type": "string", "description": "A short note on it: 'drums fall away'"},
                     },
                     "required": ["id", "kind", "bars", "chords"],
                 },
@@ -420,7 +422,10 @@ def check_plan(answer: dict[str, Any], setup: Setup) -> dict[str, Any]:
         )
         if not math.isfinite(energy) or not 0 <= energy <= 1:
             energy = sw.ENERGY[str(kind)]
-        checked.append({"id": sid, "kind": str(kind), "bars": bars, "chords": romans, "hold": hold, "energy": energy})
+        cue = " ".join(str(s.get("cue") or "").split())[:MOST_CUE]  # a short note on the section: "drums fall away"
+        checked.append(
+            {"id": sid, "kind": str(kind), "bars": bars, "chords": romans, "hold": hold, "energy": energy, "cue": cue}
+        )
 
     order_value = answer.get("order")
     ids = {s["id"] for s in checked}
@@ -554,7 +559,14 @@ def build_song(checked: Checked, setup: Setup, seed: int, size: str) -> dict[str
         "key": plan_in["key"],
         "beatsPerBar": style.beats_per_bar,
         "sections": [
-            {"id": s["id"], "kind": s["kind"], "bars": s["bars"], "contour": "arch", "progression": s["chords"]}
+            {
+                "id": s["id"],
+                "kind": s["kind"],
+                "bars": s["bars"],
+                "contour": sw.KIND_CONTOUR.get(s["kind"], "arch"),
+                "progression": s["chords"],
+                **({"cue": s["cue"]} if s.get("cue") else {}),
+            }
             for s in plan_in["sections"]
         ],
         "order": plan_in["order"],
