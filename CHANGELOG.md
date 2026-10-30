@@ -18,8 +18,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - **An export right after opening a project or applying a song could leave big sample instruments silent:** they
   load their sounds in the background (Windows plugins through Wine, most of all) and the export renders faster
-  than real time. It now plays each plugin instrument a few test notes until it sounds (at most 20 seconds each,
-  a minute in all) before rendering.
+  than real time. It now lets every plugin instrument load at once, then plays each a few test notes until it
+  sounds (at most 45 seconds each, a minute and a half in all) before rendering.
 
 ## 0.1.0-alpha.3 (2026-10-29)
 

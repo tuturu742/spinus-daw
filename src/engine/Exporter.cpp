@@ -9,6 +9,7 @@
 #include "model/StockDevices.h"
 
 #include <chrono>
+#include <vector>
 #include <set>
 #include <thread>
 
@@ -21,24 +22,30 @@ using namespace spinus::model;
 namespace
 {
 /** Instruments that load their sounds in the background after they open (big sample libraries, often Windows plugins
-    through Wine) play silence at first, and an export makes fresh ones and renders faster than real time: each
-    plugin instrument is played a few notes until it sounds, at most perInstrument each and `total` in all, as the
-    sound index's helper does (SoundRender.cpp). Spinus's own instruments are ready at once. Message thread. */
+    through Wine) play silence at first, and an export makes fresh ones and renders faster than real time. Every
+    plugin instrument is prepared first, so they all load at once; then each is played a few notes until it sounds,
+    at most perInstrument each and `total` in all, as the sound index's helper does (SoundRender.cpp). Spinus's own
+    instruments are ready at once. Message thread. */
 void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, std::chrono::milliseconds total)
 {
     using clock = std::chrono::steady_clock;
     constexpr double rate = 48000.0;
     constexpr int block = 512;
-    const auto started = clock::now();
+    std::vector<juce::AudioPluginInstance*> instances;
     for (auto* plugin : te::getAllPlugins (edit, false))
     {
         auto* external = dynamic_cast<te::ExternalPlugin*> (plugin);
         auto* instance = external != nullptr && external->isSynth() ? external->getAudioPluginInstance() : nullptr;
         if (instance == nullptr || instance->getPluginDescription().pluginFormatName == "Spinus")
             continue;
+        instance->prepareToPlay (rate, block); // starts loading its sounds, alongside the others
+        instances.push_back (instance);
+    }
+    const auto started = clock::now();
+    for (auto* instance : instances)
+    {
         const auto channels =
             std::max ({ 2, instance->getTotalNumInputChannels(), instance->getTotalNumOutputChannels() });
-        instance->prepareToPlay (rate, block);
         juce::AudioBuffer<float> buffer (channels, block);
         juce::MidiBuffer midi;
         const auto mine = clock::now();
@@ -238,7 +245,7 @@ void ExportJob::renderStep()
         return finish ({ false, false, "Missing plugin: " + names.joinIntoString (", "), {} });
     }
 
-    waitUntilAudible (*edit, std::chrono::seconds (20), std::chrono::seconds (60));
+    waitUntilAudible (*edit, std::chrono::seconds (45), std::chrono::seconds (90));
     waitForClipRenders (0);
 }
 
