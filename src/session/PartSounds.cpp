@@ -802,6 +802,9 @@ std::vector<Choice> chooseMelodic (const Target& target, const Reference& refere
             c.low = low;
             c.high = high;
             c.polyphonic = (bool)sound["polyphonic"];
+            const bool saved = SavedSounds::isSaved (c.preset);
+            if (saved)
+                c.state = SavedSounds::stateFileIn (index.getFolder(), c.preset);
             r.tier = (rank < 0 ? 4 : 0) + (chords ? 0 : 2) + (covers ? 0 : 1);
             if (isRole (role))
                 c.why.add (c.roleFrom == "name" ? article (role) + " (its name says)"
@@ -839,6 +842,12 @@ std::vector<Choice> chooseMelodic (const Target& target, const Reference& refere
                 }
                 else
                     r.tier += 1;
+            }
+            // A sound the user set up and saved: a little ahead of a factory preset that fits as well.
+            if (saved)
+            {
+                c.why.insert (0, "your saved sound");
+                r.score -= 0.1;
             }
             ranked.push_back (std::move (r));
         }
@@ -1435,6 +1444,18 @@ juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<m
                 if (const auto pad = pads.find (drum); pad != pads.end() && result.wasOk())
                     result = loadDrumPadFile (session, channel, pad->second, juce::File (file));
         }
+        else if ((c.kind == Choice::Kind::preset || c.kind == Choice::Kind::kit) && c.state != juce::File())
+        {
+            // A sound the user saved: the plugin's state as they set it up, put in place as a state preset.
+            InstrumentPreset saved;
+            saved.kind = InstrumentPreset::Kind::state;
+            saved.file = c.state;
+            saved.id = c.preset;
+            saved.name = c.name;
+            result = ! c.state.loadFileAsData (saved.state) || saved.state.isEmpty()
+                         ? juce::Result::fail ("your saved sound " + c.name + " is gone.")
+                         : loadInstrumentPreset (session, channel, saved);
+        }
         else if ((c.kind == Choice::Kind::preset || c.kind == Choice::Kind::kit) && c.preset.isNotEmpty() &&
                  ! (c.source.stockType == "spinus.3x-osc" && c.preset.startsWith ("program:")))
         {
@@ -1464,6 +1485,117 @@ juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<m
                           result.getErrorMessage());
     }
     return problems.isEmpty() ? juce::Result::ok() : juce::Result::fail (problems.joinIntoString (" "));
+}
+
+juce::var toVar (const SoundSource& s)
+{
+    return object ({ { "key", s.key },
+                     { "name", s.name },
+                     { "format", s.format },
+                     { "file", s.file },
+                     { "pluginName", s.pluginName },
+                     { "uniqueId", s.uniqueId },
+                     { "stockType", s.stockType },
+                     { "badge", s.badge },
+                     { "fingerprint", s.fingerprint },
+                     { "hostLibraries", s.hostLibraries } });
+}
+
+SoundSource sourceFromVar (const juce::var& v)
+{
+    SoundSource s;
+    s.key = v["key"].toString();
+    s.name = v["name"].toString();
+    s.format = v["format"].toString();
+    s.file = v["file"].toString();
+    s.pluginName = v["pluginName"].toString();
+    s.uniqueId = (int)v["uniqueId"];
+    s.stockType = v["stockType"].toString();
+    s.badge = v["badge"].toString();
+    s.fingerprint = v["fingerprint"].toString();
+    s.hostLibraries = (bool)v["hostLibraries"];
+    return s;
+}
+
+namespace
+{
+const juce::StringArray& kindNames()
+{
+    static const juce::StringArray names { "preset", "sample", "drumSamples", "kit", "loop" };
+    return names;
+}
+} // namespace
+
+juce::var toVar (const Choice& c)
+{
+    auto* drums = new juce::DynamicObject();
+    for (const auto& [drum, file] : c.drums)
+        drums->setProperty (drum, file);
+    auto* notes = new juce::DynamicObject();
+    for (const auto& [drum, note] : c.drumNotes)
+        notes->setProperty (drum, note);
+    juce::Array<juce::var> why;
+    for (const auto& w : c.why)
+        why.add (w);
+    return object ({ { "kind", kindNames()[(int)c.kind] },
+                     { "instrument", c.instrument },
+                     { "source", toVar (c.source) },
+                     { "preset", c.preset },
+                     { "version", c.version },
+                     { "name", c.name },
+                     { "category", c.category },
+                     { "role", c.role },
+                     { "roleFrom", c.roleFrom },
+                     { "file", c.file },
+                     { "drums", juce::var (drums) },
+                     { "drumNotes", juce::var (notes) },
+                     { "low", c.low },
+                     { "high", c.high },
+                     { "polyphonic", c.polyphonic },
+                     { "tempo", c.tempo },
+                     { "duration", c.duration },
+                     { "fundamental", c.fundamental },
+                     { "distance", c.distance },
+                     { "compared", c.compared },
+                     { "clap", c.clap },
+                     { "why", why },
+                     { "state", c.state != juce::File() ? c.state.getFullPathName() : juce::String() } });
+}
+
+Choice choiceFromVar (const juce::var& v)
+{
+    Choice c;
+    c.kind = (Choice::Kind)juce::jmax (0, kindNames().indexOf (v["kind"].toString()));
+    c.instrument = v["instrument"].toString();
+    c.source = sourceFromVar (v["source"]);
+    c.preset = v["preset"].toString();
+    c.version = v["version"].toString();
+    c.name = v["name"].toString();
+    c.category = v["category"].toString();
+    c.role = v["role"].toString();
+    c.roleFrom = v["roleFrom"].toString();
+    c.file = v["file"].toString();
+    if (const auto* drums = v["drums"].getDynamicObject())
+        for (const auto& p : drums->getProperties())
+            c.drums[p.name.toString()] = p.value.toString();
+    if (const auto* notes = v["drumNotes"].getDynamicObject())
+        for (const auto& p : notes->getProperties())
+            c.drumNotes[p.name.toString()] = (int)p.value;
+    c.low = (int)v["low"];
+    c.high = (int)v["high"];
+    c.polyphonic = (bool)v["polyphonic"];
+    c.tempo = (double)v["tempo"];
+    c.duration = (double)v["duration"];
+    c.fundamental = (double)v["fundamental"];
+    c.distance = (double)v["distance"];
+    c.compared = (bool)v["compared"];
+    c.clap = v.hasProperty ("clap") ? (double)v["clap"] : -2.0;
+    if (const auto* why = v["why"].getArray())
+        for (const auto& w : *why)
+            c.why.add (w.toString());
+    if (const auto state = v["state"].toString(); juce::File::isAbsolutePath (state))
+        c.state = juce::File (state);
+    return c;
 }
 
 int Choice::rootNote() const

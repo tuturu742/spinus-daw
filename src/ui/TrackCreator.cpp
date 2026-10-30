@@ -289,6 +289,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
         partSounds->resetParts ("The description was read, so the parts start again from what it names.");
     };
     partSounds->resetParts();
+    partSounds->onChanged = [this] { remember(); }; // the parts list is kept between runs
     addChildComponent (*describer);
     addAndMakeVisible (styleTab);
     addAndMakeVisible (describeTab);
@@ -588,7 +589,7 @@ void TrackCreator::visibilityChanged()
 void TrackCreator::remember() const
 {
     const auto file = getListFile();
-    if (file == juce::File() || ! recalled)
+    if (file == juce::File() || ! recalled || recalling)
         return;
     juce::Array<juce::var> songs;
     for (const auto& r : references)
@@ -604,13 +605,15 @@ void TrackCreator::remember() const
                                 { "summarized", summarized },
                                 { "description", describer != nullptr ? describer->getText() : juce::String() },
                                 { "described", described },
-                                { "generated", describer != nullptr ? describer->getGenerated() : juce::String() } })) +
+                                { "generated", describer != nullptr ? describer->getGenerated() : juce::String() },
+                                { "parts", partSounds != nullptr ? partSounds->getRemembered() : juce::var() } })) +
                           "\n");
 }
 
 void TrackCreator::recall()
 {
     recalled = true;
+    const juce::ScopedValueSetter<bool> quiet (recalling, true); // nothing is written while it comes back
     const auto saved = juce::JSON::parse (getListFile());
     const auto library = getLibrary();
     if (auto* songs = saved["references"].getArray())
@@ -668,6 +671,8 @@ void TrackCreator::recall()
     if (std::any_of (references.begin(), references.end(),
                      [] (const Reference& r) { return r.status == Status::waiting; }))
         status.setText ("Some songs are not analyzed yet: click Analyze again.", juce::dontSendNotification);
+    // The parts list as it was left (a description read later starts it again).
+    partSounds->restore (saved["parts"]);
     list.updateContent();
     showSummary();
 }

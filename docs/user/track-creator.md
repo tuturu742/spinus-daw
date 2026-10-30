@@ -72,7 +72,8 @@ once. A song you already took apart in the Analyzer starts from what the Analyze
 stems are used as they are, which saves most of the time.
 
 **Your list is remembered.** Close Spinus and open the Track creator again: your songs are still there, the
-analyzed ones done, with the summary as it was. Songs that were not finished wait until you click
+analyzed ones done, with the summary as it was, and so are your description and your
+[parts](#sounds-for-each-part) with their sounds. Songs that were not finished wait until you click
 **Analyze again** (Spinus doesn't start analyzing by itself when it starts).
 
 ## Saved analyses
@@ -92,7 +93,9 @@ settings folder (`~/.config/Spinus DAW/ai/library`), not in your projects. A son
 of Spinus is shown as not used, and is analyzed again when you add it.
 
 The window also shows how much space the [sound index](#your-sounds) takes, with **Delete the sound
-index** (it is made again the next time you click **Update sound index**).
+index** (it is made again the next time you click **Update sound index**). If you have
+[saved sounds](#save-this-sound), it asks first: **Keep my saved sounds** (they are listened to again at the
+next update) or **Delete them too**.
 
 ## The summary
 
@@ -225,8 +228,7 @@ extension (an AIFF called .wav) is still read.
   and the plugin, or **Measure again every silent or failed one**. Spinus forgets what it heard from it and
   updates the index at once (an installed plugin you hadn't ticked is ticked for it).
 - Some plugins stay silent until you choose a sound in their own window: a drum player that needs a kit
-  picked first, for example. Spinus can't hear those yet. A way to save the sound you set up in a plugin's
-  window, so the Track creator can use it, is planned for the next alpha.
+  picked first, for example. Set it up once and keep it with [Save this sound](#save-this-sound).
 - **Show sounds...** lists everything Spinus measured, with its guess and a few details ("attack 5 ms,
   sustained, brightness 820 Hz, C1-C7, chords"), and a search box: type "bass", "pad", "Surge" or "kick
   sample" to check its guesses. When a name says one thing and the sound another, both are shown ("sounds
@@ -331,6 +333,8 @@ D2 (the songs' 2.4)". Compare the numbers: the closer they are, the closer the s
   plugins too), and any of its presets, or its **Default sound** when it has none or lists none. Instruments
   the sound index hasn't measured (or measured as silent, or couldn't load) are there too, marked "not
   measured". Your pick stays first on the list, marked "(your choice)", when you choose sounds again.
+- **Save this sound...** (also in that list) opens the part's instrument in its own window: see
+  [Save this sound](#save-this-sound).
 - **Add these sounds to the project** makes, for each part, a channel named after it ("Bass (Track
   creator)") in the Channel Rack group **Track creator**, with its instrument, preset, tuning, effects and
   fader, and a pattern **Track creator: sounds** with a short phrase on each, so you can hear them
@@ -346,6 +350,32 @@ at the bottom says what the AI would add. Nothing is sent anywhere: all of this 
 
 These are a program's choices, made from measurements: treat them as a starting point and change them by
 ear.
+
+**Your parts are remembered.** Close Spinus and open the Track creator again: the parts are as you left them,
+with their roles and the sounds you chose. Reading a new description starts the list again, and the page
+says so.
+
+### Save this sound
+
+Some instruments need you: a drum player that stays silent until you choose a kit in its own window, a
+synth whose best sound is one you made yourself. **Save this sound...** (in the list beside a part) opens the
+part's instrument in its own window, outside your project, with the sound the part has now.
+
+![Save this sound: the instrument's own window, with a name and Save](images/track-creator-save-sound.png)
+
+1. Set the sound up in the instrument's window: choose a kit, a patch, turn its knobs.
+2. Give it a name and click **Save**.
+3. Spinus keeps it as **your saved sound**, listens to it like any preset (in the separate helper program,
+   a few seconds; longer for a big instrument) and chooses it for the part.
+
+From then on it is one of your sounds: **Choose sounds** can suggest it ("your saved sound"), the AI writer
+can pick it, and **Other sound...** lists all of them first, under **Your saved sounds**. A song that uses it
+plays the instrument exactly as you saved it. It works with any instrument, Windows plugins too. Saved sounds
+are kept beside the sound index (`~/.config/Spinus DAW/ai/saved-sounds`), so they stay when the index is
+updated or deleted. Nothing in your project changes until you add the sounds or write the song.
+
+If a saved sound made no sound when Spinus played it, the page says so: open it again and check the
+instrument's window.
 
 ## Write a song
 

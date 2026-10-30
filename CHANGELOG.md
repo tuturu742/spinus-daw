@@ -3,6 +3,19 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## Not released yet
+
+### Track creator
+
+- **Save this sound:** in the list beside a part, **Save this sound...** opens the part's instrument in its
+  own window, outside the project. Set it up (a kit in a drum player that is silent until one is chosen, a
+  patch, your own knob settings), name it and Save: Spinus keeps it as your saved sound, listens to it like a
+  preset and chooses it for the part. Choose sounds and the AI writer can use it from then on, and **Other
+  sound...** lists your saved sounds first. It works with any instrument, Windows plugins too, and saved
+  sounds stay when the sound index is updated or deleted (Delete the sound index asks about them first).
+- **The parts list is remembered** between runs: the parts, their roles, the sounds you chose and Tune
+  toward the references come back when you open the Track creator again. A new description starts it again.
+
 ## 0.1.0-alpha.3 (2026-10-29)
 
 ### Track creator: your AI connection writes the song (experimental)
