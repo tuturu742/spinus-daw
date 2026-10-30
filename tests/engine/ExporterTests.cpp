@@ -906,6 +906,8 @@ TEST_CASE ("An export waits for an instrument that loads its sounds in the backg
         juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
     job = nullptr;
     REQUIRE (result.has_value());
-    REQUIRE (result->ok);
-    CHECK (read (result->files.at (0)).rmsDb > -40.0f); // the note, from its first beat
+    const auto exported = result.value_or (ExportJob::Result {});
+    REQUIRE (exported.ok);
+    REQUIRE (! exported.files.empty());
+    CHECK (read (exported.files.at (0)).rmsDb > -40.0f); // the note, from its first beat
 }
