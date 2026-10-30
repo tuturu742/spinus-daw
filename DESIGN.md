@@ -536,6 +536,9 @@ The panel shows a short notice that analyzing copyrighted songs is for study and
 - Read tools answer from a snapshot of the project sent with each question, never from the live project.
 - **Action tools** (write): every write tool produces a **Proposal** (steps from `docs/dev/commands.schema.json`; a step may use an earlier step's result as `"$1.channel"`; Spinus tries them on a copy of the project to check and describe them; the copy is kept as `Proposal::preview`, to listen to before applying): a list of commands shown as a diff ("Add channel: Sampler", "Set Insert 3 EQ band 2: −3 dB at 300 Hz"). User clicks Apply (one undo step) or Reject. Never auto-applied.
 - Can trigger the other AI features (generate pattern, automix, analyze) on the user's behalf, still through proposals.
+- **Editing through the project harness (§12.11):** for "add pads to the chorus", "add a bridge after bar 20" or "make
+  the bass pluckier", the assistant uses the harness's tools; their steps collect into one proposal (`propose`, or one
+  made from what is left when it answers), applied as one undo step like any other.
 
 ### 12.10 Feature: Track creator (experimental)
 
@@ -585,6 +588,57 @@ The user gives a few reference songs (an album or a selection) and, in the end, 
 The panel shows the Analyzer's notice: analyzing songs is for study and personal use; only the style is measured; the user is responsible for rights when releasing.
 
 ---
+
+### 12.11 Project harness
+
+The Track creator's music harness (§12.10) edits a song plan of its own; the **project harness**
+(`ai/spinus_ai/project_harness.py`) is its tools working on the **open project**, for the assistant (§12.9) and the
+live interface (§12.12).
+
+- **Input:** the context Spinus sends (`src/ai/ProjectContext.h`, shared by both callers): project.json, the devices
+  that can be added, device names, and `deviceParameters`, each device's settings with the values they show now.
+- **A working copy** of the project follows every edit, so a later tool sees an earlier one's channels, notes and
+  clips. What an edit makes before Spinus has made it is named by a reference to its step (`"$3.channel"`, the same
+  references proposals use).
+- **Edits become Spinus commands only,** never a direct change: notes over bars become a new pattern and clip
+  (taking the part's old notes out of the pattern there, or out of a copy when other clips share it, keeping the
+  pattern's and its clips' lengths as `pattern.setNotes` would refit them); "insert bars" splits the clips across
+  the point and moves what follows, with the markers; automation in real units (dB, pan) becomes values, a
+  device's setting stays text for Spinus to read (`cli::readStepTexts`).
+- **Sound words** (pluckier, brighter, warmer, wider...) move settings by words in their names and by the values
+  they show, so they work on any instrument whose settings are named that way, never by a maker's name.
+- **Checks:** notes outside the key, judged against each section's own key when it clearly changes key; held parts
+  in one register (masking); more than one low part besides a sub; sections off 4-bar phrases; no limiter on the
+  master; and, after a render by the live interface, peaks, flat loudness across sections and silent parts.
+- Sections are the stretches between the Playlist's markers.
+
+### 12.12 Live interface for outside coding agents
+
+An MCP server in the running Spinus (`src/ai/AgentInterface.h`) so Claude Code, Codex, Cursor and other MCP clients
+can work on the open project while the user watches and listens.
+
+- **Off until the user turns it on** (Options › AI › Coding agents). It listens on 127.0.0.1 only, on a port the user
+  can change (47219 by default). Every request needs a token (`Authorization: Bearer`), kept in
+  `agent-interface.json` in the settings folder, readable by the user only. Requests carrying a web page's
+  `Origin` are refused.
+- **Transport:** MCP over HTTP: JSON-RPC 2.0 POSTed to `/mcp`, with one JSON answer each (no event stream), and a
+  session from `initialize` (`Mcp-Session-Id`). The server's thread hands each request to the message thread, where
+  the project lives, and waits for the answer.
+- **Changes apply directly** (owner decision 2026-10-29; AGENTS rule 3's one exception). Each tool call that
+  changes the project is one undo step, "Agent: ...", made through `Proposal::prepare`/`apply`, so its steps are
+  checked first and done together. While an agent is connected the top bar shows it, with **Disconnect** (its
+  session ends) and **Undo the agent's changes** (undo steps back to the count when it connected).
+- **Tools:**
+  - **Spinus's own, always, in C++:** `song_summary` (`cli::summarize`), `run_commands`, `command_help`,
+    `list_devices`, `render` (an offline export measured: mix, sections, stems), `undo_last`.
+  - **The project harness's (§12.11), through the local AI service when AI is on:** `ai.v1.project.tools` lists
+    them; `ai.v1.project.tool` runs one on the context and returns its steps, which the interface performs. The
+    AI service needs no AI connection or internet for these, so an agent works offline; with AI off it still has
+    Spinus's own tools.
+- **Why the C++ app hosts it:** the project and its undo history are there, and the interface must work without the
+  AI service (AGENTS rule 4). The harness stays in Python, where the Track creator's harness and the checks are.
+- **Files:** a step may name only files in the project's folder, the user's sample folders and the starter pack.
+  There are no tools for Spinus's settings.
 
 ## 13. Command API
 
@@ -705,11 +759,11 @@ Owner decision 2026-10-29: what was planned for alpha 4 and alpha 5 ships togeth
 - **Guitars in reference songs:** the analysis tells guitars from other instruments, so a guitar band
   doesn't come out as synth chords.
 - **The parts list is remembered** between runs.
-- **The assistant on the open project, through the music harness:** "add pads to the chorus", "add a
-  bridge after bar 20". The edits arrive as one proposal and one undo step.
-- **Instrument settings tools:** "make the bass pluckier", checked with `measure`.
-- **Deeper mix checks:** parts masking each other, loudness per section.
-- **A live MCP interface for outside coding agents** (Claude Code, Codex, Cursor) into a running Spinus.
+- **The assistant on the open project, through the music harness** (done: §12.9, §12.11): "add pads to the
+  chorus", "add a bridge after bar 20". The edits arrive as one proposal and one undo step.
+- **Instrument settings tools** (done: `shape_sound`, `set_sound`): "make the bass pluckier".
+- **Deeper mix checks** (done: masking, the low end, loudness per section from a render).
+- **A live MCP interface for outside coding agents** (done: §12.12) (Claude Code, Codex, Cursor) into a running Spinus.
   It is off until turned on in Options, listens on this computer only and needs a token. Owner decision
   2026-10-29: an agent connected through it **applies its changes directly**, without a proposal to
   approve each time, because an outside agent works in many small steps. Turning the interface on is the

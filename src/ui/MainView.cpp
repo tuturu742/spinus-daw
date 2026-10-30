@@ -127,6 +127,9 @@ public:
         recordButton.setButtonText (juce::CharPointer_UTF8 ("\xe2\x97\x8f"));    // ●
         settingsButton.setButtonText (juce::CharPointer_UTF8 ("\xe2\x9a\x99"));  // ⚙
 
+        agentButton.onClick = [this] { view.showAgentMenu(); };
+        addChildComponent (agentButton);
+
         patternBox.setHelpText ("Current pattern: what pattern mode plays and the Channel Rack edits. Its list also "
                                 "renames, colours and deletes it");
         patternBox.setTextWhenNoChoicesAvailable ("No patterns");
@@ -184,6 +187,21 @@ public:
                              ? project.getTimeSignature (view.session.getCurrentPattern())
                              : project.settings.timeSignature;
         signatureButton.setButtonText (juce::String (sig.numerator) + "/" + juce::String (sig.denominator));
+        const bool agentOn = view.agentInterface != nullptr && view.agentInterface->isAgentConnected();
+        if (agentOn != agentButton.isVisible())
+        {
+            agentButton.setVisible (agentOn);
+            resized();
+        }
+        if (agentOn)
+        {
+            agentButton.setColour (juce::TextButton::buttonColourId, themeOf (*this).get ("accent").withAlpha (0.35f));
+            agentButton.setButtonText ("Agent: " + view.agentInterface->getAgentName());
+            agentButton.setHelpText (view.agentInterface->getAgentName() +
+                                     " is working on this project through Spinus's live interface (" +
+                                     juce::String (view.agentInterface->getAgentChanges()) +
+                                     " changes). Click to disconnect it or undo its changes");
+        }
         const bool aiOn = view.aiService != nullptr && view.aiService->isEnabled();
         assistantButton.setAlpha (aiOn ? 1.0f : 0.45f);
         assistantButton.setHelpText (aiOn ? "Assistant: ask about your song, get proposals to apply (Ctrl+Shift+A)"
@@ -360,10 +378,13 @@ public:
         cpuArea = area.removeFromLeft (narrow ? 48 : 60);
         place (settingsButton, 30);
 
-        // Panel buttons as wide as their names, so no name is squeezed narrower than the others.
-        for (auto* b : { &assistantButton, &browserButton, &mixerButton, &pianoButton, &audioButton, &rackButton,
-                         &playlistButton })
+        // Panel buttons as wide as their names, so no name is squeezed narrower than the others; the agent
+        // button (only while a coding agent is connected) after them.
+        for (auto* b : { &agentButton, &assistantButton, &browserButton, &mixerButton, &pianoButton, &audioButton,
+                         &rackButton, &playlistButton })
         {
+            if (! b->isVisible())
+                continue;
             const auto font = getLookAndFeel().getTextButtonFont (*b, area.getHeight());
             const auto text = juce::GlyphArrangement::getStringWidthInt (font, b->getButtonText());
             b->setBounds (area.removeFromRight (text + (narrow ? 14 : 22)));
@@ -390,6 +411,7 @@ private:
     juce::TextButton playButton, recordButton, modeButton, metronomeButton, typingButton, newPatternButton,
         settingsButton, keyButton;
     juce::TextButton playlistButton, rackButton, audioButton, pianoButton, mixerButton, browserButton, assistantButton;
+    juce::TextButton agentButton;
     /** The pattern list: the patterns, each in its colour, then what can be done with the current one. */
     struct PatternList final : public juce::ComboBox
     {
@@ -1333,6 +1355,46 @@ void MainView::openInSpinusTune (model::ClipId clip)
     };
     window->setVisible (true);
     spinusTune = std::move (window);
+}
+
+void MainView::setAgentInterface (ai::AgentInterface* interface)
+{
+    agentInterface = interface;
+    AiSettingsDialog::setAgentInterface (interface);
+    if (agentInterface != nullptr)
+        agentInterface->onChange = [this]
+        {
+            if (topBar != nullptr)
+                topBar->refresh();
+            AiSettingsDialog::refreshIfOpen();
+        };
+    if (topBar != nullptr)
+        topBar->refresh();
+}
+
+void MainView::showAgentMenu()
+{
+    if (agentInterface == nullptr || ! agentInterface->isAgentConnected())
+        return;
+    juce::PopupMenu menu;
+    const auto changes = agentInterface->getAgentChanges();
+    menu.addSectionHeader (agentInterface->getAgentName() + " is working on this project");
+    menu.addItem (1, "Undo the agent's changes" + (changes > 0 ? " (" + juce::String (changes) + ")" : juce::String()));
+    menu.addItem (2, "Disconnect");
+    menu.addSeparator();
+    menu.addItem (3, "Settings...");
+    menu.showMenuAsync (juce::PopupMenu::Options(),
+                        [safe = juce::Component::SafePointer<MainView> (this)] (int chosen)
+                        {
+                            if (safe == nullptr || safe->agentInterface == nullptr)
+                                return;
+                            if (chosen == 1)
+                                safe->agentInterface->undoAgentChanges();
+                            else if (chosen == 2)
+                                safe->agentInterface->disconnect();
+                            else if (chosen == 3)
+                                safe->showAiSettings();
+                        });
 }
 
 void MainView::showAiSettings()

@@ -219,6 +219,33 @@ juce::var readPointTexts (Session& session, const juce::String& command, const j
     return copy;
 }
 
+} // namespace
+
+juce::var readStepTexts (Session& session, const juce::var& steps, juce::String& error)
+{
+    const auto* list = steps.getArray();
+    if (list == nullptr)
+        return steps;
+    juce::Array<juce::var> out;
+    for (auto& step : *list)
+    {
+        const auto key = step.hasProperty ("params") ? "params" : "parameters";
+        const auto read = readPointTexts (session, step["command"].toString(), step[key], error);
+        if (read == step[key])
+        {
+            out.add (step);
+            continue;
+        }
+        auto copy = step.clone();
+        if (auto* o = copy.getDynamicObject())
+            o->setProperty (key, read);
+        out.add (copy);
+    }
+    return out;
+}
+
+namespace
+{
 juce::var deviceSummary (const model::Device& d)
 {
     return object ({ { "device", (int)d.id.value },

@@ -206,6 +206,9 @@ AiSettingsDialog::AiSettingsDialog (ai::AiService& s) : service (s)
     manualSearchButton.onClick = [this] { showModels (true); };
     engineButton.setHelpText ("PyTorch, which song analysis needs: on the graphics card or the CPU");
     engineButton.onClick = [this] { showAnalysisEngine (true); };
+    agentsButton.setHelpText ("Let coding agents (Claude Code, Codex, Cursor) work on the open song");
+    agentsButton.onClick = [this] { showAgents (true); };
+    addChildComponent (agentsButton);
     backButton.onClick = [this] { showModels (false); };
     downloadModelButton.onClick = [this] { downloadModel (modelList->getSelectedRow()); };
     useModelButton.onClick = [this] { useEmbeddingModel (modelList->getSelectedRow()); };
@@ -502,6 +505,34 @@ void AiSettingsDialog::useModel (int row, const juce::String& model, const juce:
 }
 
 //==============================================================================
+namespace
+{
+ai::AgentInterface*& agentInterfaceShown()
+{
+    static ai::AgentInterface* shown = nullptr;
+    return shown;
+}
+} // namespace
+
+void AiSettingsDialog::setAgentInterface (ai::AgentInterface* interface) { agentInterfaceShown() = interface; }
+
+void AiSettingsDialog::showAgents (bool show)
+{
+    if (show && agentsPage == nullptr && agentInterfaceShown() != nullptr)
+    {
+        agentsPage = std::make_unique<AgentInterfacePage> (*agentInterfaceShown());
+        agentsPage->onBack = [this] { showAgents (false); };
+        addAndMakeVisible (*agentsPage);
+    }
+    else if (! show && agentsPage != nullptr)
+    {
+        removeChildComponent (agentsPage.get());
+        agentsPage = nullptr;
+    }
+    formVisible = modelsVisible = false;
+    updateVisibility();
+}
+
 void AiSettingsDialog::showAnalysisEngine (bool show)
 {
     if (show && enginePage == nullptr && service.isEnabled())
@@ -665,7 +696,7 @@ void AiSettingsDialog::updateVisibility()
         removeChildComponent (enginePage.get());
         enginePage = nullptr;
     }
-    const bool subPage = modelsVisible || enginePage != nullptr;
+    const bool subPage = modelsVisible || enginePage != nullptr || agentsPage != nullptr;
     onOff.setToggleState (on, juce::dontSendNotification);
     onOff.setVisible (true);
     experimentalToggle.setToggleState (service.showsExperimentalFeatures(), juce::dontSendNotification);
@@ -679,6 +710,15 @@ void AiSettingsDialog::updateVisibility()
         c->setVisible (on && ! formVisible && ! subPage);
     manualSearchButton.setVisible (on && ! formVisible && ! subPage);
     engineButton.setVisible (on && ! formVisible && ! subPage);
+    // The live interface works with AI off too (Spinus's own tools), so its button is always there.
+    agentsButton.setVisible (! formVisible && ! subPage && agentInterfaceShown() != nullptr);
+    if (agentsPage != nullptr)
+    {
+        explanation.setVisible (false);
+        status.setVisible (false);
+        experimentalToggle.setVisible (false);
+        experimentalNote.setVisible (false);
+    }
     for (auto* c : std::initializer_list<juce::Component*> {
              modelList.get(), &modelsIntro, &modelsStatus, &downloadModelButton, &useModelButton, &keywordsButton,
              &removeModelButton, &addFolderButton, &addLinkButton, &backButton, &linkField })
@@ -784,6 +824,11 @@ void AiSettingsDialog::resized()
         enginePage->setBounds (area.withTrimmedTop (6));
         return;
     }
+    if (agentsPage != nullptr)
+    {
+        agentsPage->setBounds (area.withTrimmedTop (6));
+        return;
+    }
     if (modelsVisible && service.isEnabled())
     {
         layOutModels (area.withTrimmedTop (6));
@@ -792,6 +837,8 @@ void AiSettingsDialog::resized()
     explanation.setBounds (area.removeFromTop (92));
     area.removeFromTop (6);
     status.setBounds (area.removeFromBottom (52));
+    if (agentsButton.isVisible() && ! service.isEnabled())
+        agentsButton.setBounds (area.removeFromBottom (32).removeFromRight (150).reduced (0, 3));
     area.removeFromBottom (6);
     if (experimentalToggle.isVisible())
     {
@@ -826,6 +873,7 @@ void AiSettingsDialog::resized()
     auto toolsRow = area.removeFromBottom (36);
     engineButton.setBounds (toolsRow.removeFromRight (140).reduced (0, 3));
     toolsRow.removeFromRight (8);
+    agentsButton.setBounds (toolsRow.removeFromLeft (140).reduced (0, 3));
     manualSearchButton.setBounds (toolsRow.removeFromRight (140).reduced (0, 3));
     usage.setBounds (area.removeFromBottom (36));
     auto modelRow = area.removeFromBottom (30);
@@ -906,6 +954,14 @@ void AiSettingsDialog::showAnalysisEngineIfOpen()
     if (auto* window = openWindow().getComponent())
         if (auto* dialog = dynamic_cast<AiSettingsDialog*> (window->getContentComponent()))
             dialog->showAnalysisEngine (true);
+}
+
+void AiSettingsDialog::refreshIfOpen()
+{
+    if (auto* window = openWindow().getComponent())
+        if (auto* dialog = dynamic_cast<AiSettingsDialog*> (window->getContentComponent()))
+            if (dialog->agentsPage != nullptr)
+                dialog->agentsPage->refresh();
 }
 
 void AiSettingsDialog::closeWindow()

@@ -116,6 +116,9 @@ its left edge to make it wider or narrower. Select text in an answer with the mo
 - "How do I sidechain the bass to the kick?"
 - "Add a reverb bus for the snare."
 - "Make the hi-hats in the first pattern quieter."
+- "Add pads to the chorus."
+- "Add a bridge after bar 20."
+- "Make the bass pluckier."
 
 The answer appears as it is written; the line under the conversation says what the assistant is doing
 ("Looking at the project", "Searching the manual"). **Stop** ends an answer early.
@@ -123,6 +126,25 @@ The answer appears as it is written; the line under the conversation says what t
 The buttons above the conversation say what the assistant sees: the **project**, the selected
 **channel**, the current **pattern** and the **insert** selected in the Mixer. Click one to leave it out
 of your next questions.
+
+## Changing the song
+
+To change your song, the assistant uses Spinus's music tools, the same ones the
+[Track creator's AI writer](track-creator.md) composes with, working on your open project:
+
+- **Reading it:** the song's sections (from the Playlist's markers), each part's notes, and each sound's
+  settings with the values they show.
+- **Writing notes:** a part's notes over some bars, a riff placed again (moved up or down, varied), what plays in
+  some bars copied elsewhere.
+- **Arranging:** a new part with an instrument and preset; room for a new section ("add a bridge after bar 20"
+  moves everything after it later and marks the bridge).
+- **Sound and mix:** automation (a fade, a filter sweep), effects with their settings, sends to a reverb or
+  delay, sidechain ducking, buses, and a sound shaped in words: pluckier, punchier, softer, brighter, darker,
+  warmer, longer, shorter, wider.
+- **Checking:** notes outside the key (a section that changes key on purpose is named once), parts held in the
+  same register that mask each other, a muddy low end, sections off the 4-bar phrases, no limiter on the master.
+
+Its changes collect into one **proposal** (below): nothing happens to your song until you click Apply.
 
 ## Proposals
 
