@@ -6,7 +6,7 @@ Read `DESIGN.md` before starting any task. It is the source of truth. If your ta
 
 1. **Real-time safety.** On the audio thread: no heap allocation, no locks, no file or network I/O, no logging, no system calls, no Python, no AI. Use lock-free FIFOs to talk to the audio thread. Any change under `src/engine/` or `src/dsp/` must pass the real-time checklist in `docs/dev/realtime-checklist.md`.
 2. **Command API only.** Every project change goes through a `Command`. UI code and AI code never mutate the model directly. New commands need: schema entry, undo, tests, and a manual page.
-3. **AI proposes, the user decides.** AI features never apply changes without an explicit user Apply. Each applied proposal is one undo step.
+3. **AI proposes, the user decides.** AI features never apply changes without an explicit user Apply. Each applied proposal is one undo step. The one exception is the live interface for outside agents (DESIGN.md §17): the user turns it on, and while it is on, a connected agent's changes apply directly, each as an undo step, with the agent shown as connected and its changes undoable as a whole.
 4. **The DAW works without AI.** Spinus must start, play, save and export with the `spinus-ai` service missing or crashed.
 5. **Licenses.** The project is AGPL-3.0-or-later. Before adding any dependency or model, confirm its license is AGPLv3-compatible and add it to `THIRD_PARTY.md`. No non-commercial (NC) model weights as defaults.
 6. **Never commit** API keys, model weights, copyrighted audio, or generated build output.
