@@ -7,6 +7,7 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 #include <iostream>
@@ -175,6 +176,58 @@ TEST_CASE ("Sounds per part: the parts of a summary and the roles that fit them"
         R"({"other": {"songs": 1, "low": 60, "median": 70, "high": 80, "notesPerBar": 12, "voices": 1.1}})"));
     REQUIRE (busy.size() == 1);
     CHECK (busy[0].roles[0] == "pluck");
+}
+
+TEST_CASE ("Sounds per part: guitars in the reference songs make guitar parts that follow their guitar stem",
+           "[sounds][parts]")
+{
+    auto summary = summaryWith (R"({"bass": {"songs": 4, "low": 28, "median": 36, "high": 45, "notesPerBar": 6},
+        "guitar": {"songs": 3, "low": 40, "median": 47, "high": 59, "notesPerBar": 10, "voices": 2.4},
+        "drums": {"songs": 4, "notesPerBar": 12}})");
+    // No guitars measured (an older analysis): the usual parts.
+    CHECK (guitarRoles (summary).isEmpty());
+    auto roles = [] (const std::vector<SongPart>& list)
+    {
+        juce::StringArray r;
+        for (const auto& p : list)
+            r.add (p.role);
+        return r;
+    };
+    CHECK (roles (defaultParts ("sketch", summary)) == juce::StringArray { "drums", "bass", "chords", "lead" });
+
+    auto* o = summary.getDynamicObject();
+    o->setProperty ("songs", 4);
+    o->setProperty ("guitars",
+                    juce::JSON::parse (R"({"measured": 4, "songs": 3, "distorted": 3, "clean": 0, "lead": 2})"));
+    CHECK (guitarRoles (summary) == juce::StringArray { "rhythm-guitar", "lead-guitar" });
+    CHECK (roles (defaultParts ("sketch", summary)) ==
+           juce::StringArray { "drums", "bass", "rhythm-guitar", "lead", "lead-guitar" });
+    const auto full = roles (defaultParts ("full", summary));
+    CHECK (full.contains ("rhythm-guitar"));
+    CHECK_FALSE (full.contains ("chords"));
+
+    // The guitar stem is a target of its own, and a guitar part follows its measured range.
+    const auto targets = targetsFromSummary (summary);
+    const auto stem =
+        std::find_if (targets.begin(), targets.end(), [] (const Target& t) { return t.part == "guitar"; });
+    REQUIRE (stem != targets.end());
+    CHECK (stem->chords);
+    CHECK (stem->names.contains ("guitar"));
+    const auto rhythm = targetFor ({ "rhythm-guitar", "Rhythm guitar", "rhythm-guitar" }, 0, summary);
+    CHECK (rhythm.part == "guitar");
+    CHECK (rhythm.low == 40);
+    CHECK (rhythm.median == 47);
+    CHECK (rhythm.measure);
+    const auto lead = targetFor ({ "lead-guitar", "Lead guitar", "lead-guitar" }, 0, summary);
+    CHECK (lead.median > rhythm.median);
+    CHECK_FALSE (lead.measure);
+
+    // Without a guitar stem in the songs, a guitar part keeps its usual range and is not measured.
+    const auto none = targetFor ({ "rhythm-guitar", "Rhythm guitar", "rhythm-guitar" }, 0,
+                                 summaryWith (R"({"bass": {"songs": 1, "low": 28, "median": 36, "high": 45}})"));
+    CHECK (none.part == "other");
+    CHECK (none.median == 50);
+    CHECK_FALSE (none.measure);
 }
 
 TEST_CASE ("Sounds per part: a stem is measured over its own notes", "[sounds][parts]")

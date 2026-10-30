@@ -315,6 +315,7 @@ class Style:
     without: frozenset[str] = frozenset()  # parts the song leaves out (a described song: "no drums")
     double_kick: bool = False  # the drums play a double kick in the choruses (metal)
     key_fixed: bool = False  # a key the user wrote: not moved a step
+    guitars: tuple[str, ...] = ()  # the guitar roles the reference songs have (guitar_roles)
 
     @staticmethod
     def from_summary(summary: dict[str, Any]) -> Style:
@@ -343,8 +344,18 @@ class Style:
             lanes[lane] = resample(values, steps) if values else resample(usual, steps)
 
         parts = {}
+        found_parts = summary.get("parts") or {}
         for name, default in DEFAULT_PARTS.items():
-            p = (summary.get("parts") or {}).get(name)
+            p = found_parts.get(name)
+            if name == "other" and not (isinstance(p, dict) and p.get("median")):
+                # A separation with guitar and piano stems leaves little in "other" for a guitar band: the chords
+                # are then the guitar's (or the piano's), whichever more songs have.
+                harmonic: list[dict[str, Any]] = [
+                    h
+                    for h in (found_parts.get(n) for n in ("guitar", "piano"))
+                    if isinstance(h, dict) and h.get("median")
+                ]
+                p = max(harmonic, key=lambda h: int(h.get("songs") or 0)) if harmonic else None
             if isinstance(p, dict) and p.get("median"):
                 low, mid, high = int(p.get("low") or default.low), int(p["median"]), int(p.get("high") or default.high)
                 # At least an octave to move in, around the middle.
@@ -388,6 +399,7 @@ class Style:
             without=frozenset(str(p) for p in summary.get("without") or [] if p in PARTS),
             double_kick=bool(drums.get("doubleKick")),
             key_fixed=bool(summary.get("keyFixed")),
+            guitars=guitar_roles(summary),
         )
 
     def vocabulary(self, mode: str) -> Vocabulary:
@@ -470,11 +482,43 @@ def vocabularies(summary: dict[str, Any]) -> dict[str, Vocabulary]:
 # The plan: tempo, key, sections
 
 
+def guitar_roles(summary: dict[str, Any]) -> tuple[str, ...]:
+    """The guitar parts the reference songs call for (style.summarize's `guitars`): a rhythm guitar when at
+    least half the songs have distorted guitars, a clean guitar when half have clean ones, and a lead guitar when
+    half of those with guitars play a lead line. None when fewer than half the songs have guitars, or when no
+    song was measured with a guitar stem."""
+    guitars = summary.get("guitars") if isinstance(summary, dict) else None
+    if not isinstance(guitars, dict):
+        return ()
+    songs, count = int(guitars.get("songs") or 0), int(summary.get("songs") or 0)
+    if not songs or songs * 2 < count:
+        return ()
+    roles = []
+    if int(guitars.get("distorted") or 0) * 2 >= songs:
+        roles.append("rhythm-guitar")
+    if int(guitars.get("clean") or 0) * 2 >= songs:
+        roles.append("clean-guitar")
+    if int(guitars.get("lead") or 0) * 2 >= songs:
+        roles.append("lead-guitar")
+    return tuple(roles)
+
+
 def default_parts(style: Style, size: str) -> list[dict[str, str]]:
     """The parts a size proposes: the sketch's four, or the full arrangement's (a sub bass only when there is
-    room for one)."""
-    roles = SKETCH if size == "sketch" else tuple(r for r in FULL if r != "sub" or has_sub(style))
-    return [{"id": r, "name": ROLES[r][0], "role": r} for r in roles]
+    room for one). With guitars in the reference songs, the guitars take the chords' place (and a lead guitar
+    joins the lead)."""
+    roles = list(SKETCH if size == "sketch" else tuple(r for r in FULL if r != "sub" or has_sub(style)))
+    if style.guitars:
+        chords = [g for g in style.guitars if g != "lead-guitar"]
+        at = roles.index("chords")
+        roles[at : at + 1] = chords or ["chords"]
+        if "lead-guitar" in style.guitars:
+            roles.insert(roles.index("lead") + 1, "lead-guitar")
+    parts: list[dict[str, str]] = []
+    for r in roles:
+        taken = sum(1 for p in parts if p["role"] == r)
+        parts.append({"id": r if not taken else f"{r}-{taken + 1}", "name": ROLES[r][0], "role": r})
+    return parts
 
 
 def check_parts(parts: Any) -> list[dict[str, str]]:

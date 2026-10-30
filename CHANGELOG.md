@@ -5,6 +5,15 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: guitars in your songs
+
+- **The Track creator hears guitars in your reference songs.** It now splits songs into 6 stems (guitar and
+  piano apart from the other instruments) and measures the guitar: whether it is distorted or clean, plays
+  power chords, or a lead line. When at least half of your songs have guitars, the description, **Suggest
+  parts** and the songs Spinus writes have guitar parts instead of synth chords, and they follow your songs'
+  guitar (its range, and the sound **Tune toward the references** aims for). Songs analyzed before are
+  analyzed again once, as the summary changed; the Demucs 6-stem model (55 MB) is downloaded once.
+
 ### Track creator
 
 - **Save this sound:** in the list beside a part, **Save this sound...** opens the part's instrument in its

@@ -572,3 +572,19 @@ def test_keys_are_named_as_usual(tonic: int, scale: str, name: str) -> None:
     assert songwriter.key_of_name(name) == (tonic, scale)
     reading = describe.read(f"a song in {name}")
     assert (reading.tonic, reading.scale) == (tonic, scale)
+
+
+def test_the_reference_songs_guitars_are_named_and_read_back_as_parts() -> None:
+    base = {"songs": 4, "tempo": {"median": 140.0}, "keys": [{"name": "E minor", "count": 3}],
+            "parts": {"bass": {"songs": 4}, "drums": {"songs": 4}, "guitar": {"songs": 3}}}  # fmt: skip
+    plain = describe.prompt_from(base)
+    assert "guitar" not in plain  # no guitars measured (an older analysis)
+    band = {**base, "guitars": {"measured": 4, "songs": 3, "distorted": 3, "clean": 0, "lead": 2}}
+    text = describe.prompt_from(band)
+    assert "distorted rhythm guitars" in text and "a lead guitar" in text and "clean" not in text
+    roles = [p["role"] for p in describe.read(text).parts]
+    assert roles == ["drums", "bass", "rhythm-guitar", "lead-guitar"]
+    jangle = {**base, "guitars": {"measured": 4, "songs": 4, "distorted": 0, "clean": 4, "lead": 0}}
+    assert [p["role"] for p in describe.read(describe.prompt_from(jangle)).parts] == ["drums", "bass", "clean-guitar"]
+    few = {**base, "guitars": {"measured": 4, "songs": 1, "distorted": 1, "clean": 0, "lead": 1}}
+    assert "guitar" not in describe.prompt_from(few)

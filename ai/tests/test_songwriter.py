@@ -428,3 +428,39 @@ async def test_a_malformed_answer_leaves_the_rules_song(tmp_path: Path, answer: 
     assert sent and song["refinedBy"] == ""
     assert song["parts"] == rules["parts"] and song["sections"] == rules["sections"]
     assert "not usable" in song["note"]
+
+
+def test_guitars_in_the_reference_songs_make_guitar_parts() -> None:
+    plain = summary()
+    assert songwriter.guitar_roles(plain) == ()
+    assert [p["role"] for p in songwriter.default_parts(songwriter.Style.from_summary(plain), "sketch")] == list(
+        songwriter.SKETCH
+    )
+
+    band = {**plain, "songs": 4, "guitars": {"measured": 4, "songs": 3, "distorted": 3, "clean": 0, "lead": 2}}
+    assert songwriter.guitar_roles(band) == ("rhythm-guitar", "lead-guitar")
+    style_of = songwriter.Style.from_summary(band)
+    assert [p["role"] for p in songwriter.default_parts(style_of, "sketch")] == [
+        "drums", "bass", "rhythm-guitar", "lead", "lead-guitar"]  # fmt: skip
+    full = songwriter.default_parts(style_of, "full")
+    assert "rhythm-guitar" in [p["role"] for p in full] and "chords" not in [p["role"] for p in full]
+    assert len({p["id"] for p in full}) == len(full)
+
+    # Clean and distorted both common: both kinds; fewer than half the songs with guitars: none.
+    both = {**band, "guitars": {"measured": 4, "songs": 2, "distorted": 1, "clean": 1, "lead": 0}}
+    assert songwriter.guitar_roles(both) == ("rhythm-guitar", "clean-guitar")
+    few = {**band, "guitars": {"measured": 4, "songs": 1, "distorted": 1, "clean": 0, "lead": 1}}
+    assert songwriter.guitar_roles(few) == ()
+
+
+def test_a_guitar_bands_chords_come_from_the_guitar_stem() -> None:
+    plain = summary()
+    guitar = {"songs": 3, "notesPerBar": 12.0, "low": 40, "median": 47, "high": 59, "voices": 2.6}
+    band = {**plain, "parts": {k: v for k, v in plain["parts"].items() if k != "other"} | {"guitar": guitar}}
+    chords = songwriter.Style.from_summary(band).parts["other"]
+    assert (chords.low, chords.median, chords.high) == (40, 47, 59) and chords.per_bar == 12.0
+    song = songwriter.write(band, 3)
+    assert song["kind"] == "spinus.song"
+    guitars = {**band, "songs": 4, "guitars": {"measured": 4, "songs": 4, "distorted": 4, "clean": 0, "lead": 0}}
+    written = songwriter.write(guitars, 3, "full")
+    assert any(layer["role"] == "rhythm-guitar" for layer in written["layers"])
