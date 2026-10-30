@@ -30,9 +30,9 @@ namespace spinus::ui
     key, stems, notes), and one whose style was measured is ready at once. The decoded song and the stems'
     WAV files are made in a temporary folder and deleted after each song. Once all are analyzed, the
     summary of what the songs share is shown in plain words and can be saved as a JSON file (the input of
-    the Track creator's later steps). The list of songs and the last summary are remembered
-    (track-creator.json beside the library); at the next start the songs whose style is known are ready,
-    and the others wait for Analyze again, so starting Spinus never starts the AI service.
+    the Track creator's later steps). The list of songs, the last summary, the description and the parts
+    list (with their sounds) are remembered (track-creator.json beside the library); at the next start the songs whose
+   style is known are ready, and the others wait for Analyze again, so starting Spinus never starts the AI service.
 
     Nothing here changes the project. It needs AI turned on, the analysis engine installed and the model
     files downloaded (unless the library already has what they would find); it says what is missing and
@@ -250,7 +250,7 @@ private:
     };
     std::vector<Missing> missing;
     juce::int64 downloadSize = 0;
-    bool downloading = false, summarizing = false, recalled = false;
+    bool downloading = false, summarizing = false, recalled = false, recalling = false;
     juce::String summarized; // the songs (digests) the summary is of
     juce::var summary;
     juce::File workRoot;

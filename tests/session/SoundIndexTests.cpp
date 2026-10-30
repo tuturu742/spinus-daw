@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "dsp/SpinusPluginFormat.h"
 #include "dsp/threeosc/ThreeOscPresets.h"
 #include "session/SoundDescriptors.h"
 #include "session/ProgramFolder.h"
@@ -331,6 +332,112 @@ TEST_CASE ("Sound index: Measure again forgets one instrument, or every silent o
 }
 
 //==============================================================================
+TEST_CASE ("Sound index: a saved sound is measured with its instrument, and kept when the index is deleted",
+           "[sounds][index]")
+{
+    TempFolder temp;
+    const auto folder = temp.folder.getChildFile ("sounds");
+    SoundIndex index (folder);
+    SoundIndex::Instrument osc;
+    osc.source = threeOsc();
+    osc.complete = true;
+    osc.measuredWith = SoundIndex::helperRevision;
+    osc.sounds.add (object ({ { "id", "program:0:Sub Bass" }, { "version", "1" }, { "name", "Sub Bass" } }));
+    index.instruments[osc.source.key] = osc;
+    REQUIRE (index.saveInstrument (osc));
+    REQUIRE (index.saveIndex());
+    CHECK_FALSE (index.needsVisit (threeOsc()));
+
+    // Saved (Save this sound): its state beside the index, and the instrument is measured again for it.
+    SavedSounds saved (folder);
+    const auto added = saved.add (threeOsc().key, "  My Kit  ", juce::MemoryBlock ("state", 5));
+    REQUIRE (added.has_value());
+    const auto sound = added.value_or (SavedSounds::Sound {});
+    CHECK (SavedSounds::isSaved (sound.id));
+    CHECK (sound.name == "My Kit");
+    CHECK (saved.stateFile (sound.id).existsAsFile());
+    CHECK (saved.stateFile (sound.id) == SavedSounds::stateFileIn (folder, sound.id));
+    CHECK_FALSE (saved.stateFile (sound.id).isAChildOf (folder)); // beside the index, not in it
+    CHECK_FALSE (saved.add (threeOsc().key, "Empty", {}).has_value());
+    CHECK (index.needsVisit (threeOsc()));
+
+    // Measured (as the helper reports it): nothing more to do, until it is saved again or deleted.
+    index.instruments[osc.source.key].sounds.add (
+        object ({ { "id", sound.id }, { "version", sound.version }, { "name", sound.name } }));
+    CHECK_FALSE (index.needsVisit (threeOsc()));
+    index.instruments[osc.source.key].sounds.getReference (1).getDynamicObject()->setProperty ("version", "older");
+    CHECK (index.needsVisit (threeOsc()));
+    index.instruments[osc.source.key].sounds.getReference (1).getDynamicObject()->setProperty ("version",
+                                                                                               sound.version);
+
+    // Deleting the index keeps the saved sounds; they come back in a new one.
+    REQUIRE (index.removeAll());
+    SavedSounds after (folder);
+    after.load();
+    REQUIRE (after.all().size() == 1);
+    CHECK (after.forInstrument (threeOsc().key).size() == 1);
+    CHECK (after.forInstrument ("another").empty());
+    CHECK (after.all()[0].name == "My Kit");
+    // Removed by the user: gone, file and all.
+    REQUIRE (after.remove (sound.id));
+    CHECK_FALSE (after.stateFile (sound.id).existsAsFile());
+    after.load();
+    CHECK (after.all().empty());
+}
+
+#if defined(SPINUS_PLUGIN_SCANNER)
+TEST_CASE ("Sound index: a saved sound plays as the user set it up, in the helper", "[sounds][index][helper]")
+{
+    // 3x Osc as the Sub Bass preset sets it, saved as a state: measured as a preset of 3x Osc, in its own
+    // category, and it sounds like that preset.
+    TempFolder temp;
+    const auto folder = temp.folder.getChildFile ("sounds");
+    auto instance = dsp::SpinusPluginFormat::create ("spinus:3x-osc");
+    REQUIRE (instance != nullptr);
+    int sub = -1;
+    for (int i = 0; i < instance->getNumPrograms(); ++i)
+        if (instance->getProgramName (i) == "Sub Bass")
+            sub = i;
+    REQUIRE (sub >= 0);
+    instance->setCurrentProgram (sub);
+    juce::MemoryBlock state;
+    instance->getStateInformation (state);
+    SavedSounds saved (folder);
+    const auto added = saved.add (threeOsc().key, "Deep Bass", state);
+    REQUIRE (added.has_value());
+    const auto sound = added.value_or (SavedSounds::Sound {});
+
+    SoundIndex index (folder);
+    const auto result = SoundIndexer::update (index, helperOptions(), { threeOsc() }, {}, {}, {});
+    CHECK (result.problems == 0);
+    const auto& osc = index.instruments.at (threeOsc().key);
+    const auto* mine = findSound (osc, "Deep Bass");
+    REQUIRE (mine != nullptr);
+    CHECK ((*mine)["id"].toString() == sound.id);
+    CHECK ((*mine)["category"].toString() == SavedSounds::category);
+    CHECK_FALSE ((bool)(*mine)["silent"]);
+    const auto* factory = findSound (osc, "Sub Bass");
+    REQUIRE (factory != nullptr);
+    CHECK ((*mine)["role"].toString() == (*factory)["role"].toString());
+    CHECK ((int)(*mine)["low"] == (int)(*factory)["low"]);
+    CHECK_FALSE (osc.presetFiles); // a saved sound is no preset file: it doesn't make every update visit 3x Osc
+    CHECK_FALSE (index.needsVisit (threeOsc()));
+
+    // One instrument on its own (as Save this sound does), the rest of the index left as it is.
+    REQUIRE (saved.add (threeOsc().key, "Deep Bass 2", state).has_value());
+    index.instruments["other"].source.key = "other";
+    SoundIndexer::updateInstrument (index, helperOptions(), threeOsc(), {});
+    CHECK (findSound (index.instruments.at (threeOsc().key), "Deep Bass 2") != nullptr);
+    CHECK (index.instruments.contains ("other"));
+
+    // Deleted: it leaves the index at the next update.
+    REQUIRE (saved.remove (sound.id));
+    CHECK (index.needsVisit (threeOsc()));
+    SoundIndexer::updateInstrument (index, helperOptions(), threeOsc(), {});
+    CHECK (findSound (index.instruments.at (threeOsc().key), "Deep Bass") == nullptr);
+}
+#endif
+
 #if defined(SPINUS_PLUGIN_SCANNER) && defined(SPINUS_BROKEN_PLUGINS_DIR)
 TEST_CASE ("Sound index: Spinus's 3x Osc, a CLAP synth and a sample folder, in the helper", "[sounds][index][helper]")
 {

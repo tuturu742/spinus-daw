@@ -35,8 +35,12 @@ public:
     bool deleteSong (int row);
     bool deleteAllStems();
     bool deleteEverything();
-    /** Deletes the sound index (it is made again by Update sound index); false while it is being updated. */
-    bool deleteSoundIndex();
+    /** Deletes the sound index (it is made again by Update sound index); false while it is being updated. The
+        user's saved sounds (Save this sound) are kept unless `alsoSavedSounds`; the button asks first when there
+        are any. */
+    bool deleteSoundIndex (bool alsoSavedSounds = false);
+    /** The button: asks whether the saved sounds go too, when there are any, then deletes. */
+    void askAndDeleteSoundIndex();
     juce::String getSoundIndexText() const { return soundsText.getText(); }
     std::function<void()> onSoundIndexDeleted;
     void selectRow (int row) { list.selectRow (row); }

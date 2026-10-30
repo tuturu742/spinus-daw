@@ -5,14 +5,25 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator
+
+- **Save this sound:** in the list beside a part, **Save this sound...** opens the part's instrument in its
+  own window, outside the project. Set it up (a kit in a drum player that is silent until one is chosen, a
+  patch, your own knob settings), name it and Save: Spinus keeps it as your saved sound, listens to it like a
+  preset and chooses it for the part. Choose sounds and the AI writer can use it from then on, and **Other
+  sound...** lists your saved sounds first. It works with any instrument, Windows plugins too, and saved
+  sounds stay when the sound index is updated or deleted (Delete the sound index asks about them first).
+- **The parts list is remembered** between runs: the parts, their roles, the sounds you chose and Tune
+  toward the references come back when you open the Track creator again. A new description starts it again.
+
 ### Fixes
 
 - **Local models in Ollama no longer lose the start of long conversations.** Spinus asked Ollama through its
   OpenAI-compatible API, which can't set the context length, so Ollama kept only its default and silently
   dropped the rest of the conversation: the assistant's longer chats and the Track creator's AI writer (whose
-  tools alone are a few thousand tokens) were cut short. Spinus now uses Ollama's own API and sets the context for each
-  request from its size (at least 16k tokens, up to the model's own limit). Reasoning levels are passed on as
-  Ollama's `think`.
+  tools alone are a few thousand tokens) were cut short. Spinus now uses Ollama's own API and sets the context
+  for each request from its size (at least 16k tokens, up to the model's own limit). Reasoning levels are passed
+  on as Ollama's `think`.
 
 ## 0.1.0-alpha.3 (2026-10-29)
 

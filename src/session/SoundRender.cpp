@@ -3,6 +3,7 @@
 #include "InstrumentPresets.h"
 #include "OfflineInstrument.h"
 #include "SoundDescriptors.h"
+#include "SoundIndex.h"
 #include "SynthMatch.h"
 #include "dsp/SpinusPluginFormat.h"
 #include "dsp/sampler/SampleStorage.h"
@@ -141,13 +142,28 @@ int runInstrument (const juce::var& request, Lines& out)
     // found or right after): only its sound as it opens.
     auto presets = (bool)request["defaultOnly"] ? std::vector<InstrumentPreset> {}
                                                 : InstrumentPresets::find (*instance, deviceOf (request));
-    const bool hasPresets = ! presets.empty();
-    if (! hasPresets)
+    if (presets.empty())
     {
-        InstrumentPreset asItIs;
+        InstrumentPreset asItIs; // its id is "": played as the instrument opens, nothing loaded
         asItIs.name = "Default sound";
         presets.push_back (asItIs);
     }
+    // The user's saved sounds (Save this sound): the plugin's state as they set it up in its window. Measured
+    // with "defaultOnly" too, for an instrument that is silent until a sound is chosen in its window.
+    if (const auto* saved = request["saved"].getArray())
+        for (const auto& s : *saved)
+        {
+            InstrumentPreset p;
+            p.kind = InstrumentPreset::Kind::state;
+            p.file = juce::File (s["file"].toString());
+            if (! p.file.loadFileAsData (p.state) || p.state.isEmpty())
+                continue;
+            p.id = s["id"].toString();
+            p.version = s["version"].toString();
+            p.name = s["name"].toString();
+            p.category = SavedSounds::category;
+            presets.push_back (std::move (p));
+        }
 
     juce::Array<juce::var> listed;
     bool presetFiles = false;
@@ -157,7 +173,7 @@ int runInstrument (const juce::var& request, Lines& out)
         o->setProperty ("id", p.id);
         o->setProperty ("version", p.version);
         listed.add (juce::var (o));
-        presetFiles = presetFiles || p.file != juce::File();
+        presetFiles = presetFiles || (p.file != juce::File() && ! SavedSounds::isSaved (p.id)); // more may come
     }
     {
         auto* o = new juce::DynamicObject();
@@ -192,7 +208,7 @@ int runInstrument (const juce::var& request, Lines& out)
         out.write ("begin", preset.id);
         juce::var sound;
         juce::String problem;
-        if (hasPresets)
+        if (preset.id.isNotEmpty()) // not the instrument's own sound as it opens
             if (const auto loaded = player.loadPreset (preset); loaded.failed())
                 problem = loaded.getErrorMessage();
         if (problem.isEmpty())
