@@ -4,10 +4,14 @@
 #include "ai/AnalysisJobs.h"
 #include "ai/Proposal.h"
 #include "FakeProvider.h"
+#include "engine/BundledDevices.h"
+#include "engine/DeviceFactory.h"
 #include "engine/EngineHost.h"
 #include "session/PartSounds.h"
 #include "session/UserRoles.h"
 #include "ui/PartSoundsPanel.h"
+#include "ui/SaveSoundWindow.h"
+#include "dsp/SpinusPluginFormat.h"
 #include "session/SongPreparation.h"
 #include "session/SoundDescriptors.h"
 #include "ui/AnalysisLibraryView.h"
@@ -1527,3 +1531,174 @@ TEST_CASE ("Track creator: a new song in the style of real songs (SPINUS_REALMUS
     exportTo (songOut.getChildFile (name + ".flac"));
 }
 #endif
+
+#if defined(SPINUS_PLUGIN_SCANNER)
+TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the user set it, measured, chosen, added "
+           "and remembered with the parts list",
+           "[ui][trackcreator][sounds]")
+{
+    TempFolder t;
+    EngineHost host { { .openAudioDevice = false } };
+    auto devices = std::make_unique<engine::DefaultDeviceFactory>();
+    engine::registerBundledDevices (*devices, host.getEngine(), {});
+    Session session { host.getEngine(), std::move (devices) };
+    SoundSource osc;
+    osc.key = "stock-spinus.3x-osc";
+    osc.name = "3x Osc";
+    osc.format = "Spinus";
+    osc.file = "spinus:3x-osc";
+    osc.stockType = "spinus.3x-osc";
+    osc.badge = "Spinus";
+    osc.fingerprint = "Spinus test";
+    PartSoundsPanel::Context context;
+    context.indexFolder = t.root.getChildFile ("sounds");
+    context.workFolder = t.root.getChildFile ("work");
+    context.helper.helper = juce::File (SPINUS_PLUGIN_SCANNER);
+    context.sources = { osc };
+    PartSoundsPanel panel (session, [&] { return context; });
+    int changes = 0;
+    panel.onChanged = [&] { ++changes; };
+    panel.setParts ({ { "bass", "Bass", "bass" } });
+    CHECK (changes > 0);
+
+    // Without an instrument for the part, there is nothing to open.
+    CHECK_FALSE (panel.saveSound (0));
+    CHECK (panel.getStatusText().contains ("Other sound"));
+    CHECK (SaveSoundWindow::getNumOpen() == 0);
+
+    // The part plays 3x Osc: its window opens outside the project, the user sets it up and saves.
+    parts::Choice start;
+    start.kind = parts::Choice::Kind::preset;
+    start.instrument = osc.key;
+    start.source = osc;
+    start.name = "Default sound";
+    REQUIRE (panel.pickSound (0, start));
+    const auto channelsBefore = session.getProject().channels.size();
+    const bool opened = panel.saveSound (0);
+    INFO (panel.getStatusText());
+    REQUIRE (opened);
+    REQUIRE (SaveSoundWindow::getNumOpen() == 1);
+    CHECK (session.getProject().channels.size() == channelsBefore); // the project does not change
+    REQUIRE (SaveSoundWindow::saveLastOpened ("Deep Bass"));
+    REQUIRE (waitFor (
+        [&]
+        {
+            const auto& rows = panel.getRows();
+            return ! panel.isBusy() && rows[0].picked && SavedSounds::isSaved (rows[0].picked->preset);
+        },
+        120000));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    CHECK (SaveSoundWindow::getNumOpen() == 0);
+    const auto picked = panel.getRows()[0].picked.value_or (parts::Choice {});
+    INFO (panel.getStatusText());
+    CHECK (picked.name == "Deep Bass");
+    CHECK (picked.state.existsAsFile());
+    CHECK (picked.reasons().contains ("your saved sound"));
+    CHECK_FALSE (picked.reasons().contains ("not measured"));
+    CHECK (panel.getStatusText().contains ("Saved Deep Bass"));
+
+    // Measured in the helper as a preset of 3x Osc, in its own category.
+    SoundIndex index (context.indexFolder);
+    index.load();
+    const juce::var* measured = nullptr;
+    for (const auto& s : index.instruments.at (osc.key).sounds)
+        if (s["id"].toString() == picked.preset)
+            measured = &s;
+    REQUIRE (measured != nullptr);
+    CHECK ((*measured)["category"].toString() == SavedSounds::category);
+    CHECK_FALSE ((bool)(*measured)["silent"]);
+
+    // Other sound... lists it first, under Your saved sounds.
+    juce::PopupMenu menu;
+    panel.fillInstrumentMenu (menu, [] (const parts::Choice&) {});
+    juce::PopupMenu::MenuItemIterator item (menu);
+    REQUIRE (item.next());
+    CHECK (item.getItem().text == SavedSounds::category);
+
+    // Added to the project (one undo step): the channel's 3x Osc plays the saved state.
+    panel.setEffects (false);
+    panel.setListenCloser (false);
+    REQUIRE (panel.addToProject());
+    CHECK_FALSE (panel.getStatusText().contains ("Not every sound loaded"));
+    REQUIRE (panel.getAddedChannels().size() == 1);
+    const auto* channel = session.getProject().findChannel (panel.getAddedChannels()[0]);
+    REQUIRE (channel != nullptr);
+    REQUIRE (channel->instrument);
+    const auto device = channel->instrument.value_or (model::Device {});
+    auto* plugin = dynamic_cast<tracktion::ExternalPlugin*> (session.getAdapter().getDevicePlugin (device.id));
+    REQUIRE (plugin != nullptr);
+    auto* instance = plugin->getAudioPluginInstance();
+    REQUIRE (instance != nullptr);
+    juce::MemoryBlock saved;
+    REQUIRE (picked.state.loadFileAsData (saved));
+    auto reference = dsp::SpinusPluginFormat::create ("spinus:3x-osc");
+    REQUIRE (reference != nullptr);
+    reference->setStateInformation (saved.getData(), (int)saved.getSize());
+    const auto& theirs = reference->getParameters();
+    const auto& ours = instance->getParameters();
+    REQUIRE (theirs.size() == ours.size());
+    for (int i = 0; i < ours.size(); ++i)
+        CHECK (std::abs (ours[i]->getValue() - theirs[i]->getValue()) < 1.0e-4f);
+
+    // Remembered: the parts list and its sounds come back in a new panel.
+    const auto remembered = panel.getRemembered();
+    PartSoundsPanel next (session, [&] { return context; });
+    next.restore (juce::JSON::parse (juce::JSON::toString (remembered)));
+    REQUIRE (next.getRows().size() == 1);
+    CHECK (next.getRows()[0].part.name == "Bass");
+    CHECK (next.getRows()[0].part.role == "bass");
+    REQUIRE (next.getRows()[0].picked);
+    const auto restored = next.getRows()[0].picked.value_or (parts::Choice {});
+    CHECK (restored.preset == picked.preset);
+    CHECK (restored.state == picked.state);
+    CHECK (next.getRows()[0].chosen() != nullptr);
+    next.restore ({}); // nothing remembered: nothing changes
+    CHECK (next.getRows().size() == 1);
+
+    // Deleting the sound index keeps saved sounds, unless the user says they go too.
+    AnalysisLibraryView view (AnalysisLibrary (t.root.getChildFile ("library")), context.indexFolder);
+    CHECK (view.deleteSoundIndex());
+    SavedSounds kept (context.indexFolder);
+    kept.load();
+    CHECK (kept.all().size() == 1);
+    CHECK (view.deleteSoundIndex (true));
+    kept.load();
+    CHECK (kept.all().empty());
+}
+#endif
+
+TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screenshot][manual]")
+{
+    EngineHost host { { .openAudioDevice = false } };
+    auto devices = std::make_unique<engine::DefaultDeviceFactory>();
+    engine::registerBundledDevices (*devices, host.getEngine(), {});
+    Session session { host.getEngine(), std::move (devices) };
+    SpinusLookAndFeel look (Theme::dark());
+    juce::LookAndFeel::setDefaultLookAndFeel (&look);
+    parts::Choice start;
+    start.kind = parts::Choice::Kind::preset;
+    start.source.key = "stock-spinus.3x-osc";
+    start.source.name = "3x Osc";
+    start.source.format = "Spinus";
+    start.source.file = "spinus:3x-osc";
+    start.source.stockType = "spinus.3x-osc";
+    juce::String problem;
+    REQUIRE (SaveSoundWindow::open (session, start, "Bass (3x Osc)", nullptr, {}, problem));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
+    SaveSoundWindow* window = nullptr;
+    for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i)
+        if (auto* w = dynamic_cast<SaveSoundWindow*> (juce::Desktop::getInstance().getComponent (i)))
+            window = w;
+    REQUIRE (window != nullptr);
+    auto* content = window->getContentComponent();
+    REQUIRE (content != nullptr);
+    const auto file = juce::File (SPINUS_TEST_FILES_DIR)
+                          .getParentDirectory()
+                          .getChildFile ("docs/user/images/track-creator-save-sound.png");
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    const auto image = content->createComponentSnapshot (content->getLocalBounds());
+    REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
+    SaveSoundWindow::closeAll();
+    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+}

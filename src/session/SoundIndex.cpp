@@ -173,6 +173,100 @@ std::vector<SoundSource> findSoundSources (const plugins::DeviceList& list)
 //==============================================================================
 juce::File SoundIndex::getDefaultFolder() { return getPluginListFolder().getChildFile ("ai/sounds"); }
 
+//==============================================================================
+SavedSounds::SavedSounds (const juce::File& indexFolder) : folder (indexFolder.getSiblingFile ("saved-sounds")) {}
+
+juce::File SavedSounds::stateFileIn (const juce::File& indexFolder, const juce::String& id)
+{
+    return SavedSounds (indexFolder).stateFile (id);
+}
+
+juce::File SavedSounds::stateFile (const juce::String& id) const
+{
+    return folder.getChildFile (
+        id.fromFirstOccurrenceOf ("saved:", false, false).retainCharacters ("abcdefghijklmnopqrstuvwxyz0123456789-") +
+        ".state");
+}
+
+void SavedSounds::load()
+{
+    sounds.clear();
+    const auto saved = juce::JSON::parse (folder.getChildFile ("sounds.json"));
+    if (const auto* list = saved["sounds"].getArray())
+        for (const auto& s : *list)
+        {
+            Sound sound;
+            sound.id = s["id"].toString();
+            sound.instrument = s["instrument"].toString();
+            sound.name = s["name"].toString();
+            sound.version = s["version"].toString();
+            sound.saved = juce::Time ((juce::int64)s["saved"]);
+            if (isSaved (sound.id) && sound.instrument.isNotEmpty() && stateFile (sound.id).existsAsFile())
+                sounds.push_back (sound);
+        }
+}
+
+bool SavedSounds::save() const
+{
+    juce::Array<juce::var> list;
+    for (const auto& s : sounds)
+        list.add (object ({ { "id", s.id },
+                            { "instrument", s.instrument },
+                            { "name", s.name },
+                            { "version", s.version },
+                            { "saved", s.saved.toMilliseconds() } }));
+    return writeJson (folder.getChildFile ("sounds.json"), object ({ { "version", 1 }, { "sounds", list } }));
+}
+
+std::optional<SavedSounds::Sound> SavedSounds::add (const juce::String& instrument, const juce::String& name,
+                                                    const juce::MemoryBlock& state)
+{
+    if (instrument.isEmpty() || state.isEmpty())
+        return std::nullopt;
+    Sound sound;
+    sound.id = "saved:" + juce::Uuid().toDashedString();
+    sound.instrument = instrument;
+    sound.name = name.trim().isNotEmpty() ? name.trim() : juce::String ("My sound");
+    // Its version: a hash of the state (FNV-1a), so a sound saved again under its id is measured again.
+    juce::uint64 hash = 14695981039346656037ull;
+    for (size_t i = 0; i < state.getSize(); ++i)
+        hash = (hash ^ (juce::uint8)state[i]) * 1099511628211ull;
+    sound.version = juce::String::toHexString ((juce::int64)hash);
+    sound.saved = juce::Time::getCurrentTime();
+    folder.createDirectory();
+    if (! stateFile (sound.id).replaceWithData (state.getData(), state.getSize()))
+        return std::nullopt;
+    sounds.push_back (sound);
+    if (! save())
+        return std::nullopt;
+    return sound;
+}
+
+bool SavedSounds::remove (const juce::String& id)
+{
+    const auto found = std::find_if (sounds.begin(), sounds.end(), [&id] (const Sound& s) { return s.id == id; });
+    if (found == sounds.end())
+        return false;
+    stateFile (id).deleteFile();
+    sounds.erase (found);
+    return save();
+}
+
+bool SavedSounds::removeAll()
+{
+    sounds.clear();
+    return ! folder.exists() || folder.deleteRecursively();
+}
+
+std::vector<SavedSounds::Sound> SavedSounds::forInstrument (const juce::String& key) const
+{
+    std::vector<Sound> found;
+    for (const auto& s : sounds)
+        if (s.instrument == key)
+            found.push_back (s);
+    return found;
+}
+
 juce::File SoundIndex::instrumentFile (const juce::String& key) const
 {
     return root.getChildFile ("instruments")
@@ -379,6 +473,19 @@ bool SoundIndex::needsVisit (const SoundSource& source) const
         return true;
     const auto& known = found->second;
     if (known.source.fingerprint != source.fingerprint)
+        return true;
+    // Sounds the user saved for it and not measured yet (or saved again), or measured and since deleted.
+    SavedSounds saved (root);
+    saved.load();
+    std::map<juce::String, juce::String> measured; // a saved sound's id -> the version measured
+    for (const auto& s : known.sounds)
+        if (SavedSounds::isSaved (s["id"].toString()))
+            measured[s["id"].toString()] = s["version"].toString();
+    const auto mine = saved.forInstrument (source.key);
+    for (const auto& s : mine)
+        if (const auto at = measured.find (s.id); at == measured.end() || at->second != s.version)
+            return true;
+    if (measured.size() != mine.size())
         return true;
     // Silent or failed with an older helper, which may have measured it too soon or given up too early.
     if (known.measuredWith != helperRevision && known.silentOrFailed())
@@ -788,6 +895,18 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
     progress.current = source.name;
     report (progress);
 
+    // The user's saved sounds for it (Save this sound): measured as presets of its own, by their state.
+    juce::Array<juce::var> saved;
+    {
+        SavedSounds mine (index.getFolder());
+        mine.load();
+        for (const auto& s : mine.forInstrument (source.key))
+            saved.add (object ({ { "id", s.id },
+                                 { "name", s.name },
+                                 { "version", s.version },
+                                 { "file", mine.stateFile (s.id).getFullPathName() } }));
+    }
+
     bool defaultOnly = false;
     for (int attempt = 0;; ++attempt)
     {
@@ -805,6 +924,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
                                        { "stockType", source.stockType },
                                        { "known", juce::var (known) },
                                        { "skip", skip },
+                                       { "saved", saved },
                                        { "defaultOnly", defaultOnly } });
         const auto run = SoundIndexer::runHelper (
             options, request, source.hostLibraries,
@@ -1063,6 +1183,20 @@ SoundIndexer::Result SoundIndexer::update (SoundIndex& index, const Options& opt
     }
 
     index.updated = juce::Time::getCurrentTime();
+    index.saveIndex();
+    return result;
+}
+
+SoundIndexer::Result SoundIndexer::updateInstrument (SoundIndex& index, const Options& options,
+                                                     const SoundSource& source, const std::function<bool()>& shouldStop)
+{
+    Result result;
+    Progress progress;
+    progress.stage = "instruments";
+    progress.total = 1;
+    ++running;
+    visitInstrument (index, options, source, shouldStop, progress, [] (const Progress&) {}, result);
+    --running;
     index.saveIndex();
     return result;
 }
