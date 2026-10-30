@@ -1,6 +1,7 @@
 """One way to talk to every provider: Anthropic's Messages API, OpenAI's Responses API (OpenAI's own
-service), and the OpenAI-compatible chat API used by OpenRouter, other services and local servers (Ollama,
-llama.cpp). All stream."""
+service), Ollama's own chat API (a local Ollama: it alone lets a request set the context length), and the
+OpenAI-compatible chat API used by OpenRouter, other services and other local servers (llama.cpp, LM Studio).
+All stream."""
 
 from __future__ import annotations
 
@@ -722,6 +723,181 @@ async def complete_responses(
 
 
 # ---------------------------------------------------------------------------------------------------
+# Ollama's own chat API: the OpenAI-compatible one can't set the context length, and Ollama's default context
+# silently cuts off a long conversation (a music harness's tools and system prompt alone are a few thousand tokens).
+
+OLLAMA_PORT = 11434
+# The least context asked for, and the steps it grows in (powers of two: a new size reloads the model, so it changes
+# seldom, and never shrinks for a model while Spinus runs).
+OLLAMA_MIN_CONTEXT = 16384
+# The answer's room when the request leaves it to the model.
+OLLAMA_ANSWER_ROOM = 16384
+_ollama_servers: dict[str, bool] = {}  # server root -> whether it is Ollama
+_ollama_limits: dict[tuple[str, str], int] = {}  # (server root, model) -> the model's own context length
+_ollama_contexts: dict[tuple[str, str], int] = {}  # (server root, model) -> the largest context asked for so far
+
+
+def ollama_root(connection: Connection) -> str:
+    """The server's address without the OpenAI-compatible API's /v1."""
+    url = connection.base_url.rstrip("/")
+    return url[: -len("/v1")] if url.endswith("/v1") else url
+
+
+async def is_ollama(client: httpx.AsyncClient, connection: Connection) -> bool:
+    """A local connection to Ollama: its usual port, or a server that answers Ollama's /api/version (asked once
+    per server)."""
+    if connection.provider != "local":
+        return False
+    root = ollama_root(connection)
+    if root not in _ollama_servers:
+        if urlparse(root).port == OLLAMA_PORT:
+            _ollama_servers[root] = True
+        else:
+            try:
+                response = await client.get(f"{root}/api/version", timeout=httpx.Timeout(3.0))
+                _ollama_servers[root] = response.status_code == 200 and "version" in response.json()
+            except (httpx.TransportError, ValueError):
+                _ollama_servers[root] = False
+    return _ollama_servers[root]
+
+
+async def ollama_model_context(client: httpx.AsyncClient, root: str, model: str) -> int:
+    """The model's own context length (/api/show's model_info), 0 when Ollama doesn't say."""
+    if (root, model) not in _ollama_limits:
+        limit = 0
+        try:
+            response = await client.post(f"{root}/api/show", json={"model": model}, timeout=httpx.Timeout(10.0))
+            if response.status_code == 200:
+                info = response.json().get("model_info") or {}
+                limit = max((int(v) for k, v in info.items() if k.endswith(".context_length")), default=0)
+        except (httpx.TransportError, ValueError):
+            pass
+        _ollama_limits[(root, model)] = limit
+    return _ollama_limits[(root, model)]
+
+
+def ollama_context(request: Request, root: str, limit: int) -> int:
+    """num_ctx for this request: the prompt (estimated, scaled by how the model counted before) plus the answer's
+    room, rounded up to a power of two, at least OLLAMA_MIN_CONTEXT, never below what this model was given before,
+    and no more than the model's own context length."""
+    ratio = min(4.0, max(0.5, request.token_ratio)) if request.token_ratio > 0 else 1.0
+    prompt = json.dumps([request.system, request.messages, request.tools], default=lambda o: o.__dict__)
+    need = int(len(prompt) / 4 * ratio) + (request.max_tokens or OLLAMA_ANSWER_ROOM)
+    size = OLLAMA_MIN_CONTEXT
+    while size < need:
+        size *= 2
+    size = max(size, _ollama_contexts.get((root, request.model), 0))
+    if limit > 0:
+        size = min(size, limit)
+    _ollama_contexts[(root, request.model)] = max(size, _ollama_contexts.get((root, request.model), 0))
+    return size
+
+
+def ollama_think(request: Request) -> bool | str | None:
+    """Ollama's `think`: the level itself for models that take one (gpt-oss), else on; None leaves the model's
+    default."""
+    if not request.effort:
+        return None
+    return request.effort if request.effort in ("low", "medium", "high") and "gpt-oss" in request.model else True
+
+
+def ollama_body(request: Request, num_ctx: int) -> dict[str, Any]:
+    messages: list[dict[str, Any]] = [{"role": "system", "content": request.system}]
+    names: dict[str, str] = {}
+    for m in request.messages:
+        texts = "".join(b.text for b in m.blocks if isinstance(b, Text))
+        uses = [b for b in m.blocks if isinstance(b, ToolUse)]
+        results = [b for b in m.blocks if isinstance(b, ToolResult)]
+        if m.role == "assistant":
+            entry: dict[str, Any] = {"role": "assistant", "content": texts}
+            if uses:
+                entry["tool_calls"] = [{"function": {"name": u.name, "arguments": u.input}} for u in uses]
+                names.update({u.id: u.name for u in uses})
+            messages.append(entry)
+        else:
+            messages.extend(
+                {"role": "tool", "content": r.content, "tool_name": names.get(r.tool_use_id, "")} for r in results
+            )
+            if texts:
+                messages.append({"role": "user", "content": texts})
+    options: dict[str, Any] = {"num_ctx": num_ctx}
+    if request.max_tokens is not None:
+        options["num_predict"] = request.max_tokens
+    body: dict[str, Any] = {"model": request.model, "messages": messages, "stream": True, "options": options}
+    if request.tools:
+        body["tools"] = [
+            {
+                "type": "function",
+                "function": {"name": t.name, "description": t.description, "parameters": t.input_schema},
+            }
+            for t in request.tools
+        ]
+    think = ollama_think(request)
+    if think is not None:
+        body["think"] = think
+    return body
+
+
+class NotOllama(Exception):
+    """The server has no /api/chat after all: the OpenAI-compatible API is used instead."""
+
+
+async def complete_ollama(
+    client: httpx.AsyncClient, connection: Connection, request: Request, on_text: OnText
+) -> Completion:
+    cleared = clear_old_tool_calls(request) if request.context_edits else 0
+    root = ollama_root(connection)
+    num_ctx = ollama_context(request, root, await ollama_model_context(client, root, request.model))
+    body = ollama_body(request, num_ctx)
+    text, thought = "", ""
+    calls: list[ToolUse] = []
+    usage = Usage(cleared_tokens=cleared)
+    stop_reason = ""
+    model = request.model
+    async with client.stream("POST", f"{root}/api/chat", json=body, timeout=ANSWER_TIMEOUT) as response:
+        if response.status_code != 200:
+            error = (await response.aread()).decode(errors="replace")
+            if response.status_code == 404 and "model" not in error:  # no /api/chat here: not Ollama after all
+                raise NotOllama()
+            raise error_for_status(response.status_code, error)
+        async for line in response.aiter_lines():
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            if payload.get("error"):
+                raise chat_error({"message": payload["error"]})
+            model = payload.get("model") or model
+            message = payload.get("message") or {}
+            if message.get("thinking"):
+                thought += message["thinking"]
+            if message.get("content"):
+                text += message["content"]
+                await on_text(message["content"])
+            for call in message.get("tool_calls") or []:
+                function = call.get("function") or {}
+                arguments = function.get("arguments")
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments or "{}")
+                    except json.JSONDecodeError:
+                        calls.append(ToolUse(call.get("id") or f"call_{len(calls)}", function.get("name", ""),
+                                             {"_unparsed": arguments}, arguments))  # fmt: skip
+                        continue
+                calls.append(ToolUse(call.get("id") or f"call_{len(calls)}", function.get("name", ""), arguments or {}))
+            if payload.get("done"):
+                stop_reason = payload.get("done_reason") or "stop"
+                usage.input_tokens = int(payload.get("prompt_eval_count") or 0)
+                usage.output_tokens = int(payload.get("eval_count") or 0)
+    # Ollama counts the reasoning in eval_count without saying how much: estimated from its text (characters over four).
+    usage.reasoning_tokens = min(usage.output_tokens, len(thought) // 4)
+    blocks: list[Block] = [Text(text)] if text else []
+    blocks.extend(calls)
+    if usage.input_tokens > 0:
+        request.token_ratio = usage.input_tokens / max(1.0, len(json.dumps(body)) / 4)
+    return Completion(blocks, "tool_use" if calls else (stop_reason or "end_turn"), usage, model)
+
+
+# ---------------------------------------------------------------------------------------------------
 
 
 def offered_effort(asked: str, error: str) -> str | None:
@@ -785,6 +961,11 @@ async def complete_once(
             raise ProviderError("auth", f"The connection '{connection.name}' has no key.")
         if uses_responses_api(connection):
             return await complete_responses(client, connection, key, request, on_text)
+        if await is_ollama(client, connection):
+            try:
+                return await complete_ollama(client, connection, request, on_text)
+            except NotOllama:
+                _ollama_servers[ollama_root(connection)] = False
         return await complete_openai(client, connection, key, request, on_text)
     except httpx.TransportError as error:
         raise ProviderError("network", f"Could not reach {connection.base_url}: {network_trouble(error)}") from error
