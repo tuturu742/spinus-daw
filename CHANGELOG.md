@@ -3,6 +3,17 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## Not released yet
+
+### Fixes
+
+- **Local models in Ollama no longer lose the start of long conversations.** Spinus asked Ollama through its
+  OpenAI-compatible API, which can't set the context length, so Ollama kept only its default and silently
+  dropped the rest of the conversation: the assistant's longer chats and the Track creator's AI writer (whose
+  tools alone are a few thousand tokens) were cut short. Spinus now uses Ollama's own API and sets the context for each
+  request from its size (at least 16k tokens, up to the model's own limit). Reasoning levels are passed on as
+  Ollama's `think`.
+
 ## 0.1.0-alpha.3 (2026-10-29)
 
 ### Track creator: your AI connection writes the song (experimental)

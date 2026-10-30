@@ -65,6 +65,12 @@ Click **Add...**, choose a provider, and **Save and test**. You can add several 
 3. In **Options › AI...**, click **Find local servers**. Spinus adds Ollama (and a llama.cpp server on
    port 8080, if one runs) and lists its models.
 
+**The context is set for you.** Spinus talks to Ollama through Ollama's own API and tells it how much of
+the conversation to keep for each request (at least 16k tokens, more as a conversation grows, up to what
+the model allows), so long conversations and the Track creator's AI writer aren't cut off at Ollama's
+default. Nothing needs changing in Ollama's settings. Other local servers (llama.cpp, LM Studio) are
+asked through the OpenAI-compatible API; set their context length in the server itself.
+
 Local models are good for questions about Spinus and simple changes. For complex requests a large
 model (Claude through Anthropic or OpenRouter) does better.
 

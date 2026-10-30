@@ -276,6 +276,8 @@ async def test_other_openai_compatible_services_keep_the_chat_api(tmp_path: Path
     paths: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/version":  # llama.cpp's server: not Ollama
+            return httpx.Response(404)
         paths.append(request.url.path)
         chunk = {"model": "local", "choices": [{"delta": {"content": "Hi"}, "finish_reason": "stop"}]}
         return httpx.Response(200, content=f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
@@ -284,7 +286,7 @@ async def test_other_openai_compatible_services_keep_the_chat_api(tmp_path: Path
     for name, provider, url in [
         ("Proxy", "openai", "https://proxy.example/v1"),
         ("Router", "openrouter", None),
-        ("Ollama", "local", "http://localhost:11434/v1"),
+        ("llama.cpp", "local", "http://localhost:8080/v1"),  # Ollama has its own API: test_ollama.py
     ]:
         c = store.upsert(name, provider, url, "k" if provider != "local" else None)
         result = await complete(
