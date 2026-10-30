@@ -34,6 +34,49 @@ struct SoundSource
     bool hostLibraries = false; // in the Flatpak: runs with the computer's own libraries
 };
 
+/** Sounds the user set up in a plugin's own window and saved (the Track creator's Save this sound): a plugin
+    that is silent until a kit or a patch is chosen in its window can be used then, and any other sound the
+    user made too. Each is the plugin's state, kept as a file beside the sound index (`<index folder>/../
+    saved-sounds/`: `sounds.json` {version, sounds: [{id, instrument, name, version, saved}]} and `<id>.state`),
+    so updating or deleting the index keeps them. The index measures each as one more preset of its instrument
+    (its preset id is the saved sound's id, "saved:..."; its category "Your saved sounds"). Generic for every
+    plugin. Message thread or the indexer's thread, one at a time. */
+class SavedSounds
+{
+public:
+    struct Sound
+    {
+        juce::String id;         // "saved:" and a unique part: its preset id in the index
+        juce::String instrument; // the index's key of its instrument (SoundSource::key)
+        juce::String name;       // as the user named it
+        juce::String version;    // of its state: a sound saved again under its id is measured again
+        juce::Time saved;
+    };
+
+    /** The folder beside the index folder. */
+    explicit SavedSounds (const juce::File& indexFolder);
+    static bool isSaved (const juce::String& presetId) { return presetId.startsWith ("saved:"); }
+    /** Where a saved sound's state is, for an index folder. */
+    static juce::File stateFileIn (const juce::File& indexFolder, const juce::String& id);
+    static constexpr const char* category = "Your saved sounds";
+
+    void load();
+    bool save() const;
+    /** Keeps a new sound (its state written, the list saved); none if it could not be written. */
+    std::optional<Sound> add (const juce::String& instrument, const juce::String& name, const juce::MemoryBlock& state);
+    bool remove (const juce::String& id);
+    /** Deletes every saved sound. */
+    bool removeAll();
+    juce::File stateFile (const juce::String& id) const;
+    const std::vector<Sound>& all() const noexcept { return sounds; }
+    std::vector<Sound> forInstrument (const juce::String& key) const;
+    juce::File getFolder() const { return folder; }
+
+private:
+    juce::File folder;
+    std::vector<Sound> sounds;
+};
+
 /** The installed instruments the sound index can measure (message thread): Spinus's own that make a sound
     by themselves (3x Osc and the Drum Machine; the Sampler and the Beat Slicer play samples, which are
     indexed as samples), the downloaded ones, and the installed instrument plugins in the Browser's list
@@ -126,9 +169,10 @@ public:
     juce::int64 getDiskUse() const;
 
     /** Whether an update should start the helper for this instrument: new, changed (its fingerprint), not
-        finished, with preset files (which may have been added or changed), or silent or failed when measured
-        by an older helperRevision (or marked with measureAgain). A healthy one measured by an older helper is
-        kept as it is; one that did not load is otherwise not tried again until it changes. */
+        finished, with preset files (which may have been added or changed), with saved sounds (SavedSounds) not
+        measured yet or gone, or silent or failed when measured by an older helperRevision (or marked with
+        measureAgain). A healthy one measured by an older helper is kept as it is; one that did not load is
+        otherwise not tried again until it changes. */
     bool needsVisit (const SoundSource&) const;
 
     /** Forgets what was measured of this instrument (its sounds and problems), so the next update measures it
@@ -219,6 +263,10 @@ public:
     static Result update (SoundIndex&, const Options&, const std::vector<SoundSource>&,
                           const juce::Array<juce::File>& sampleFolders, const std::function<bool()>& shouldStop,
                           const std::function<void (const Progress&)>& onProgress);
+    /** One instrument brought up to date on the calling thread (a sound just saved), the rest of the index left
+        as it is. Saves the index. */
+    static Result updateInstrument (SoundIndex&, const Options&, const SoundSource&,
+                                    const std::function<bool()>& shouldStop);
 
     /** One run of the helper: `onLine` gets each line it writes. `stuckOn` is the last "begin" without its
         result when it crashed or hung. */

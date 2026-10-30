@@ -40,7 +40,7 @@ AnalysisLibraryView::AnalysisLibraryView (AnalysisLibrary l, juce::File sounds)
         addAndMakeVisible (c);
     soundsButton.setTooltip ("Delete what the Track creator measured of your instruments and samples (never the sounds "
                              "themselves); Update sound index measures them again");
-    soundsButton.onClick = [this] { deleteSoundIndex(); };
+    soundsButton.onClick = [this] { askAndDeleteSoundIndex(); };
     soundsText.setJustificationType (juce::Justification::centredLeft);
     addChildComponent (soundsText);
     addChildComponent (soundsButton);
@@ -118,12 +118,44 @@ void AnalysisLibraryView::refresh()
     updateButtons();
 }
 
-bool AnalysisLibraryView::deleteSoundIndex()
+void AnalysisLibraryView::askAndDeleteSoundIndex()
+{
+    if (soundsFolder == juce::File())
+        return;
+    SavedSounds saved (soundsFolder);
+    saved.load();
+    if (saved.all().empty())
+    {
+        deleteSoundIndex();
+        return;
+    }
+    const auto count = (int)saved.all().size();
+    juce::AlertWindow::showAsync (
+        juce::MessageBoxOptions()
+            .withIconType (juce::MessageBoxIconType::QuestionIcon)
+            .withTitle ("Delete the sound index")
+            .withMessage ("You have " + juce::String (count) + (count == 1 ? " saved sound" : " saved sounds") +
+                          " (Save this sound). Keep them? They are measured again by the next Update sound index; "
+                          "deleted, they are gone for good.")
+            .withButton ("Keep my saved sounds")
+            .withButton ("Delete them too")
+            .withButton ("Cancel")
+            .withAssociatedComponent (this),
+        [safe = juce::Component::SafePointer<AnalysisLibraryView> (this)] (int result)
+        {
+            if (safe != nullptr && result != 0)
+                safe->deleteSoundIndex (result == 2);
+        });
+}
+
+bool AnalysisLibraryView::deleteSoundIndex (bool alsoSavedSounds)
 {
     if (soundsFolder == juce::File() || SoundIndexer::isAnyRunning())
         return false;
     SoundIndex index (soundsFolder);
-    const bool done = index.removeAll();
+    bool done = index.removeAll();
+    if (alsoSavedSounds)
+        done = SavedSounds (soundsFolder).removeAll() && done;
     refresh();
     if (onSoundIndexDeleted)
         onSoundIndexDeleted();

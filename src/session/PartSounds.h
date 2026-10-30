@@ -170,6 +170,7 @@ struct Choice
     bool compared = false;              // measured against the stem (false: no stem measurements to compare)
     double clap = -2.0;                 // closest preset's CLAP score (-1 to 1; -2: not compared)
     juce::StringArray why;              // the reasons, in plain words
+    juce::File state; // a sound the user saved (SavedSounds): the plugin's state, put in place instead of a preset
 
     /** "Surge XT: Reese Bass", "Sample: 808 Boom.wav", "Drum samples: Kick 01, Snare 3, Hat 2"... */
     juce::String title() const;
@@ -181,6 +182,13 @@ struct Choice
     /** A sample's own note (from its pitch; C2 when unknown). */
     int rootNote() const;
 };
+
+/** A choice as JSON (the Track creator remembers the parts' sounds between runs), and back. */
+juce::var toVar (const Choice&);
+Choice choiceFromVar (const juce::var&);
+/** An instrument (SoundSource) as JSON, and back. */
+juce::var toVar (const SoundSource&);
+SoundSource sourceFromVar (const juce::var&);
 
 /** The part's measured stems (empty when there are none to compare with) and, for the drums, its hits. */
 struct Reference

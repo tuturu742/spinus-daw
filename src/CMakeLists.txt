@@ -266,6 +266,8 @@ add_library (spinus_core STATIC
     ui/DescribeSongPanel.cpp
     ui/DescribeSongPanel.h
     ui/PartSoundsPanel.cpp
+    ui/SaveSoundWindow.cpp
+    ui/SaveSoundWindow.h
     ui/PartSoundsPanel.h
     ui/SongWriterPanel.cpp
     ui/SongWriterPanel.h
