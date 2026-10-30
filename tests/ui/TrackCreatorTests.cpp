@@ -1697,8 +1697,8 @@ TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screens
                           .getChildFile ("docs/user/images/track-creator-save-sound.png");
     file.deleteFile();
     juce::FileOutputStream stream (file);
-    REQUIRE (juce::PNGImageFormat().writeImageToStream (content->createComponentSnapshot (content->getLocalBounds()),
-                                                         stream));
+    const auto image = content->createComponentSnapshot (content->getLocalBounds());
+    REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
     SaveSoundWindow::closeAll();
     juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
 }
