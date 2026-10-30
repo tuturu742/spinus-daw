@@ -14,6 +14,9 @@ import httpx
 from .connections import ConnectionStore
 from .gateway import Completion, Message, ProviderError, Request, Text, Tool, ToolResult, ToolUse, Usage, complete
 from .manual import Manual
+from .project_harness import TOOL_NAMES as HARNESS_TOOL_NAMES
+from .project_harness import TOOLS as HARNESS_TOOLS
+from .project_harness import ProjectHarness
 from .project_tools import Snapshot, Tools
 from .routing import Route, Routing
 from .usage import UsageLog
@@ -30,22 +33,25 @@ Who you talk to: musicians, often beginners. Answer in plain, friendly language,
 and FL Studio's words (channel, pattern, insert, Piano Roll). No code, no JSON in your answers.
 
 How to work:
-- For questions about the user's song, look first: call project_overview, then pattern_notes or \
-insert_details as needed. Refer to things by name, not ID.
+- For questions about the user's song, look first: call song_overview (sections, parts, mixer), then read_part, \
+sound_settings or insert_details as needed. Refer to things by name, not ID.
 - For how-to questions about Spinus, call search_manual and answer from what it returns.
-- You cannot change anything yourself. To change the song, call propose_changes with Spinus commands \
-(check their parameters with command_help first). The user sees the steps and clicks Apply or Reject. \
-Never say a change was made; say what the proposal will do if they apply it.
-- Make one proposal per answer, with everything it needs in the right order.
-- To add an instrument or effect, call find_devices and copy its 'device' object exactly.
-- To change a device's settings, use device.setParameters. For Spinus's own devices (stockType spinus.*) \
-give 'text': each setting by its name as the manual's Controls table lists it (or its ID), with the value as \
-the device shows it: "35%", "220 ms", "1.5 s", "-6 dB", "1.2 kHz", "4:1", "30% L", "Low pass". A plain number \
-is in the units the device shows (percent, milliseconds, hertz, dB), never 0 to 1. 'values' are 0 to 1 over a \
-setting's whole range: use them only for other plugins, whose units you cannot know.
-- To write or change notes musically (a bass line, a beat, chords, "more syncopated"), call write_notes: \
-the pattern generator writes them and the user sees them in the Piano Roll as a suggestion to accept or \
-discard. Prefer it to proposing pattern.setNotes yourself.
+- You cannot change anything yourself. To change the song, use the editing tools: write_part, motif and \
+place_motif, add_part, insert_bars ("add a bridge after bar 20"), copy_bars, automate, add_effect, send, duck, \
+bus, set_sound and shape_sound ("make the bass pluckier"). They collect the changes; nothing happens to the \
+song yet. Then call check, fix what matters, and call propose with one sentence: the user sees the changes as \
+one proposal and clicks Apply or Reject. Never say a change was made; say what the proposal will do.
+- For anything the editing tools can't do, propose Spinus commands with propose_changes (check their parameters \
+with command_help first). To add an instrument or effect that way, call find_devices and copy its 'device' \
+object exactly.
+- To change a device's settings, use set_sound (or device.setParameters). For Spinus's own devices give 'text': \
+each setting by its name as the manual's Controls table lists it (or its ID), with the value as the device shows \
+it: "35%", "220 ms", "1.5 s", "-6 dB", "1.2 kHz", "4:1", "30% L", "Low pass". A plain number is in the units the \
+device shows (percent, milliseconds, hertz, dB), never 0 to 1. 'values' are 0 to 1 over a setting's whole range: \
+use them only for other plugins, whose units you cannot know.
+- Make one proposal per answer, with everything it needs.
+- To have the pattern generator suggest notes for one pattern in the Piano Roll (the user accepts or discards \
+them there), call write_notes.
 - Music facts: notes are in ticks, 960 per beat; FL note names (C5 = MIDI 60); volumes in dB.
 """
 
@@ -98,6 +104,7 @@ async def ask(
         raise NoConnection("No AI connection is set up. Add one in Options > AI.")
 
     tools = Tools(Snapshot(snapshot_data), manual, commands)
+    harness = ProjectHarness(snapshot_data) if isinstance(snapshot_data.get("project"), dict) else None
     messages = [
         Message("user" if m.get("role") == "user" else "assistant", [Text(str(m.get("text", "")))])
         for m in conversation
@@ -124,16 +131,32 @@ async def ask(
         await say({"kind": "status", "text": describe_tool(use)})
         if use.name == "write_notes":
             return await write_notes(client, connections, routing, usage_log, tools.snapshot, use.input, answer, say)
+        if use.name in HARNESS_TOOL_NAMES or use.name == "propose":
+            if harness is None:
+                return "The project wasn't shared with you: ask the user to turn on the Project chip.", True
+            if use.name == "propose":
+                proposal = harness.take_proposal(str(use.input.get("summary", "")))
+                if proposal is None:
+                    return "Nothing to propose: no edits since the last proposal.", True
+                tools.proposals.append(proposal)
+                return (
+                    "The changes are shown to the user with Apply and Reject buttons. They are NOT applied yet. "
+                    "Tell the user briefly what they do."
+                ), False
+            return harness.call(use.name, use.input)
         return tools.call(use.name, use.input)
 
     async def after_results() -> None:
         if answer.text and not answer.text.endswith("\n"):
             await on_text("\n\n")
 
-    request = Request(routes[0].model, SYSTEM, messages, [*tools.definitions(), WRITE_NOTES])
+    request = Request(routes[0].model, SYSTEM, messages, [*tools.definitions(), *HARNESS_TOOLS, PROPOSE, WRITE_NOTES])
     await tool_loop(client, connections, routes, request, call, on_turn, on_text, say, MAX_TURNS, after=after_results)
 
     answer.text = answer.text.strip()
+    # Edits the model made but didn't propose still reach the user, as a proposal of their own.
+    if harness is not None and (left := harness.take_proposal("")) is not None:
+        tools.proposals.append(left)
     answer.proposals = tools.proposals
     return answer
 
@@ -234,6 +257,17 @@ def answered_by(model: str, failed: list[str]) -> str:
     answer: ..."."""
     return f"{model}, because {'; '.join(failed)}" if failed else model
 
+
+PROPOSE = Tool(
+    "propose",
+    "Show the changes the editing tools collected (write_part, add_part, insert_bars, ...) to the user as one "
+    "proposal to Apply or Reject.",
+    {
+        "type": "object",
+        "properties": {"summary": {"type": "string", "description": "One sentence for the user: what it does."}},
+        "required": ["summary"],
+    },
+)
 
 WRITE_NOTES = Tool(
     "write_notes",
@@ -370,6 +404,24 @@ def describe_tool(use: ToolUse) -> str:
         "find_devices": "Looking for instruments and effects",
         "propose_changes": "Preparing a proposal",
         "write_notes": "Writing notes",
+        "song_overview": "Looking at the song",
+        "read_part": "Reading a part",
+        "sound_settings": "Looking at a sound",
+        "write_part": "Writing a part",
+        "motif": "Writing a motif",
+        "place_motif": "Placing a motif",
+        "add_part": "Adding a part",
+        "insert_bars": "Making room for a section",
+        "copy_bars": "Copying bars",
+        "automate": "Drawing automation",
+        "add_effect": "Adding an effect",
+        "send": "Setting a send",
+        "duck": "Setting sidechain ducking",
+        "bus": "Making a bus",
+        "set_sound": "Changing a sound",
+        "shape_sound": "Shaping a sound",
+        "check": "Checking the song",
+        "propose": "Preparing a proposal",
     }
     detail = use.input.get("query") if use.name == "search_manual" else None
     return names.get(use.name, use.name) + (f": {json.dumps(detail)}" if detail else "")

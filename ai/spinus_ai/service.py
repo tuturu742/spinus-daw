@@ -27,6 +27,8 @@ from .connections import DEFAULT_BASE_URLS, ConnectionStore, KeyStore, key_misma
 from .embeddings import ModelStore, default_models_folder, missing_dependencies, run_blocking
 from .gateway import ProviderError, list_models
 from .manual import Manual
+from .project_harness import TOOLS as PROJECT_TOOLS
+from .project_harness import ProjectHarness
 from .routing import Routing
 from .usage import UsageLog
 
@@ -114,6 +116,8 @@ class Service:
             "ai.v1.routing.get": self.get_routing,
             "ai.v1.routing.set": self.set_routing,
             "ai.v1.assistant.ask": self.assistant_ask,
+            "ai.v1.project.tools": self.project_tools,
+            "ai.v1.project.tool": self.project_tool,
             "ai.v1.job.cancel": self.cancel_job,
             "ai.v1.usage.get": self.get_usage,
             "ai.v1.shutdown": self.shutdown,
@@ -1333,6 +1337,29 @@ class Service:
 
         self.jobs[job] = asyncio.create_task(run())
         return {"job": job}
+
+    async def project_tools(self, params: dict[str, Any], notify: Notify) -> Any:
+        """The project harness's tools, for Spinus's live interface to offer outside agents."""
+        return {
+            "tools": [
+                {"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in PROJECT_TOOLS
+            ]
+        }
+
+    async def project_tool(self, params: dict[str, Any], notify: Notify) -> Any:
+        """One project-harness tool on the project Spinus sent: its answer, and the commands its edit made (which
+        Spinus performs at once for the live interface; nothing here applies them)."""
+        context = params.get("context")
+        if not isinstance(context, dict) or not isinstance(context.get("project"), dict):
+            raise RpcError(-32602, "context.project is required")
+        harness = ProjectHarness(context)
+        name = str(params.get("tool", ""))
+        arguments = params.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            raise RpcError(-32602, "arguments must be an object")
+        text, failed = harness.call(name, arguments)
+        proposal = None if failed else harness.take_proposal(f"{name}: " + "; ".join(harness.changes))
+        return {"text": text, "isError": failed, "proposal": proposal}
 
     async def cancel_job(self, params: dict[str, Any], notify: Notify) -> Any:
         task = self.jobs.get(str(params.get("job", "")))
