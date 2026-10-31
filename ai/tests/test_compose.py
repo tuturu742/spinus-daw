@@ -163,7 +163,7 @@ async def test_the_ais_song_is_checked_and_what_it_left_out_written_by_the_rules
 @pytest.mark.parametrize(
     "answer, why",
     [
-        ({"sections": [{"id": "v", "kind": "solo", "bars": 8, "chords": ["i"]}], "order": ["v"]}, "kind of section"),
+        ({"sections": [{"id": "v", "kind": "kazoo", "bars": 8, "chords": ["i"]}], "order": ["v"]}, "kind of section"),
         ({"sections": [{"id": "v", "kind": "verse", "bars": 8, "chords": ["Xm9"]}], "order": ["v"]}, "Roman"),
         ({"sections": [{"id": "v", "kind": "verse", "bars": 8, "chords": ["i"]}], "order": ["w"]}, "aren't there"),
         ({"sections": [{"id": "v", "kind": "verse", "bars": 8, "chords": ["i"]}], "order": ["v"],

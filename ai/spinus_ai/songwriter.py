@@ -98,9 +98,140 @@ SUMMARY_PART = {"drums": "drums", "bass": "bass", "chords": "other", "lead": "vo
 PART_WORDS = {"drums": "Drums", "bass": "Bass", "chords": "Chords", "lead": "Lead"}
 DRUMS = ("kick", "snare", "hat", "openHat", "crash", "tomLow", "tomMid", "tomHigh")
 
-KINDS = ("intro", "verse", "chorus", "bridge", "outro")
-KIND_WORDS = {"intro": "Intro", "verse": "Verse", "chorus": "Chorus", "bridge": "Bridge", "outro": "Outro"}
-ENERGY = {"intro": 0.45, "verse": 0.7, "chorus": 1.0, "bridge": 0.6, "outro": 0.5}
+# The kinds the rules write a song from, and every kind a section may be: about the structure tags songwriters and
+# song generators use (intro ... fade out). Each further kind plays as its base kind (a drop as a chorus, a breakdown
+# as a bridge), with its own name, energy and shape.
+BASE_KINDS = ("intro", "verse", "chorus", "bridge", "outro")
+BASE_OF = {
+    "intro": "intro",
+    "verse": "verse",
+    "pre-chorus": "verse",
+    "chorus": "chorus",
+    "post-chorus": "chorus",
+    "hook": "chorus",
+    "drop": "chorus",
+    "bridge": "bridge",
+    "break": "bridge",
+    "breakdown": "bridge",
+    "build": "verse",
+    "interlude": "bridge",
+    "instrumental": "verse",
+    "solo": "bridge",
+    "outro": "outro",
+    "end": "outro",
+    "fade-out": "outro",
+}
+KINDS = tuple(BASE_OF)
+KIND_WORDS = {
+    "intro": "Intro",
+    "verse": "Verse",
+    "pre-chorus": "Pre-Chorus",
+    "chorus": "Chorus",
+    "post-chorus": "Post-Chorus",
+    "hook": "Hook",
+    "drop": "Drop",
+    "bridge": "Bridge",
+    "break": "Break",
+    "breakdown": "Breakdown",
+    "build": "Build",
+    "interlude": "Interlude",
+    "instrumental": "Instrumental",
+    "solo": "Solo",
+    "outro": "Outro",
+    "end": "End",
+    "fade-out": "Fade Out",
+}
+ENERGY = {
+    "intro": 0.45,
+    "verse": 0.7,
+    "pre-chorus": 0.8,
+    "chorus": 1.0,
+    "post-chorus": 0.9,
+    "hook": 0.95,
+    "drop": 1.0,
+    "bridge": 0.6,
+    "break": 0.35,
+    "breakdown": 0.4,
+    "build": 0.75,
+    "interlude": 0.55,
+    "instrumental": 0.65,
+    "solo": 0.85,
+    "outro": 0.5,
+    "end": 0.4,
+    "fade-out": 0.35,
+}
+# A kind's shape over its bars where it has one of its own: a build rises, an end and a fade out fall.
+KIND_CONTOUR = {"build": "rise", "pre-chorus": "rise", "end": "fall", "fade-out": "fall", "outro": "fall"}
+
+
+# Sections a description can ask for, in generic words (the structure tags songwriters and song generators use): the
+# name a finding uses, how a text says it, and what a section's id shows when it is one. NAMED_KIND: the kind each is.
+NAMED_SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
+    ("intro", r"\bintro(?:duction)?s?\b", ("intro",)),
+    ("verse", r"\bverses?\b", ("verse",)),
+    ("pre-chorus", r"\bpre[- ]?choruse?s?\b", ("pre",)),
+    ("post-chorus", r"\bpost[- ]?choruse?s?\b", ("post",)),
+    ("chorus", r"\b(?<!pre-)(?<!pre)(?<!post-)(?<!post)choruse?s?\b", ("chorus",)),
+    ("hook", r"\bhook section\b|\[hook\]", ("hook",)),
+    ("bridge", r"\bbridges?\b", ("bridge",)),
+    ("solo", r"\bsolos?\b", ("solo",)),
+    ("breakdown", r"\bbreak[- ]?downs?\b", ("breakdown",)),
+    ("break", r"\bbreaks?\b(?![- ]?downs?\b)", ("break",)),
+    ("build-up", r"\bbuild[- ]?ups?\b", ("build",)),
+    ("drop", r"\bdrops?\b(?!\s+(?:back|out|off|down|away|to)\b)", ("drop",)),
+    ("interlude", r"\binterludes?\b", ("interlude",)),
+    ("instrumental", r"\binstrumental (?:section|part|passage)s?\b|\[instrumental\]", ("instrumental",)),
+    ("double chorus", r"\bdouble[- ]choruse?s?\b", ("double",)),
+    ("outro", r"\boutros?\b", ("outro",)),
+    ("end", r"\bend section\b|\[end\]", ("end",)),
+    ("fade out", r"\bfade[- ]?outs?\b|\bfades? out\b", ("fade",)),
+]
+NAMED_KIND = {
+    "intro": "intro",
+    "verse": "verse",
+    "pre-chorus": "pre-chorus",
+    "post-chorus": "post-chorus",
+    "chorus": "chorus",
+    "hook": "hook",
+    "bridge": "bridge",
+    "solo": "solo",
+    "breakdown": "breakdown",
+    "break": "break",
+    "build-up": "build",
+    "drop": "drop",
+    "interlude": "interlude",
+    "instrumental": "instrumental",
+    "double chorus": "chorus",
+    "outro": "outro",
+    "end": "end",
+    "fade out": "fade-out",
+}
+
+
+def asked_sections(text: str) -> list[list[str]]:
+    """The sections a description names, each a group of names any one of which will do ("a breakdown or bridge":
+    either)."""
+    lowered = text.lower()
+    found = [(m.start(), m.end(), name) for name, pattern, _ in NAMED_SECTIONS for m in re.finditer(pattern, lowered)]
+    found.sort()
+    groups: list[list[str]] = []
+    for i, (start, _, name) in enumerate(found):
+        before = found[i - 1] if i else None
+        if before is not None and re.fullmatch(r"\s+or\s+(?:an?\s+)?", lowered[before[1] : start]):
+            group = next(g for g in groups if before[2] in g)
+            if name not in group:
+                group.append(name)
+            continue
+        if not any(name in g and len(g) == 1 for g in groups):
+            groups.append([name])
+    return groups
+
+
+def base_kind(kind: Any) -> str:
+    """The kind the rules write a section as (a drop as a chorus); an unknown kind as a verse."""
+    return BASE_OF.get(str(kind), "verse")
+
+
 CONTOURS = ("rise", "fall", "arch", "wave", "valley")
 # Song forms by how many sections they have; the plan takes the one nearest the songs' count.
 FORMS: tuple[tuple[str, ...], ...] = (
@@ -572,7 +703,7 @@ def make_plan(
             choices = {b: float(n) for b, n in pool.items() if b >= 8}
         return int(weighted(rng, choices or {8: 1.0}))
 
-    bars = {kind: draw(kind) for kind in KINDS if kind in form}
+    bars = {kind: draw(kind) for kind in BASE_KINDS if kind in form}
     template = form
 
     def joined() -> tuple[str, ...]:
@@ -606,7 +737,7 @@ def make_plan(
         "outro": "fall",
     }
     sections = [
-        {"id": kind, "kind": kind, "bars": bars[kind], "contour": contour[kind]} for kind in KINDS if kind in form
+        {"id": kind, "kind": kind, "bars": bars[kind], "contour": contour[kind]} for kind in BASE_KINDS if kind in form
     ]
     return {
         "tempo": tempo,
@@ -691,7 +822,7 @@ def section_chords(
         loop = [str(c) for c in given]
     else:
         rng = rng_for(seeds["sections"][section["id"]], "chords")
-        loop = make_loop(vocab, rng, str(section["kind"]), tonic_chord, used)
+        loop = make_loop(vocab, rng, base_kind(section["kind"]), tonic_chord, used)
     own = rotation_key(tuple(loop))
     if own in vocab.own_loops:
         used.update(vocab.own_loops)  # one reference loop at most: no other section takes one
@@ -703,7 +834,7 @@ def section_chords(
         chords.append({"bar": bar, "roman": roman})
     # The song ends at home.
     allowed = vocab.allowed()
-    if section["kind"] == "outro" and (tonic_chord in allowed or not allowed):
+    if base_kind(section["kind"]) == "outro" and (tonic_chord in allowed or not allowed):
         for c in chords[-hold:]:
             c["roman"] = tonic_chord
     for c in chords:
@@ -812,7 +943,7 @@ def write_drums(ctx: Context) -> list[dict[str, Any]]:
 
     base, variant = bar_variant(), bar_variant()
     notes: list[dict[str, Any]] = []
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     fills = ("roll", "toms", "short")
     fill = rng.choice(fills if energy >= 0.6 else ("short", "roll"))
     for bar in range(ctx.bars):
@@ -924,7 +1055,7 @@ def write_bass(ctx: Context) -> list[dict[str, Any]]:
     cells = [cell(), cell()]
     tonic = int(ctx.plan["key"]["tonic"])
     notes: list[dict[str, Any]] = []
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     previous = style.median
     for bar in range(ctx.bars):
         if not plays("bass", kind, bar, ctx.bars):
@@ -998,7 +1129,7 @@ def write_chords(ctx: Context) -> list[dict[str, Any]]:
     style = ctx.style.parts["other"]
     per_bar = density(ctx, "chords", 0.75 + 0.3 * ctx.energy)
     notes: list[dict[str, Any]] = []
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     hats = ctx.style.lanes["hats"]
     if style.voices >= 1.3:
         voices = max(2, min(4, round(style.voices + 0.5)))
@@ -1104,7 +1235,7 @@ def contour_at(contour: str, x: float) -> float:
 def write_lead(ctx: Context) -> list[dict[str, Any]]:
     rng, steps = ctx.rng, ctx.steps
     style = ctx.style.parts["vocals"]
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     scale = ctx.scale
     lift = {"chorus": 1.15, "verse": 0.9, "bridge": 0.8}.get(kind, 0.8)
     per_bar = density(ctx, "lead", lift)
@@ -1224,7 +1355,7 @@ def pad_register(style: Style) -> tuple[int, int, int]:
 def write_pad(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
     """The chords held: a voicing of 3 or 4 notes for each run of one chord, moving as little as it can."""
     low, middle, high = (n + 12 * octave for n in pad_register(ctx.style))
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     previous: list[int] | None = None
     voices = 4 if ctx.energy >= 0.9 else 3
@@ -1264,7 +1395,7 @@ def write_arp(ctx: Context, octave: int = 0, slower: bool = False, plays: str = 
     every = (1 if other.per_bar >= 8 and ctx.plan["tempo"] < 140 else 2) * (2 if slower else 1)
     low = max(52, min(72, other.median + 5)) + 12 * octave
     shape = ctx.rng.choice(("up", "updown", "down"))
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         tones = ctx.chords[bar]["tones"]
@@ -1296,7 +1427,7 @@ def write_counter(
     vocals = ctx.style.parts["vocals"]
     centre = max(52, vocals.median - 7) + 12 * octave
     half = ctx.steps // 2 * TICKS_PER_STEP
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
 
     def lead_at(at: int) -> list[int]:
         return [int(n["pitch"]) for n in lead if int(n["start"]) <= at < int(n["start"]) + int(n["length"])]
@@ -1334,7 +1465,7 @@ def write_counter(
 
 def write_sub(ctx: Context) -> list[dict[str, Any]]:
     """The chords' roots held low, under the bass, for each run of one chord."""
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for first, length in chord_spans(ctx):
         playing = [b for b in range(first, first + length) if layer_plays("sub", kind, b, ctx.bars)]
@@ -1361,7 +1492,7 @@ def has_sub(style: Style) -> bool:
 def write_stabs(ctx: Context) -> list[dict[str, Any]]:
     """Short chords on the off-beat eighths (a third chords part), an octave over the chords part."""
     low, middle, high = (n + 12 for n in pad_register(ctx.style))
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         tones = ctx.chords[bar]["tones"]
@@ -1380,7 +1511,7 @@ def write_stabs(ctx: Context) -> list[dict[str, Any]]:
 def write_harmony(ctx: Context, lead: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """A second lead: the first a third (or so) below, on the chord's or the key's notes, in the choruses and
     the bridge's second half."""
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     bar_ticks = ctx.steps * TICKS_PER_STEP
     notes: list[dict[str, Any]] = []
     for n in lead:
@@ -1397,7 +1528,7 @@ def write_harmony(ctx: Context, lead: list[dict[str, Any]]) -> list[dict[str, An
 
 def write_percussion(ctx: Context) -> list[dict[str, Any]]:
     """A second drums part: hats on the off-beat sixteenths (some by chance) and a low tom at each bar's end."""
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         if not layer_plays("drums", kind, bar, ctx.bars, 1):
@@ -1456,7 +1587,7 @@ def write_rhythm_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
     heavy = is_heavy(ctx.style)
     kick = ctx.style.lanes["kick"]
     gallop = heavy and ctx.rng.random() < 0.4
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         tones = ctx.chords[bar]["tones"]
@@ -1489,7 +1620,7 @@ STRUM = ((0, True, 0.75), (4, True, 0.62), (6, False, 0.48), (10, False, 0.48), 
 def write_acoustic_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
     """Strummed open chords: D D U U D U, a down stroke from the low string up (a few ticks apart), an up
     stroke from the high strings down on four of them; each stroke rings until the next."""
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         tones = ctx.chords[bar]["tones"]
@@ -1541,7 +1672,7 @@ def write_lead_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
         if (p - tonic) % 12 in PENTATONIC.get(scale, PENTATONIC["minor"])
     ]
     heavy = is_heavy(ctx.style)
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     every = 1 if heavy or kind == "bridge" else 2
     count = ctx.rng.randint(5, 8) if every == 2 else ctx.rng.randint(7, 11)
     onsets = rhythm(ctx.rng, ctx.steps, count, [1.0 if s % every == 0 else 0.0 for s in range(ctx.steps)])
@@ -1565,7 +1696,7 @@ def write_lead_guitar(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
 def write_piano(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
     """Two hands: the left the chord's root in octaves, the right a voiced chord near middle C. Verses break it
     into eighths (root-fifth-third-fifth in the right hand); choruses strike it on the beats."""
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     previous: list[int] | None = None
     for bar in range(ctx.bars):
@@ -1593,7 +1724,7 @@ def held_voicing(
     ctx: Context, layer: str, low: int, high: int, voices: int, velocity: float, bass: int | None = None
 ) -> list[dict[str, Any]]:
     """A voicing held for each run of one chord (organ, strings, choir), with a low root under it when `bass`."""
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     previous: list[int] | None = None
     for first, length in chord_spans(ctx):
@@ -1633,7 +1764,7 @@ def write_choir(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
 def write_brass(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
     """Stabs: a short three-note chord on the bar's first beat and where the snare hits, in the choruses."""
     snare = ctx.style.lanes["snare"]
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         tones = ctx.chords[bar]["tones"]
@@ -1651,7 +1782,7 @@ def write_brass(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
 def write_percussion_role(ctx: Context, octave: int = 0) -> list[dict[str, Any]]:
     """Hand percussion: a shaker on the sixteenths (accented on the off-beats), congas on the "and"s and a clap
     with the backbeat."""
-    kind = str(ctx.section["kind"])
+    kind = base_kind(ctx.section["kind"])
     notes: list[dict[str, Any]] = []
     for bar in range(ctx.bars):
         if not layer_plays("percussion", kind, bar, ctx.bars):
@@ -1740,7 +1871,7 @@ def make_layers(
                     n
                     for n in shifted(write_bass(ctx), 12)
                     if layer_plays(
-                        "bass", str(section["kind"]), int(n["start"]) // (ctx.steps * TICKS_PER_STEP), ctx.bars, 1
+                        "bass", base_kind(section["kind"]), int(n["start"]) // (ctx.steps * TICKS_PER_STEP), ctx.bars, 1
                     )
                 ]
             elif role == "chords":
@@ -1767,7 +1898,7 @@ def make_layers(
     bar_ticks = style.steps * TICKS_PER_STEP
     risers, impacts = [], []
     for i, entry in enumerate(plan_arrangement(plan, by_id)):
-        kind = str(by_id[entry["section"]]["kind"])
+        kind = base_kind(by_id[entry["section"]]["kind"])
         if kind == "chorus" and entry["bar"] >= 2:
             risers.append(entry["bar"] - 2)
         if kind in ("chorus", "bridge") and i > 0:
@@ -1846,7 +1977,7 @@ def playing_shares(plan: dict[str, Any]) -> dict[str, float]:
             sum(
                 1
                 for bar in range(int(by_id[i]["bars"]))
-                if plays(part, str(by_id[i]["kind"]), bar, int(by_id[i]["bars"]))
+                if plays(part, base_kind(by_id[i]["kind"]), bar, int(by_id[i]["bars"]))
             )
             for i in plan["order"]
         )
@@ -1922,6 +2053,7 @@ def build(
                 "loop": loop_chords,
                 "chords": chords,
                 **({"progression": section["progression"]} if section.get("progression") else {}),
+                **({"cue": str(section["cue"])} if section.get("cue") else {}),
             }
         )
 
@@ -2162,7 +2294,8 @@ def describe(song: dict[str, Any]) -> list[str]:
             if not names or names[-1] != c["name"]:
                 names.append(c["name"])
         loop = " - ".join(s["loop"])
-        lines.append(f"{s['name']} chords: {loop} ({' '.join(names[:4])}).")
+        cue = f" {s['cue']}." if s.get("cue") else ""
+        lines.append(f"{s['name']} chords: {loop} ({' '.join(names[:4])}).{cue}")
     checks = song.get("checks") or {}
     parts = checks.get("parts") or {}
     if parts:

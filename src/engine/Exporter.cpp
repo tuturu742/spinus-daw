@@ -8,6 +8,8 @@
 #include "model/Freeze.h"
 #include "model/StockDevices.h"
 
+#include <chrono>
+#include <vector>
 #include <set>
 #include <thread>
 
@@ -19,6 +21,66 @@ using namespace spinus::model;
 
 namespace
 {
+/** Instruments that load their sounds in the background after they open (big sample libraries, often Windows plugins
+    through Wine) play silence at first, and an export makes fresh ones and renders faster than real time. Every
+    plugin instrument is prepared first, so they all load at once; then each is played a few notes until it sounds,
+    at most perInstrument each and `total` in all, as the sound index's helper does (SoundRender.cpp). Spinus's own
+    instruments are ready at once. Message thread. */
+void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, std::chrono::milliseconds total)
+{
+    using clock = std::chrono::steady_clock;
+    constexpr double rate = 48000.0;
+    constexpr int block = 512;
+    std::vector<juce::AudioPluginInstance*> instances;
+    for (auto* plugin : te::getAllPlugins (edit, false))
+    {
+        auto* external = dynamic_cast<te::ExternalPlugin*> (plugin);
+        auto* instance = external != nullptr && external->isSynth() ? external->getAudioPluginInstance() : nullptr;
+        if (instance == nullptr || instance->getPluginDescription().pluginFormatName == "Spinus")
+            continue;
+        instance->prepareToPlay (rate, block); // starts loading its sounds, alongside the others
+        instances.push_back (instance);
+    }
+    const auto started = clock::now();
+    for (auto* instance : instances)
+    {
+        const auto channels =
+            std::max ({ 2, instance->getTotalNumInputChannels(), instance->getTotalNumOutputChannels() });
+        juce::AudioBuffer<float> buffer (channels, block);
+        juce::MidiBuffer midi;
+        const auto mine = clock::now();
+        bool audible = false;
+        while (! audible && clock::now() - mine < perInstrument && clock::now() - started < total)
+        {
+            for (const int pitch : { 60, 48, 36 }) // a drum instrument may play only its low keys
+            {
+                for (int i = 0; i < 10 && ! audible; ++i) // 0.1 s of a note
+                {
+                    buffer.clear();
+                    midi.clear();
+                    if (i == 0)
+                        midi.addEvent (juce::MidiMessage::noteOn (1, pitch, (juce::uint8)100), 0);
+                    if (i == 9)
+                        midi.addEvent (juce::MidiMessage::noteOff (1, pitch), block - 1);
+                    instance->processBlock (buffer, midi);
+                    audible = buffer.getMagnitude (0, block) > 1.0e-4f;
+                }
+                if (audible)
+                    break;
+            }
+            if (! audible)
+                std::this_thread::sleep_for (std::chrono::milliseconds (200)); // still loading: give it time
+        }
+        buffer.clear();
+        midi.clear();
+        midi.addEvent (juce::MidiMessage::allNotesOff (1), 0);
+        instance->processBlock (buffer, midi);
+        instance->reset();
+        if (! audible)
+            core::Logs::warning ("export", instance->getName() + " played nothing to a test note; exporting anyway");
+    }
+}
+
 int bitDepthFor (ExportSettings::Format f)
 {
     switch (f)
@@ -183,6 +245,7 @@ void ExportJob::renderStep()
         return finish ({ false, false, "Missing plugin: " + names.joinIntoString (", "), {} });
     }
 
+    waitUntilAudible (*edit, std::chrono::seconds (45), std::chrono::seconds (90));
     waitForClipRenders (0);
 }
 

@@ -25,6 +25,22 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **The parts list is remembered** between runs: the parts, their roles, the sounds you chose and Tune
   toward the references come back when you open the Track creator again. A new description starts it again.
 
+### Track creator: the AI writer
+
+- **More kinds of section, as songwriters and song generators name them:** besides intro, verse, chorus,
+  bridge and outro, a song the AI writes can have a **Pre-Chorus, Post-Chorus, Hook, Break, Breakdown, Build,
+  Drop, Interlude, Instrumental, Solo, End** or **Fade Out**. Each has its usual energy (a drop as big as a
+  chorus, a break or breakdown quiet, a build rising, an end and a fade out falling away), and Playlist markers
+  use these names. Each section can carry a short cue ("drums fall away"), shown in the song's summary. The
+  checks name a section your description asks for that the song doesn't have, by these kinds.
+
+### Fixes
+
+- **An export right after opening a project or applying a song could leave big sample instruments silent:** they
+  load their sounds in the background (Windows plugins through Wine, most of all) and the export renders faster
+  than real time. It now lets every plugin instrument load at once, then plays each a few test notes until it
+  sounds (at most 45 seconds each, a minute and a half in all) before rendering.
+
 ### Fixes
 
 - **Local models in Ollama no longer lose the start of long conversations.** Spinus asked Ollama through its
