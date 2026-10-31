@@ -144,6 +144,10 @@ A script is a JSON list of steps:
   The music tools' `send` to "Delay" makes that bus for you.
 - **Reverb** comes from the free plugins (Dragonfly reverbs; Surge XT Effects for chorus too). They are
   usable only once the user has downloaded them in **Options › Get free plugins**.
+- **Chorus, phaser, flanger, distortion:** Surge XT Effects, by its type: `{"FX Type": "Chorus", "Rate":
+  "0.5 Hz", "Mix": "30%"}` in one `text` (the type is set first; its other settings are named for that type,
+  and a word of a name is enough when only one setting has it). `--describe bundled.surge-xt-effects` lists
+  the types under `"FX Type"`'s `choices`.
 - **Plugins the user installed** are named in a project as `--check` shows them. Their own presets, and sounds
   chosen in their windows, can't be set from a script.
 - **Project files:** a project is a folder holding a `.spn` file (plain JSON) and an `audio` folder. Change it

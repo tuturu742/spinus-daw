@@ -4,6 +4,7 @@
 
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 namespace spinus::engine
 {
@@ -41,6 +42,18 @@ public:
 private:
     std::unordered_map<juce::String, juce::AudioProcessorParameter*> bySpinusId, byPluginId;
 };
+
+/** Lets setting changes made on a plugin take effect now, so its settings' names, texts and state show them:
+    many plugins take in a change only when they next process audio, and an effect's type may pick which
+    settings it has and what they mean. Not being played, the plugin processes a short block of silence on
+    this thread; while the engine plays it, this waits briefly for the audio thread instead (CLAP plugins;
+    nothing for other plugins, which keep their own ways). Message thread. */
+void letChangesTakeEffect (juce::AudioProcessor&);
+
+/** Sets several of a plugin's parameters (0 to 1) as one change: then lets the change take effect and sets again
+    any the plugin put elsewhere meanwhile, as a plugin may put its settings back to their defaults when one
+    of them changes (an effect's type), whatever their order. Message thread. */
+void setParameterValues (juce::AudioProcessor&, const std::vector<std::pair<juce::AudioProcessorParameter*, float>>&);
 
 /** A plugin's parameters now, 0 to 1, by Spinus's ID. */
 std::map<juce::String, float> readParameterValues (const juce::AudioProcessor&);

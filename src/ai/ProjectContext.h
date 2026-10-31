@@ -26,6 +26,9 @@ struct ContextOptions
     model::ChannelId channel;
     model::PatternId pattern;
     model::InsertId insert;
+    /** Each free or Spinus effect's `modes`: its settings that pick its kind by name ({"FX Type": ["Delay",
+        "Chorus"...]}), read from a copy of it the first time (Session::getDeviceChoices). */
+    bool deviceChoices = true;
 };
 
 juce::var projectContext (Session&, const ContextOptions&);

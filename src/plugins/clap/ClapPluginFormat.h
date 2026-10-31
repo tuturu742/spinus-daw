@@ -74,6 +74,13 @@ public:
     /** Loads a discovered preset (clap.preset-load from_location; message thread). */
     static juce::Result loadPreset (juce::AudioPluginInstance&, const DiscoveredPreset&);
 
+    /** Lets setting changes made while a CLAP plugin is not being played take effect, so its settings' names,
+        texts and saved state show them: many plugins take in a change only when they next process audio (an
+        effect's type, which picks the effect's other settings). With no audio thread playing it, a short block
+        of silence is processed on this thread; while one is, this waits briefly for it to process. Message
+        thread; nothing for other formats, and quick when no change is waiting. */
+    static void applyPendingChanges (juce::AudioProcessor&);
+
     /** The paths of the CLAP files loaded in this process now (by any instance, of any edit, hidden ones
         too), e.g. so a plugin is not deleted while it runs. */
     static juce::StringArray getLoadedFiles();

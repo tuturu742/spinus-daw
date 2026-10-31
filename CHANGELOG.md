@@ -20,6 +20,20 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Scripts and coding agents: `spinus.delay` in `--describe`, with settings as text (`"note": "1/8 dotted"`,
   `"time": "350 ms"`, `"feedback": "40%"`, `"high_cut": "4.5 kHz"`).
 
+### Effect types from words
+
+- **A chorus, phaser, flanger or distortion from words:** Surge XT Effects' type (`"FX Type": "Chorus"`) and
+  that type's own settings ("Modulation Rate", "Output Mix"...) can be set in one go by scripts, the assistant
+  and coding agents. Before, the settings kept showing "-" after the type was set, and a saved project lost the
+  type: Surge (like some other plugins) takes in a change only when it plays audio, and nothing played while a
+  script or the AI built the project. Now Spinus lets a plugin take its changes in while nothing plays (a moment
+  of silence, never while the song plays), sets a type before the settings it renames, and saves the type.
+- The assistant's "add a chorus to the pad" finds the chorus among the free effects' types (Surge XT Effects,
+  once downloaded) and sets it up.
+- Scripts: `--describe bundled.surge-xt-effects` lists the types as `"FX Type"`'s `choices`; a setting can be
+  named by a few words of its name (`"Rate"`, `"Mix"`) when only one setting has them, and an unknown name's
+  error lists the settings the effect has now.
+
 ### Export
 
 - **Exports wait for plugins that run in a separate process, too**, while they load their sounds: one that was

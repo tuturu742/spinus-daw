@@ -20,9 +20,13 @@ namespace
 std::shared_ptr<juce::AudioProcessor> pluginForText (te::Engine& engine, engine::EngineAdapter& adapter,
                                                      engine::DeviceFactory& devices, const model::Device& device)
 {
+    // Changes made while it is not being played first: they may rename or redescribe its other settings.
     if (auto* external = dynamic_cast<te::ExternalPlugin*> (adapter.getDevicePlugin (device.id)))
         if (auto* instance = external->getAudioPluginInstance())
+        {
+            engine::letChangesTakeEffect (*instance);
             return { instance, [keep = te::Plugin::Ptr (external)] (juce::AudioProcessor*) {} };
+        }
 
     struct Copy
     {
@@ -37,6 +41,14 @@ std::shared_ptr<juce::AudioProcessor> pluginForText (te::Engine& engine, engine:
     auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
     if (instance == nullptr)
         return nullptr;
+    // With the device's settings so far (an effect type chosen earlier in the same proposal).
+    const engine::ParameterFinder finder (*instance);
+    std::vector<std::pair<juce::AudioProcessorParameter*, float>> values;
+    for (auto& [key, value] : device.parameters)
+        if (auto* parameter = finder.findSaved (key))
+            values.emplace_back (parameter, value);
+    engine::setParameterValues (*instance, values);
+    engine::letChangesTakeEffect (*instance);
     return { copy, instance };
 }
 } // namespace
@@ -610,8 +622,11 @@ std::optional<float> Session::parseTargetValue (const model::ParameterTarget& ta
     if (target.kind == model::ParameterTarget::Kind::deviceParameter)
         if (auto* external = dynamic_cast<te::ExternalPlugin*> (adapter->getDevicePlugin (target.device)))
             if (auto* instance = external->getAudioPluginInstance())
+            {
+                engine::letChangesTakeEffect (*instance); // what it shows after the changes made so far
                 if (auto* parameter = engine::ParameterFinder (*instance).find (target.parameterId))
                     return dsp::param::normalisedForText (*parameter, trimmed);
+            }
 
     // Volume and pan: Tracktion's own reading, in the units they show.
     if (auto* parameter = adapter->findParameter (target))
@@ -648,6 +663,27 @@ juce::String Session::getDeviceParameterValueText (model::DeviceId id, const juc
                 parameter != nullptr && parameter->paramID == parameterId)
                 return parameter->getCurrentValueAsStringWithLabel().trim();
     return {};
+}
+
+std::vector<std::pair<juce::String, juce::StringArray>> Session::getDeviceChoices (const model::Device& device,
+                                                                                   int most)
+{
+    auto key = device;
+    key.id = {};
+    key.parameters.clear();
+    const auto name = juce::JSON::toString (model::deviceToJson (key), true);
+    if (auto found = deviceChoices.find (name); found != deviceChoices.end())
+        return found->second;
+    std::vector<std::pair<juce::String, juce::StringArray>> choices;
+    if (auto instance = pluginForText (edit->engine, *adapter, *devices, key))
+        for (auto* parameter : instance->getParameters())
+            if (const auto names = dsp::param::choicesOf (*parameter);
+                names.size() >= 3 && (int)choices.size() < most &&
+                std::all_of (names.begin(), names.end(), [] (auto& n) { return dsp::param::isName (n); }) &&
+                std::none_of (choices.begin(), choices.end(), [&] (auto& c) { return c.second == names; }))
+                choices.emplace_back (parameter->getName (200).trim(), names);
+    deviceChoices[name] = choices;
+    return choices;
 }
 
 juce::String Session::getDeviceTitle (model::DeviceId id) const

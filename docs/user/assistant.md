@@ -144,7 +144,8 @@ To change your song, the assistant uses Spinus's music tools, the same ones the
   some bars copied elsewhere.
 - **Arranging:** a new part with an instrument and preset; room for a new section ("add a bridge after bar 20"
   moves everything after it later and marks the bridge).
-- **Sound and mix:** automation (a fade, a filter sweep), effects with their settings, sends to a reverb or
+- **Sound and mix:** automation (a fade, a filter sweep), effects with their settings (a chorus, phaser,
+  flanger or distortion too, from Surge XT Effects once you have it: "add a chorus to the pad"), sends to a reverb or
   delay, sidechain ducking, buses, and a sound shaped in words: pluckier, punchier, softer, brighter, darker,
   warmer, longer, shorter, wider.
 - **Checking:** notes outside the key (a section that changes key on purpose is named once), parts held in the

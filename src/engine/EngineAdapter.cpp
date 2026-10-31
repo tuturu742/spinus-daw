@@ -608,20 +608,24 @@ void EngineAdapter::applyParameters (te::Plugin& plugin, const Device& device)
     const auto now = byParameter (device.parameters);
     const auto before = byParameter (lastApplied);
     auto& originals = originalParameters[device.id]; // by Spinus's ID
+    std::vector<std::pair<juce::AudioProcessorParameter*, float>> changed;
     for (auto& [parameter, value] : now)
         if (auto it = before.find (parameter);
             it == before.end() || ! juce::approximatelyEqual (it->second.second, value.second))
         {
             originals.try_emplace (getParameterId (*parameter), parameter->getValue()); // before any command set it
-            parameter->setValueNotifyingHost (value.second);
+            changed.emplace_back (parameter, value.second);
         }
     for (auto& [parameter, value] : before)
         if (! now.contains (parameter))
             if (auto original = originals.find (getParameterId (*parameter)); original != originals.end())
             {
-                parameter->setValueNotifyingHost (original->second);
+                changed.emplace_back (parameter, original->second);
                 originals.erase (original);
             }
+    // As one change: a plugin that puts its other settings back when one changes (an effect's type) still ends
+    // with every one of them as set, while it is not being played too (ParameterIds.h).
+    setParameterValues (*instance, changed);
     lastApplied = device.parameters;
 }
 

@@ -351,16 +351,44 @@ inline std::optional<float> normalisedForText (const juce::AudioProcessorParamet
     return byPluginText (p, trimmed);
 }
 
+/** True for a name ("Chorus", "Reverb 2", "Off"), false for a number in any units ("2 ms", "-6 dB") or none. */
+inline bool isName (const juce::String& text)
+{
+    const auto t = text.trim();
+    return ! read (t).has_value() && t.toLowerCase().containsAnyOf ("abcdefghijklmnopqrstuvwxyz");
+}
+
 /** A choice's or switch's values by name, in order ("Bell", "Low cut"...); empty for a number setting or one
-    with too many steps to list. Message thread. */
+    with too many steps to list. A plugin's setting that is not marked as stepped but shows only words over its
+    whole range (an effect's type: "Delay", "Chorus"...) is a choice too, of the words it shows. Message thread. */
 inline juce::StringArray choicesOf (const juce::AudioProcessorParameter& p)
 {
+    constexpr int most = 64;
     juce::StringArray names;
     const auto steps = p.getNumSteps();
-    if ((p.isDiscrete() || p.isBoolean()) && steps >= 2 && steps <= 64)
+    if ((p.isDiscrete() || p.isBoolean()) && steps >= 2 && steps <= most)
+    {
         for (int k = 0; k < steps; ++k)
             names.add (p.getText ((float)k / (float)(steps - 1), 200).trim());
-    return names;
+        return names;
+    }
+    if (dynamic_cast<const juce::RangedAudioParameter*> (&p) != nullptr) // a Spinus device's: marked as it is
+        return names;
+    const auto word = [] (const juce::String& t) { return isName (t); };
+    for (const auto v : { 0.0f, 0.5f, 1.0f })
+        if (! word (p.getText (v, 200).trim()))
+            return names;
+    constexpr int points = 200; // as byPluginText reads a word
+    for (int k = 0; k <= points; ++k)
+    {
+        const auto t = p.getText ((float)k / (float)points, 200).trim();
+        if (! word (t))
+            return {};
+        names.addIfNotAlreadyThere (t, true);
+        if (names.size() > most)
+            return {};
+    }
+    return names.size() >= 2 ? names : juce::StringArray();
 }
 
 inline float FloatSetting::getValueForText (const juce::String& text) const

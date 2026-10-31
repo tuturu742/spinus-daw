@@ -582,7 +582,10 @@ juce::var describe (Session& session, const juce::String& stockType)
     juce::Array<juce::var> parameters;
     std::optional<engine::ParameterFinder> finder;
     if (instance != nullptr)
+    {
+        engine::letChangesTakeEffect (*instance); // so a plugin shows its settings as it starts (named, with values)
         finder.emplace (*instance);
+    }
     for (auto& [pid, name] : session.getDeviceParameters (id))
     {
         model::ParameterTarget target;

@@ -179,7 +179,16 @@ presets. For the Drum Machine it lists the pads, with each pad's note and sound,
 prints Spinus's own devices and the free plugins installed here, one per line.
 
 A setting with a fixed list of values (a filter type, a mode, a switch) also has `choices`: every value by
-name, as `text` takes it (`"Low cut"`, `"Bell"`).
+name, as `text` takes it (`"Low cut"`, `"Bell"`). So does a plugin's setting that shows only names, such as
+Surge XT Effects' `"FX Type"` (`"Delay"`, `"Chorus"`, `"Phaser"`, `"Flanger"`, `"Distortion"`...).
+
+Some effects have a type that decides what their other settings are: Surge XT Effects' settings are named
+"FX Parameter 0" to "FX Parameter 11" until a type is chosen, then "Modulation Rate", "Output Mix" and so on
+for that type. Give the type in the same `text` (Spinus sets a choice first, then reads the rest as the
+effect shows them for it) or in an earlier step: `{"FX Type": "Chorus", "Modulation Rate": "0.5 Hz",
+"Output Mix": "30%"}`. A few words of a setting's name are enough when only one setting has them (`"Rate"`,
+`"Mix"`), and a name it doesn't have gets an error that lists the settings it has now. The project saves the
+type with the settings.
 
 `device.setParameters` also takes settings in their own units through `text`: `{"cutoff": "1.2 kHz",
 "attack": "20 ms"}`, so a script rarely needs the 0 to 1 values. This works for any plugin too, VST3,
@@ -190,7 +199,7 @@ shows at a few points ("-60.0 dB" at 0 ... "0.0 dB" at 1); use `values` (0 to 1)
 
 The last line of `--describe all` lists the free plugins that aren't installed here (`notInstalled`).
 Spinus's own effects have no reverb: that comes from the free plugins (the Dragonfly reverbs; Surge XT
-Effects for chorus and more). Get them in Spinus with Options › Get free plugins, then scripts can use them.
+Effects for chorus, phaser, flanger, distortion and more, by its `"FX Type"`). Get them in Spinus with Options › Get free plugins, then scripts can use them.
 Echoes need no download: the [Spinus Delay](delay.md) (`spinus.delay`) is Spinus's own, with its time as a
 note length at the song's tempo (`{"note": "1/8 dotted", "mix": "100%"}` on a send bus). Without the free
 plugins, Spinus's own effects still make a full mix.

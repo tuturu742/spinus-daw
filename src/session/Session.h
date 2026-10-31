@@ -197,6 +197,12 @@ public:
     /** A device parameter's current value as the plugin shows it ("1.20 kHz"), or empty. */
     juce::String getDeviceParameterValueText (model::DeviceId, const juce::String& parameterId) const;
 
+    /** The choices of a device that picks its kind of sound by name (an effect's type: "Chorus", "Phaser"...):
+        its settings that show only names and have at least three, at most `most` of them, as the setting's name
+        and its choices. Read from a copy made for it once (then remembered); empty when it cannot be made. For
+        the AI, so a chorus can be found in an effect that has one. Message thread. */
+    std::vector<std::pair<juce::String, juce::StringArray>> getDeviceChoices (const model::Device&, int most = 3);
+
     /** A device's window title: its name and where it is, e.g. "Hall Reverb - 4 Reverb". */
     juce::String getDeviceTitle (model::DeviceId) const;
 
@@ -221,6 +227,7 @@ private:
     void syncAdapter();
 
     std::unique_ptr<engine::DeviceFactory> devices;
+    std::map<juce::String, std::vector<std::pair<juce::String, juce::StringArray>>> deviceChoices; // by device
     plugins::DeviceList deviceList;
     commands::CommandHistory history;
     Suggestions suggestions { history };
