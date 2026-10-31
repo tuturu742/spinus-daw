@@ -3,6 +3,8 @@
 #include "PatternGenerator.h"
 
 #include "Theme.h"
+#include "ai/ProjectContext.h"
+#include "session/AgentCommandLine.h"
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
 
@@ -284,61 +286,19 @@ AssistantPanel::~AssistantPanel()
 //==============================================================================
 juce::var AssistantPanel::makeContext() const
 {
-    const auto& project = session.getProject();
-    auto context = new juce::DynamicObject();
-    juce::Array<juce::var> chips;
+    ai::ContextOptions options;
+    options.chips.clear();
     for (auto& [chip, on] : chipsOn)
         if (on)
-            chips.add (chip);
-    context->setProperty ("chips", chips);
-    if (chipsOn.at ("project"))
-        context->setProperty ("project", model::toJson (project));
-
-    auto* selection = new juce::DynamicObject();
-    if (chipsOn.at ("channel") && session.getSelectedChannel().isValid())
-        selection->setProperty ("channel", (int)session.getSelectedChannel().value);
-    if (chipsOn.at ("pattern") && session.getCurrentPattern().isValid())
-        selection->setProperty ("pattern", (int)session.getCurrentPattern().value);
+            options.chips.add (chip);
+    options.project = chipsOn.at ("project");
+    if (chipsOn.at ("channel"))
+        options.channel = session.getSelectedChannel();
+    if (chipsOn.at ("pattern"))
+        options.pattern = session.getCurrentPattern();
     if (chipsOn.at ("insert") && getSelectedInsert)
-        selection->setProperty ("insert", (int)getSelectedInsert().value);
-    context->setProperty ("selection", juce::var (selection));
-
-    // Device names as Spinus shows them (the project file only has types).
-    auto* names = new juce::DynamicObject();
-    for (auto& channel : project.channels)
-        if (channel.instrument)
-            names->setProperty (juce::String ((int)channel.instrument->id.value),
-                                model::getDeviceDisplayName (*channel.instrument));
-    auto addEffects = [names] (const model::Insert& insert)
-    {
-        for (auto& slot : insert.effects)
-            names->setProperty (juce::String ((int)slot.device.id.value), model::getDeviceDisplayName (slot.device));
-    };
-    addEffects (project.mixer.master);
-    for (auto& insert : project.mixer.inserts)
-        addEffects (insert);
-    context->setProperty ("deviceNames", juce::var (names));
-
-    // What can be added: Spinus's devices, the free plugins and the installed plugins, each with the device
-    // JSON the commands take (so the assistant never guesses an ID).
-    juce::Array<juce::var> devices;
-    for (auto& entry : session.getDeviceList().getEntries())
-    {
-        auto device = model::deviceToJson (entry.device);
-        if (auto* o = device.getDynamicObject())
-        {
-            o->removeProperty ("id");
-            o->removeProperty ("bypassed");
-        }
-        devices.add (object ({ { "name", entry.name },
-                               { "maker", entry.maker },
-                               { "type", entry.instrument ? "instrument" : "effect" },
-                               { "format", entry.badge.isNotEmpty() ? entry.badge : juce::String ("Spinus") },
-                               { "available", entry.available },
-                               { "device", device } }));
-    }
-    context->setProperty ("devices", devices);
-    return juce::var (context);
+        options.insert = getSelectedInsert();
+    return ai::projectContext (session, options);
 }
 
 void AssistantPanel::ask (const juce::String& question)
@@ -421,7 +381,14 @@ void AssistantPanel::finish (const juce::var& result)
         {
             Entry e;
             e.kind = Entry::Kind::proposal;
-            e.proposal = std::make_shared<ai::Proposal> (ai::Proposal::prepare (p, session.getHistory()));
+            // Automation points the project harness gave as text ("-12 dB") are read for their targets here.
+            juce::String textError;
+            auto checked = p.clone();
+            if (auto* o = checked.getDynamicObject())
+                o->setProperty ("steps", cli::readStepTexts (session, p["steps"], textError));
+            e.proposal = std::make_shared<ai::Proposal> (ai::Proposal::prepare (checked, session.getHistory()));
+            if (textError.isNotEmpty() && e.proposal->error.isEmpty())
+                e.proposal->error = textError;
             entries.push_back (e);
         }
     status.setText ({}, juce::dontSendNotification);

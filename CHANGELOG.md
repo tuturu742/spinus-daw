@@ -5,6 +5,23 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Coding agents and the assistant on your open song
+
+- **Let a coding agent work on your project:** turn on **Options › AI › Coding agents** and Claude Code, Codex,
+  Cursor or another MCP agent on your computer can read the open song, change it and render it to measure it,
+  while you watch and play it in Spinus. Its changes apply at once, each one an undo step; while it is connected the
+  top bar shows it, with **Disconnect** and **Undo the agent's changes** (back to the song as it was when it
+  connected). The interface listens on this computer only, needs the token shown there, refuses web pages, and is
+  off until you turn it on. The music tools need AI on in Spinus but no AI connection or internet; with AI off the
+  agent still has Spinus's own tools (the song's summary, commands, devices, render).
+- **The assistant changes your song with Spinus's music tools:** "add pads to the chorus", "add a bridge after
+  bar 20", "make the bass pluckier", "duck the pad under the kick". It writes parts over bars, places riffs, adds
+  parts and sections, automates, adds effects and sends, and shapes sounds in words (pluckier, brighter, warmer,
+  wider...), then checks the song: notes outside the key (a section that changes key on purpose is named once),
+  parts held in one register masking each other, a muddy low end, sections off 4-bar phrases, a missing limiter.
+  Everything still comes as one proposal you Apply.
+- **The skill for coding agents** (`skills/spinus-songwriter`) says to use the live interface when it is on.
+
 ### Track creator: guitars in your songs
 
 - **The Track creator hears guitars in your reference songs.** It now splits songs into 6 stems (guitar and

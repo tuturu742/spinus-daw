@@ -9,6 +9,7 @@ add_executable (spinus_tests
     acceptance/PluginsAndAssistantAcceptanceTests.cpp
     acceptance/CreativeAiAcceptanceTests.cpp
     acceptance/AnalysisAcceptanceTests.cpp
+    ai/AgentInterfaceTests.cpp
     ai/AiTests.cpp
     commands/CommandTests.cpp
     core/ChildProcessTests.cpp

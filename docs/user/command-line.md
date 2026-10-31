@@ -190,6 +190,10 @@ can use them. Without them, Spinus's own effects still make a full mix.
 
 ## For AI coding agents
 
+To let an agent work on the song **open in Spinus** instead, while you watch, turn on the live interface: see
+[Let a coding agent work on your project](agents.md).
+
+
 Spinus comes with a skill for coding agents (Claude Code, Codex, Cursor and others that read skill
 files): [`skills/spinus-songwriter/SKILL.md`](https://github.com/tuturu742/spinus-daw/blob/main/skills/spinus-songwriter/SKILL.md).
 It teaches an agent to plan, write, mix, check and render a whole song with these options, using only an

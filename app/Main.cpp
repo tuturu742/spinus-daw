@@ -28,7 +28,9 @@
 #include "plugins/PluginDownloads.h"
 #include "plugins/windows/PluginDialogs.h"
 #include "plugins/windows/WindowsPlugins.h"
+#include "ai/AgentInterface.h"
 #include "ai/AiService.h"
+#include "ai/ProjectContext.h"
 #include "ui/About.h"
 #include "ui/AiSettingsDialog.h"
 #include "ui/Manual.h"
@@ -281,6 +283,8 @@ public:
         view.setLayoutsFile (getSettingsFolder().getChildFile ("layouts.xml"));
         aiService = std::make_unique<ai::AiService> (getSettingsFolder());
         view.setAiService (aiService.get());
+        agentInterface = makeAgentInterface (view);
+        view.setAgentInterface (agentInterface.get());
         view.setWindowsPlugins (windows.get(), getHelperProgram ("spinus-plugin-scanner"));
 
         // `spinus "Song/Song.spn"` (or the folder) opens that project; otherwise offer crashed work, if any.
@@ -330,6 +334,7 @@ public:
         ui::ManualWindow::closeWindow();
         ui::AboutSpinus::closeWindow();
         windowIcons = nullptr;
+        agentInterface = nullptr; // stops the live interface before what it reads goes
         mainWindow = nullptr;
         aiService = nullptr; // stops the AI service
         document = nullptr;
@@ -730,6 +735,38 @@ private:
     std::unique_ptr<juce::DocumentWindow> checkWindow; // --choose-file
     std::unique_ptr<core::FileDialog> checkDialog;
     std::unique_ptr<ui::WindowIcons> windowIcons;
+    std::unique_ptr<ai::AgentInterface> agentInterface;
+
+    /** The live interface for coding agents: the open project, the user's sample folders, and the project
+        harness's tools through the AI service when AI is on. */
+    std::unique_ptr<ai::AgentInterface> makeAgentInterface (ui::MainView& view)
+    {
+        ai::AgentInterface::Host host;
+        host.projectFolder = [this] { return document != nullptr ? document->getFolder() : juce::File(); };
+        host.sampleFolders = [&view] { return view.getBrowser().getSampleFolders(); };
+        host.context = [this] { return ai::projectContext (*session, {}); };
+        host.listHarnessTools = [this] (const auto& reply)
+        {
+            if (aiService == nullptr || ! aiService->isEnabled())
+                return reply ({}, "AI is off");
+            aiService->call ("ai.v1.project.tools", juce::var (new juce::DynamicObject()),
+                             [reply] (const juce::var& result, const juce::String& error)
+                             { reply (result["tools"], error); });
+        };
+        host.callHarnessTool =
+            [this] (const juce::String& tool, const juce::var& arguments, const juce::var& context, const auto& reply)
+        {
+            if (aiService == nullptr || ! aiService->isEnabled())
+                return reply ({}, "The music tools need AI turned on in Spinus (Options > AI). Spinus's own tools "
+                                  "(song_summary, run_commands, command_help, list_devices, render) work without it.");
+            auto* params = new juce::DynamicObject();
+            params->setProperty ("tool", tool);
+            params->setProperty ("arguments", arguments);
+            params->setProperty ("context", context);
+            aiService->call ("ai.v1.project.tool", juce::var (params), reply);
+        };
+        return std::make_unique<ai::AgentInterface> (*session, getSettingsFolder(), std::move (host));
+    }
 };
 
 } // namespace spinus

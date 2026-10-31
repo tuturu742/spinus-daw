@@ -272,15 +272,21 @@ TEST_CASE ("The AI service knows what each command returns, for references betwe
             table[name] = fields;
         }
     }
-    REQUIRE (table.size() == 12);
+    REQUIRE (table.size() == 18);
 
     const std::map<juce::String, juce::String> calls {
         { "channel.add", R"({"name": "Hats", "instrument": {"kind": "stock", "stockType": "spinus.sampler"}})" },
         { "insert.add", R"({"name": "Vocals"})" },
         { "insert.addEffect", R"({"insert": 6, "device": {"kind": "stock", "stockType": "spinus.filter"}})" },
+        { "insert.addBus", R"({"name": "Drums", "inserts": [6]})" },
         { "pattern.add", R"({"name": "Fill"})" },
+        { "pattern.clone", R"({"pattern": 11})" },
+        { "marker.add", R"({"at": 3840, "name": "Bridge"})" },
         { "lane.add", R"({"name": "Drums"})" },
         { "clip.addPattern", R"({"lane": 13, "pattern": 11, "start": 7680})" },
+        { "clip.add", R"({"clip": {"type": "pattern", "lane": 13, "pattern": 11, "start": 15360, "length": 3840}})" },
+        { "clip.split", R"({"clip": 14, "at": 1920})" },
+        { "clip.makeUnique", R"({"clip": 14})" },
         { "clip.addAudio", R"({"lane": 13, "file": "drums/loop.wav", "start": 3840, "length": 7680})" },
         { "clip.addAutomation",
           R"({"start": 0, "length": 3840, "laneName": "Drums volume", "target": {"kind": "insertVolume", "insert": 2},
@@ -313,4 +319,36 @@ TEST_CASE ("The AI service knows what each command returns, for references betwe
         expected.sort (false);
         CHECK (returned == expected);
     }
+}
+
+TEST_CASE ("The project harness's edits apply in Spinus as one undo step", "[ai]")
+{
+    // tests/ai/files/harness-proposal.json: what ai/spinus_ai/project_harness.py makes of a part added and written,
+    // a shared pattern's notes changed, a bridge inserted, automation, a send and ducking, on the example project
+    // (ai/tests/test_project_harness.py keeps it up to date).
+    const auto file =
+        juce::File (SPINUS_TEST_FILES_DIR).getParentDirectory().getChildFile ("tests/ai/files/harness-proposal.json");
+    const auto json = juce::JSON::parse (file.loadFileAsString());
+    REQUIRE (json.isObject());
+    commands::CommandHistory history (example());
+    const auto markersBefore = history.getProject().playlist.markers.size();
+    auto proposal = ai::Proposal::prepare (json, history);
+    INFO (proposal.error);
+    REQUIRE (proposal.canApply());
+    REQUIRE (proposal.apply (history).wasOk());
+    const auto& project = history.getProject();
+    CHECK (history.getUndoDescriptions().size() == 1);
+    CHECK (project.channels.size() == 3);
+    CHECK (project.channels.back().name == "Pads");
+    CHECK (project.playlist.markers.size() == markersBefore + 1);
+    CHECK (project.playlist.markers.back().name == "Bridge");
+    const auto* reverb = project.findInsert (model::InsertId { 4 });
+    const auto* kick = project.findInsert (model::InsertId { 2 });
+    REQUIRE (kick != nullptr);
+    REQUIRE (reverb != nullptr);
+    CHECK (kick->sends.size() == 1);
+    CHECK (history.undo());
+    auto undone = history.getProject();
+    undone.nextId = example().nextId; // IDs are not handed out again after an undo
+    CHECK (undone == example());
 }

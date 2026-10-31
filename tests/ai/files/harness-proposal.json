@@ -1,0 +1,366 @@
+{
+ "summary": "Harness edits",
+ "steps": [
+  {
+   "command": "channel.add",
+   "parameters": {
+    "name": "Pads",
+    "instrument": {
+     "kind": "stock",
+     "stockType": "spinus.3x-osc"
+    }
+   }
+  },
+  {
+   "command": "device.loadPreset",
+   "parameters": {
+    "device": "$1.device",
+    "preset": "Warm Pad"
+   }
+  },
+  {
+   "command": "channel.set",
+   "parameters": {
+    "channel": "$1.channel",
+    "group": "Synths"
+   }
+  },
+  {
+   "command": "pattern.add",
+   "parameters": {
+    "name": "Pads 2-3",
+    "length": 5760
+   }
+  },
+  {
+   "command": "pattern.setNotes",
+   "parameters": {
+    "pattern": "$4.pattern",
+    "channel": "$1.channel",
+    "notes": [
+     {
+      "start": 0,
+      "length": 2880,
+      "pitch": 57,
+      "velocity": 0.709
+     },
+     {
+      "start": 0,
+      "length": 2880,
+      "pitch": 60,
+      "velocity": 0.709
+     },
+     {
+      "start": 2880,
+      "length": 2880,
+      "pitch": 57,
+      "velocity": 0.709
+     },
+     {
+      "start": 2880,
+      "length": 2880,
+      "pitch": 60,
+      "velocity": 0.709
+     }
+    ]
+   }
+  },
+  {
+   "command": "pattern.setLength",
+   "parameters": {
+    "pattern": "$4.pattern",
+    "length": 5760
+   }
+  },
+  {
+   "command": "lane.add",
+   "parameters": {
+    "name": "Pads"
+   }
+  },
+  {
+   "command": "clip.addPattern",
+   "parameters": {
+    "lane": "$7.lane",
+    "pattern": "$4.pattern",
+    "start": 2880,
+    "length": 5760
+   }
+  },
+  {
+   "command": "clip.makeUnique",
+   "parameters": {
+    "clip": 14
+   }
+  },
+  {
+   "command": "pattern.setNotes",
+   "parameters": {
+    "pattern": "$9.pattern",
+    "channel": 9,
+    "notes": []
+   }
+  },
+  {
+   "command": "pattern.setLength",
+   "parameters": {
+    "pattern": "$9.pattern",
+    "length": 15360
+   }
+  },
+  {
+   "command": "clip.set",
+   "parameters": {
+    "clip": 14,
+    "length": 15360
+   }
+  },
+  {
+   "command": "pattern.add",
+   "parameters": {
+    "name": "Surge 1-1",
+    "length": 2880
+   }
+  },
+  {
+   "command": "pattern.setNotes",
+   "parameters": {
+    "pattern": "$13.pattern",
+    "channel": 9,
+    "notes": [
+     {
+      "start": 0,
+      "length": 960,
+      "pitch": 60,
+      "velocity": 0.787
+     },
+     {
+      "start": 960,
+      "length": 960,
+      "pitch": 62,
+      "velocity": 0.787
+     },
+     {
+      "start": 1920,
+      "length": 960,
+      "pitch": 64,
+      "velocity": 0.787
+     }
+    ]
+   }
+  },
+  {
+   "command": "pattern.setLength",
+   "parameters": {
+    "pattern": "$13.pattern",
+    "length": 2880
+   }
+  },
+  {
+   "command": "lane.add",
+   "parameters": {
+    "name": "Surge"
+   }
+  },
+  {
+   "command": "clip.addPattern",
+   "parameters": {
+    "lane": "$16.lane",
+    "pattern": "$13.pattern",
+    "start": 0,
+    "length": 2880
+   }
+  },
+  {
+   "command": "clip.split",
+   "parameters": {
+    "clip": 14,
+    "at": 5760
+   }
+  },
+  {
+   "command": "clip.split",
+   "parameters": {
+    "clip": 16,
+    "at": 5760
+   }
+  },
+  {
+   "command": "clip.split",
+   "parameters": {
+    "clip": "$8.clip",
+    "at": 5760
+   }
+  },
+  {
+   "command": "clip.set",
+   "parameters": {
+    "clip": 15,
+    "start": 21120
+   }
+  },
+  {
+   "command": "clip.set",
+   "parameters": {
+    "clip": "$18.clip",
+    "start": 11520
+   }
+  },
+  {
+   "command": "clip.set",
+   "parameters": {
+    "clip": "$19.clip",
+    "start": 11520
+   }
+  },
+  {
+   "command": "clip.set",
+   "parameters": {
+    "clip": "$20.clip",
+    "start": 11520
+   }
+  },
+  {
+   "command": "marker.add",
+   "parameters": {
+    "at": 5760,
+    "name": "Bridge"
+   }
+  },
+  {
+   "command": "clip.addPattern",
+   "parameters": {
+    "lane": 12,
+    "pattern": "$9.pattern",
+    "start": 5760,
+    "length": 5760,
+    "offset": 0
+   }
+  },
+  {
+   "command": "clip.add",
+   "parameters": {
+    "clip": {
+     "lane": 13,
+     "start": 5760,
+     "length": 5760,
+     "muted": false,
+     "type": "audio",
+     "file": "vocals.wav",
+     "channel": 0,
+     "offset": 0,
+     "gainDb": -2.0,
+     "pitchSemitones": 0.0,
+     "stretchMode": "tempo-sync",
+     "fadeIn": 96,
+     "fadeOut": 480
+    }
+   }
+  },
+  {
+   "command": "clip.add",
+   "parameters": {
+    "clip": {
+     "lane": 13,
+     "start": 5760,
+     "length": 3840,
+     "muted": false,
+     "type": "automation",
+     "target": {
+      "kind": "deviceParameter",
+      "device": 5,
+      "parameterId": "size"
+     },
+     "points": [
+      {
+       "time": 0,
+       "value": 0.0,
+       "curve": 0.0
+      },
+      {
+       "time": 3840,
+       "value": 1.0,
+       "curve": 0.5
+      }
+     ]
+    }
+   }
+  },
+  {
+   "command": "clip.addPattern",
+   "parameters": {
+    "lane": "$7.lane",
+    "pattern": "$4.pattern",
+    "start": 8640,
+    "length": 2880,
+    "offset": 0
+   }
+  },
+  {
+   "command": "clip.addPattern",
+   "parameters": {
+    "lane": "$16.lane",
+    "pattern": "$13.pattern",
+    "start": 5760,
+    "length": 2880,
+    "offset": 0
+   }
+  },
+  {
+   "command": "clip.addAutomation",
+   "parameters": {
+    "laneName": "Pads volume",
+    "start": 5760,
+    "length": 5761,
+    "target": {
+     "kind": "channelVolume",
+     "channel": "$1.channel"
+    },
+    "points": [
+     {
+      "time": 0,
+      "value": 0.3012
+     },
+     {
+      "time": 5760,
+      "value": 0.7408
+     }
+    ]
+   }
+  },
+  {
+   "command": "insert.setSend",
+   "parameters": {
+    "insert": 2,
+    "target": 4,
+    "levelDb": -14.0
+   }
+  },
+  {
+   "command": "insert.addEffect",
+   "parameters": {
+    "insert": 6,
+    "device": {
+     "kind": "stock",
+     "stockType": "spinus.ducker"
+    }
+   }
+  },
+  {
+   "command": "device.setParameters",
+   "parameters": {
+    "device": "$33.device",
+    "text": {
+     "Amount": "40%"
+    }
+   }
+  },
+  {
+   "command": "insert.setSidechain",
+   "parameters": {
+    "insert": 6,
+    "source": 2
+   }
+  }
+ ]
+}

@@ -2,6 +2,7 @@
 
 #include "core/FileDialog.h"
 #include "AnalysisEnginePage.h"
+#include "AgentInterfacePage.h"
 #include "ai/AiService.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -26,6 +27,12 @@ public:
     /** Turns the open Options > AI window to its Analysis engine page. */
     static void showAnalysisEngineIfOpen();
     static void closeWindow();
+    /** The live interface for coding agents, for its page here (Coding agents...). */
+    static void setAgentInterface (ai::AgentInterface*);
+    /** Reads the Coding agents page again, if it is open. */
+    static void refreshIfOpen();
+    void showAgents (bool);
+    AgentInterfacePage* getAgentsPage() const noexcept { return agentsPage.get(); }
 
     //==============================================================================
     // For the buttons and for tests. Results arrive asynchronously; refresh() reloads everything.
@@ -130,6 +137,8 @@ private:
     std::unique_ptr<juce::ListBox> modelList;
     juce::Label modelsIntro, modelsStatus;
     std::unique_ptr<AnalysisEnginePage> enginePage;
+    std::unique_ptr<AgentInterfacePage> agentsPage;
+    juce::TextButton agentsButton { "Coding agents..." };
     juce::TextButton engineButton { "Analysis engine..." };
     juce::TextButton manualSearchButton { "Manual search..." }, downloadModelButton { "Download" },
         useModelButton { "Use" }, keywordsButton { "Keywords only" }, removeModelButton { "Remove" },

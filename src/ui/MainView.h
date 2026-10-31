@@ -9,6 +9,7 @@
 #include "commands/CommandHistory.h"
 #include "plugins/PluginDownloads.h"
 #include "plugins/windows/WindowsPlugins.h"
+#include "ai/AgentInterface.h"
 #include "ai/AiService.h"
 #include "session/ProjectDocument.h"
 
@@ -159,6 +160,11 @@ public:
 
     /** AI: the service behind Options > AI and the assistant panel. */
     void setAiService (ai::AiService*);
+    /** The live interface for coding agents: while an agent is connected the top bar shows it, with Disconnect and
+        Undo the agent's changes. */
+    void setAgentInterface (ai::AgentInterface*);
+    /** The menu of the top bar's agent button. */
+    void showAgentMenu();
     void showAiSettings();
 
     /** Options > AI > Show experimental features (off without an AI service). While it is off the experimental
@@ -302,6 +308,7 @@ private:
     std::unique_ptr<Browser> browser;
     std::unique_ptr<juce::Component> assistant; // the AssistantPanel once AI is wired in, else a placeholder
     ai::AiService* aiService = nullptr;
+    ai::AgentInterface* agentInterface = nullptr;
     int aiStateListener = 0;
     /** Record idea and Generate show only while AI is on. */
     void updateAiButtons();

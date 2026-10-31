@@ -1,12 +1,16 @@
 # spinus_core: everything except the executable entry point, so tests can link it.
 
 add_library (spinus_core STATIC
+    ai/AgentInterface.cpp
+    ai/AgentInterface.h
     ai/AiService.cpp
     ai/AiService.h
     ai/AnalysisJobs.cpp
     ai/AnalysisJobs.h
     ai/Proposal.cpp
     ai/Proposal.h
+    ai/ProjectContext.cpp
+    ai/ProjectContext.h
     commands/Command.cpp
     commands/Command.h
     commands/CommandHistory.cpp
@@ -285,6 +289,8 @@ add_library (spinus_core STATIC
     ui/Analyzer.h
     ui/Automixer.h
     ui/Launcher.h
+    ui/AgentInterfacePage.cpp
+    ui/AgentInterfacePage.h
     ui/AnalysisEnginePage.cpp
     ui/AnalysisEnginePage.h
     ui/AssistantPanel.cpp

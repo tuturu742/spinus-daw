@@ -34,6 +34,12 @@ using Say = std::function<void (const juce::String&)>;
 juce::var resolveReferences (const juce::var& value, const std::map<juce::String, juce::var>& results,
                              juce::String& error);
 
+/** Steps ([{command, parameters or params}]) with their automation points' `text` ("-12 dB", "30% L", "1.2 kHz")
+    read as values for each clip's target, as --run reads them; the steps as they were when none has text. A text
+    that can't be read sets `error` (the first one). A target made by an earlier step of the same list ("$3.device")
+    can't be read yet: its points stay as they are, and the command says what is wrong. */
+juce::var readStepTexts (Session&, const juce::var& steps, juce::String& error);
+
 struct RunOptions
 {
     juce::File scriptFolder; // relative file paths in parameters are looked for here first

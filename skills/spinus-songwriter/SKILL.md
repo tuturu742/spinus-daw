@@ -16,6 +16,21 @@ the window instead, that Spinus is too old for this skill: tell the user to upda
 (on Windows no change is needed). `spinus --help` lists the options. Starting Spinus with a project path,
 or with nothing, opens the full app on the user's screen: don't.
 
+## 0. If Spinus's live interface is on
+
+If the user has Spinus open with **Options › AI › Coding agents** turned on, and has set you up with its MCP
+server (`spinus`, `http://127.0.0.1:47219/mcp`), work on their open song through it instead of `--run`. Its
+tools:
+
+- **Spinus's own:** `song_summary`, `run_commands` (the same commands, with `"$1.channel"` references), `command_help`,
+  `list_devices`, `render` (loudness of the mix, each section and each part), `undo_last`.
+- **With AI on in Spinus,** the music tools: `song_overview`, `read_part`, `write_part`, `motif`, `place_motif`,
+  `add_part`, `insert_bars`, `copy_bars`, `automate`, `add_effect`, `send`, `duck`, `bus`, `set_sound`,
+  `shape_sound`, `check`.
+
+Every change applies at once as one undo step, and the user hears it in Spinus. The craft below still applies;
+check and render after each big change. Tell the user what you changed.
+
 ## 1. Find Spinus and its reference material
 
 | Install | Run Spinus as (`spinus` below) | Demo songs, samples and the manual |
