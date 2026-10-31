@@ -30,6 +30,12 @@ public:
     /** Adds a channel playing this instrument (a bundled device or an installed plugin). */
     bool addChannelWith (const model::Device& instrument, const juce::String& name);
 
+    /** Replaces the channel's instrument (FL: Replace), keeping its notes, Playlist clips, insert, volume, pan,
+        colour and group; one undo step. It keeps its name unless that was the old instrument's name: then it
+        takes `entryName`, the new instrument's name in the menu. Automation of the old instrument's settings is
+        removed (the hint bar says so). */
+    bool replaceInstrument (model::ChannelId, const model::Device& instrument, const juce::String& entryName);
+
     /** Adds a Sampler channel playing this audio file, named after it (FL: drop a sample on the rack).
         Fails, adding nothing, if the file is not audio Spinus can read. */
     bool addSamplerChannel (const juce::File&);

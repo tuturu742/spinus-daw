@@ -9,7 +9,7 @@ sequencer** for the current pattern (chosen in the top bar, or by clicking a pat
 | Part | What it does |
 |---|---|
 | Green light | Click to mute or unmute the channel. |
-| Name | Click to select the channel for the Piano Roll (it gets a blue outline). Double-click to open the instrument's window. The name button is drawn in the channel's colour. Right-click for options: **Rename...**, **Colour**, **Group** (see below), Open instrument window, Create automation clip (volume, pan, or an instrument setting; see [Automation clips](playlist.md#automation-clips)), **Slices to pattern** for a [Beat Slicer](beat-slicer.md) with a loop, **Freeze** / **Unfreeze** (play the channel as audio to save CPU, see [Freeze](freeze.md); a frozen channel shows a blue snowflake), Delete channel. |
+| Name | Click to select the channel for the Piano Roll (it gets a blue outline). Double-click to open the instrument's window. The name button is drawn in the channel's colour. Right-click for options: **Rename...**, **Colour**, **Group** (see below), Open instrument window, **Replace instrument** (see below), Create automation clip (volume, pan, or an instrument setting; see [Automation clips](playlist.md#automation-clips)), **Slices to pattern** for a [Beat Slicer](beat-slicer.md) with a loop, **Freeze** / **Unfreeze** (play the channel as audio to save CPU, see [Freeze](freeze.md); a frozen channel shows a blue snowflake), Delete channel. |
 | Two knobs | Volume and pan. Drag to change; double-click to reset. |
 | Steps | Each box is a sixteenth note. Click a box to add a note (C5), click again to remove it. Boxes are grouped by beat. There is one bar of steps in the pattern's time signature: 16 in 4/4, 12 in 3/4 or 6/8. |
 | **Triplet steps** | Switches the current pattern's boxes to sixteenth-note triplets: six per beat, 24 in a 4/4 bar, for shuffles and triplet hi-hats. Click again for sixteenths. Your notes stay where they are; ones that no longer fit the boxes show as a note picture. |
@@ -27,6 +27,23 @@ appears next to **Swing**: show **All channels**, one group, or the channels **N
 **Group › Send group "Drums" through a new mixer bus** adds a mixer insert named after the group and
 plays the group's channels through it: one fader and one set of effects for all the drums (see the
 [Mixer](mixer.md)). It is one undo step.
+
+## Replace instrument
+
+To try another sound on a channel without redoing its notes (FL's **Replace**): right-click the channel's
+name › **Replace instrument** and choose an instrument from the same list as **+ Add channel**. The new
+instrument plays the channel's notes in every pattern, and the channel keeps its place in the Playlist, its
+mixer insert, volume, pan, colour and group. Its name stays too, unless it was the old instrument's name
+("3x Osc"): then the channel, and its own mixer insert, take the new instrument's name.
+
+![Replace instrument in a channel's menu](images/channel-rack-replace.png)
+
+- [Automation clips](playlist.md#automation-clips) of the old instrument's settings (a cutoff, say) are
+  removed, since the new instrument has other settings; the hint bar says how many. Automation of the
+  channel's volume and pan stays.
+- A frozen channel is unfrozen: the new instrument plays live.
+- It is one undo step: **Ctrl+Z** brings the old instrument back with all its settings, and its automation.
+- A channel with no instrument shows **Choose instrument** instead.
 
 ## Good to know
 

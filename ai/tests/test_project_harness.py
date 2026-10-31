@@ -318,3 +318,34 @@ def write_example() -> None:
     target = ROOT / "tests/ai/files/harness-proposal.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(example_edits(), indent=1) + "\n")
+
+
+def test_a_part_changes_instrument_keeping_its_notes() -> None:
+    project = song()
+    project["playlist"]["clips"].append(
+        {
+            "id": 44,
+            "lane": 41,
+            "start": 0,
+            "length": BAR,
+            "type": "automation",
+            "target": {"kind": "deviceParameter", "device": 10, "parameterId": "cutoff"},
+            "points": [{"time": 0, "value": 0.5}],
+        }
+    )
+    h = harness(project)
+    text, failed = h.call("set_sound", {"part": "Surge", "instrument": "3x Osc", "preset": "Reese Bass"})
+    assert not failed, text
+    assert h.steps[0] == {
+        "command": "channel.replaceInstrument",
+        "parameters": {"channel": 9, "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}, "name": "Surge"},
+    }
+    # The preset is the new instrument's.
+    assert h.steps[1] == {"command": "device.loadPreset", "parameters": {"device": "$1.device", "preset": "Reese Bass"}}
+    assert "now 3x Osc" in text
+    assert not any(c["id"] == 44 for c in h.clips())  # the old instrument's automation went
+    valid(h.steps)
+    # Only a new instrument, no preset or settings: one step.
+    h = harness()
+    text, failed = h.call("set_sound", {"part": "Bass", "instrument": "3x Osc"})
+    assert not failed and [s["command"] for s in h.steps] == ["channel.replaceInstrument"], text

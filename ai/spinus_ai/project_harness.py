@@ -303,8 +303,13 @@ TOOLS = [
     ),
     Tool(
         "set_sound",
-        "Change a part's sound: a preset of its instrument and/or settings by name, as the device shows them.",
-        schema({"part": PART, "preset": {"type": "string"}, "settings": SETTINGS}, ["part"]),
+        "Change a part's sound: another instrument found by words (as add_part; its notes, mix and look stay, "
+        "automation of the old instrument's settings goes), a preset of its instrument and/or settings by name, as "
+        "the device shows them.",
+        schema(
+            {"part": PART, "instrument": {"type": "string"}, "preset": {"type": "string"}, "settings": SETTINGS},
+            ["part"],
+        ),
     ),
     Tool(
         "shape_sound",
@@ -1165,20 +1170,46 @@ class ProjectHarness:
                 i["output"] = f"${number}.insert"
         return f"Made the bus {name} for {len(inserts)} parts."
 
-    def tool_set_sound(self, part: str, preset: str = "", settings: dict[str, Any] | None = None) -> str:
+    def tool_set_sound(
+        self, part: str, preset: str = "", settings: dict[str, Any] | None = None, instrument: str = ""
+    ) -> str:
         channel = self.part(part)
+        if not instrument and not preset and not settings:
+            raise Mistake("give an instrument, a preset, settings, or some of them")
+        if instrument:
+            new = self.find_device(instrument, "instrument")
+            number = self.step(
+                "channel.replaceInstrument",
+                {"channel": channel.get("id"), "instrument": new, "name": channel.get("name")},
+                f"{channel.get('name')} now plays {self.device_name(new)}",
+            )
+            old_id = (channel.get("instrument") or {}).get("id")
+            channel["instrument"] = {**new, "id": f"${number}.device"}
+            # Automation of the old instrument's settings goes with it (as Spinus's command does).
+            self.project["playlist"]["clips"] = [
+                c
+                for c in self.clips()
+                if not (
+                    old_id is not None
+                    and c.get("type") == "automation"
+                    and (c.get("target") or {}).get("kind") == "deviceParameter"
+                    and (c.get("target") or {}).get("device") == old_id
+                )
+            ]
         device = channel.get("instrument") or {}
         if not device:
             raise Mistake(f"{channel.get('name')} has no instrument")
         if not preset and not settings:
-            raise Mistake("give a preset, settings, or both")
+            return f"{channel.get('name')}: now {self.device_name(device)}"
         if preset:
             self.step("device.loadPreset", {"device": device.get("id"), "preset": preset})
         if settings:
             self.step("device.setParameters", {"device": device.get("id"), "text": text_settings(settings)})
         self.changes.append(f"{channel.get('name')}'s sound changed")
         return f"{channel.get('name')}: " + ", ".join(
-            [f"preset {preset}"] * bool(preset) + [f"{k} {v}" for k, v in (settings or {}).items()]
+            [f"now {self.device_name(device)}"] * bool(instrument)
+            + [f"preset {preset}"] * bool(preset)
+            + [f"{k} {v}" for k, v in (settings or {}).items()]
         )
 
     def tool_shape_sound(self, part: str, words: list[str], amount: str = "clearly") -> str:

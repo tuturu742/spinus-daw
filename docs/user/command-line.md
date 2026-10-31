@@ -41,7 +41,8 @@ as `spinus --commands` lists them.
 
 **`as` names the step's result.** `channel.add`'s result is the new channel's IDs: `{"channel": 5,
 "insert": 7, "device": 6}`. A later step writes `"$bass.channel"`, `"$bass.insert"` or `"$bass.device"`
-where it needs one of them. `"$3.pattern"` is the third step's result.
+where it needs one of them. `"$3.pattern"` is the third step's result. `channel.replaceInstrument` (another
+instrument on a channel, keeping its notes) gives the new instrument's `"device"` the same way.
 
 Without `--save`, nothing is saved: a dry run that checks every step. Each command is one undo step, exactly
 as if you had done it yourself. A step that fails stops the script:

@@ -272,10 +272,12 @@ TEST_CASE ("The AI service knows what each command returns, for references betwe
             table[name] = fields;
         }
     }
-    REQUIRE (table.size() == 18);
+    REQUIRE (table.size() == 19);
 
     const std::map<juce::String, juce::String> calls {
         { "channel.add", R"({"name": "Hats", "instrument": {"kind": "stock", "stockType": "spinus.sampler"}})" },
+        { "channel.replaceInstrument",
+          R"({"channel": 9, "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}})" },
         { "insert.add", R"({"name": "Vocals"})" },
         { "insert.addEffect", R"({"insert": 6, "device": {"kind": "stock", "stockType": "spinus.filter"}})" },
         { "insert.addBus", R"({"name": "Drums", "inserts": [6]})" },

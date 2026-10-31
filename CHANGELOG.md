@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Channel Rack: replace instrument
+
+- **Replace a channel's instrument** (FL's Replace): right-click a channel's name › **Replace instrument**. The new
+  instrument plays the channel's notes; its Playlist clips, mixer insert, volume, pan, colour and group stay.
+  Automation of the old instrument's settings is removed; undo brings it all back. Scripts and agents use the
+  `channel.replaceInstrument` command, and the assistant's `set_sound` can change a part's instrument.
+
 ### Coding agents and the assistant on your open song
 
 - **Let a coding agent work on your project:** turn on **Options › AI › Coding agents** and Claude Code, Codex,
