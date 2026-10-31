@@ -1169,7 +1169,7 @@ TEST_CASE ("The newest undo steps can be joined into one", "[commands]")
     CHECK (history.getProject().channels.size() == 3);
 }
 
-TEST_CASE ("device.setParameters reads text for Spinus devices only", "[commands]")
+TEST_CASE ("device.setParameters reads text for Spinus devices; for plugins only with a Session", "[commands]")
 {
     CommandHistory history (makeExample());
     auto add =
@@ -1193,7 +1193,8 @@ TEST_CASE ("device.setParameters reads text for Spinus devices only", "[commands
     CHECK (parameters.at ("ratio") > 0.0f);
     CHECK (parameters.at ("ratio") < 1.0f);
 
-    // The LSP compressor (device 3) is a plugin: values from 0 to 1 only.
+    // The LSP compressor (device 3) is a plugin: without a Session to open it, values from 0 to 1 only
+    // (DeviceParametersTests reads plugins' text).
     auto lsp = make ("device.setParameters", R"({"device": 3, "text": {"ratio": "4:1"}})");
     const auto result = history.perform (std::move (lsp));
     CHECK (result.failed());

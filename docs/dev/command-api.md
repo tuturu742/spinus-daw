@@ -43,7 +43,13 @@ A device's settings have one stored form and one typed form, and nothing else:
 
 Everything that turns text into a setting follows the typed rule: the knobs' text boxes in Spinus's own
 devices (every number setting is a `param::FloatSetting`, and a test checks each one reads back what it
-shows), the Automation editor's Value box (`Session::parseTargetValue`), `device.setParameters`' `text`
-(Spinus devices only; it is read once, on a fresh copy of the device, into stored values), the Automixer,
-the assistant (its prompt and the schema tell it to use `text`) and the demo song generators. Another
-plugin's text is read by the plugin itself, once the unit agrees with what it shows.
+shows), the Automation editor's Value box (`Session::parseTargetValue`), `device.setParameters`' `text` (read once
+into stored values: a Spinus device's on a fresh copy of the device, another plugin's on the plugin as it
+plays, or on a copy when the same proposal adds it), the Automixer, the assistant (its prompt and the schema
+tell it to use `text`) and the demo song generators. Another plugin's text is read by what the plugin shows,
+once the unit agrees with it (`param::byPluginText`): the plugin's own reading when it shows what was typed,
+else the value is found from what it shows at 200 points over its range (a VST3's separate unit label
+counts), narrowed between the two the number lies between, to the middle of the values that show the same;
+a word it shows ("Hall", "Off") reads too. A plugin that shows bare numbers ("2.575" for a decay in seconds)
+takes "2.5 s" as 2.5 when only that is in its range (else as 2500, in milliseconds). A plugin that shows no numbers is refused, with what it shows at
+a few points.

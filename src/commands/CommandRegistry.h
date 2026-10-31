@@ -4,8 +4,23 @@
 
 #include <functional>
 
+namespace juce
+{
+class AudioProcessor;
+}
+
 namespace spinus::commands
 {
+
+/** How device.setParameters reads 'text' for a device that is not Spinus's own (a bundled plugin, any VST3,
+    CLAP, LV2 or VST): the plugin as it plays in the project, or a copy made for reading (a device added in the
+    same proposal is not playing yet). Nothing when it cannot be loaded here. */
+using PluginForText = std::function<std::shared_ptr<juce::AudioProcessor> (const model::Device&)>;
+
+/** The Session that runs commands gives its plugins (message thread). The last one set is used; an owner
+    clears only its own. Without one (a command history on its own), such text is refused: values only. */
+void setPluginForText (const void* owner, PluginForText);
+void clearPluginForText (const void* owner);
 
 /** Builds a JSON Schema (draft 2020-12) object for a command's parameters. */
 class ParameterSchema

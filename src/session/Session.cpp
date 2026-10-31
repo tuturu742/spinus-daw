@@ -13,6 +13,34 @@ namespace spinus
 
 namespace te = tracktion;
 
+namespace
+{
+/** A device's plugin for reading its settings as text (device.setParameters): as it plays in the project, or a
+    copy made for it, out of the project (a device added in the same proposal does not play yet). */
+std::shared_ptr<juce::AudioProcessor> pluginForText (te::Engine& engine, engine::EngineAdapter& adapter,
+                                                     engine::DeviceFactory& devices, const model::Device& device)
+{
+    if (auto* external = dynamic_cast<te::ExternalPlugin*> (adapter.getDevicePlugin (device.id)))
+        if (auto* instance = external->getAudioPluginInstance())
+            return { instance, [keep = te::Plugin::Ptr (external)] (juce::AudioProcessor*) {} };
+
+    struct Copy
+    {
+        std::unique_ptr<te::Edit> edit;
+        te::Plugin::Ptr plugin;
+        ~Copy() { plugin = nullptr; } // before its edit
+    };
+    auto copy = std::make_shared<Copy>();
+    copy->edit = te::Edit::createSingleTrackEdit (engine);
+    copy->plugin = devices.create (*copy->edit, device);
+    auto* external = dynamic_cast<te::ExternalPlugin*> (copy->plugin.get());
+    auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
+    if (instance == nullptr)
+        return nullptr;
+    return { copy, instance };
+}
+} // namespace
+
 Session::Session (te::Engine& engine, std::unique_ptr<engine::DeviceFactory> d)
     : devices (d != nullptr ? std::move (d) : std::make_unique<engine::DefaultDeviceFactory>()),
       edit (te::Edit::createSingleTrackEdit (engine)),
@@ -32,6 +60,8 @@ Session::Session (te::Engine& engine, std::unique_ptr<engine::DeviceFactory> d)
     historyListener = history.addListener ([this] (const commands::ChangeSet& c) { projectChanged (c); });
     controlWatcher = std::make_unique<ControlWatcher> (*this);
     edit->getParameterChangeHandler().addListener (*controlWatcher);
+    commands::setPluginForText (this, [this] (const model::Device& device)
+                                { return pluginForText (edit->engine, *adapter, *devices, device); });
 }
 
 void Session::ControlWatcher::pluginParameterChanged (te::AutomatableParameter& parameter, bool isFollowingAutomation)
@@ -73,6 +103,7 @@ juce::String Session::describeLastMovedControl() const
 
 Session::~Session()
 {
+    commands::clearPluginForText (this);
     edit->getParameterChangeHandler().removeListener (*controlWatcher);
     controlWatcher->cancelPendingUpdate();
     history.removeListener (historyListener);

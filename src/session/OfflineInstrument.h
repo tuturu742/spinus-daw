@@ -14,8 +14,8 @@ namespace spinus
     (inside Spinus) and the sound index's helper process (session/SoundRender), so both record presets the
     same way.
 
-    Prepares the plugin when made (stereo out, at sampleRate and blockSize). loadPreset() runs on the message
-    thread; render() may then be used from one other thread at a time (it is processed like an audio thread
+    Prepares the plugin when made (its own buses, the main output on; at sampleRate and blockSize). loadPreset() runs on
+   the message thread; render() may then be used from one other thread at a time (it is processed like an audio thread
     would, but never on Spinus's audio thread). */
 class OfflineInstrument
 {

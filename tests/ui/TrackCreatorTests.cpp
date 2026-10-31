@@ -1245,7 +1245,7 @@ TEST_CASE ("Track creator sounds for each part screenshot for the manual", "[.sc
     SpinusLookAndFeel look (Theme::dark());
     PartSoundsPanel panel (a.session, [context] { return context; });
     panel.setLookAndFeel (&look);
-    panel.setSize (700, 560);
+    panel.setSize (820, 560);
     panel.setTune (true);
     panel.setTuneTries (30);
     REQUIRE (panel.suggestParts ("sketch"));
@@ -1565,10 +1565,19 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     panel.setParts ({ { "bass", "Bass", "bass" } });
     CHECK (changes > 0);
 
-    // Without an instrument for the part, there is nothing to open.
+    // Without an instrument for the part, there is nothing to open: the button is off and says why.
+    CHECK (panel.whySaveSoundIsOff (0).contains ("Other sound"));
     CHECK_FALSE (panel.saveSound (0));
     CHECK (panel.getStatusText().contains ("Other sound"));
     CHECK (SaveSoundWindow::getNumOpen() == 0);
+    // Nor with a sample: not an instrument plugin's own sound.
+    parts::Choice sample;
+    sample.kind = parts::Choice::Kind::sample;
+    sample.name = "808.wav";
+    sample.file = "/nowhere/808.wav";
+    REQUIRE (panel.pickSound (0, sample));
+    CHECK (panel.whySaveSoundIsOff (0).contains ("plays samples"));
+    CHECK_FALSE (panel.saveSound (0));
 
     // The part plays 3x Osc: its window opens outside the project, the user sets it up and saves.
     parts::Choice start;
@@ -1577,6 +1586,7 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     start.source = osc;
     start.name = "Default sound";
     REQUIRE (panel.pickSound (0, start));
+    CHECK (panel.whySaveSoundIsOff (0).isEmpty()); // an instrument not measured yet is fine
     const auto channelsBefore = session.getProject().channels.size();
     const bool opened = panel.saveSound (0);
     INFO (panel.getStatusText());

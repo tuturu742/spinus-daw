@@ -5,7 +5,12 @@ namespace spinus
 
 OfflineInstrument::OfflineInstrument (juce::AudioPluginInstance& i) : instance (i)
 {
-    instance.setPlayConfigDetails (0, 2, sampleRate, blockSize);
+    // The plugin's buses stay as it has them, as a host plays it (switching its input off made a bridged
+    // Windows instrument with an input and many outputs crash on its first block): only a main output that is
+    // off is switched on, in stereo. The sound is the main output's first two channels (one, twice, if mono).
+    if (instance.getBusCount (false) > 0 && instance.getChannelCountOfBus (false, 0) == 0)
+        instance.setChannelLayoutOfBus (false, 0, juce::AudioChannelSet::stereo());
+    instance.setRateAndBufferSizeDetails (sampleRate, blockSize);
     instance.prepareToPlay (sampleRate, blockSize);
 }
 
@@ -14,6 +19,8 @@ OfflineInstrument::~OfflineInstrument() { instance.releaseResources(); }
 void OfflineInstrument::play (int samples, const juce::MidiBuffer& midi, juce::AudioBuffer<float>* into)
 {
     const auto channels = juce::jmax (2, instance.getTotalNumOutputChannels(), instance.getTotalNumInputChannels());
+    // The main output's channels (the first ones); a mono one plays on both sides.
+    const auto right = instance.getBusCount (false) > 0 && instance.getChannelCountOfBus (false, 0) == 1 ? 0 : 1;
     juce::AudioBuffer<float> block (channels, blockSize);
     for (int done = 0; done < samples; done += blockSize)
     {
@@ -25,10 +32,10 @@ void OfflineInstrument::play (int samples, const juce::MidiBuffer& midi, juce::A
         instance.processBlock (block, events);
         if (into != nullptr && into->getNumChannels() >= 2)
             for (int c = 0; c < 2; ++c)
-                into->addFrom (c, done, block, c, 0, count);
+                into->addFrom (c, done, block, c == 0 ? 0 : right, 0, count);
         else if (into != nullptr)
             for (int c = 0; c < 2; ++c)
-                into->addFrom (0, done, block, c, 0, count, 0.5f);
+                into->addFrom (0, done, block, c == 0 ? 0 : right, 0, count, 0.5f);
     }
 }
 

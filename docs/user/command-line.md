@@ -182,7 +182,11 @@ A setting with a fixed list of values (a filter type, a mode, a switch) also has
 name, as `text` takes it (`"Low cut"`, `"Bell"`).
 
 `device.setParameters` also takes settings in their own units through `text`: `{"cutoff": "1.2 kHz",
-"attack": "20 ms"}`, so a script rarely needs the 0 to 1 values.
+"attack": "20 ms"}`, so a script rarely needs the 0 to 1 values. This works for any plugin too, VST3,
+CLAP, LV2 or VST (the free reverbs, a limiter, Windows plugins): `{"Decay": "2.5 s", "Threshold": "-12 dB"}`,
+by the setting's name as the plugin shows it, with the value as it shows it. Spinus reads where on the
+setting's range the plugin shows that value. When a plugin can't be read that way, the error says what it
+shows at a few points ("-60.0 dB" at 0 ... "0.0 dB" at 1); use `values` (0 to 1) for it then.
 
 The last line of `--describe all` lists the free plugins that aren't installed here (`notInstalled`).
 Spinus's own effects have no reverb or delay: those come from the free plugins (the Dragonfly reverbs, and

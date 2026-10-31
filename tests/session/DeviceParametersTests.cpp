@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "ai/Proposal.h"
 #include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
@@ -243,6 +244,68 @@ TEST_CASE ("Settings saved by the plugin's own parameter IDs (older projects) st
     REQUIRE (setParameters (session, effect, R"({"0": 0.5})"));
     CHECK (juce::approximatelyEqual (byName (*instance, "Drive")->getValue(), 0.5f));
     CHECK (juce::approximatelyEqual (byName (*instance, "Level")->getValue(), 0.9f));
+}
+
+TEST_CASE ("device.setParameters reads text for any plugin, as the plugin shows its values", "[session][engine]")
+{
+    EngineHost host { { .openAudioDevice = false } };
+    Session session (host.getEngine(), makeDevices (host.getEngine()));
+    const auto plugin = installParamIdsPlugin (host.getEngine());
+    const auto effect = addEffect (session, plugin);
+    auto* instance = instanceOf (session, effect);
+    REQUIRE (instance != nullptr);
+    auto* drive = byName (*instance, "Drive");
+    auto* tone = byName (*instance, "Tone");
+    auto* mix = byName (*instance, "Mix");
+    auto* level = byName (*instance, "Level");
+    REQUIRE ((drive != nullptr && tone != nullptr && mix != nullptr && level != nullptr));
+    auto setText = [&] (model::DeviceId device, const juce::String& text)
+    {
+        return session.getHistory().perform (make (
+            "device.setParameters", R"({"device": )" + juce::String (device.value) + R"(, "text": )" + text + "}"));
+    };
+
+    // The plugin reads no text itself: what it shows over its range says where each value is. By name or ID.
+    const auto done = setText (effect, R"({"Drive": "-12 dB", "1": "1.2 kHz", "Mix": "35", "level": "2.5 s"})");
+    INFO (done.getErrorMessage());
+    REQUIRE (done.wasOk());
+    CHECK (drive->getText (drive->getValue(), 100) == "-12.0 dB");
+    CHECK (tone->getText (tone->getValue(), 100) == "1200 Hz"); // logarithmic
+    CHECK (mix->getText (mix->getValue(), 100) == "35%");
+    CHECK (level->getText (level->getValue(), 100) == "2.500"); // seconds, shown without the unit
+    CHECK (std::abs (drive->getValue() - 0.8f) < 0.002f);
+
+    // A word it shows, and a number past its range (the closest end).
+    REQUIRE (setText (effect, R"({"Level": "Off", "Drive": "+6 dB"})").wasOk());
+    CHECK (juce::approximatelyEqual (level->getValue(), 0.0f));
+    CHECK (juce::approximatelyEqual (drive->getValue(), 1.0f));
+
+    // What it cannot read says what it shows.
+    const auto wrongUnit = setText (effect, R"({"Drive": "50%"})");
+    CHECK (wrongUnit.failed());
+    CHECK (wrongUnit.getErrorMessage().contains ("\"-60.0 dB\" at 0"));
+    CHECK (wrongUnit.getErrorMessage().contains ("\"0.0 dB\" at 1"));
+    CHECK (setText (effect, R"({"Level": "Loud"})").failed());
+    CHECK (setText (effect, R"({"Width": "50%"})").getErrorMessage().contains ("has no setting"));
+
+    // In one proposal with the effect it sets (not playing yet): read on a copy of the plugin.
+    auto steps = juce::JSON::parse (R"([{"command": "insert.addEffect", "parameters": {"insert": 1}},
+        {"command": "device.setParameters", "parameters": {"device": "$1.device", "text": {"Mix": "70%"}}}])");
+    steps[0]["parameters"].getDynamicObject()->setProperty ("device", model::deviceToJson (plugin));
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("summary", "Add Param IDs at 70%");
+    o->setProperty ("steps", steps);
+    auto proposal = ai::Proposal::prepare (juce::var (o), session.getHistory());
+    INFO (proposal.error);
+    REQUIRE (proposal.canApply());
+    REQUIRE (proposal.apply (session.getHistory()).wasOk());
+    session.getEdit().dispatchPendingUpdatesSynchronously();
+    const auto* insert = session.getProject().findInsert (model::InsertId { 1 });
+    REQUIRE (insert != nullptr);
+    const auto& added = insert->effects.back().device;
+    CHECK (added.id != effect);
+    REQUIRE (added.parameters.contains ("2"));
+    CHECK (std::abs (added.parameters.at ("2") - 0.7f) < 0.003f);
 }
 
 namespace

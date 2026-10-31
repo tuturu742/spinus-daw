@@ -79,6 +79,7 @@ add_executable (spinus_tests
     session/SoundDescriptorsTests.cpp
     session/SoundIndexTests.cpp
     session/PartSoundsTests.cpp
+    session/OfflineInstrumentTests.cpp
     session/SongWriterTests.cpp
     session/SuggestionsTests.cpp
     session/TunerTests.cpp
@@ -224,6 +225,9 @@ add_dependencies (spinus_tests spinus_test_sidechain_clap)
 # An effect whose CLAP parameter IDs are not their positions (DeviceParametersTests.cpp).
 add_library (spinus_test_param_ids_clap MODULE plugins/ParamIdsClap.c)
 target_include_directories (spinus_test_param_ids_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+if (NOT WIN32)
+    target_link_libraries (spinus_test_param_ids_clap PRIVATE m)
+endif()
 set_target_properties (spinus_test_param_ids_clap PROPERTIES
     PREFIX "" OUTPUT_NAME "param-ids" SUFFIX ".clap"
     LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
