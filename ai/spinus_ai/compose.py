@@ -169,7 +169,7 @@ class Setup:
     parts: list[dict[str, str]]
     candidates: dict[str, list[dict[str, str]]] = field(default_factory=dict)  # part id -> [{id, name}]
     current: dict[str, str] = field(default_factory=dict)  # part id -> the sound it has now, in words
-    # Effects the user has that Spinus has none of its own of: "reverb" or "delay" -> their names (plugins).
+    # The user's send effects: "reverb" or "delay" -> their names (plugins; Spinus Delay is always there besides).
     effects: dict[str, list[str]] = field(default_factory=dict)
 
     @staticmethod

@@ -4,6 +4,8 @@
 #include "ai/Proposal.h"
 #include "commands/CommandHistory.h"
 #include "session/PartSounds.h"
+#include "dsp/ParameterText.h"
+#include "dsp/delay/DelayProcessor.h"
 #include "dsp/drums/StarterPack.h"
 #include "session/SongWriter.h"
 
@@ -860,4 +862,78 @@ TEST_CASE ("Song writer: the AI's effects, buses, sends and ducking are part of 
     CHECK (apply (false, other).failed());
     CHECK (other.getUndoDescriptions().isEmpty());
     CHECK (apply (true, other).wasOk());
+}
+
+TEST_CASE ("Song writer: a delay send gets a Delay bus with the Spinus Delay, fully wet, in time with the song",
+           "[song]")
+{
+    auto song = makeFullSong();
+    const auto layers = song::layersOf (song);
+    REQUIRE (layers.size() >= 2);
+    const auto& a = layers[0];
+    const auto& b = layers[1];
+    song.getDynamicObject()->setProperty ("production", juce::JSON::parse (R"({
+        "effects": [{"id": "x-delay", "part": ")" + b.id + R"(", "effect": "delay", "plugin": "Spinus Delay",
+                     "settings": {"note": "1/8", "mix": "20%"}}],
+        "returns": {"delay": "Spinus Delay"},
+        "returnSettings": {"delay": {"note": "1/4 dotted", "mode": "Ping-pong", "mix": "40%"}},
+        "sends": {")" + a.id + R"(": {"delay": -9}}
+    })"));
+    auto apply = [&] (bool withoutSettings, commands::CommandHistory& history)
+    {
+        song::Options options; // no delay plugin of the user's: Spinus's own needs none
+        options.name = song::nextSongName (history.getProject());
+        options.withoutEffectSettings = withoutSettings;
+        juce::String error;
+        const auto json = song::makeProposal (song, history.getProject(), options, &error);
+        INFO (error);
+        auto proposal = ai::Proposal::prepare (json, history);
+        return proposal.canApply() ? proposal.apply (history) : juce::Result::fail (proposal.error);
+    };
+    auto delayOf = [] (const model::Project& project) -> const model::Device*
+    {
+        for (const auto& insert : project.mixer.inserts)
+            if (insert.name.endsWith (" Delay"))
+                return insert.effects.size() == 1 ? &insert.effects[0].device : nullptr;
+        return nullptr;
+    };
+    auto parameter = [] (const model::Device& d, const char* id, const juce::String& text)
+    {
+        // The value Spinus Delay's setting has when it shows `text`.
+        dsp::DelayProcessor shown;
+        auto* p = shown.getParameterState().getParameter (id);
+        const auto value = dsp::param::normalisedForText (*p, text);
+        REQUIRE (value.has_value());
+        const auto found = d.parameters.find (id);
+        REQUIRE (found != d.parameters.end());
+        CHECK (found->second == Catch::Approx (value.value_or (-1.0f)).margin (1.0e-4));
+    };
+
+    commands::CommandHistory history { model::Project {} };
+    const auto result = apply (false, history);
+    INFO (result.getErrorMessage());
+    REQUIRE (result.wasOk());
+    const auto& project = history.getProject();
+    const auto* delay = delayOf (project);
+    REQUIRE (delay != nullptr);
+    CHECK (delay->stockType == "spinus.delay");
+    parameter (*delay, "mix", "100%"); // only the echoes on a send bus, whatever the AI said
+    parameter (*delay, "note", "1/4 dotted");
+    parameter (*delay, "mode", "Ping-pong");
+    const auto* ia = project.findInsert (channelNamed (project, a.name)->targetInsert);
+    REQUIRE (ia->sends.size() == 1);
+    CHECK (ia->sends[0].levelDb == Catch::Approx (-9.0f));
+    const auto* ib = project.findInsert (channelNamed (project, b.name)->targetInsert);
+    REQUIRE (ib->effects.size() == 1);
+    CHECK (ib->effects[0].device.stockType == "spinus.delay");
+    parameter (ib->effects[0].device, "note", "1/8");
+    parameter (ib->effects[0].device, "mix", "20%");
+
+    // Without the AI's settings, the bus still plays only the echoes.
+    commands::CommandHistory plain { model::Project {} };
+    REQUIRE (apply (true, plain).wasOk());
+    const auto* bare = delayOf (plain.getProject());
+    REQUIRE (bare != nullptr);
+    parameter (*bare, "mix", "100%");
+    CHECK (! bare->parameters.contains ("note"));
 }

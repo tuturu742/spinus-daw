@@ -124,11 +124,15 @@ spinus_add_own_plugin (spinus_limiter_plugin "Spinus Limiter" Limt "Fx;Dynamics"
 spinus_add_own_plugin (spinus_gate_plugin "Spinus Gate" Gate "Fx;Dynamics" gate EFFECT
     SOURCES ${dynamicsSources} dynamics/GatePluginEntry.cpp)
 
+spinus_add_own_plugin (spinus_delay_plugin "Spinus Delay" Dely "Fx;Delay" delay EFFECT
+    SOURCES delay/DelayEditor.cpp delay/DelayEngine.cpp delay/DelayPluginEntry.cpp delay/DelayProcessor.cpp)
+
 set (SPINUS_EQ_VST3 "${CMAKE_BINARY_DIR}/spinus_eq_plugin_artefacts/$<CONFIG>/VST3/Spinus EQ.vst3")
 set (SPINUS_COMPRESSOR_VST3
      "${CMAKE_BINARY_DIR}/spinus_compressor_plugin_artefacts/$<CONFIG>/VST3/Spinus Compressor.vst3")
 set (SPINUS_LIMITER_VST3 "${CMAKE_BINARY_DIR}/spinus_limiter_plugin_artefacts/$<CONFIG>/VST3/Spinus Limiter.vst3")
 set (SPINUS_GATE_VST3 "${CMAKE_BINARY_DIR}/spinus_gate_plugin_artefacts/$<CONFIG>/VST3/Spinus Gate.vst3")
+set (SPINUS_DELAY_VST3 "${CMAKE_BINARY_DIR}/spinus_delay_plugin_artefacts/$<CONFIG>/VST3/Spinus Delay.vst3")
 set (SPINUS_LOUDNESS_METER_VST3
      "${CMAKE_BINARY_DIR}/spinus_loudness_meter_plugin_artefacts/$<CONFIG>/VST3/Spinus Loudness Meter.vst3")
 set (SPINUS_TUNE_VST3 "${CMAKE_BINARY_DIR}/spinus_tune_plugin_artefacts/$<CONFIG>/VST3/Spinus Tune.vst3")

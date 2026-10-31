@@ -1,5 +1,6 @@
 #include "SpinusPluginFormat.h"
 
+#include "delay/DelayProcessor.h"
 #include "drums/DrumMachineProcessor.h"
 #include "ducker/DuckerProcessor.h"
 #include "dynamics/DynamicsProcessors.h"
@@ -43,6 +44,8 @@ std::unique_ptr<juce::AudioPluginInstance> SpinusPluginFormat::create (const juc
         return std::make_unique<LimiterProcessor>();
     if (identifier == GateProcessor::identifier)
         return std::make_unique<GateProcessor>();
+    if (identifier == DelayProcessor::identifier)
+        return std::make_unique<DelayProcessor>();
     return nullptr;
 }
 
@@ -56,7 +59,7 @@ juce::Array<juce::PluginDescription> SpinusPluginFormat::getDescriptions()
                           FilterProcessor::identifier, DuckerProcessor::identifier, StereoUtilityProcessor::identifier,
                           BeatSlicerProcessor::identifier, TuneProcessor::identifier,
                           LoudnessMeterProcessor::identifier, EqProcessor::identifier, CompressorProcessor::identifier,
-                          LimiterProcessor::identifier, GateProcessor::identifier })
+                          LimiterProcessor::identifier, GateProcessor::identifier, DelayProcessor::identifier })
             if (auto instance = create (id))
                 result.add (instance->getPluginDescription());
         return result;

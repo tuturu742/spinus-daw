@@ -126,7 +126,7 @@ A script is a JSON list of steps:
 - **Time:** 960 ticks per quarter note, so a 4/4 bar is 3840. Notes are MIDI numbers; the Piano Roll's C5 is 60.
 - **Devices:** a device is `{"kind": "stock", "stockType": "spinus.3x-osc"}`. Spinus's own include
   `spinus.3x-osc`, `spinus.drum-machine`, `spinus.sampler`, `spinus.eq`, `spinus.compressor`, `spinus.limiter`,
-  `spinus.filter` and `spinus.ducker`.
+  `spinus.filter`, `spinus.ducker` and `spinus.delay`.
   `--describe all` lists every one.
 - **Settings:** `device.setParameters` takes real units as text (`{"cutoff": "1.2 kHz", "attack": "20 ms"}`).
   A setting with a list takes one of its `choices` exactly (`"Low cut"`, `"Bell"`). A wrong name is refused,
@@ -139,8 +139,11 @@ A script is a JSON list of steps:
 - **Mono presets:** 3x Osc's lead and bass presets are mono. Set `voices` to "Poly" before playing chords.
 - **Drum Machine kits** share one layout: kick on pad 1 (note 60), snare on pad 2 (61), closed and open hats
   on 4 and 5.
-- **Reverb and delay** come from the free plugins (Dragonfly reverbs; Surge XT Effects for delay and chorus).
-  They are usable only once the user has downloaded them in **Options › Get free plugins**.
+- **Delay** is Spinus's own, `spinus.delay`: its time is a note length at the song's tempo
+  (`{"note": "1/8 dotted"}`), or `{"sync": "Free", "time": "350 ms"}`. On a send bus set `"mix": "100%"`.
+  The music tools' `send` to "Delay" makes that bus for you.
+- **Reverb** comes from the free plugins (Dragonfly reverbs; Surge XT Effects for chorus too). They are
+  usable only once the user has downloaded them in **Options › Get free plugins**.
 - **Plugins the user installed** are named in a project as `--check` shows them. Their own presets, and sounds
   chosen in their windows, can't be set from a script.
 - **Project files:** a project is a folder holding a `.spn` file (plain JSON) and an `audio` folder. Change it

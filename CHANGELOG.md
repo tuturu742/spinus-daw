@@ -5,6 +5,21 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Spinus Delay
+
+- **Spinus Delay**, Spinus's own delay ([manual](docs/user/delay.md)): echoes at a note length locked to the
+  song's tempo (1/32 to 1 bar, with dotted and triplet lengths) or a time in milliseconds, feedback up to 95%, a
+  low cut and a high cut on the echoes so each repeat gets thinner and darker, stereo, ping-pong or mono, width
+  and mix. A new time or a tempo change fades to the new echoes without a click. Its window draws the echoes of
+  a sound, side by side, and says the time ("1/8 dotted at 120 BPM: 375 ms"). It needs no download, and is also
+  a VST3 and LV2 plugin for other programs.
+- **Delay sends work out of the box:** the Track creator's AI writer and the assistant make the song's **Delay**
+  bus with the Spinus Delay at 100% mix, in time with the song; the AI may pick its note length, ping-pong and
+  filters. Before, a delay send needed a delay plugin of yours, and without one it was left out. A delay plugin
+  of yours is still used when the AI names it.
+- Scripts and coding agents: `spinus.delay` in `--describe`, with settings as text (`"note": "1/8 dotted"`,
+  `"time": "350 ms"`, `"feedback": "40%"`, `"high_cut": "4.5 kHz"`).
+
 ### Export
 
 - **Exports wait for plugins that run in a separate process, too**, while they load their sounds: one that was

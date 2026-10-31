@@ -32,6 +32,7 @@ A page for every feature of Spinus. The assistant reads these pages too, so you 
 - [Spinus Compressor](compressor.md): steadier levels, parallel compression, sidechain
 - [Spinus Limiter](limiter.md): a loud master that never clips
 - [Spinus Gate](gate.md): silence the noise between notes
+- [Spinus Delay](delay.md): echoes in time with the song, stereo, ping-pong or mono
 - [Filter](filter.md): filter sweeps with an LFO or the sound's own loudness
 - [Sidechain Ducker](ducker.md): the bass dips on every kick
 - [Stereo Utility](stereo-utility.md): gain, pan, width, mono and polarity

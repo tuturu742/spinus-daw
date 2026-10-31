@@ -850,13 +850,50 @@ def test_sends_go_to_the_users_reverb_and_never_to_one_it_lacks() -> None:
     production = ws.song()["production"]
     assert production["returns"] == {"reverb": "Plate Two"} and production["sends"]["lead"] == {"reverb": -12.0}
     assert "no longer" in ws.call("send", {"part": "lead", "to": "reverb", "level": "off"})
-    with pytest.raises(harness.Mistake, match="has no delay"):
-        ws.call("send", {"part": "lead", "to": "delay", "level": "-12 dB"})
     with pytest.raises(harness.Mistake, match="-60 to 6 dB"):
         ws.call("send", {"part": "lead", "to": "reverb", "level": "loud"})
     with pytest.raises(harness.Mistake, match="reverbs: Hall One, Plate Two"):
         ws.call("send", {"part": "lead", "to": "reverb", "level": "-6", "plugin": "Cathedral"})
     assert "none (Spinus has none of its own)" in mixed({}).call("mix", {})
+    with pytest.raises(harness.Mistake, match="set by its send level"):
+        ws.call("send", {"part": "lead", "to": "reverb", "level": "-12", "settings": {"mix": "50%"}})
+
+
+def test_delay_sends_use_spinus_delay_in_time_with_the_song() -> None:
+    ws = mixed()  # the user has no delay plugin
+    said = ws.call("send", {"part": "lead", "to": "delay", "level": "-14 dB"})
+    assert "(Spinus Delay)" in said
+    said = ws.call(
+        "send",
+        {"part": "keys", "to": "delay", "level": "-18", "settings": {"note": "1/4 TRIPLET", "mode": "ping-pong"}},
+    )
+    assert "note 1/4 triplet, mode Ping-pong" in said
+    production = ws.song()["production"]
+    assert production["returns"] == {"delay": "Spinus Delay"}
+    assert production["returnSettings"] == {"delay": {"note": "1/4 triplet", "mode": "Ping-pong"}}
+    assert production["sends"]["lead"] == {"delay": -14.0} and production["sends"]["keys"] == {"delay": -18.0}
+    assert "the delay bus: Spinus Delay (note 1/4 triplet, mode Ping-pong)" in ws.call("mix", {})
+    assert "The delays: Spinus Delay" in mixed({}).call("mix", {})
+    with pytest.raises(harness.Mistake, match="note is one of"):
+        ws.call("send", {"part": "lead", "to": "delay", "level": "-12", "settings": {"note": "3/7"}})
+    with pytest.raises(harness.Mistake, match="has no control 'decay'"):
+        ws.call("send", {"part": "lead", "to": "delay", "level": "-12", "settings": {"decay": "2 s"}})
+
+    # As an effect on a part: Spinus Delay with its settings, or a delay of the user's by name (no settings).
+    assert "(Spinus Delay): note 1/8, mix 25%" in ws.call(
+        "add_effect", {"part": "lead", "effect": "delay", "settings": {"note": "1/8", "mix": "25%"}}
+    )
+    theirs = mixed({"delay": ["Tape Echo"]})
+    assert "(Tape Echo)" in theirs.call("send", {"part": "lead", "to": "delay", "level": "-12", "plugin": "tape echo"})
+    with pytest.raises(harness.Mistake, match="the delays there are: Spinus Delay, Tape Echo"):
+        theirs.call("add_effect", {"part": "lead", "effect": "delay", "plugin": "Cathedral"})
+    with pytest.raises(harness.Mistake, match="set by its send level"):
+        theirs.call("add_effect", {"part": "lead", "effect": "delay", "plugin": "Tape Echo", "settings": {"mix": "1"}})
+    # Switching the bus to another delay drops the Spinus Delay's settings.
+    switched = mixed({"delay": ["Tape Echo"]})
+    switched.call("send", {"part": "lead", "to": "delay", "level": "-12", "settings": {"note": "1/4"}})
+    switched.call("send", {"part": "lead", "to": "delay", "level": "-12", "plugin": "Tape Echo"})
+    assert not switched.song()["production"].get("returnSettings")
 
 
 def test_ducking_and_buses() -> None:

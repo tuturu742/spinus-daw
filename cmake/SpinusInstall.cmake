@@ -36,7 +36,7 @@ if (SPINUS_BUILD_OWN_PLUGINS)
                     "Spinus Beat Slicer:spinus_beat_slicer_plugin" "Spinus Tune:spinus_tune_plugin"
                     "Spinus Loudness Meter:spinus_loudness_meter_plugin" "Spinus EQ:spinus_eq_plugin"
                     "Spinus Compressor:spinus_compressor_plugin" "Spinus Limiter:spinus_limiter_plugin"
-                    "Spinus Gate:spinus_gate_plugin")
+                    "Spinus Gate:spinus_gate_plugin" "Spinus Delay:spinus_delay_plugin")
         string (REPLACE ":" ";" parts "${plugin}")
         list (GET parts 0 name)
         list (GET parts 1 target)

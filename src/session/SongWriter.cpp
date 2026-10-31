@@ -400,6 +400,9 @@ juce::String nextSongName (const model::Project& project)
 
 namespace
 {
+/** Spinus's own delay as the AI names it (its returns and effects name the user's plugins the same way). */
+constexpr const char* spinusDelayName = "Spinus Delay";
+
 /** The device type of one of Spinus's own effects as the AI names it ("eq"), or empty. */
 juce::String stockEffectType (const juce::String& name)
 {
@@ -600,10 +603,14 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
                 if (! options.withoutEffectSettings)
                     step ("device.setParameters", object ({ { "device", device }, { "text", text } }));
         };
+        // The user's reverbs and delays by name, and Spinus's own delay (always there).
         auto userDevice = [&] (const juce::String& name) -> juce::var
         {
-            const auto found = options.effectDevices.find (name);
-            return found != options.effectDevices.end() ? found->second : juce::var();
+            if (const auto found = options.effectDevices.find (name); found != options.effectDevices.end())
+                return found->second;
+            if (name.equalsIgnoreCase (spinusDelayName))
+                return object ({ { "kind", "stock" }, { "stockType", "spinus.delay" } });
+            return {};
         };
         // The song's master (the AI's "master" part): its chain ends with a limiter. The master stays when a song is
         // written again, so an effect it already has is not added a second time.
@@ -649,8 +656,23 @@ juce::var makeFullProposal (const juce::var& song, const model::Project& project
                         step ("insert.add",
                               object ({ { "name", options.name + " " +
                                                       (r.name.toString() == "reverb" ? "Reverb" : "Delay") } }));
-                    step ("insert.addEffect", object ({ { "insert", bus + ".insert" }, { "device", device } }));
+                    const auto added =
+                        step ("insert.addEffect", object ({ { "insert", bus + ".insert" }, { "device", device } }));
                     returns[r.name.toString()] = bus + ".insert";
+                    // Spinus's own delay on a send bus: only the echoes (the dry sound is the part's own, so this
+                    // stays when the AI's settings are left out), with the AI's settings over that.
+                    if (device["stockType"].toString() == "spinus.delay")
+                    {
+                        auto* tuned = new juce::DynamicObject();
+                        tuned->setProperty ("mix", "100%");
+                        if (auto* chosenSettings = production["returnSettings"][r.name].getDynamicObject();
+                            chosenSettings != nullptr && ! options.withoutEffectSettings)
+                            for (const auto& s : chosenSettings->getProperties())
+                                if (s.name.toString() != "mix")
+                                    tuned->setProperty (s.name, s.value);
+                        step ("device.setParameters",
+                              object ({ { "device", added + ".device" }, { "text", juce::var (tuned) } }));
+                    }
                 }
         if (auto* sends = production["sends"].getDynamicObject())
             for (const auto& part : sends->getProperties())

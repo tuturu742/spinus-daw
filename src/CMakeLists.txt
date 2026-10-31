@@ -49,6 +49,12 @@ add_library (spinus_core STATIC
     dsp/dynamics/GateEngine.h
     dsp/dynamics/LimiterEngine.cpp
     dsp/dynamics/LimiterEngine.h
+    dsp/delay/DelayEditor.cpp
+    dsp/delay/DelayEditor.h
+    dsp/delay/DelayEngine.cpp
+    dsp/delay/DelayEngine.h
+    dsp/delay/DelayProcessor.cpp
+    dsp/delay/DelayProcessor.h
     dsp/eq/EqEditor.cpp
     dsp/eq/EqEditor.h
     dsp/eq/EqEngine.cpp

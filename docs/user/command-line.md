@@ -189,9 +189,11 @@ setting's range the plugin shows that value. When a plugin can't be read that wa
 shows at a few points ("-60.0 dB" at 0 ... "0.0 dB" at 1); use `values` (0 to 1) for it then.
 
 The last line of `--describe all` lists the free plugins that aren't installed here (`notInstalled`).
-Spinus's own effects have no reverb or delay: those come from the free plugins (the Dragonfly reverbs, and
-Surge XT Effects for delay and chorus). Get them in Spinus with Options › Get free plugins, then scripts
-can use them. Without them, Spinus's own effects still make a full mix.
+Spinus's own effects have no reverb: that comes from the free plugins (the Dragonfly reverbs; Surge XT
+Effects for chorus and more). Get them in Spinus with Options › Get free plugins, then scripts can use them.
+Echoes need no download: the [Spinus Delay](delay.md) (`spinus.delay`) is Spinus's own, with its time as a
+note length at the song's tempo (`{"note": "1/8 dotted", "mix": "100%"}` on a send bus). Without the free
+plugins, Spinus's own effects still make a full mix.
 
 ## For AI coding agents
 

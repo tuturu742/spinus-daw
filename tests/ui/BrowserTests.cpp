@@ -146,7 +146,7 @@ TEST_CASE ("The browser groups, folds and searches", "[ui][browser]")
     // Utility, Spinus Tune and the Loudness Meter.
     CHECK (texts (browser, Browser::RowKind::group) ==
            juce::StringArray { "Installed plugins  (2)", "Spinus  (4)", "Free open source  (4)",
-                               "Installed plugins  (2)", "Spinus  (9)", "Free open source  (14)" });
+                               "Installed plugins  (2)", "Spinus  (10)", "Free open source  (14)" });
     CHECK (texts (browser, Browser::RowKind::device).contains ("Serum [WIN]"));
     CHECK (texts (browser, Browser::RowKind::problem).isEmpty()); // problems start folded
 

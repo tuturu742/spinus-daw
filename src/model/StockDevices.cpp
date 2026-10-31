@@ -55,6 +55,7 @@ const std::vector<SpinusDevice>& getSpinusDevices()
         { "spinus.compressor", "Spinus Compressor", "spinus:compressor", false },
         { "spinus.limiter", "Spinus Limiter", "spinus:limiter", false },
         { "spinus.gate", "Spinus Gate", "spinus:gate", false },
+        { "spinus.delay", "Spinus Delay", "spinus:delay", false },
     };
     return devices;
 }

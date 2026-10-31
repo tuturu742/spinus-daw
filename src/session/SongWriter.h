@@ -106,8 +106,9 @@ struct Options
     std::map<juce::String, int> drums;                 // the drum channel's notes per drum, when known
     juce::String name = "Song 1";                      // names the patterns ("Song 1: Verse") and the track
     juce::String replace; // a song of the project the new one replaces, in its place ("Song 1"), or none
-    /** The user's effects the AI may name (its reverbs and delays, Spinus having none of its own): name -> the
-        device as insert.addEffect takes it (model::deviceToJson). */
+    /** The user's effects the AI may name (its reverbs and delays; Spinus has no reverb of its own, and its
+        delay, "Spinus Delay", needs no entry): name -> the device as insert.addEffect takes it
+        (model::deviceToJson). */
     std::map<juce::String, juce::var> effectDevices;
     /** Leave out the AI's effect settings (the effects themselves stay): when a setting was refused. */
     bool withoutEffectSettings = false;
