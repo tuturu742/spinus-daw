@@ -25,7 +25,9 @@ namespace
     through Wine) play silence at first, and an export makes fresh ones and renders faster than real time. Every
     plugin instrument is prepared first, so they all load at once; then each is played a few notes until it sounds,
     at most perInstrument each and `total` in all, as the sound index's helper does (SoundRender.cpp). Spinus's own
-    instruments are ready at once. Message thread. */
+    instruments are ready at once. The notes are played offline, as the render plays them: a plugin in a separate
+    process then answers each block before the next (it may be slow while it loads), instead of being taken for
+    hung by blocks coming faster than real time. Message thread. */
 void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, std::chrono::milliseconds total)
 {
     using clock = std::chrono::steady_clock;
@@ -38,6 +40,7 @@ void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, 
         auto* instance = external != nullptr && external->isSynth() ? external->getAudioPluginInstance() : nullptr;
         if (instance == nullptr || instance->getPluginDescription().pluginFormatName == "Spinus")
             continue;
+        instance->setNonRealtime (true);
         instance->prepareToPlay (rate, block); // starts loading its sounds, alongside the others
         instances.push_back (instance);
     }
@@ -76,6 +79,7 @@ void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, 
         midi.addEvent (juce::MidiMessage::allNotesOff (1), 0);
         instance->processBlock (buffer, midi);
         instance->reset();
+        instance->setNonRealtime (false); // the render sets it again
         if (! audible)
             core::Logs::warning ("export", instance->getName() + " played nothing to a test note; exporting anyway");
     }
