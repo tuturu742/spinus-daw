@@ -884,6 +884,7 @@ juce::var SongWriterPanel::composeParams (int seed)
                             { "effort", getEffort() },
                             { "rounds", getRounds() },
                             { "tools", juce::var (getToolGroups()) },
+                            { "rulesFinding", rulesFinding },
                             { "effects",
                               [this]
                               {

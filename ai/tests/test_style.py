@@ -445,3 +445,138 @@ def test_a_key_most_estimates_agree_on_is_kept_whatever_the_bass() -> None:
     song = song_with(["C", "Am", "C", "Am"] * 4, key=(9, "minor"))
     key = style.estimate_key(song, a_minor, a_minor)
     assert key is not None and key["name"] == "A minor" and key["confidence"] in ("high", "medium")
+
+
+# -----------------------------------------------------------------------------------------------
+# Guitars (a 6-stem analysis has a guitar stem)
+
+E2 = 82.41
+
+
+def plucked(freq: float, seconds: float, decay: float, bright: float = 1.0) -> np.ndarray:
+    t = np.arange(int(seconds * RATE)) / RATE
+    x = np.zeros_like(t)
+    for h in range(1, 25):
+        if freq * h > RATE / 2:
+            break
+        x += (bright**h) / h * np.sin(2 * np.pi * freq * h * t) * np.exp(-t * decay * (1 + 0.15 * h))
+    return x
+
+
+def strummed(chord: list[float], seconds: float, hits: int, distortion: float = 0.0) -> np.ndarray:
+    """A guitar strumming `chord` (Hz) `hits` times, with a pick's noise at each hit, clean or through a tanh
+    distortion of that gain (which also amplifies the strings' and the amplifier's noise)."""
+    length = int(seconds / hits * RATE)
+    rng = np.random.default_rng(7)
+    one = sum(plucked(f, seconds / hits, 0.5 if distortion else 2.5, 1.0 if distortion else 0.85) for f in chord)
+    pick = rng.standard_normal(length) * np.exp(-np.arange(length) / (0.004 * RATE)) * 0.3
+    one = one + pick + rng.standard_normal(length) * 0.03  # the strings' and the room's noise
+    if distortion:
+        one = np.tanh(distortion * (one + rng.standard_normal(length) * 0.3))
+    out = np.tile(one, hits)
+    return out / np.max(np.abs(out)) * 0.5
+
+
+def test_a_distorted_guitar_sounds_flat_and_a_clean_one_does_not() -> None:
+    power = [E2, E2 * 1.5, E2 * 2]
+    clean = [E2 * 2, E2 * 2 * 1.26, E2 * 2 * 1.5, E2 * 4]
+    distorted = style.guitar_tone(strummed(power, 8.0, 32, distortion=12.0), RATE)
+    light = style.guitar_tone(strummed(power, 8.0, 32, distortion=3.0), RATE)
+    bright = style.guitar_tone(strummed(clean, 8.0, 32), RATE)
+    assert distorted >= style.DISTORTED and light >= style.DISTORTED
+    assert style.TONAL <= bright < style.DISTORTED / 4
+    # A synth's pure tones (what a separation may put in the guitar stem) are below a guitar's.
+    t = np.arange(8 * RATE) / RATE
+    synth = sum(np.sin(2 * np.pi * f * t) / k for k, f in enumerate([220.0, 277.2, 329.6], start=1)) * 0.3
+    assert style.guitar_tone(synth, RATE) < style.TONAL
+    # Reverb (noise tails) does not make a clean guitar sound distorted.
+    rng = np.random.default_rng(1)
+    tail = rng.standard_normal(int(1.5 * RATE)) * np.exp(-np.arange(int(1.5 * RATE)) / RATE * 4) * 0.03
+    wet = strummed(clean, 8.0, 32)
+    wet = wet + np.convolve(wet, tail)[: len(wet)]
+    assert style.guitar_tone(wet, RATE) < style.DISTORTED
+
+
+def guitar_notes(bars: int, bar: float, kind: str) -> list[dict[str, Any]]:
+    """Power chords (E5 on E2), strummed open chords, a lead line above D4 or a low single-note riff."""
+    notes = []
+    for b in range(bars):
+        for k in range(4):
+            start = 0.5 + b * bar + k * bar / 4
+            end = start + bar / 4 * 0.9
+            if kind == "power":
+                pitches = [40, 47, 52]
+            elif kind == "open":
+                pitches = [45, 52, 57, 60, 64]
+            elif kind == "lead":
+                pitches = [67 + (k * 2) % 7]
+            else:  # riff
+                pitches = [40 + (k * 3) % 5]
+            notes += [{"start": start, "end": end, "pitch": p, "velocity": 0.8} for p in pitches]
+    return notes
+
+
+def test_how_a_guitar_is_played() -> None:
+    bars = [0.5 + i * 2.0 for i in range(8)]
+    power = style.guitar_playing(guitar_notes(8, 2.0, "power"), bars)
+    assert power["rhythm"] == 1.0 and power["lead"] == 0.0 and power["powerChords"] == 1.0
+    open_chords = style.guitar_playing(guitar_notes(8, 2.0, "open"), bars)
+    assert open_chords["rhythm"] == 1.0 and open_chords["powerChords"] == 0.0
+    lead = style.guitar_playing(guitar_notes(8, 2.0, "lead"), bars)
+    assert lead["lead"] == 1.0 and lead["rhythm"] == 0.0
+    riff = style.guitar_playing(guitar_notes(8, 2.0, "riff"), bars)
+    assert riff["rhythm"] == 1.0 and riff["lead"] == 0.0  # a low single-note riff is rhythm, not a lead
+    half = style.guitar_playing(
+        guitar_notes(4, 2.0, "power")
+        + [{**n, "start": n["start"] + 8.0, "end": n["end"] + 8.0} for n in guitar_notes(4, 2.0, "lead")],
+        bars,
+    )
+    assert half["rhythm"] == 0.5 and half["lead"] == 0.5
+
+
+def guitar_song(
+    name: str, distortion: float, lead: bool
+) -> tuple[dict[str, Any], dict[str, tuple[np.ndarray, int]], np.ndarray]:
+    """A 16-bar song with a guitar part and stem (power chords, distorted or not; a lead line in its second
+    half), and its mix (the guitar and an organ-like chord an octave up)."""
+    song = add_drums(song_with(["Em", "C", "G", "D"] * 4, 120.0, (4, "minor"), name))
+    notes = guitar_notes(8, 2.0, "power")
+    second = guitar_notes(8, 2.0, "lead" if lead else "power")
+    song["parts"]["guitar"] = notes + [{**n, "start": n["start"] + 16.0, "end": n["end"] + 16.0} for n in second]
+    seconds = 0.5 + 16 * 2.0
+    stem = np.concatenate([np.zeros(int(0.5 * RATE)), strummed([E2, E2 * 1.5, E2 * 2], 32.0, 64, distortion)])
+    stem = np.vstack([stem, stem])
+    mix = stem + 0.2 * np.sin(2 * np.pi * 330.0 * np.arange(stem.shape[1]) / RATE)
+    assert abs(stem.shape[1] / RATE - seconds) < 0.1
+    return song, {"guitar": (stem, RATE)}, mix
+
+
+def test_a_songs_guitars_and_the_summary_of_them() -> None:
+    metal, metal_stems, metal_mix = guitar_song("Metal", 12.0, lead=True)
+    loud = style.analyze_song(metal, metal_mix, RATE, metal_stems)
+    g = loud["guitars"]
+    assert g["present"] and g["measured"] and g["distorted"]
+    assert g["rhythm"] >= 0.4 and g["lead"] >= 0.4 and g["powerChords"] == 1.0
+    assert g["low"] == 40 and g["level"] is not None and g["level"] > style.GUITAR_LEVEL
+
+    jangle, jangle_stems, jangle_mix = guitar_song("Jangle", 0.0, lead=False)
+    clean = style.analyze_song(jangle, jangle_mix, RATE, jangle_stems)
+    assert clean["guitars"]["present"] and not clean["guitars"]["distorted"] and clean["guitars"]["lead"] == 0.0
+
+    # Only the separation's bleed: too quiet against the mix.
+    quiet, quiet_stems, quiet_mix = guitar_song("Bleed", 12.0, lead=False)
+    bleed = style.analyze_song(quiet, quiet_mix, RATE, {"guitar": (quiet_stems["guitar"][0] * 0.01, RATE)})
+    assert not bleed["guitars"]["present"] and bleed["guitars"]["measured"]
+
+    # An older analysis (4 stems): not measured, said nowhere.
+    older = style.analyze_song(song_with(["Am", "F"] * 4))
+    assert older["guitars"] == {"present": False, "measured": False}
+
+    summary = style.summarize([loud, bleed, clean])
+    assert summary["guitars"]["measured"] == 3 and summary["guitars"]["songs"] == 2
+    assert summary["guitars"]["distorted"] == 1 and summary["guitars"]["clean"] == 1
+    assert summary["guitars"]["lead"] == 1
+    text = "\n".join(summary["plain"])
+    assert "Guitars: in 2 of 3 songs, distorted and clean, mostly power chords, with a lead guitar in 1." in text
+    assert "Guitars" not in "\n".join(style.summarize([older])["plain"])
+    json.dumps(summary)

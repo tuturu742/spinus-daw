@@ -22,6 +22,15 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   Everything still comes as one proposal you Apply.
 - **The skill for coding agents** (`skills/spinus-songwriter`) says to use the live interface when it is on.
 
+### Track creator: guitars in your songs
+
+- **The Track creator hears guitars in your reference songs.** It now splits songs into 6 stems (guitar and
+  piano apart from the other instruments) and measures the guitar: whether it is distorted or clean, plays
+  power chords, or a lead line. When at least half of your songs have guitars, the description, **Suggest
+  parts** and the songs Spinus writes have guitar parts instead of synth chords, and they follow your songs'
+  guitar (its range, and the sound **Tune toward the references** aims for). Songs analyzed before are
+  analyzed again once, as the summary changed; the Demucs 6-stem model (55 MB) is downloaded once.
+
 ### Track creator
 
 - **Save this sound:** in the list beside a part, **Save this sound...** opens the part's instrument in its
@@ -32,6 +41,22 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   sounds stay when the sound index is updated or deleted (Delete the sound index asks about them first).
 - **The parts list is remembered** between runs: the parts, their roles, the sounds you chose and Tune
   toward the references come back when you open the Track creator again. A new description starts it again.
+
+### Track creator: the AI writer
+
+- **More kinds of section, as songwriters and song generators name them:** besides intro, verse, chorus,
+  bridge and outro, a song the AI writes can have a **Pre-Chorus, Post-Chorus, Hook, Break, Breakdown, Build,
+  Drop, Interlude, Instrumental, Solo, End** or **Fade Out**. Each has its usual energy (a drop as big as a
+  chorus, a break or breakdown quiet, a build rising, an end and a fade out falling away), and Playlist markers
+  use these names. Each section can carry a short cue ("drums fall away"), shown in the song's summary. The
+  checks name a section your description asks for that the song doesn't have, by these kinds.
+
+### Fixes
+
+- **An export right after opening a project or applying a song could leave big sample instruments silent:** they
+  load their sounds in the background (Windows plugins through Wine, most of all) and the export renders faster
+  than real time. It now lets every plugin instrument load at once, then plays each a few test notes until it
+  sounds (at most 45 seconds each, a minute and a half in all) before rendering.
 
 ### Fixes
 

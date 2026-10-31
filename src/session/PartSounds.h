@@ -31,6 +31,11 @@
 namespace spinus::parts
 {
 
+/** The separation the Track creator analyzes reference songs with: Demucs with 6 stems, which has a guitar
+    stem (and a piano one). Songs analyzed before alpha 4 kept the 4-stem one's stems and notes, still read. */
+inline constexpr const char* separationModel = "htdemucs_6s";
+inline constexpr const char* olderSeparationModel = "htdemucs";
+
 /** A part of the song to write, on the user's list (the Sounds page): what it is called and what it plays. The
     song writer (spinus_ai.songwriter's ROLES) writes exactly the parts of the list, each by its role; two parts
     of one role get complementary material (a second chords part an arpeggio an octave up...). */
@@ -57,6 +62,9 @@ std::vector<SongPart> suggestedParts (const juce::String& which, const juce::var
 juce::String roleName (const juce::String& role);
 /** The list an arrangement proposes: "sketch" drums, bass, chords and lead; "full" those and a pad, an arpeggio,
     a counter-melody, a riser and impacts, with a sub bass when the summary's bass sits high enough. */
+/** The guitar parts the reference songs call for (the summary's `guitars`, as spinus_ai.songwriter.guitar_roles):
+    "rhythm-guitar", "clean-guitar", "lead-guitar"; none when fewer than half the songs have guitars. */
+juce::StringArray guitarRoles (const juce::var& summary);
 std::vector<SongPart> defaultParts (const juce::String& arrangement, const juce::var& summary);
 /** A new part of a role for the list: an id and a name not taken yet ("Chords 2"). */
 SongPart newPart (const std::vector<SongPart>& list, const juce::String& role);

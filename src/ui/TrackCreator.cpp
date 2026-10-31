@@ -4,6 +4,7 @@
 #include "AnalysisLibraryView.h"
 #include "SoundIndexView.h"
 #include "Theme.h"
+#include "session/PartSounds.h"
 #include "session/ProgramFolder.h"
 #include "session/SongPreparation.h"
 
@@ -30,7 +31,7 @@ juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items
     return juce::var (o);
 }
 
-constexpr const char* separationModel = "htdemucs"; // 4 stems: what the style needs
+using parts::separationModel; // 6 stems: guitars and piano apart from the other instruments
 } // namespace
 
 //==============================================================================

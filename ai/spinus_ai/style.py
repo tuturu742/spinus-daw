@@ -38,8 +38,8 @@ import numpy as np
 
 from . import keynames
 
-FEATURES_VERSION = 4  # change when what analyze_song measures changes (Spinus then analyzes songs again)
-SUMMARY_VERSION = 1  # change when the summary's format changes
+FEATURES_VERSION = 5  # change when what analyze_song measures changes (Spinus then analyzes songs again)
+SUMMARY_VERSION = 2  # change when the summary's format changes
 
 NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
@@ -465,6 +465,114 @@ def parts_of(song: dict[str, Any], bar_count: int, seconds: float) -> dict[str, 
     return result
 
 
+GUITAR_LEVEL = -24.0  # dB: a guitar stem quieter than this, against the mix, is the separation's bleed
+# Spectral flatness (500 Hz - 5 kHz) of a guitar stem, as measured on real songs' 6-stem separations: distorted
+# guitars 0.15-0.32, clean ones 0.012-0.047 (pick noise and the body keep it above pure tones), and a synth the
+# separation took for a guitar about 0.002.
+DISTORTED = 0.1  # above: a distorted guitar
+TONAL = 0.005  # below: pure tones, not a guitar (a synth in the guitar stem)
+LEAD_PITCH = 62  # a bar of single notes centred above D4 is a lead line; below, a riff (rhythm)
+TOGETHER = 0.05  # seconds: notes starting this close are played together (a chord)
+
+
+def guitar_tone(audio: np.ndarray, rate: int) -> float:
+    """How distorted a guitar stem sounds: the median spectral flatness, 500 Hz to 5 kHz, of its louder half of
+    frames. A clean guitar's harmonics stand out of quiet valleys, with its pick noise and body between them; a
+    distorted one fills the band with harmonics, intermodulation and amplified noise (see DISTORTED)."""
+    mono = audio.mean(axis=0) if audio.ndim == 2 else audio
+    size, hop = 4096, 2048
+    if len(mono) < size:
+        return 0.0
+    frames = np.lib.stride_tricks.sliding_window_view(mono, size)[::hop]
+    rms = np.sqrt(np.mean(frames * frames, axis=1))
+    loud = frames[rms >= np.percentile(rms, 50)]
+    if not len(loud):
+        return 0.0
+    power = np.abs(np.fft.rfft(loud * np.hanning(size), axis=1)) ** 2
+    freqs = np.fft.rfftfreq(size, 1.0 / rate)
+    band = power[:, (freqs >= 500.0) & (freqs <= 5000.0)] + 1e-12
+    flatness = np.exp(np.mean(np.log(band), axis=1)) / np.mean(band, axis=1)
+    return float(np.median(flatness))
+
+
+def guitar_playing(notes: list[dict[str, Any]], bars: list[float]) -> dict[str, float]:
+    """Shares of a guitar's bars (with notes) played as chords (rhythm), as single notes above LEAD_PITCH (lead)
+    or below it (riffs, counted as rhythm), and of its chords that are power chords (fifths and octaves only)."""
+    if not notes or len(bars) < 2:
+        return {"rhythm": 0.0, "lead": 0.0, "powerChords": 0.0}
+    ordered = sorted(notes, key=lambda n: float(n["start"]))
+    groups: list[list[dict[str, Any]]] = []
+    for n in ordered:
+        if groups and float(n["start"]) - float(groups[-1][0]["start"]) <= TOGETHER:
+            groups[-1].append(n)
+        else:
+            groups.append([n])
+    edges = np.array([*bars, bars[-1] + (bars[-1] - bars[-2])])
+    per_bar: dict[int, list[list[dict[str, Any]]]] = {}
+    for g in groups:
+        index = int(np.searchsorted(edges, float(g[0]["start"]), side="right")) - 1
+        if 0 <= index < len(bars):
+            per_bar.setdefault(index, []).append(g)
+    rhythm = lead = 0
+    chords = power = 0
+    for found in per_bar.values():
+        chordal = [g for g in found if len({int(n["pitch"]) for n in g}) >= 2]
+        for g in chordal:
+            pitches = sorted({int(n["pitch"]) for n in g})
+            chords += 1
+            power += len(pitches) <= 4 and all(b - a in (5, 7, 12) for a, b in itertools.pairwise(pitches))
+        if len(chordal) * 2 >= len(found):
+            rhythm += 1
+        elif statistics.median(int(n["pitch"]) for g in found for n in g) >= LEAD_PITCH:
+            lead += 1
+        else:
+            rhythm += 1
+    played = max(1, len(per_bar))
+    return {
+        "rhythm": round(rhythm / played, 2),
+        "lead": round(lead / played, 2),
+        "powerChords": round(power / chords, 2) if chords else 0.0,
+    }
+
+
+def guitars_of(
+    song: dict[str, Any],
+    part: dict[str, Any] | None,
+    bars: list[float],
+    guitar: tuple[np.ndarray, int] | None,
+    mix: np.ndarray | None,
+) -> dict[str, Any]:
+    """The song's guitars, from a guitar stem (a separation with one: htdemucs_6s) and its notes: whether
+    there are any (loud enough against the mix, not the separation's bleed, with notes, and not pure tones),
+    how distorted they sound, and how they are played. `{present: false}` when there is no guitar stem (an
+    older analysis) or no guitar."""
+    if guitar is None:
+        return {"present": False, "measured": False}
+    audio, rate = guitar
+    level = None
+    if mix is not None and audio.size and mix.size:
+        stem_rms = float(np.sqrt(np.mean(np.square(audio))))
+        mix_rms = float(np.sqrt(np.mean(np.square(mix))))
+        level = round(20 * math.log10(max(stem_rms, 1e-9) / max(mix_rms, 1e-9)), 1)
+    tone = guitar_tone(audio, rate)
+    present = bool(part and part.get("present")) and (level is None or level >= GUITAR_LEVEL) and tone >= TONAL
+    if not present:
+        return {"present": False, "measured": True, "level": level, "distortion": round(tone, 4)}
+    playing = guitar_playing((song.get("parts") or {}).get("guitar") or [], bars)
+    return {
+        "present": True,
+        "measured": True,
+        "level": level,
+        "distortion": round(tone, 4),
+        "distorted": tone >= DISTORTED,
+        **playing,
+        "low": part.get("low") if part else None,
+        "median": part.get("median") if part else None,
+        "high": part.get("high") if part else None,
+        "notesPerBar": part.get("notesPerBar") if part else None,
+    }
+
+
 def frames_of(audio: np.ndarray, rate: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Chroma (frames x 12, each frame summing to 1), loudness (dB) and the frames' times, from 4096-sample
     frames of the mono mix."""
@@ -721,6 +829,7 @@ def analyze_song(
         groove = groove_of(song)
     tempo = float(song["tempo"]) if song.get("tempo") else None
     given = song.get("key") or {}
+    parts = parts_of(song, len(bars), seconds)
     return {
         "version": FEATURES_VERSION,
         "name": str(song.get("name", "")),
@@ -733,7 +842,8 @@ def analyze_song(
         "seconds": round(seconds, 2),
         "chords": chords_of(keyed, bars, heard),
         "groove": groove,
-        "parts": parts_of(song, len(bars), seconds),
+        "parts": parts,
+        "guitars": guitars_of(song, parts.get("guitar"), bars, stems.get("guitar"), audio),
         "sections": sections,
         "loudness": {
             "lufs": loudness.get("loudness"),
@@ -911,6 +1021,29 @@ def summarize(songs: list[dict[str, Any]]) -> dict[str, Any]:
             )
         parts[part] = entry
 
+    # Guitars: in how many songs, how they sound and how they are played.
+    measured = [s["guitars"] for s in songs if (s.get("guitars") or {}).get("measured")]
+    with_guitars = [g for g in measured if g.get("present")]
+
+    def guitar_median(key: str) -> float | None:
+        return median([float(g[key]) for g in with_guitars if g.get(key) is not None])
+
+    guitars = {
+        "measured": len(measured),
+        "songs": len(with_guitars),
+        "distorted": sum(1 for g in with_guitars if g.get("distorted")),
+        "clean": sum(1 for g in with_guitars if not g.get("distorted")),
+        "rhythm": sum(1 for g in with_guitars if float(g.get("rhythm") or 0) >= 0.3),
+        "lead": sum(1 for g in with_guitars if float(g.get("lead") or 0) >= 0.2),
+        # Power chords only where the guitars are distorted: a clean guitar's overtones (an octave, a fifth) read as
+        # power chords in its notes.
+        "powerChords": round(median([float(g["powerChords"]) for g in with_guitars if g.get("distorted")]) or 0.0, 2),
+        "low": round(guitar_median("low") or 0) if with_guitars else None,
+        "median": round(guitar_median("median") or 0) if with_guitars else None,
+        "high": round(guitar_median("high") or 0) if with_guitars else None,
+        "notesPerBar": round(guitar_median("notesPerBar") or 0.0, 2) if with_guitars else None,
+    }
+
     # Sections.
     lengths = Counter(sec["bars"] for s in songs for sec in s.get("sections") or [])
     with_sections = [s for s in songs if s.get("sections")]
@@ -954,6 +1087,7 @@ def summarize(songs: list[dict[str, Any]]) -> dict[str, Any]:
         "chords": chords_summary,
         "drums": drums,
         "parts": parts,
+        "guitars": guitars,
         "sections": sections,
         "loudness": loudness,
         "perSong": songs,
@@ -979,6 +1113,29 @@ PART_NAMES = {
     "guitar": "Guitar",
     "drums": "Drums",
 }
+
+
+def guitar_words(guitars: dict[str, Any], count: int) -> str:
+    """The guitars in a line: "Guitars: in 3 of 4 songs, distorted, mostly power chords, with a lead guitar in
+    2." Empty when no song was measured with a guitar stem (older analyses)."""
+    measured = int(guitars.get("measured") or 0)
+    if not measured:
+        return ""
+    songs = int(guitars.get("songs") or 0)
+    if not songs:
+        return "Guitars: none heard."
+    where = "every song" if songs == count else f"{songs} of {count} songs"
+    distorted, clean = int(guitars.get("distorted") or 0), int(guitars.get("clean") or 0)
+    sound = "distorted" if distorted and not clean else "clean" if clean and not distorted else "distorted and clean"
+    words = [f"in {where}", sound]
+    if distorted and float(guitars.get("powerChords") or 0) >= 0.5:
+        words.append("mostly power chords")
+    elif int(guitars.get("rhythm") or 0):
+        words.append("chords and riffs")
+    lead = int(guitars.get("lead") or 0)
+    if lead:
+        words.append(f"with a lead guitar in {lead}" if lead < songs else "with a lead guitar")
+    return "Guitars: " + ", ".join(words) + "."
 
 
 def plural(count: int, word: str) -> str:
@@ -1088,6 +1245,9 @@ def describe(summary: dict[str, Any]) -> list[str]:
             f"{name}: in {songs}, {note_name(entry['low'])} to {note_name(entry['high'])}, "
             f"about {per_bar(entry['notesPerBar'])} notes a bar, mostly {voices}."
         )
+    guitar_line = guitar_words(summary.get("guitars") or {}, count)
+    if guitar_line:
+        lines.append(guitar_line)
     sections = summary["sections"]
     if sections["lengths"]:
         usual = sections["lengths"][0]["bars"]

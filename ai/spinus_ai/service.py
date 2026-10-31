@@ -1015,7 +1015,8 @@ class Service:
         """A song written by the AI, opt-in: {summary, seed, parts, arrangement, candidates (part id -> [{id, name}]:
         sounds from the sound index it may pick), current (part id -> its sound in words), effort ("low", "medium",
         "high", "xhigh" or none: the model's own), tools (the harness's groups of tools allowed: a depth, basic,
-        arrangement, transitions or full, or a list of groups; Basic + arrangement by default), way ("harness", the
+        arrangement, transitions or full, or a list of groups; Basic + arrangement by default), rulesFinding (true:
+        check names each melodic or harmonic part the rules wrote, for the model to write itself), way ("harness", the
         default: the model composes with the music harness's
         tools, spinus_ai.harness; "one-shot": one answer with the whole song, spinus_ai.compose), song and
         levels/problems (a song it wrote, with how loud each part played and why one could not: one revision
@@ -1067,6 +1068,7 @@ class Service:
                         params.get("levels"),
                         params.get("problems"),
                         groups,
+                        bool(params.get("rulesFinding")),
                     )
                 if previous is not None:
                     return await compose.revise(

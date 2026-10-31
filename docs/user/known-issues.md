@@ -71,9 +71,6 @@ what happened, and attach the project if you can.
 
 ## Track creator (experimental)
 
-- **Guitar bands come out with synth chords instead of guitars** when written from reference songs: the
-  analysis doesn't yet tell guitars apart from other instruments. Add a guitar part yourself on the
-  **Parts** tab and pick its sound.
 - **Rendering right after Apply can leave out a plugin that is still loading its sounds** (big sampled
   guitars, for example, played through a Windows plugin). Save the project and export again, or wait a
   few seconds after Apply before exporting.

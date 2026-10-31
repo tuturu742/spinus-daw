@@ -36,10 +36,14 @@ computer; nothing is sent anywhere.
 2. **The analysis engine** (PyTorch), installed once: the Track creator offers a **Set up the analysis
    engine...** button that opens [the analysis engine page](analysis-engine.md).
 3. **Model files**, downloaded once: Beat This! (8 MB on the CPU, 81 MB with a graphics card), Demucs for
-   4 stems (84 MB) and Basic Pitch (230 KB). The Track creator says what is missing and how big it is;
+   6 stems (55 MB: drums, bass, vocals, guitar, piano and the rest) and Basic Pitch (230 KB). The Track creator says what is missing and how big it is;
    click **Download** to agree, and it carries on. The Analyzer's **Sources and licences...** says where
    each comes from and under which licence, and can download one from another link its authors give (the
    models are shared, so the Track creator then has it too).
+
+   Songs analyzed by an older Spinus (with 4 stems, before guitars were told apart) are analyzed again the
+   next time you click **Analyze**: their tempo and key are kept, and only the stems and what follows are
+   found again.
 
 ## Adding songs
 
@@ -118,8 +122,16 @@ Once the songs are analyzed, **What the songs have in common** says it in plain 
   play, numbered as in the [Channel Rack](channel-rack.md), and whether the beat is straight or swung.
   Spinus listens to the drum part itself for this. Songs with different grooves are not mixed into one:
   you get the main groove (and in how many songs), and the other grooves beside it.
-- **Parts**: bass, vocals, other instruments: in how many of the songs, from which note to which, how
-  many notes a bar, and whether they play single notes or chords.
+- **Parts**: bass, vocals, guitar, piano, other instruments: in how many of the songs, from which note to
+  which, how many notes a bar, and whether they play single notes or chords.
+- **Guitars**: in how many songs, whether they sound distorted or clean, whether they play power chords,
+  and whether there is a lead guitar: "Guitars: in 3 of 4 songs, distorted, mostly power chords, with a lead
+  guitar in 2." Spinus listens to the guitar part on its own for this: a distorted guitar fills its sound
+  with harmonics and noise, a clean one rings with clear notes. A guitar too quiet in the mix, or one that
+  is really a synth (pure tones), is not counted. When at least half of your songs have guitars, the
+  description and **Suggest parts** name them (a rhythm guitar, a clean guitar, a lead guitar), and the
+  guitar parts follow your songs' guitar: its notes, and the sound **Tune toward the references** aims
+  for.
 - **Sections**: how long they usually are in bars (8 or 16, say), and how many a song has. Sections
   follow the song's 4-bar phrases, and a short fill does not count as a section of its own.
 - **Loudness**: about how loud the songs are (LUFS, as the [Loudness Meter](loudness-meter.md) shows),
@@ -417,6 +429,12 @@ anywhere and no AI connection is needed.
 - **Sections**: an intro, verses, choruses, a bridge and an outro, about as many as your songs have and
   about as long, each 4, 8, 12, 16... bars as your songs' sections are. A chorus is the same each time
   (one pattern), so you can change it once.
+  When your AI connection writes the song, a section can be any of the kinds songwriters and song
+  generators name: **Intro, Verse, Pre-Chorus, Chorus, Post-Chorus, Hook, Bridge, Break, Breakdown, Build,
+  Drop, Interlude, Instrumental, Solo, Outro, End** and **Fade Out**. Each has its usual energy (a drop is as
+  big as a chorus, a break and a breakdown are quiet, a build rises, an end and a fade out fall away) and
+  can carry a short cue, as in "Breakdown: drums fall away", shown in the song's summary on Write a song.
+  Markers on the Playlist use these names.
 - **Chords**: loops of four chords, chosen from the chords your songs use and the way they move from one
   chord to the next: new combinations, not a copy of one of your songs (a loop that one song plays as its
   own is used at most once).
@@ -494,8 +512,9 @@ programmer runs tests:
 - notes a bar against your songs' parts;
 - the drums' groove against your songs';
 - a lead repeating one bar, a part with no notes, sections off the 4-bar phrases;
-- sections your description asks for that the form doesn't have: a pre-chorus, a solo, a breakdown, a build-up,
-  a drop, a double chorus, an outro ("a breakdown or bridge": either will do).
+- sections your description asks for that the form doesn't have, by the kinds above (a pre-chorus, a solo, a
+  breakdown, a build-up, a drop, an interlude, a double chorus, a fade out...); "a breakdown or bridge": either
+  will do.
 
 It fixes what the checks find with small edits of a few bars, then says it's finished. If it tries to finish while the checks still find something, it is told what is open, once; asked again, it finishes as it is. While it works, the
 page shows each step in plain words ("Writing the bass for the chorus", "Checking: 2 issues") and the tokens
