@@ -760,40 +760,40 @@ What Spinus does in its first release (the [changelog](CHANGELOG.md) lists it fo
   64-bit (§16). **macOS** is not planned (releasing for it needs a paid Apple developer account).
 - The flagship synth is **Surge XT**; a Spinus-built flagship synth is not planned.
 
-### Next: 0.1.0-alpha.4
+### 0.1.0-alpha.4 (2026-10-31)
 
-Owner decision 2026-10-29: what was planned for alpha 4 and alpha 5 ships together in alpha 4.
+Owner decision 2026-10-29: what was planned for alpha 4 and alpha 5 ships together in alpha 4. All of it
+shipped, except the delay send (moved to rc.1, below):
 
-- **The AI writer, finished:**
-  - **Defaults from an A/B test:** a check that flags melodic parts left to Spinus's rules, against a
-    higher reasoning level.
-  - **Section kinds matching Suno's structure tags:** Intro, Verse, Pre-Chorus, Chorus, Post-Chorus,
-    Hook, Bridge, Break, Breakdown, Build, Drop, Interlude, Instrumental, Solo, Outro, End and Fade Out,
-    with a cue per section.
-  - **A delay send** through a free plugin's delay mode (Surge XT Effects; Dragonfly for reverb). Spinus
-    builds its own only if the free plugins can't do it on both Linux and Windows.
-  - **Rendering right after Apply** waits for plugins still loading their sounds.
-- **Save this sound:** set up a plugin in its own window (a drum kit chosen in a drum player that is
-  silent until then), and Spinus keeps that sound in the sound index for the Track creator. Generic for
-  any plugin.
-- **Guitars in reference songs:** the analysis tells guitars from other instruments, so a guitar band
-  doesn't come out as synth chords.
-- **The parts list is remembered** between runs.
-- **The assistant on the open project, through the music harness** (done: §12.9, §12.11): "add pads to the
-  chorus", "add a bridge after bar 20". The edits arrive as one proposal and one undo step.
-- **Instrument settings tools** (done: `shape_sound`, `set_sound`): "make the bass pluckier".
-- **Deeper mix checks** (done: masking, the low end, loudness per section from a render).
-- **A live MCP interface for outside coding agents** (done: §12.12) (Claude Code, Codex, Cursor) into a running Spinus.
-  It is off until turned on in Options, listens on this computer only and needs a token. Owner decision
-  2026-10-29: an agent connected through it **applies its changes directly**, without a proposal to
-  approve each time, because an outside agent works in many small steps. Turning the interface on is the
-  user's consent. Its safeguards:
-  - each change is an ordinary undo step;
-  - Spinus shows that an agent is connected, with a button to disconnect it;
-  - **Undo the agent's changes** takes the project back to where it was when the agent connected.
-  - The in-app assistant and the Track creator keep proposals.
+- **The AI writer, finished:** the A/B test (2026-10-30, four cloud models and two local ones) kept the
+  defaults (low reasoning, the check off) and made the check that flags melodic parts left to Spinus's
+  rules an option; section kinds matching Suno's structure tags, with a cue per section; rendering right
+  after Apply waits for plugins still loading their sounds.
+- **Save this sound** (generic for any plugin), **guitars in reference songs**, and **the parts list is
+  remembered** (§12.10).
+- **The assistant on the open project, through the music harness** (§12.9, §12.11), with instrument
+  settings tools (`shape_sound`, `set_sound`) and deeper mix checks (masking, the low end, loudness per
+  section).
+- **A live MCP interface for outside coding agents** (§12.12). Owner decision 2026-10-29: an agent
+  connected through it **applies its changes directly**, because an outside agent works in many small
+  steps; turning the interface on is the user's consent. Each change is an ordinary undo step, Spinus shows
+  the connected agent with Disconnect, and **Undo the agent's changes** takes the project back to where it
+  was when the agent connected. The in-app assistant and the Track creator keep proposals. A guide for any
+  agent: `skills/spinus/SKILL.md`.
+- Also: **Replace instrument** in the Channel Rack (`channel.replaceInstrument`), and plugin settings as text
+  for every plugin format.
 
-Then 0.1.0-rc.1 (features frozen, polish), then 0.1.0 with a few modest posts.
+### Next: 0.1.0-rc.1
+
+Features freeze, then polish until it is presentable to strangers; rc.2 and later follow if needed. The
+owner tests on Linux and Windows.
+
+- **Spinus Delay** (owner decision 2026-10-31): Spinus's own tempo-synced delay, so the AI writer, the
+  assistant and agents can make a delay send on every computer. Surge XT Effects' delay can't be set up
+  from words (its settings are named only once its mode is chosen).
+- **Rendering right after Apply waits for plugins in a separate process** too.
+- **The flaky Windows tests** (the MIDI keyboard, the metronome) fixed at their cause.
+- **Polish:** the README, screenshots, known issues and the manual, ready for 0.1.0's few modest posts.
 
 ### Later
 
