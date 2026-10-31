@@ -199,12 +199,13 @@ public:
 
     void prepareToPlay (double rate, int block) override
     {
-        auto& s = memory->get();
-        s.posted = 0;
-        s.done = 0;
-        posted = collected = 0;
+        // The host may still be working through blocks sent before (an export plays test notes, then prepares
+        // again to render): the counters go on from where they are, and the host sets `done` to `posted` once
+        // its audio thread has stopped. Resetting them here raced with that thread, whose late `done` then made
+        // every later block look lost (an export of silence).
         const int extra = juce::jlimit (1, maxBlock, block);
         connection->request ("prepare", object ({ { "rate", rate }, { "block", extra } }), 10000);
+        posted = collected = memory->get().posted.load (std::memory_order_acquire);
         // One block of silence ahead: the plugin has a block's time to answer (more when blocks vary).
         fifo.setSize (juce::jmax (1, numOut), 4 * maxBlock + extra);
         fifo.clear();
@@ -392,8 +393,9 @@ private:
         fifoRead = (fifoRead + available) % fifo.getNumSamples();
         fifoCount -= available;
 
-        // Not answering for two seconds while blocks wait: hung.
-        stalledSamples = posted != collected ? stalledSamples + n : 0;
+        // Not answering for two seconds while blocks wait: hung. Offline, blocks come faster than real time and
+        // each one waits for its answer (above), so only that wait counts.
+        stalledSamples = posted != collected && ! isNonRealtime() ? stalledSamples + n : 0;
         if (stalledSamples > hangLimit && failure == Failure::none)
             failure = Failure::hung;
     }

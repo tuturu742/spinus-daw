@@ -120,6 +120,7 @@ private:
             instance->setRateAndBufferSizeDetails (rate, block);
             instance->prepareToPlay (rate, block);
             processed = shared->get().posted.load();
+            shared->get().done.store (processed, std::memory_order_release); // nothing older is still coming
             midi.ensureSize ((size_t)maxMidiEvents * 8);
             startThread (juce::Thread::Priority::highest);
             return object ({ { "latency", instance->getLatencySamples() } });

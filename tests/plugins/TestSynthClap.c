@@ -16,7 +16,11 @@
 
    Built with DIFFICULT=1 it is "Spinus Difficult Synth" (difficult-synth.clap), behaving as some big sample
    instruments do: it crashes when its presets are listed, and stays silent for its first 3 seconds (as if
-   loading its samples in the background). */
+   loading its samples in the background).
+
+   Built with DIFFICULT=2 it is "Spinus Busy Synth" (busy-synth.clap): the difficult synth as it is through a
+   bridge or in a plugin that holds its processing while it loads, so slow to answer: each block takes 1.5 s
+   while it loads, and 2 ms after. */
 
 #include <clap/clap.h>
 #include <math.h>
@@ -29,6 +33,7 @@
         #define CRASH() (*(volatile int*)0 = 0)
         #define PAUSE() Sleep (1000)
         #define NOW() ((double)GetTickCount64() / 1000.0)
+        #define WAIT_MS(ms) Sleep (ms)
     #else
         #include <signal.h>
         #include <time.h>
@@ -42,6 +47,12 @@ static double now_seconds (void)
     return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
 }
         #define NOW() now_seconds()
+static void wait_ms (long ms)
+{
+    struct timespec t = { ms / 1000, (ms % 1000) * 1000000L };
+    nanosleep (&t, NULL);
+}
+        #define WAIT_MS(ms) wait_ms (ms)
     #endif
 #endif
 
@@ -116,6 +127,9 @@ static const char* const features[] = { CLAP_PLUGIN_FEATURE_INSTRUMENT, CLAP_PLU
 #if MISBEHAVING
     #define SYNTH_ID "io.github.tuturu742.spinus.test.misbehaving-synth"
     #define SYNTH_NAME "Spinus Misbehaving Synth"
+#elif DIFFICULT == 2
+    #define SYNTH_ID "io.github.tuturu742.spinus.test.busy-synth"
+    #define SYNTH_NAME "Spinus Busy Synth"
 #elif DIFFICULT
     #define SYNTH_ID "io.github.tuturu742.spinus.test.difficult-synth"
     #define SYNTH_NAME "Spinus Difficult Synth"
@@ -455,6 +469,9 @@ static clap_process_status process (const clap_plugin_t* p, const clap_process_t
         PAUSE();
 #endif
 #if DIFFICULT
+    #if DIFFICULT == 2
+    WAIT_MS (NOW() - s->created < 3.0 ? 1500 : 2);
+    #endif
     if (NOW() - s->created < 3.0)
     {
         /* Still "loading its samples": silence. */
