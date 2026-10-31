@@ -16,10 +16,11 @@ add_library (spinus_rubberband INTERFACE)
 
 if (WIN32)
     include (FetchContent)
-    # The checkout's folder must be named rubberband for Tracktion's include form.
+    # The checkout's folder must be named rubberband for Tracktion's include form. The release comes from the
+    # project's GitHub tag: its own site (breakfastquay.com) was unreachable for hours, failing every build.
     FetchContent_Declare (spinus_rubberband_source
-        URL https://breakfastquay.com/files/releases/rubberband-4.0.0.tar.bz2
-        URL_HASH SHA256=af050313ee63bc18b35b2e064e5dce05b276aaf6d1aa2b8a82ced1fe2f8028e9
+        URL https://github.com/breakfastquay/rubberband/archive/refs/tags/v4.0.0.tar.gz
+        URL_HASH SHA256=24300f48a8014b7c863b573a9647e61b1b19b37875e2cdd92005e64c6424d266
         SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/rubberband-checkout/rubberband")
     FetchContent_MakeAvailable (spinus_rubberband_source)
     set (rubberbandRoot "${CMAKE_BINARY_DIR}/_deps/rubberband-checkout/rubberband")
