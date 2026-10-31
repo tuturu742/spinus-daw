@@ -20,8 +20,8 @@ Double-click one to open [Get free plugins](free-plugins.md).
 
 **Instruments** › **Spinus** lists the instruments made by Spinus: the [Sampler](sampler.md), the
 [Drum Machine](drum-machine.md), [3x Osc](3x-osc.md) and the [Beat Slicer](beat-slicer.md). **Effects** › **Spinus** lists the effects made
-by Spinus: the [Spinus EQ](eq.md), [Spinus Compressor](compressor.md), [Spinus Limiter](limiter.md) and
-[Spinus Gate](gate.md) (the basic mixing effects, with nothing to download), the [Filter](filter.md), the
+by Spinus: the [Spinus EQ](eq.md), [Spinus Compressor](compressor.md), [Spinus Limiter](limiter.md),
+[Spinus Gate](gate.md) and [Spinus Delay](delay.md) (the basic mixing effects, with nothing to download), the [Filter](filter.md), the
 [Sidechain Ducker](ducker.md), the [Stereo Utility](stereo-utility.md), [Spinus Tune](spinus-tune.md) and the
 [Loudness Meter](loudness-meter.md).
 

@@ -262,8 +262,8 @@ TEST_CASE ("Nothing is heard when the output is switched", "[session][silence][s
             session, "channel.add",
             juce::String (R"({"name": "Spinus", "instrument": {"kind": "stock", "stockType": ")") + type + R"("}})");
         const auto into = juce::String ((int)added["insert"]);
-        for (auto effect :
-             { "spinus.filter", "spinus.ducker", "spinus.stereo-utility", "spinus.tune", "spinus.loudness-meter" })
+        for (auto effect : { "spinus.filter", "spinus.ducker", "spinus.stereo-utility", "spinus.tune",
+                             "spinus.loudness-meter", "spinus.delay" })
             perform (session, "insert.addEffect",
                      R"({"insert": )" + into + R"(, "device": {"kind": "stock", "stockType": ")" + effect + R"("}})");
     }

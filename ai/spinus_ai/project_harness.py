@@ -26,6 +26,7 @@ from .gateway import Tool
 TICKS_PER_BEAT = 960
 TICKS_PER_STEP = 240
 MOST_ISSUES = 24
+DELAY_TYPE = "spinus.delay"  # Spinus Delay: a missing Delay bus is made with it
 SCALES = {"major": (0, 2, 4, 5, 7, 9, 11), "minor": (0, 2, 3, 5, 7, 8, 10)}
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 FLATS = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
@@ -273,14 +274,15 @@ TOOLS = [
     ),
     Tool(
         "add_effect",
-        "Add an effect (found by words: 'EQ', 'Compressor', 'Limiter', 'Filter', 'Ducker', a reverb or delay "
-        "you have) to a part's insert, a bus, or 'master', with settings.",
+        "Add an effect (found by words: 'EQ', 'Compressor', 'Limiter', 'Filter', 'Ducker', 'Spinus Delay' (note "
+        "'1/8 dotted', feedback '35%', mode 'Ping-pong', mix '30%'), a reverb you have) to a part's insert, a bus, "
+        "or 'master', with settings.",
         schema({"to": {"type": "string"}, "effect": {"type": "string"}, "settings": SETTINGS}, ["to", "effect"]),
     ),
     Tool(
         "send",
-        "Send a part to a bus by name ('Reverb', 'Delay', or any insert); a missing Reverb or Delay bus is made "
-        "with an effect of that kind you have.",
+        "Send a part to a bus by name ('Reverb', 'Delay', or any insert); a missing Reverb bus is made with a "
+        "reverb you have, a missing Delay bus with Spinus Delay (echoes in time with the song, fully wet).",
         schema(
             {"part": PART, "to": {"type": "string"}, "level": {"type": "string", "description": "'-12 dB'"}},
             ["part", "to", "level"],
@@ -1117,7 +1119,13 @@ class ProjectHarness:
             if words is None:
                 raise Mistake(f"there is no bus '{to}' (make one with bus, or send to 'Reverb' or 'Delay')")
             device = None
-            for w in words:
+            if kind == "delay":  # Spinus's own, always there (in the device list of a Spinus that has it)
+                own = next((d for d in self.devices if (d.get("device") or {}).get("stockType") == DELAY_TYPE), None)
+                if own is not None or not self.devices:
+                    device = (
+                        copy.deepcopy(own.get("device") or {}) if own else {"kind": "stock", "stockType": DELAY_TYPE}
+                    )
+            for w in words if device is None else ():
                 try:
                     device = self.find_device(w, "effect")
                     break
@@ -1128,7 +1136,10 @@ class ProjectHarness:
             number = self.step("insert.add", {"name": to.strip().title()}, f"a {to.strip().title()} bus")
             target = {"id": f"${number}.insert", "name": to.strip().title(), "effects": [], "sends": []}
             self.project["mixer"]["inserts"].append(target)
-            self.step("insert.addEffect", {"insert": target["id"], "device": device})
+            added = self.step("insert.addEffect", {"insert": target["id"], "device": device})
+            target["effects"].append({"device": {**device, "id": f"${added}.device"}})
+            if device.get("stockType") == DELAY_TYPE:  # on a bus: only the echoes
+                self.step("device.setParameters", {"device": f"${added}.device", "text": {"mix": "100%"}})
         self.step(
             "insert.setSend",
             {"insert": insert.get("id"), "target": target.get("id"), "levelDb": read_db(level)},

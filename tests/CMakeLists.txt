@@ -19,6 +19,7 @@ add_executable (spinus_tests
     dsp/StarterPackTests.cpp
     dsp/SamplerTests.cpp
     dsp/BeatSlicerTests.cpp
+    dsp/DelayTests.cpp
     dsp/DuckerTests.cpp
     dsp/DynamicsTests.cpp
     dsp/ParameterTextTests.cpp
@@ -187,6 +188,7 @@ if (SPINUS_BUILD_OWN_PLUGINS)
     spinus_add_pluginval_test (spinus-compressor "${SPINUS_COMPRESSOR_VST3}")
     spinus_add_pluginval_test (spinus-limiter "${SPINUS_LIMITER_VST3}")
     spinus_add_pluginval_test (spinus-gate "${SPINUS_GATE_VST3}")
+    spinus_add_pluginval_test (spinus-delay "${SPINUS_DELAY_VST3}")
 endif()
 
 if (SPINUS_BUILD_SURGE)

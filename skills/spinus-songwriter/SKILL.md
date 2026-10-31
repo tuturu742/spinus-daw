@@ -97,11 +97,12 @@ up while it's small:
 2. **Mixer skeleton:** a bus per family, a reverb bus and a delay bus (sends), and the master chain:
    EQ, then compressor, then limiter, with the loudness meter last, so it measures what's heard (some demos
    put the meter before the limiter; that only changes what the meter shows).
-   Spinus's own effects have no reverb or delay. Those come from the free plugins (`bundled.dragonfly.hall`,
-   `.room`, `.plate`, `.early`; `bundled.surge-xt-effects`), and only if `--describe all` lists them. If
-   it doesn't, ask the user to get them in Spinus (Get free plugins). Otherwise, fake the space: echoes
-   written as quieter delayed notes (a dotted 8th, two or three repeats), longer releases, and a widened
-   bus with the Stereo Utility.
+   The delay bus uses Spinus's own `spinus.delay`, always there: `{"note": "1/8 dotted", "mix": "100%"}`
+   (its time follows the song's tempo; `"mode": "Ping-pong"` bounces the echoes, `"high_cut": "5 kHz"`
+   darkens the repeats). Spinus's own effects have no reverb. That comes from the free plugins
+   (`bundled.dragonfly.hall`, `.room`, `.plate`, `.early`; `bundled.surge-xt-effects`), and only if
+   `--describe all` lists them. If it doesn't, ask the user to get them in Spinus (Get free plugins).
+   Otherwise, fake the space: longer releases, the delay bus, and a widened bus with the Stereo Utility.
 3. **Channels:** each with its instrument and sound (a factory preset, then parameter changes), its own
    insert routed to its family bus, a colour and a group.
 4. **Patterns:** one per part and section, named "Chorus - Bass". Ticks are 960 per quarter note (3840 per 4/4 bar,

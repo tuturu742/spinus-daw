@@ -848,8 +848,9 @@ juce::var SongWriterPanel::candidatesFor (juce::var& current)
 
 std::map<juce::String, juce::var> SongWriterPanel::userSendEffects() const
 {
-    // The user's reverbs and delays (Spinus has none of its own), by the words in their names. A plugin that takes
-    // no audio in (a MIDI delay, say) is not one: a send to it would be silent.
+    // The reverbs and delays there are (Spinus's own Delay among them; Spinus has no reverb of its own), by the
+    // words in their names. A plugin that takes no audio in (a MIDI delay, say) is not one: a send to it would be
+    // silent.
     const auto* catalog = session.getDeviceList().getCatalog();
     const auto takesAudio = [catalog] (const plugins::DeviceList::Entry& entry)
     {

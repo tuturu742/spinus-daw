@@ -545,8 +545,8 @@ juce::var notInstalled (Session& session)
         }
     return object ({ { "notInstalled", missing },
                      { "hint", "Free plugins Spinus can download: in Spinus, Options > Get free plugins. Spinus's own "
-                               "effects have no reverb or delay; the Dragonfly reverbs and Surge XT Effects (delay, "
-                               "chorus) are among these." } });
+                               "effects have no reverb (its delay is spinus.delay); the Dragonfly reverbs and Surge XT "
+                               "Effects (chorus, more delays) are among these." } });
 }
 
 juce::var describe (Session& session, const juce::String& stockType)

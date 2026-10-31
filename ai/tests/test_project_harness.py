@@ -191,6 +191,30 @@ def test_automation_effects_sends_and_ducking_in_real_units() -> None:
     assert "master: no limiter" not in h.call("check", {})[0]
 
 
+def test_a_delay_send_makes_a_delay_bus_with_spinus_delay_fully_wet() -> None:
+    devices = [
+        *DEVICES,
+        device("Ping Pong Delay", "effect", "bundled.other-delay"),
+        device("Spinus Delay", "effect", "spinus.delay"),
+    ]
+    h = ProjectHarness({"project": song(), "devices": devices})
+    text, failed = h.call("send", {"part": "Pad", "to": "Delay", "level": "-14 dB"})
+    assert not failed, text
+    commands = [(s["command"], s["parameters"]) for s in h.steps]
+    assert ("insert.add", {"name": "Delay"}) in commands
+    added = next(p for c, p in commands if c == "insert.addEffect")
+    assert added["device"] == {"kind": "stock", "stockType": "spinus.delay"}
+    assert any(c == "device.setParameters" and p["text"] == {"mix": "100%"} for c, p in commands)
+    assert commands[-1][0] == "insert.setSend" and commands[-1][1]["levelDb"] == -14.0
+    tools = Tools(Snapshot({"project": EXAMPLE, "devices": devices}), Manual(None), COMMANDS)
+    text, failed = tools.propose({"summary": "x", "steps": h.steps})
+    assert not failed, text
+    # A second send goes to the same bus.
+    before = len(h.steps)
+    assert not h.call("send", {"part": "Bass", "to": "Delay", "level": "-20 dB"})[1]
+    assert [s["command"] for s in h.steps[before:]] == ["insert.setSend"]
+
+
 def test_shaping_a_sound_moves_its_settings_as_they_show() -> None:
     h = harness(
         deviceParameters={

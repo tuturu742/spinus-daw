@@ -30,6 +30,7 @@ is different, and which features FL Studio users often ask for that Spinus alrea
 | Fruity Compressor, Fruity Limiter in compressor mode | [Spinus Compressor](compressor.md) |
 | Fruity Limiter on the master | [Spinus Limiter](limiter.md) |
 | Fruity Limiter in gate mode | [Spinus Gate](gate.md) |
+| Fruity Delay 3 | [Spinus Delay](delay.md) |
 | Fruity Limiter sidechain, Peak Controller ducking | [Sidechain Ducker](ducker.md), or the [Spinus Compressor](compressor.md) with a sidechain |
 | Fruity Stereo Shaper, stereo widening | [Stereo Utility](stereo-utility.md) |
 | 3x Osc | [3x Osc](3x-osc.md), Spinus's own |
