@@ -200,6 +200,11 @@ It teaches an agent to plan, write, mix, check and render a whole song with thes
 installed Spinus. To use it, copy the `spinus-songwriter` folder into your agent's skills folder (for
 Claude Code: `~/.claude/skills/`), then ask the agent for a song.
 
+A shorter, general guide for agents, [`skills/spinus/SKILL.md`](https://github.com/tuturu742/spinus-daw/blob/main/skills/spinus/SKILL.md),
+covers both ways in (the live interface and the command line), the rules an agent should keep, and the
+facts that are easy to get wrong. Install it the same way, or give it to an agent that reads plain
+Markdown files (an `AGENTS.md`, for example).
+
 ## Things to know
 
 - Plugins you installed yourself work in scripts by their name and file, as `--describe` can't list them:
