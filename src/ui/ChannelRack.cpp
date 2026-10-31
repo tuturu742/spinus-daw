@@ -8,6 +8,7 @@
 
 #include "Browser.h"
 #include "DeviceMenu.h"
+#include "MainView.h"
 #include "SliderDrag.h"
 #include "Theme.h"
 #include "commands/CommandRegistry.h"
@@ -15,6 +16,7 @@
 #include "dsp/slicer/BeatSlicerProcessor.h"
 #include "engine/BundledDevices.h"
 #include "model/ModelJson.h"
+#include "model/StockDevices.h"
 #include "session/SlicesToPattern.h"
 
 namespace spinus::ui
@@ -310,6 +312,18 @@ private:
         menu.addSeparator();
         menu.addItem (frozen ? "Open instrument window (unfreeze to edit)" : "Open instrument window",
                       hasInstrument && ! frozen, false, [this] { rack.showInstrumentWindow (id); });
+        {
+            // FL's Replace: the same instruments as the rack's "+" menu.
+            juce::PopupMenu replace;
+            addDeviceItems (replace, rack.session.getDeviceList(), true,
+                            [safe = juce::Component::SafePointer<ChannelRack> (&rack),
+                             id = id] (const plugins::DeviceList::Entry& e)
+                            {
+                                if (safe != nullptr)
+                                    safe->replaceInstrument (id, e.device, e.name);
+                            });
+            menu.addSubMenu (hasInstrument ? "Replace instrument" : "Choose instrument", replace);
+        }
         menu.addSeparator();
         using Kind = model::ParameterTarget::Kind;
         for (auto [kind, text] : { std::pair { Kind::channelVolume, "Create automation clip: volume" },
@@ -653,6 +667,52 @@ bool ChannelRack::addChannelWith (const model::Device& instrument, const juce::S
 
     // A new channel becomes the selected one, ready for the Piano Roll.
     session.setSelectedChannel (model::ChannelId { (uint32_t)(int)raw->getResult()["channel"] });
+    return true;
+}
+
+bool ChannelRack::replaceInstrument (model::ChannelId channel, const model::Device& instrument,
+                                     const juce::String& entryName)
+{
+    const auto* c = session.getProject().findChannel (channel);
+    if (c == nullptr)
+        return false;
+
+    // Named after its instrument (as the "+" menu names a channel): it takes the new one's name.
+    auto name = c->name;
+    if (c->instrument)
+    {
+        const auto& old = *c->instrument;
+        bool isDefault = name == model::getDeviceDisplayName (old);
+        for (const auto& e : session.getDeviceList().getEntries())
+            if (e.name == name && e.device.kind == old.kind && e.device.stockType == old.stockType &&
+                e.device.plugin.fileOrIdentifier == old.plugin.fileOrIdentifier &&
+                e.device.plugin.name == old.plugin.name)
+                isDefault = true;
+        if (isDefault && entryName.isNotEmpty())
+            name = entryName;
+    }
+
+    // Automation of the old instrument's settings goes with it: say so.
+    int removed = 0;
+    if (c->instrument)
+        for (const auto& clip : session.getProject().playlist.clips)
+            if (auto* a = std::get_if<model::AutomationClip> (&clip.content);
+                a != nullptr && a->target.kind == model::ParameterTarget::Kind::deviceParameter &&
+                a->target.device == c->instrument->id)
+                ++removed;
+
+    auto params = object (
+        { { "channel", (int)channel.value }, { "instrument", model::deviceToJson (instrument) }, { "name", name } });
+    juce::String error;
+    auto command = commands::CommandRegistry::get().create ("channel.replaceInstrument", params, error);
+    if (command == nullptr || session.getHistory().perform (std::move (command)).failed())
+        return false;
+
+    if (removed > 0)
+        if (auto* view = findParentComponentOfClass<MainView>())
+            view->getHintBar().showMessage (
+                "Removed " + juce::String (removed) + (removed == 1 ? " automation clip" : " automation clips") +
+                " of the old instrument's settings (the new one has other settings). Undo brings them back.");
     return true;
 }
 

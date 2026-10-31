@@ -273,6 +273,42 @@ TEST_CASE ("Freeze and Unfreeze a channel from the rack; its instrument window s
     CHECK (r.session.getHistory().getUndoDescriptions().contains ("Freeze channel 'Lead'"));
 }
 
+TEST_CASE ("Replace instrument: another instrument plays the channel's steps, one undo step", "[ui][channelrack]")
+{
+    Rack r;
+    REQUIRE (r.rack.addChannel ("spinus.3x-osc", "3x Osc")); // named after its instrument, as the + menu does
+    const auto synth = r.lastChannel();
+    REQUIRE (r.rack.addChannel ("spinus.3x-osc", "My bass"));
+    const auto bass = r.lastChannel();
+    REQUIRE (r.rack.toggleStep (synth, 0));
+    REQUIRE (r.rack.toggleStep (bass, 4));
+    const auto oldDevice = r.session.getProject().findChannel (synth)->instrument.value_or (model::Device {}).id;
+
+    model::Device sampler;
+    sampler.stockType = "spinus.sampler";
+    REQUIRE (r.rack.replaceInstrument (synth, sampler, "Sampler"));
+    REQUIRE (r.rack.replaceInstrument (bass, sampler, "Sampler"));
+
+    const auto& p = r.session.getProject();
+    const auto* channel = p.findChannel (synth);
+    CHECK (channel->name == "Sampler");
+    CHECK (p.findInsert (channel->targetInsert)->name == "Sampler");
+    CHECK (channel->instrument.value_or (model::Device {}).stockType == "spinus.sampler");
+    CHECK (r.session.getAdapter().getDevicePlugin (channel->instrument.value_or (model::Device {}).id) != nullptr);
+    CHECK (r.session.getAdapter().getDevicePlugin (oldDevice) == nullptr);
+    CHECK (r.rack.isStepOn (synth, 0));
+    CHECK (p.findChannel (bass)->name == "My bass"); // a name of its own stays
+    CHECK (r.rack.isStepOn (bass, 4));
+    CHECK (r.session.getHistory().getUndoDescriptions().strings.getLast() ==
+           "Replace instrument of 'My bass' with Sampler");
+
+    REQUIRE (r.session.getHistory().undo());
+    REQUIRE (r.session.getHistory().undo());
+    CHECK (r.session.getProject().findChannel (synth)->name == "3x Osc");
+    CHECK (r.session.getProject().findChannel (synth)->instrument.value_or (model::Device {}).id == oldDevice);
+    CHECK (r.session.getAdapter().getDevicePlugin (oldDevice) != nullptr);
+}
+
 TEST_CASE ("Notes steps cannot show turn the row into a picture that opens the Piano Roll", "[ui][channelrack]")
 {
     EngineHost host { { .openAudioDevice = false } };

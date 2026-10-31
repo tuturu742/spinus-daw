@@ -52,6 +52,8 @@ const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
         { "project.setKey", R"({"tonic": 2, "scale": "dorian"})" },
         { "channel.add", R"({"name": "Hats", "instrument": {"kind": "stock", "stockType": "spinus.sampler"}})" },
         { "channel.remove", R"({"channel": 9})" },
+        { "channel.replaceInstrument",
+          R"({"channel": 9, "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}})" },
         { "channel.set",
           R"({"channel": 7, "name": "Big kick", "volumeDb": -6, "muted": true, "colour": "#ff112233"})" },
         { "channel.route", R"({"channel": 7, "insert": 6})" },
@@ -236,6 +238,109 @@ TEST_CASE ("Removing a channel removes its notes and automation; undo brings the
     history.undo();
     auto restored = history.getProject();
     CHECK (restored == project);
+}
+
+TEST_CASE ("Replacing an instrument keeps the channel and its notes; undo brings the old one back", "[commands]")
+{
+    auto project = makeExample();
+    // Automation of the old instrument (Surge XT, device 10) and of the channel's volume.
+    AutomationClip cutoff, volume;
+    cutoff.target = { ParameterTarget::Kind::deviceParameter, {}, {}, DeviceId { 10 }, "cutoff" };
+    cutoff.points = { { 0, 0.5f, 0.0f } };
+    volume.target = { ParameterTarget::Kind::channelVolume, ChannelId { synth }, {}, {}, {} };
+    volume.points = { { 0, 0.5f, 0.0f } };
+    project.playlist.clips.push_back ({ project.allocateId<ClipId>(), LaneId { 12 }, 0, 960, false, cutoff });
+    project.playlist.clips.push_back ({ project.allocateId<ClipId>(), LaneId { 12 }, 0, 960, false, volume });
+    project.channels[1].colour = 0xff112233;
+    project.channels[1].group = "Synths";
+    project.channels[1].frozen = true;
+
+    CommandHistory history (project);
+    auto command = make ("channel.replaceInstrument",
+                         R"({"channel": 9, "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}})");
+    auto* raw = command.get();
+    REQUIRE (history.perform (std::move (command)).wasOk());
+    CHECK (history.getUndoDescriptions()[0] == "Replace instrument of 'Surge' with 3x Osc");
+
+    const auto newDevice = DeviceId { (uint32_t)(int)raw->getResult()["device"] };
+    CHECK ((int)raw->getResult()["channel"] == synth);
+    const auto& p = history.getProject();
+    const auto* channel = p.findChannel (ChannelId { synth });
+    REQUIRE (channel != nullptr);
+    REQUIRE (channel->instrument.has_value());
+    CHECK (channel->instrument.value_or (Device {}).stockType == "spinus.3x-osc");
+    CHECK (channel->instrument.value_or (Device {}).id == newDevice);
+    CHECK (newDevice != DeviceId { 10 });
+    // Everything else stays: its name (not the old instrument's), colour, group, insert, volume, pan, notes.
+    CHECK (channel->name == "Surge");
+    CHECK (channel->colour == 0xff112233);
+    CHECK (channel->group == "Synths");
+    CHECK (channel->targetInsert == InsertId { bass });
+    CHECK (juce::approximatelyEqual (channel->volumeDb, -3.0f));
+    CHECK (juce::approximatelyEqual (channel->pan, 0.25f));
+    CHECK (! channel->frozen); // the new instrument plays live
+    CHECK (p.patterns[0].notes.at (ChannelId { synth }) == project.patterns[0].notes.at (ChannelId { synth }));
+    CHECK (p.findInsert (InsertId { bass })->name == "Bass");
+    // The old instrument's automation went; the channel's volume automation stayed.
+    CHECK (p.playlist.clips.size() == project.playlist.clips.size() - 1);
+    CHECK (std::none_of (p.playlist.clips.begin(), p.playlist.clips.end(),
+                         [] (const Clip& c)
+                         {
+                             auto* a = std::get_if<AutomationClip> (&c.content);
+                             return a != nullptr && a->target.device == DeviceId { 10 };
+                         }));
+    CHECK (validate (p).isEmpty());
+
+    REQUIRE (history.undo());
+    auto undone = history.getProject();
+    undone.nextId = project.nextId;
+    CHECK (undone == project);
+
+    REQUIRE (history.redo());
+    CHECK (history.getProject().findChannel (ChannelId { synth })->instrument.value_or (Device {}).id ==
+           newDevice); // same ID again
+}
+
+TEST_CASE ("A channel named after its instrument takes the new instrument's name", "[commands]")
+{
+    auto project = makeExample();
+    project.channels[1].name = "Surge XT"; // as added from the menu
+    project.findInsert (InsertId { bass })->name = "Surge XT";
+
+    CommandHistory history (project);
+    REQUIRE (history
+                 .perform (make ("channel.replaceInstrument",
+                                 R"({"channel": 9, "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}})"))
+                 .wasOk());
+    CHECK (history.getProject().findChannel (ChannelId { synth })->name == "3x Osc");
+    CHECK (history.getProject().findInsert (InsertId { bass })->name == "3x Osc");
+
+    // A name given is used; a mixer insert other channels play into keeps its name.
+    REQUIRE (history.perform (make ("channel.route", R"({"channel": 7, "insert": 6})")).wasOk());
+    REQUIRE (history
+                 .perform (make ("channel.replaceInstrument",
+                                 R"({"channel": 9, "name": "Lead", "instrument": {"kind": "plugin", "plugin":
+                                     {"format": "CLAP", "name": "Some Synth", "fileOrIdentifier": "/x.clap"}}})"))
+                 .wasOk());
+    CHECK (history.getProject().findChannel (ChannelId { synth })->name == "Lead");
+    CHECK (history.getProject().findChannel (ChannelId { synth })->instrument.value_or (Device {}).plugin.name ==
+           "Some Synth");
+    CHECK (history.getProject().findInsert (InsertId { bass })->name == "3x Osc");
+
+    // Refused: an audio track, a channel that isn't there, no instrument.
+    REQUIRE (history.perform (make ("channel.add", R"({"name": "Vox", "audioTrack": true})")).wasOk());
+    const auto vox = history.getProject().channels.back().id;
+    CHECK (history
+               .perform (make ("channel.replaceInstrument",
+                               "{\"channel\": " + juce::String (vox.value) +
+                                   ", \"instrument\": {\"kind\": \"stock\", \"stockType\": \"spinus.3x-osc\"}}"))
+               .getErrorMessage()
+               .contains ("audio track"));
+    CHECK (history
+               .perform (make ("channel.replaceInstrument",
+                               R"({"channel": 999, "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}})"))
+               .failed());
+    CHECK (createError ("channel.replaceInstrument", R"({"channel": 9})").contains ("instrument"));
 }
 
 TEST_CASE ("Removing an insert sends its inputs to master and drops sends to it", "[commands]")

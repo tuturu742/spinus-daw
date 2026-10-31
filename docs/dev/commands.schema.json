@@ -168,6 +168,71 @@
         "additionalProperties": false
       }
     },
+    "channel.replaceInstrument": {
+      "description": "Replace a channel's instrument with another (FL's Replace): its notes, Playlist clips, insert, volume, pan, colour and group stay. Its name stays too unless it was the old instrument's name (then it, and its own insert's, become the new one's). Automation clips of the old instrument's settings are removed. Result: the new instrument's device ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          },
+          "instrument": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "stock",
+                  "plugin"
+                ],
+                "description": "\"stock\": Spinus's own or a bundled device, by stockType; \"plugin\": a plugin installed on this computer"
+              },
+              "stockType": {
+                "type": "string",
+                "description": "For kind \"stock\": e.g. \"spinus.3x-osc\", \"spinus.drum-machine\", \"spinus.eq\", \"bundled.dragonfly.hall\" (spinus --describe all lists them)"
+              },
+              "plugin": {
+                "type": "object",
+                "description": "For kind \"plugin\": the plugin as Spinus's plugin list names it (a saved project shows it)",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "description": "\"VST3\", \"CLAP\", \"LV2\" or \"VST\""
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "manufacturer": {
+                    "type": "string"
+                  },
+                  "fileOrIdentifier": {
+                    "type": "string",
+                    "description": "The plugin's file, or its identifier (LV2's URI)"
+                  },
+                  "uniqueId": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "description": "The new instrument device (without id)"
+          },
+          "name": {
+            "type": "string",
+            "description": "A new name for the channel (default: as described above)"
+          }
+        },
+        "required": [
+          "channel",
+          "instrument"
+        ],
+        "additionalProperties": false
+      }
+    },
     "channel.set": {
       "description": "Change a channel's name, colour, volume, pan, pitch, mute, solo or group (the Channel Rack's filter group, e.g. \"Drums\"; empty for none), or an audio track's recording: its input, stereo, and whether it is armed.",
       "parameters": {

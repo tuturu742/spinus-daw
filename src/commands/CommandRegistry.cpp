@@ -600,6 +600,85 @@ private:
     juce::String removedName;
 };
 
+/** FL's "Replace" on a channel: another instrument plays the channel's notes. The channel keeps everything
+    else (colour, group, insert, volume, pan, notes, Playlist clips); its name too, unless it was the old
+    instrument's name, which becomes the new one's (and so does its insert's, if the insert is the channel's
+    own and still has that name). Automation of the old instrument's settings is removed in the same step: the
+    new one has other settings, so those clips would move nothing (undo brings them back). The old instrument's
+    settings come back with undo (the engine keeps a removed device's state). */
+class ReplaceInstrument final : public SnapshotCommand
+{
+public:
+    ReplaceInstrument (juce::var p, ChannelId c, Device device, std::optional<juce::String> nameToUse)
+        : SnapshotCommand ("channel.replaceInstrument", std::move (p)), channel (c), instrument (std::move (device)),
+          name (std::move (nameToUse))
+    {
+    }
+
+    juce::String getDescription() const override
+    {
+        return "Replace instrument of " + quoted (channelName) + " with " + getDeviceDisplayName (instrument);
+    }
+
+    juce::var getResult() const override
+    {
+        return resultWith ({ { "channel", channel.value }, { "device", deviceId.value } });
+    }
+
+protected:
+    juce::Result apply (Project& p) override
+    {
+        auto* c = p.findChannel (channel);
+        if (c == nullptr)
+            return juce::Result::fail ("channel " + juce::String (channel.value) + " does not exist");
+        if (c->audioTrack)
+            return juce::Result::fail ("an audio track has no instrument");
+
+        if (! deviceId) // first perform allocates the ID; redo reuses it
+            deviceId = p.allocateId<DeviceId>();
+
+        const auto old = c->instrument;
+        const auto oldName = c->name;
+        auto newName = name.value_or (oldName);
+        if (! name && old && oldName == getDeviceDisplayName (*old))
+            newName = getDeviceDisplayName (instrument);
+        channelName = oldName;
+
+        c->instrument = instrument;
+        c->instrument->id = deviceId;
+        c->frozen = false; // the new instrument plays live; freeze it again when it sounds right
+
+        if (newName != oldName)
+        {
+            c->name = newName;
+            // Its own insert (named with it when it was added) follows; a bus other channels play into keeps
+            // its name.
+            const auto shared = std::any_of (p.channels.begin(), p.channels.end(), [&] (const Channel& other)
+                                             { return other.id != channel && other.targetInsert == c->targetInsert; });
+            if (auto* insert = p.findInsert (c->targetInsert);
+                insert != nullptr && c->targetInsert != masterInsertId && insert->name == oldName && ! shared)
+                insert->name = std::move (newName);
+        }
+
+        if (old)
+            std::erase_if (p.playlist.clips,
+                           [&] (const Clip& clip)
+                           {
+                               auto* a = std::get_if<AutomationClip> (&clip.content);
+                               return a != nullptr && a->target.kind == ParameterTarget::Kind::deviceParameter &&
+                                      a->target.device == old->id;
+                           });
+        return juce::Result::ok();
+    }
+
+private:
+    ChannelId channel;
+    Device instrument;
+    std::optional<juce::String> name;
+    juce::String channelName;
+    DeviceId deviceId;
+};
+
 class SetChannel final : public JsonCommand
 {
 public:
@@ -3161,6 +3240,29 @@ void addChannelCommands (std::vector<CommandInfo>& list)
                               p.allowOnly ({ "channel" });
                               return std::make_unique<RemoveChannel> (p.json, p.id<ChannelId> ("channel"));
                           }));
+
+    list.push_back (info (
+        "channel.replaceInstrument",
+        "Replace a channel's instrument with another (FL's Replace): its notes, Playlist clips, insert, volume, pan, "
+        "colour and group stay. Its name stays too unless it was the old instrument's name (then it, and its own "
+        "insert's, become the new one's). Automation clips of the old instrument's settings are removed. Result: the "
+        "new instrument's device ID.",
+        ParameterSchema()
+            .id ("channel", "Channel ID")
+            .custom ("instrument", "The new instrument device (without id)", true, deviceSchema())
+            .string ("name", "A new name for the channel (default: as described above)"),
+        [] (Params& p) -> std::unique_ptr<Command>
+        {
+            p.allowOnly ({ "channel", "instrument", "name" });
+            Device device;
+            if (auto d = p.get ("instrument", true); ! d.isVoid())
+                if (auto e = deviceFromJson (d, device); e.isNotEmpty())
+                    p.errors.add ("instrument: " + e);
+            auto name = p.string ("name");
+            if (name && name->trim().isEmpty())
+                p.errors.add ("'name' must not be empty");
+            return std::make_unique<ReplaceInstrument> (p.json, p.id<ChannelId> ("channel"), device, name);
+        }));
 
     list.push_back (info ("channel.set",
                           "Change a channel's name, colour, volume, pan, pitch, mute, solo or group (the Channel "

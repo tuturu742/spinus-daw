@@ -182,6 +182,7 @@ class Snapshot:
 # CommandRegistry getResult(); tests/ai/AiTests.cpp checks this table against it).
 RESULT_FIELDS: dict[str, tuple[str, ...]] = {
     "channel.add": ("channel", "insert", "device"),
+    "channel.replaceInstrument": ("channel", "device"),
     "insert.add": ("insert",),
     "insert.addEffect": ("device",),
     "insert.addBus": ("insert",),

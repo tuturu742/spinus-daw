@@ -83,7 +83,7 @@ std::unique_ptr<Command> randomCommand (const model::Project& p, std::mt19937& r
         return ids.empty() ? 999 : ids[(size_t)pick ((int)ids.size())];
     };
 
-    switch (pick (18))
+    switch (pick (19))
     {
     case 0:
         return make ("channel.add", R"({"name": "Ch", "instrument": {"kind": "stock", "stockType": "test.tone"}})");
@@ -136,6 +136,10 @@ std::unique_ptr<Command> randomCommand (const model::Project& p, std::mt19937& r
     case 16:
         return make ("insert.setEffect",
                      "{\"device\": " + num (effectId()) + ", \"bypassed\": " + (pick (2) ? "true" : "false") + "}");
+    case 17:
+        return make ("channel.replaceInstrument", "{\"channel\": " + num (channelId()) +
+                                                      ", \"instrument\": {\"kind\": \"stock\", \"stockType\": \"" +
+                                                      (pick (2) ? "test.tone" : "spinus.sampler") + "\"}}");
     default:
         return make ("project.setTempo", "{\"bpm\": " + num (90 + pick (80)) + "}");
     }
@@ -304,6 +308,53 @@ TEST_CASE ("Effects are added, reordered and moved in place; undoing a removal r
     REQUIRE (moved != nullptr);
     CHECK (adapter.getInsertTrack (model::InsertId { 6 })->pluginList.indexOf (moved) >= 0);
     CHECK (juce::approximatelyEqual (moved->getAutomatableParameter (0)->getCurrentValue(), value));
+    CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+}
+
+TEST_CASE ("Replacing a channel's instrument swaps the plugin on its track; undo brings back its settings", "[engine]")
+{
+    Fixture f;
+    auto edit = f.newEdit();
+    EngineAdapter adapter (*edit, f.factory);
+
+    CommandHistory history (makeExample());
+    history.addListener ([&] (const ChangeSet&) { adapter.sync (history.getProject()); });
+    adapter.sync (history.getProject());
+
+    // The kick (channel 7) plays device 8. Change one of its settings.
+    auto* old = adapter.getDevicePlugin (model::DeviceId { 8 });
+    REQUIRE (old != nullptr);
+    auto* parameter = old->getAutomatableParameter (0).get();
+    REQUIRE (parameter != nullptr);
+    parameter->setParameter (0.123f, juce::sendNotificationSync);
+    const auto value = parameter->getCurrentValue();
+    auto& list = adapter.getChannelTrack (model::ChannelId { 7 })->pluginList;
+    const auto clipsBefore = adapter.getNumMidiClips();
+
+    auto command = make ("channel.replaceInstrument",
+                         R"({"channel": 7, "instrument": {"kind": "stock", "stockType": "test.tone"}})");
+    auto* raw = command.get();
+    REQUIRE (history.perform (std::move (command)).wasOk());
+    const auto newId = model::DeviceId { (uint32_t)(int)raw->getResult()["device"] };
+
+    CHECK (adapter.getDevicePlugin (model::DeviceId { 8 }) == nullptr);
+    auto* tone = adapter.getDevicePlugin (newId);
+    REQUIRE (tone != nullptr);
+    CHECK (dynamic_cast<te::ToneGeneratorPlugin*> (tone) != nullptr);
+    CHECK (list.indexOf (tone) >= 0);                 // on the channel's track, where the old one was
+    CHECK (adapter.getNumMidiClips() == clipsBefore); // its notes still play, on the same track
+    CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+
+    REQUIRE (history.undo());
+    auto* restored = adapter.getDevicePlugin (model::DeviceId { 8 });
+    REQUIRE (restored != nullptr);
+    CHECK (adapter.getDevicePlugin (newId) == nullptr);
+    CHECK (list.indexOf (restored) >= 0);
+    CHECK (juce::approximatelyEqual (restored->getAutomatableParameter (0)->getCurrentValue(), value));
+
+    REQUIRE (history.redo());
+    CHECK (adapter.getDevicePlugin (model::DeviceId { 8 }) == nullptr);
+    CHECK (dynamic_cast<te::ToneGeneratorPlugin*> (adapter.getDevicePlugin (newId)) != nullptr);
     CHECK (adapter.describe() == f.describeFresh (history.getProject()));
 }
 
