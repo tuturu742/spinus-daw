@@ -98,10 +98,20 @@ public:
         choice.setTooltip ("The closest sounds for this part, the closest first: pick another to swap it");
         listenButton.setTooltip ("Hear the chosen sound play a short phrase");
         listenButton.onClick = [this] { panel.listen (index); };
+        // The instrument in its own window, to set up a sound (a kit, a patch) and keep it.
+        saveButton.onClick = [this]
+        {
+            juce::MessageManager::callAsync (
+                [safe = juce::Component::SafePointer<PartSoundsPanel> (&panel), row = index]
+                {
+                    if (safe != nullptr)
+                        safe->saveSound (row);
+                });
+        };
         songsButton.setTooltip ("Hear the part in the reference song it was compared with");
         songsButton.onClick = [this] { panel.listenToSongs (index); };
-        for (auto* c :
-             std::initializer_list<juce::Component*> { &title, &role, &removeButton, &choice, &listenButton, &why })
+        for (auto* c : std::initializer_list<juce::Component*> { &title, &role, &removeButton, &choice, &listenButton,
+                                                                 &saveButton, &why })
             addAndMakeVisible (c);
         addChildComponent (tuneToggle);
         addChildComponent (songsButton);
@@ -119,10 +129,8 @@ public:
         choice.addSeparator();
         choice.addItem ("Other sound...", otherId);
         // A plugin's own window, to set up a sound (a kit, a patch) and keep it: for the chosen instrument.
-        const auto* now = row.chosen();
         choice.addItem ("Save this sound...", saveId);
-        choice.setItemEnabled (saveId, now != nullptr && (now->kind == parts::Choice::Kind::preset ||
-                                                          now->kind == parts::Choice::Kind::kit));
+        choice.setItemEnabled (saveId, panel.whySaveSoundIsOff (index).isEmpty());
         if (! row.choices.empty())
             choice.setSelectedId (row.selected + 1, juce::dontSendNotification);
         choice.setTextWhenNothingSelected (row.choices.empty() && row.measured == 0 && row.note.isEmpty()
@@ -136,15 +144,29 @@ public:
         tuneToggle.setToggleState (row.tune, juce::dontSendNotification);
         songsButton.setVisible (panel.hasReferences());
         songsButton.setEnabled (row.stem != juce::File());
+        updateSaveButton();
         resized();
+    }
+
+    /** Save this sound: on whenever the part has an instrument; its tooltip says why when it is off. */
+    void updateSaveButton()
+    {
+        const auto off = panel.whySaveSoundIsOff (index);
+        saveButton.setEnabled (off.isEmpty());
+        saveButton.setTooltip (off.isNotEmpty()
+                                   ? off
+                                   : "Open this part's instrument in its own window: set a sound up there (choose a "
+                                     "kit or a patch), name it and Save. The Track creator uses it from then on (for "
+                                     "an instrument that is silent until a sound is chosen, such as some drum "
+                                     "players)");
     }
 
     void resized() override
     {
         auto r = getLocalBounds().reduced (2);
         auto top = r.removeFromTop (26);
-        title.setBounds (top.removeFromLeft (130));
-        role.setBounds (top.removeFromLeft (140).reduced (0, 1));
+        title.setBounds (top.removeFromLeft (120));
+        role.setBounds (top.removeFromLeft (132).reduced (0, 1));
         top.removeFromLeft (4);
         removeButton.setBounds (top.removeFromRight (26).reduced (0, 1));
         top.removeFromRight (4);
@@ -153,7 +175,9 @@ public:
             songsButton.setBounds (top.removeFromRight (90).reduced (0, 1));
             top.removeFromRight (4);
         }
-        listenButton.setBounds (top.removeFromRight (70).reduced (0, 1));
+        saveButton.setBounds (top.removeFromRight (120).reduced (0, 1));
+        top.removeFromRight (4);
+        listenButton.setBounds (top.removeFromRight (64).reduced (0, 1));
         top.removeFromRight (6);
         choice.setBounds (top.reduced (0, 1));
         if (tuneToggle.isVisible())
@@ -169,7 +193,8 @@ private:
     juce::Label title, why;
     juce::ComboBox role;
     juce::ToggleButton tuneToggle { "Tune toward the references" };
-    juce::TextButton listenButton { "Listen" }, songsButton { "The songs'" }, removeButton { "x" };
+    juce::TextButton listenButton { "Listen" }, saveButton { "Save this sound..." }, songsButton { "The songs'" },
+        removeButton { "x" };
 };
 
 /** What the measuring thread is given and finds. */
@@ -1192,7 +1217,9 @@ parts::Choice PartSoundsPanel::choiceOf (const SoundSource& source, const juce::
     }
     else
         c.why.add ("chosen by you");
-    if (! measured || ! sound.isObject() || sound.hasProperty ("problem") || (bool)sound["silent"])
+    if (measured && (bool)sound["silent"] && ! sound.hasProperty ("problem"))
+        c.why.add ("silent as it opens: set a sound up in its window with Save this sound");
+    else if (! measured || ! sound.isObject() || sound.hasProperty ("problem") || (bool)sound["silent"])
         c.why.add ("not measured");
     return c;
 }
@@ -1241,15 +1268,27 @@ void PartSoundsPanel::fillInstrumentMenu (juce::PopupMenu& menu,
         const auto found = index.instruments.find (source.key);
         const bool measured = found != index.instruments.end() && found->second.problem.isEmpty();
         auto make = [this, source, measured] (const juce::var& sound) { return choiceOf (source, sound, measured); };
+        // Its sound as it opens: as measured, when it was (an instrument without presets).
+        juce::var asItOpens;
+        if (found != index.instruments.end())
+            for (const auto& sound : found->second.sounds)
+                if (sound["id"].toString().isEmpty())
+                    asItOpens = sound;
+        const auto silent = (bool)asItOpens["silent"] && ! asItOpens.hasProperty ("problem");
         juce::PopupMenu presets;
-        presets.addItem (juce::String ("Default sound") + (measured ? "" : " (not measured)"),
-                         [picked, make] { picked (make ({})); });
+        presets.addItem (juce::String ("Default sound") +
+                             (! measured ? " (not measured)"
+                              : silent   ? " (silent until a sound is chosen in its window: Save this sound)"
+                                         : ""),
+                         [picked, make, asItOpens] { picked (make (asItOpens)); });
         if (found != index.instruments.end())
         {
             // Many presets: by category.
             std::map<juce::String, juce::PopupMenu> byCategory;
             for (const auto& sound : found->second.sounds)
             {
+                if (sound["id"].toString().isEmpty())
+                    continue; // Default sound, above
                 const auto unmeasured = sound.hasProperty ("problem") || (bool)sound["silent"];
                 const auto name = sound["name"].toString() + (unmeasured ? " (not measured)" : "");
                 auto& into = found->second.sounds.size() > 40 ? byCategory[sound["category"].toString()] : presets;
@@ -1281,20 +1320,35 @@ void PartSoundsPanel::fillInstrumentMenu (juce::PopupMenu& menu,
         menu.addItem ("No instruments found (Browser > Instruments lists them)", false, false, [] {});
 }
 
+juce::String PartSoundsPanel::whySaveSoundIsOff (int index) const
+{
+    if (! juce::isPositiveAndBelow (index, (int)rows.size()))
+        return "There is no such part.";
+    const auto& row = rows[(size_t)index];
+    const auto* now = row.chosen();
+    if (now == nullptr)
+        return "Choose a sound for " + row.part.name +
+               " first (Choose sounds, or Other sound... in its list), then Save this sound opens its "
+               "instrument's window.";
+    if (now->kind != parts::Choice::Kind::preset && now->kind != parts::Choice::Kind::kit)
+        return now->title() + " plays samples or a loop: Save this sound keeps an instrument plugin's own sound. " +
+               "Pick an instrument with Other sound... first.";
+    if (now->source.key.isEmpty() || (now->source.stockType.isEmpty() && now->source.file.isEmpty()))
+        return "Spinus does not know where " + now->source.name + " is: pick it again with Other sound...";
+    if (busy)
+        return "Spinus is busy with this list: wait until it finishes (or Stop), then Save this sound.";
+    return {};
+}
+
 bool PartSoundsPanel::saveSound (int index)
 {
-    if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()))
-        return false;
-    context = getContext ? getContext() : Context {};
-    const auto* now = rows[(size_t)index].chosen();
-    if (now == nullptr || (now->kind != parts::Choice::Kind::preset && now->kind != parts::Choice::Kind::kit))
+    if (const auto why = whySaveSoundIsOff (index); why.isNotEmpty())
     {
-        status.setText ("Choose an instrument for " + rows[(size_t)index].part.name +
-                            " first (Other sound...), then Save this sound.",
-                        juce::dontSendNotification);
+        status.setText ("Save this sound: " + why, juce::dontSendNotification);
         return false;
     }
-    const auto start = *now;
+    context = getContext ? getContext() : Context {};
+    const auto start = *rows[(size_t)index].chosen();
     juce::String problem;
     const auto opened = SaveSoundWindow::open (
         session, start, rows[(size_t)index].part.name + " (" + start.source.name + ")", this,
@@ -1617,6 +1671,8 @@ void PartSoundsPanel::updateButtons()
     stopButton.setVisible (busy);
     for (auto* b : { &closerButton, &effectsButton })
         b->setEnabled (! busy);
+    for (auto& view : views)
+        view->updateSaveButton();
     resized();
 }
 

@@ -106,8 +106,10 @@ public:
     static constexpr int version = 1;
     /** How the helper measures (SoundRender): raised when that changes in a way that can make a sound silent or
         failed before measure now. 2: it waits for instruments that load their sounds late, and tries a plugin
-        that crashes listing its presets with its default sound only. */
-    static constexpr int helperRevision = 2;
+        that crashes listing its presets with its default sound only. 3: it plays a plugin with the buses it
+        has (it switched the input off, and a bridged Windows drum player with an input and many outputs
+        crashed on its first sound). */
+    static constexpr int helperRevision = 3;
 
     explicit SoundIndex (juce::File folder) : root (std::move (folder)) {}
     /** <plugin list folder>/ai/sounds. */

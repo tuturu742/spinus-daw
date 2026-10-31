@@ -701,7 +701,7 @@
       }
     },
     "device.setParameters": {
-      "description": "Change settings of an instrument or effect, by the parameter ID automation uses (a Spinus device's own; for other plugins the position: 0, 1...). 'text': a Spinus device's settings as it shows them, \"35%\", \"220 ms\", \"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, milliseconds for times, hertz for frequencies). 'values': numbers from 0 to 1 over each setting's whole range, for any device.",
+      "description": "Change settings of an instrument or effect, by the parameter ID automation uses (a Spinus device's own; for other plugins the position: 0, 1...). 'text': settings as the device shows them, \"35%\", \"220 ms\", \"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, milliseconds for times, hertz for frequencies); for any plugin, read by what it shows over its range. 'values': numbers from 0 to 1 over each setting's whole range, for any device.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -726,7 +726,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Spinus devices only: parameter ID or setting name to its value as the device shows it (\"35%\", \"220 ms\", \"1.5 s\", \"-6 dB\", \"1.2 kHz\", \"4:1\", \"30% L\", \"Low pass\")"
+            "description": "Parameter ID or setting name to its value as the device shows it (\"35%\", \"220 ms\", \"1.5 s\", \"-6 dB\", \"1.2 kHz\", \"4:1\", \"30% L\", \"Low pass\"); any plugin's too"
           }
         },
         "required": [

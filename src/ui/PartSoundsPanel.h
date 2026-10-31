@@ -102,6 +102,9 @@ public:
     /** Save this sound: the part's instrument in its own window (SaveSoundWindow), with the chosen sound, for
         the user to set up (a kit, a patch) and save. False (the status says why) without an instrument. */
     bool saveSound (int row);
+    /** Why Save this sound cannot open for a part now (empty: it can): no sound chosen yet, samples or a loop (not
+        an instrument plugin's own sound), or the list busy. Its button is on otherwise, and its tooltip says this. */
+    juce::String whySaveSoundIsOff (int row) const;
     /** What Save does with the state (the window, and tests): keeps it as a saved sound of `start`'s
         instrument named `name` (SavedSounds), measures it in the sound helper, and picks it for the part. The
         result arrives asynchronously. */

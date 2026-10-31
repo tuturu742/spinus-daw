@@ -33,12 +33,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Track creator
 
-- **Save this sound:** in the list beside a part, **Save this sound...** opens the part's instrument in its
-  own window, outside the project. Set it up (a kit in a drum player that is silent until one is chosen, a
+- **Save this sound:** the **Save this sound...** button beside each part's **Listen** (also in the list beside
+  the part) opens the part's instrument in its own window, outside the project. Set it up (a kit in a drum player that is silent until one is chosen, a
   patch, your own knob settings), name it and Save: Spinus keeps it as your saved sound, listens to it like a
   preset and chooses it for the part. Choose sounds and the AI writer can use it from then on, and **Other
   sound...** lists your saved sounds first. It works with any instrument, Windows plugins too, and saved
-  sounds stay when the sound index is updated or deleted (Delete the sound index asks about them first).
+  sounds stay when the sound index is updated or deleted (Delete the sound index asks about them first). The
+  button works whenever the part has an instrument, also one picked with Other sound... or one the sound index
+  couldn't measure; when it is greyed out, its tooltip says why.
 - **The parts list is remembered** between runs: the parts, their roles, the sounds you chose and Tune
   toward the references come back when you open the Track creator again. A new description starts it again.
 
@@ -57,9 +59,19 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   load their sounds in the background (Windows plugins through Wine, most of all) and the export renders faster
   than real time. It now lets every plugin instrument load at once, then plays each a few test notes until it
   sounds (at most 45 seconds each, a minute and a half in all) before rendering.
-
-### Fixes
-
+- **A Windows drum player (BFD Player) crashed the sound index's helper**, so it was never listed as measured
+  ("crashed before its first preset", then "crashed while listing its presets"). Spinus played instruments
+  there with their audio input switched off; through the Wine bridge, a plugin with an input and many outputs
+  then crashed on its first sound. Spinus now plays every instrument with the inputs and outputs it has, as
+  in a song, there, in Listen, and in Save this sound's window (which could crash Spinus itself for such a
+  plugin with a saved sound). Instruments that were silent or failed are measured again at the next sound
+  index update. An instrument that is silent until a sound is chosen in its window is listed as "Default
+  sound (silent until a sound is chosen in its window: Save this sound)" under Other sound....
+- **Settings as text now work for every plugin**, not just Spinus's own devices: `device.setParameters`'
+  `text` (in `--run`, the live interface for coding agents, and the assistant's set_sound, add_effect and
+  shape_sound) and automation points' `text` read "-12 dB", "2.5 s", "1.2 kHz" or "Hall" for the free reverbs,
+  the limiter, and any VST3, CLAP, LV2 or VST plugin, by what the plugin shows over the setting's range. When a
+  plugin can't be read so, the error says what it shows at a few points.
 - **Local models in Ollama no longer lose the start of long conversations.** Spinus asked Ollama through its
   OpenAI-compatible API, which can't set the context length, so Ollama kept only its default and silently
   dropped the rest of the conversation: the assistant's longer chats and the Track creator's AI writer (whose

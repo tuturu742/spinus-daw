@@ -345,8 +345,8 @@ D2 (the songs' 2.4)". Compare the numbers: the closer they are, the closer the s
   plugins too), and any of its presets, or its **Default sound** when it has none or lists none. Instruments
   the sound index hasn't measured (or measured as silent, or couldn't load) are there too, marked "not
   measured". Your pick stays first on the list, marked "(your choice)", when you choose sounds again.
-- **Save this sound...** (also in that list) opens the part's instrument in its own window: see
-  [Save this sound](#save-this-sound).
+- **Save this sound...** (the button beside **Listen**, and also in that list) opens the part's instrument
+  in its own window: see [Save this sound](#save-this-sound).
 - **Add these sounds to the project** makes, for each part, a channel named after it ("Bass (Track
   creator)") in the Channel Rack group **Track creator**, with its instrument, preset, tuning, effects and
   fader, and a pattern **Track creator: sounds** with a short phrase on each, so you can hear them
@@ -370,8 +370,14 @@ says so.
 ### Save this sound
 
 Some instruments need you: a drum player that stays silent until you choose a kit in its own window, a
-synth whose best sound is one you made yourself. **Save this sound...** (in the list beside a part) opens the
-part's instrument in its own window, outside your project, with the sound the part has now.
+synth whose best sound is one you made yourself. **Save this sound...** (the button beside a part's
+**Listen**) opens the part's instrument in its own window, outside your project, with the sound the part has
+now.
+
+The button works as soon as the part has an instrument: one **Choose sounds** found, or one you picked with
+**Other sound...**, even one the sound index couldn't measure ("not measured", or "silent until a sound is
+chosen in its window"). It is greyed out while the part has no sound yet, or plays samples or a loop (not an
+instrument plugin's own sound); hold the mouse over it to see why.
 
 ![Save this sound: the instrument's own window, with a name and Save](images/track-creator-save-sound.png)
 

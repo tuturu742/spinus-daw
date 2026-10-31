@@ -4,6 +4,8 @@
    It passes its input through; its state is the settings' values, in list order. Never installed or shipped. */
 
 #include <clap/clap.h>
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -67,14 +69,37 @@ static bool params_value (const clap_plugin_t* p, clap_id id, double* value)
     *value = self (p)->values[i];
     return true;
 }
+/* Its values as text, in units, as many plugins show them (and it reads no text back, as some do not): Drive
+   -60 to 0 dB, Tone 20 Hz to 20 kHz (logarithmic), Mix in percent, Level in seconds (0 to 10) shown as a bare
+   number, with words at its ends ("Off" at 0, "Full" at 1). */
 static bool params_to_text (const clap_plugin_t* p, clap_id id, double value, char* text, uint32_t size)
 {
     (void) p;
-    (void) id;
-    (void) value;
-    if (size > 0)
+    if (size == 0)
+        return false;
+    switch (id)
+    {
+    case 2:
+        snprintf (text, size, "%.1f dB", -60.0 + 60.0 * value);
+        return true;
+    case 1000:
+        snprintf (text, size, "%.0f Hz", 20.0 * pow (1000.0, value));
+        return true;
+    case 0:
+        snprintf (text, size, "%.0f%%", value * 100.0);
+        return true;
+    case 77:
+        if (value <= 0.0)
+            snprintf (text, size, "Off");
+        else if (value >= 1.0)
+            snprintf (text, size, "Full");
+        else
+            snprintf (text, size, "%.3f", value * 10.0); /* seconds, shown without the unit */
+        return true;
+    default:
         text[0] = 0;
-    return false;
+        return false;
+    }
 }
 static bool params_from_text (const clap_plugin_t* p, clap_id id, const char* text, double* value)
 {

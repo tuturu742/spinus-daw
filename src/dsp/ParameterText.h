@@ -2,9 +2,13 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <optional>
+#include <vector>
 
 /** Settings typed as text, the one rule everything follows (the knobs' text boxes, the automation editor's
     Value box, device.setParameters' "text", the demo song generators):
@@ -38,6 +42,7 @@ struct Reading
 {
     double value = 0.0;
     UnitKind kind = UnitKind::none;
+    double asTyped = 0.0; // the number as written ("2.5" for "2.5 s")
 };
 
 inline std::optional<Reading> read (const juce::String& text)
@@ -70,6 +75,7 @@ inline std::optional<Reading> read (const juce::String& text)
             unit = rest;
             break;
         }
+    const auto asTyped = r.value;
 
     auto is = [&unit] (std::initializer_list<const char*> names)
     {
@@ -102,6 +108,7 @@ inline std::optional<Reading> read (const juce::String& text)
         r.kind = UnitKind::ratio;
     else
         r.kind = UnitKind::unknown;
+    r.asTyped = asTyped;
     return r;
 }
 
@@ -157,8 +164,143 @@ public:
     float getValueForText (const juce::String& text) const override;
 };
 
+/** What a setting shows at a value (0 to 1), with its unit: a plugin that gives the unit apart (a VST3's
+    label, "dB" beside "-6.0") has it added. Message thread. */
+inline juce::String shownText (const juce::AudioProcessorParameter& p, float value)
+{
+    auto text = p.getText (value, 200).trim();
+    const auto label = p.getLabel().trim();
+    if (label.isNotEmpty() && text.isNotEmpty() && ! text.endsWithIgnoreCase (label))
+        text << " " << label;
+    return text;
+}
+
+/** Another plugin's setting read by its own text: the 0..1 value at which it shows what was typed. The plugin's
+    own reading (getValueForText) when what it then shows is as close as can be; else the value is found from
+    what it shows at points over its whole range (numbers, in the units the rule above reads, or a word it
+    shows), narrowed between the two points the number lies between. Out of its range: the closest end.
+    Nothing when it shows no number (or not that word). Message thread. */
+inline std::optional<float> byPluginText (const juce::AudioProcessorParameter& p, const juce::String& text)
+{
+    constexpr int points = 200;
+    const auto typed = read (text);
+    if (! typed)
+    {
+        // A word ("Hall", "Off"): the middle of the first run of values that show it.
+        std::optional<float> first, last;
+        for (int k = 0; k <= points; ++k)
+        {
+            const auto v = (float)k / (float)points;
+            if (p.getText (v, 200).trim().equalsIgnoreCase (text.trim()))
+            {
+                if (! first)
+                    first = v;
+                last = v;
+            }
+            else if (first)
+                break;
+        }
+        if (first && last)
+            return (*first + *last) / 2.0f;
+        const auto own = juce::jlimit (0.0f, 1.0f, p.getValueForText (text));
+        if (p.getText (own, 200).trim().equalsIgnoreCase (text))
+            return own;
+        return std::nullopt;
+    }
+
+    auto at = [&p] (float v) -> std::optional<double>
+    {
+        if (const auto shown = read (shownText (p, v)))
+            return shown->value;
+        return std::nullopt;
+    };
+    std::vector<std::pair<float, double>> shown; // value, the number it shows
+    bool bare = true;                            // it shows numbers without a unit
+    for (int k = 0; k <= points; ++k)
+        if (const auto v = (float)k / (float)points; const auto reading = read (shownText (p, v)))
+        {
+            shown.emplace_back (v, reading->value);
+            bare = bare && (reading->kind == UnitKind::none || reading->kind == UnitKind::unknown);
+        }
+    // A plugin that shows bare numbers ("2.575" for a decay in seconds): "2.5 s" may mean 2.5 as it shows it
+    // rather than 2500 ms. The number as written when only it is in the setting's range.
+    auto target = typed->value;
+    if (bare && ! shown.empty() && ! juce::exactlyEqual (typed->asTyped, typed->value))
+    {
+        const auto [low, high] = std::minmax_element (shown.begin(), shown.end(), [] (const auto& x, const auto& y)
+                                                      { return x.second < y.second; });
+        auto inRange = [&, l = low->second, h = high->second] (double x) { return x >= l && x <= h; };
+        if (! inRange (target) && inRange (typed->asTyped))
+            target = typed->asTyped;
+    }
+    auto distance = [&] (float v)
+    {
+        const auto number = at (v);
+        return number ? std::abs (*number - target) : std::numeric_limits<double>::infinity();
+    };
+
+    std::optional<float> found;
+    for (size_t i = 0; i + 1 < shown.size() && ! found; ++i)
+    {
+        const auto [a, va] = shown[i];
+        const auto [b, vb] = shown[i + 1];
+        if (target < std::min (va, vb) || target > std::max (va, vb))
+            continue;
+        // Between these two: narrowed by what it shows.
+        const bool rising = vb >= va;
+        auto low = a, high = b;
+        for (int step = 0; step < 30; ++step)
+        {
+            const auto middle = (low + high) / 2.0f;
+            const auto number = at (middle);
+            if (! number)
+                break;
+            if ((*number < target) == rising)
+                low = middle;
+            else
+                high = middle;
+        }
+        const auto closest = distance (low) <= distance (high) ? low : high;
+        // The middle of the values that show the same (a shown "70%" covers 69.5% to 70.5%).
+        const auto same = shownText (p, closest);
+        auto edge = [&] (float from, float to)
+        {
+            if (shownText (p, to) == same)
+                return to;
+            for (int step = 0; step < 30; ++step)
+            {
+                const auto middle = (from + to) / 2.0f;
+                if (shownText (p, middle) == same)
+                    from = middle;
+                else
+                    to = middle;
+            }
+            return from;
+        };
+        found = (edge (closest, a) + edge (closest, b)) / 2.0f;
+    }
+    if (! found && ! shown.empty()) // out of its range: the closest point
+        found = std::min_element (shown.begin(), shown.end(), [target] (const auto& x, const auto& y)
+                                  { return std::abs (x.second - target) < std::abs (y.second - target); })
+                    ->first;
+
+    const auto own = juce::jlimit (0.0f, 1.0f, p.getValueForText (text));
+    if (! found || distance (own) <= distance (*found))
+        return std::isfinite (distance (own)) ? std::optional<float> (own) : found;
+    return found;
+}
+
+/** What a setting shows at a few points, for a message: "-60.0 dB" at 0, "-30.0 dB" at 0.5, "0.0 dB" at 1. */
+inline juce::String examplesOf (const juce::AudioProcessorParameter& p)
+{
+    juce::StringArray said;
+    for (auto v : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+        said.add ("\"" + shownText (p, v) + "\" at " + juce::String (v));
+    return said.joinIntoString (", ");
+}
+
 /** The 0..1 value for text typed for any plugin's setting, by the rule above: a choice or switch by its name;
-    a Spinus device's number setting as FloatSetting reads it; another plugin's by the plugin's own reading,
+    a Spinus device's number setting as FloatSetting reads it; another plugin's by its own text (byPluginText),
     once the unit agrees with what it shows. Nothing when the text cannot be read so. Message thread. */
 inline std::optional<float> normalisedForText (const juce::AudioProcessorParameter& p, const juce::String& text)
 {
@@ -189,7 +331,7 @@ inline std::optional<float> normalisedForText (const juce::AudioProcessorParamet
             return std::nullopt;
     }
 
-    if (! unitsAgree (trimmed, p.getText (p.getValue(), 200)))
+    if (! unitsAgree (trimmed, shownText (p, p.getValue())))
         return std::nullopt;
     if (auto* setting = dynamic_cast<const FloatSetting*> (&p))
     {
@@ -200,9 +342,13 @@ inline std::optional<float> normalisedForText (const juce::AudioProcessorParamet
             return std::nullopt;
         return juce::jlimit (0.0f, 1.0f, range.convertTo0to1 (range.snapToLegalValue (*value)));
     }
-    if (! trimmed.containsAnyOf ("0123456789"))
-        return std::nullopt;
-    return juce::jlimit (0.0f, 1.0f, p.getValueForText (trimmed));
+    if (dynamic_cast<const juce::RangedAudioParameter*> (&p) != nullptr) // a Spinus device's other settings
+    {
+        if (! trimmed.containsAnyOf ("0123456789"))
+            return std::nullopt;
+        return juce::jlimit (0.0f, 1.0f, p.getValueForText (trimmed));
+    }
+    return byPluginText (p, trimmed);
 }
 
 /** A choice's or switch's values by name, in order ("Bell", "Low cut"...); empty for a number setting or one

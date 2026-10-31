@@ -1275,6 +1275,13 @@ std::pair<Insert*, int> findEffect (Project& p, DeviceId device)
 
 juce::String effectName (const Device& d) { return getDeviceDisplayName (d); }
 
+/** The Session's plugins for device.setParameters' text (setPluginForText): its owner and the lookup. */
+std::pair<const void*, PluginForText>& pluginForText()
+{
+    static std::pair<const void*, PluginForText> current;
+    return current;
+}
+
 class AddEffect final : public SnapshotCommand
 {
 public:
@@ -1387,9 +1394,10 @@ private:
 };
 
 /** device.setParameters: settings of an instrument or effect, by Spinus's parameter ID (the one
-    automation uses, engine/ParameterIds.h), as values from 0 to 1 (the automixer's EQ bands, for example), or,
-    for a Spinus device, as text in the units it shows ("35%", "220 ms": dsp/ParameterText.h's rule). The text is
-    read once, on a copy of the device made for it, into values from 0 to 1: the project stores those. */
+    automation uses, engine/ParameterIds.h), as values from 0 to 1 (the automixer's EQ bands, for example), or
+    as text in the units it shows ("35%", "220 ms": dsp/ParameterText.h's rule). The text is read once into
+    values from 0 to 1, which the project stores: a Spinus device's on a copy made for it, another plugin's on
+    the plugin the Session gives (setPluginForText). */
 class SetParameters : public JsonCommand
 {
 public:
@@ -1444,22 +1452,27 @@ public:
     }
 
 protected:
-    /** The texts as values from 0 to 1, on a new copy of the Spinus device: by its parameter ID or its name. */
+    /** The texts as values from 0 to 1, by the parameter ID or the setting's name: on a new copy of a Spinus
+        device, or on another plugin as the Session gives it (playing, or a copy), read as the plugin shows its
+        values (dsp/ParameterText.h). */
     juce::Result readTexts (const Device& d)
     {
         const auto stock = d.kind == Device::Kind::stock && d.stockType.startsWith ("spinus.");
-        auto instance =
-            stock ? dsp::SpinusPluginFormat::create ("spinus:" + d.stockType.fromFirstOccurrenceOf (".", false, false))
-                  : nullptr;
+        std::shared_ptr<juce::AudioProcessor> instance;
+        if (stock)
+            instance =
+                dsp::SpinusPluginFormat::create ("spinus:" + d.stockType.fromFirstOccurrenceOf (".", false, false));
+        else if (const auto& plugins = pluginForText(); plugins.second)
+            instance = plugins.second (d);
         if (instance == nullptr)
-            return juce::Result::fail ("settings as text work for Spinus's own devices only; for " + effectName (d) +
-                                       " use 'values' (0 to 1)");
+            return juce::Result::fail ("Spinus could not open " + effectName (d) +
+                                       " here to read its settings as text; use 'values' (0 to 1) for it");
         const engine::ParameterFinder finder (*instance);
         for (auto& [key, text] : texts)
         {
             auto* parameter = finder.find (key);
             for (auto* each : instance->getParameters())
-                if (parameter == nullptr && each->getName (200).equalsIgnoreCase (key.trim()))
+                if (parameter == nullptr && each->getName (200).trim().equalsIgnoreCase (key.trim()))
                     parameter = each;
             if (parameter == nullptr)
                 return juce::Result::fail (effectName (d) + " has no setting " + quoted (key));
@@ -1468,9 +1481,11 @@ protected:
             {
                 const auto choices = dsp::param::choicesOf (*parameter);
                 return juce::Result::fail (
-                    "cannot read " + quoted (text) + " for " + quoted (parameter->getName (200)) +
-                    (choices.isEmpty() ? " (it shows values like " + quoted (parameter->getCurrentValueAsText()) + ")"
-                                       : " (its choices: " + choices.joinIntoString (", ") + ")"));
+                    "cannot read " + quoted (text) + " for " + quoted (parameter->getName (200)) + " of " +
+                    effectName (d) +
+                    (choices.isEmpty()
+                         ? " (it shows " + dsp::param::examplesOf (*parameter) + "; or give 'values' from 0 to 1)"
+                         : " (its choices: " + choices.joinIntoString (", ") + ")"));
             }
             values[engine::getParameterId (*parameter)] = *value;
         }
@@ -3434,10 +3449,10 @@ void addEffectCommands (std::vector<CommandInfo>& list)
     list.push_back (info (
         "device.setParameters",
         "Change settings of an instrument or effect, by the parameter ID automation uses (a Spinus device's own; for "
-        "other plugins the position: 0, 1...). 'text': a Spinus device's settings as it shows them, \"35%\", "
-        "\"220 ms\", \"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, "
-        "milliseconds for times, hertz for frequencies). 'values': numbers from 0 to 1 over each setting's whole "
-        "range, for any device.",
+        "other plugins the position: 0, 1...). 'text': settings as the device shows them, \"35%\", \"220 ms\", "
+        "\"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, "
+        "milliseconds for times, hertz for frequencies); for any plugin, read by what it shows over its range. "
+        "'values': numbers from 0 to 1 over each setting's whole range, for any device.",
         ParameterSchema()
             .id ("device", "The instrument's or effect's device ID")
             .custom ("values", "Parameter ID to value, 0 to 1 over the setting's whole range", false,
@@ -3446,8 +3461,8 @@ void addEffectCommands (std::vector<CommandInfo>& list)
                                      { "additionalProperties",
                                        schemaObject ({ { "type", "number" }, { "minimum", 0 }, { "maximum", 1 } }) } }))
             .custom ("text",
-                     "Spinus devices only: parameter ID or setting name to its value as the device shows it "
-                     "(\"35%\", \"220 ms\", \"1.5 s\", \"-6 dB\", \"1.2 kHz\", \"4:1\", \"30% L\", \"Low pass\")",
+                     "Parameter ID or setting name to its value as the device shows it (\"35%\", \"220 ms\", "
+                     "\"1.5 s\", \"-6 dB\", \"1.2 kHz\", \"4:1\", \"30% L\", \"Low pass\"); any plugin's too",
                      false,
                      schemaObject ({ { "type", "object" },
                                      { "minProperties", 1 },
@@ -4541,6 +4556,14 @@ juce::var CommandRegistry::getSchema() const
     return schemaObject ({ { "$schema", "https://json-schema.org/draft/2020-12/schema" },
                            { "title", "Spinus DAW command API" },
                            { "commands", juce::var (defs) } });
+}
+
+void setPluginForText (const void* owner, PluginForText lookup) { pluginForText() = { owner, std::move (lookup) }; }
+
+void clearPluginForText (const void* owner)
+{
+    if (pluginForText().first == owner)
+        pluginForText() = {};
 }
 
 } // namespace spinus::commands

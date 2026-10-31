@@ -209,8 +209,11 @@ juce::var readPointTexts (Session& session, const juce::String& command, const j
             const auto value = pan ? readPan (text) : session.parseTargetValue (target, text);
             if (! value)
             {
+                juce::StringArray shown;
+                for (auto v : { 0.0f, 0.5f, 1.0f })
+                    shown.add ("\"" + session.describeTargetValue (target, v) + "\" at " + juce::String (v));
                 error = "cannot read point text \"" + text + "\" for " + session.describeTarget (target) +
-                        " (it shows values like \"" + session.describeTargetValue (target, 0.75f) + "\")";
+                        " (it shows " + shown.joinIntoString (", ") + "; or give 'value' from 0 to 1)";
                 return params;
             }
             o->removeProperty ("text");
