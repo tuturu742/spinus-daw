@@ -224,8 +224,15 @@ TEST_CASE ("The metronome's first beat of each bar sounds different", "[session]
     test::RealtimeRunner runner (host.getEngine(), { .outputChannels = 2, .maxSeconds = 3.0, .paceInRealTime = true });
     runner.start();
     runner.runUntil (0.2);
-    const auto start = runner.getSecondsProcessed();
-    session.play();
+    // Started between two blocks: Tracktion starting the play head and setting its position with a block between
+    // them repeats the first block, which cut the first click short (1 run in about 700 with many at once).
+    double start = 0.0;
+    runner.betweenBlocks (
+        [&]
+        {
+            start = runner.getSecondsProcessed();
+            session.play();
+        });
     runner.runUntil (start + 2.3);
     session.stop();
     runner.stop();
