@@ -1,6 +1,6 @@
 pkgbase = spinus-git
 	pkgdesc = A Linux-first, FL Studio-style digital audio workstation
-	pkgver = 0.1.0alpha3
+	pkgver = 0.1.0alpha4
 	pkgrel = 1
 	url = https://github.com/tuturu742/spinus-daw
 	arch = x86_64

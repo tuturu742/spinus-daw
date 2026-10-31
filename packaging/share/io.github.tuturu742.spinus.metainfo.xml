@@ -64,6 +64,16 @@
     <display_length compare="ge">1024</display_length>
   </requires>
   <releases>
+    <release version="0.1.0~alpha.4" date="2026-10-31" type="development">
+      <description>
+        <p>The fourth alpha: coding agents such as Claude Code can work on the song open in Spinus through a
+        live interface you turn on, and the assistant now edits your song with Spinus's music tools and checks
+        it. The Track creator hears guitars in your reference songs, remembers your parts, and can save a sound
+        you set up in an instrument's own window. A channel's instrument can be replaced in the Channel Rack.
+        Fixes for a drum plugin that crashed the sound index, plugin settings as text, exports right after
+        Apply, and local models in Ollama.</p>
+      </description>
+    </release>
     <release version="0.1.0~alpha.3" date="2026-10-29" type="development">
       <description>
         <p>The third alpha: the experimental Track creator writes whole songs, from a description or from
