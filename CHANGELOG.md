@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Coding agents and the assistant on your open song
 
+- **A guide for any coding agent:** `skills/spinus/SKILL.md` explains how to work with Spinus through the live
+  interface or the command line, the rules to keep (never open the window, don't overwrite your work) and the
+  details that are easy to get wrong. It is plain Markdown, so agents that don't use skill folders can read it too.
 - **Let a coding agent work on your project:** turn on **Options › AI › Coding agents** and Claude Code, Codex,
   Cursor or another MCP agent on your computer can read the open song, change it and render it to measure it,
   while you watch and play it in Spinus. Its changes apply at once, each one an undo step; while it is connected the
