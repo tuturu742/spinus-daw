@@ -47,7 +47,7 @@ manager. When something goes wrong, attach the log of that run to your bug repor
 
 **Help › About Spinus** shows:
 
-- Spinus's version, for example **0.1.0-alpha.3**. **Copy version info** copies the version, the kind of
+- Spinus's version, for example **0.1.0-alpha.4**. **Copy version info** copies the version, the kind of
   package (Flatpak, AppImage, Windows) and your system, ready to paste into a bug report.
 - The license: Spinus is free software under the GNU Affero General Public License, version 3 or later
   (AGPL-3.0-or-later). The demo songs are under CC BY 4.0 (credit "Spinus DAW contributors").
