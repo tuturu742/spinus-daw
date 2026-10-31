@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -18,14 +19,32 @@ int64_t nowMs()
     return duration_cast<milliseconds> (steady_clock::now().time_since_epoch()).count();
 }
 
+/** The DeviceManager is a private juce::Timer, whose only use is the MIDI device rescan (or a slow hardware
+    check). */
+juce::Timer& rescanTimerOf (tracktion::DeviceManager& devices)
+{
+    return (juce::Timer&)devices; // NOLINT: a C-style cast is the only way to reach a private base
+}
+
+/** A MIDI device rescan is waiting for its 5 ms timer. */
+bool deviceChangesPending (tracktion::DeviceManager& devices)
+{
+    auto& rescan = rescanTimerOf (devices);
+    return rescan.isTimerRunning() && rescan.getTimerInterval() < 1000;
+}
+
 /** Tracktion applies MIDI device changes (an input made or turned on, as Spinus's computer keyboard on a
     first start) on a 5 ms timer of its DeviceManager, and applying them stops every playhead. Whether that
     timer fires before or after a test presses Play depends on the machine; apply them now, until no more
-    come (each applied change can make its listeners turn on another input). */
+    come (each applied change can make its listeners turn on another input).
+
+    Never while the audio thread processes a block: each rescan adds a MIDI input and output to the hosted
+    device's lists, which the audio thread walks without a lock (Tracktion's HostedAudioDeviceInterface, made
+    for plugins, whose hosts rescan nothing). The audio thread then reads the list's old, freed copy: the
+    likely cause of tests ending with 0xc0000409 on Windows now and then. */
 void applyPendingDeviceChanges (tracktion::DeviceManager& devices)
 {
-    // The DeviceManager is a private juce::Timer, whose only use is this rescan (or a slow hardware check).
-    auto& rescan = (juce::Timer&)devices; // NOLINT: a C-style cast is the only way to reach a private base
+    auto& rescan = rescanTimerOf (devices);
     for (int i = 0; i < 16; ++i)
     {
         devices.dispatchPendingMessages();
@@ -85,6 +104,8 @@ RealtimeRunner::RealtimeRunner (tracktion::Engine& e, Params p)
     hp.outputChannels = params.outputChannels;
     device.initialise (hp);
     device.prepareToPlay (params.sampleRate, params.blockSize);
+    // The hosted device's MIDI input and output come with the next rescan: made now, before any block runs.
+    engine.getDeviceManager().rescanMidiDeviceList();
     applyPendingDeviceChanges (engine.getDeviceManager());
 
     capacity = (int64_t)(params.maxSeconds * params.sampleRate);
@@ -181,9 +202,17 @@ void RealtimeRunner::runUntil (double secondsProcessed)
 
     while (running && getSecondsProcessed() < secondsProcessed)
     {
+        // A rescan asked for by the last message (the test's or Spinus's, as when an input is turned on) is
+        // applied between two blocks, before its timer can fire while a block runs. So one message per pass.
+        if (deviceChangesPending (engine.getDeviceManager()))
+        {
+            const std::scoped_lock betweenBlocks (blockMutex);
+            applyPendingDeviceChanges (engine.getDeviceManager());
+        }
+
         const auto t0 = clock::now();
         dispatchingSinceMs = nowMs();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil (2);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (0); // one message, or a 1 ms wait
         dispatchingSinceMs = 0;
         const auto ms = std::chrono::duration<double, std::milli> (clock::now() - t0).count();
         maxDispatchMs = std::max (maxDispatchMs, ms);
@@ -218,11 +247,13 @@ void RealtimeRunner::audioThreadLoop()
         if (params.inputSource)
             params.inputSource (block, params.inputChannels, start);
 
+        std::unique_lock blockLock (blockMutex);
         const auto t0 = clock::now();
         processingSinceMs = nowMs();
         device.processBlock (block, midi);
         processingSinceMs = 0;
         const auto t1 = clock::now();
+        blockLock.unlock();
 
         blockTimesMs.push_back (std::chrono::duration<float, std::milli> (t1 - t0).count());
 
