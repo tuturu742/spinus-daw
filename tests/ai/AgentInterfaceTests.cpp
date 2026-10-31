@@ -220,6 +220,12 @@ TEST_CASE ("An agent's steps can't reach files outside the project and the sampl
     CHECK ((bool)result["isError"]);
     CHECK (result["content"][0]["text"].toString().contains ("outside the project"));
     CHECK (f.agents->getAgentChanges() == 0);
+
+    // Nor by climbing out of the project from a relative path.
+    steps.getReference (0).getProperty ("parameters", {}).getDynamicObject()->setProperty ("file", "../../secret.wav");
+    const auto climbed = f.call (sessionId, "run_commands", object ({ { "steps", steps } }));
+    CHECK ((bool)climbed["isError"]);
+    CHECK (climbed["content"][0]["text"].toString().contains ("climbs out"));
 }
 
 TEST_CASE ("Without AI, the music tools say so and Spinus's own still work", "[ai][agents]")

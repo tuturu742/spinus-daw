@@ -662,8 +662,17 @@ juce::String AgentInterface::checkPaths (const juce::var& value) const
                 for (auto& n : named)
                 {
                     const auto path = n.toString();
+                    // Relative: the project's own audio, never climbing out of it. A path that starts at a root
+                    // ("/etc/x" is relative to the drive on Windows) is checked as absolute.
+                    const auto rooted = path.startsWithChar ('/') || path.startsWithChar ('\\');
+                    if (! juce::File::isAbsolutePath (path) && ! rooted)
+                    {
+                        if (path.replaceCharacter ('\\', '/').contains ("../") || path.endsWith (".."))
+                            return "\"" + path + "\" climbs out of the project";
+                        continue;
+                    }
                     if (! juce::File::isAbsolutePath (path))
-                        continue; // relative: the project's own audio
+                        return "\"" + path + "\" is outside the project and your sample folders";
                     const juce::File file (path);
                     juce::Array<juce::File> allowed;
                     if (host.projectFolder)
