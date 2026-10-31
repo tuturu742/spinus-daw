@@ -25,9 +25,8 @@ struct Fixture
         REQUIRE (rack->addChannel ("spinus.3x-osc", "Bass"));
         REQUIRE (rack->toggleStep (session->getProject().channels[1].id, 0)); // makes a one-bar pattern
 
-        // The test engine's MIDI input appears once the hosted device runs.
+        // The test engine's MIDI input (the runner's hosted device makes it).
         runner.start();
-        host.getEngine().getDeviceManager().rescanMidiDeviceList();
         runner.runUntil (0.3);
         for (auto& d : host.getEngine().getDeviceManager().getMidiInDevices())
             if (dynamic_cast<te::VirtualMidiInputDevice*> (d.get()) == nullptr)

@@ -271,6 +271,18 @@ set_target_properties (spinus_test_difficult_clap PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
 add_dependencies (spinus_tests spinus_test_difficult_clap)
 
+# The difficult synth slow to answer, as through a bridge: 1.5 s a block while it loads (SandboxEngineTests.cpp).
+add_library (spinus_test_busy_clap MODULE plugins/TestSynthClap.c)
+target_include_directories (spinus_test_busy_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+target_compile_definitions (spinus_test_busy_clap PRIVATE DIFFICULT=2)
+if (NOT WIN32)
+    target_link_libraries (spinus_test_busy_clap PRIVATE m)
+endif()
+set_target_properties (spinus_test_busy_clap PROPERTIES
+    PREFIX "" OUTPUT_NAME "busy-synth" SUFFIX ".clap"
+    LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
+add_dependencies (spinus_tests spinus_test_busy_clap)
+
 # A small LV2 plugin with X11 UIs that misbehave as real ones do (Lv2UiTestPlugin.c), for Lv2GuiTests.cpp.
 if (UNIX AND NOT APPLE)
     set (lv2TestBundle "${SPINUS_BROKEN_PLUGINS_DIR}/spinus-test-lv2-ui.lv2")

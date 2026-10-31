@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <functional>
+#include <mutex>
 #include <thread>
 
 namespace spinus::test
@@ -46,6 +47,15 @@ public:
         thread has rendered the given number of seconds in total. */
     void runUntil (double secondsProcessed);
 
+    /** Runs `f` on this (message) thread while no block is being processed: the audio thread waits. For a
+        test about what plays from the very start: Tracktion's play() starts the play head and only then posts its
+        position for the next block, so a block processed in between plays the first block twice. */
+    void betweenBlocks (const std::function<void()>& f)
+    {
+        const std::scoped_lock noBlock (blockMutex);
+        f();
+    }
+
     /** Device ID of an output pair: 0 = channels 1/2, 1 = channels 3/4. */
     juce::String getOutputDeviceID (int pairIndex) const;
 
@@ -59,8 +69,8 @@ public:
     const std::vector<float>& getBlockTimesMs() const { return blockTimesMs; }
     int getNumOverrunBlocks() const;
 
-    /** Longest single pass of the message loop inside runUntil(), in ms (includes the 2 ms wait).
-        Long passes mean the UI thread was blocked, e.g. by a graph rebuild. */
+    /** Longest single pass of the message loop inside runUntil(), in ms (one message, or the 1 ms wait
+        when there is none). Long passes mean the UI thread was blocked, e.g. by a graph rebuild. */
     double getMaxMessageThreadStallMs() const noexcept { return maxDispatchMs; }
     void resetMaxMessageThreadStall() noexcept { maxDispatchMs = 0.0; }
 
@@ -86,6 +96,7 @@ private:
     std::atomic<int64_t> samplesProcessed { 0 };
     std::atomic<bool> running { false };
     std::thread thread;
+    std::mutex blockMutex; // held by the audio thread for each block, and by runUntil() to apply MIDI device changes
 
     // For the watchdog: when the audio thread entered processBlock and the message thread its last
     // dispatch pass (milliseconds on the steady clock), 0 while outside.

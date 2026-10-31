@@ -184,3 +184,85 @@ TEST_CASE ("Exports wait for plugins in their own process", "[engine][sandbox]")
         CHECK (std::abs (audio.getRMSLevel (0, (int)(t * rate), (int)(0.4 * rate)) - expected) < expected * 0.25f);
     }
 }
+
+TEST_CASE ("An export waits for an instrument in its own process that loads its sounds in the background",
+           "[engine][sandbox][export]")
+{
+    // The busy synth stays silent for its first 3 seconds, as big sample libraries do while they load, and is slow
+    // to answer meanwhile (1.5 s a block), as through a bridge. In a separate process too, an export waits until it
+    // sounds: the song's first note must not be lost, and the plugin is not taken for hung (it answers each
+    // block well within the 5 s an offline render gives it).
+    const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getChildFile ("spinus-sandbox-export-" + juce::Uuid().toString());
+    root.createDirectory();
+    EngineHost host ({ .openAudioDevice = false, .pluginHost = juce::File (SPINUS_PLUGIN_HOST) });
+    plugins::ClapPluginFormat clap;
+    juce::OwnedArray<juce::PluginDescription> found;
+    const auto file = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("busy-synth.clap");
+    clap.findAllTypesForFile (found, file.getFullPathName());
+    const juce::PluginDescription* synth = nullptr;
+    for (auto* d : found)
+        if (d->name == "Spinus Busy Synth")
+            synth = d;
+    REQUIRE (synth != nullptr);
+    host.getEngine().getPluginManager().knownPluginList.addType (*synth);
+
+    plugins::SandboxList list { root.getChildFile ("run-separately.json") };
+    list.set (plugins::SandboxList::keyOf ("CLAP", file.getFullPathName()), true, synth->name);
+    auto devices = std::make_unique<engine::DefaultDeviceFactory>();
+    devices->setRunSeparately (
+        [&list] (const juce::PluginDescription& d)
+        { return list.contains (plugins::SandboxList::keyOf (d.pluginFormatName, d.fileOrIdentifier)); });
+    auto session = std::make_unique<Session> (host.getEngine(), std::move (devices));
+    session->setSandboxList (&list);
+    auto run = [&] (const juce::String& name, const juce::String& params)
+    {
+        juce::String error;
+        auto command = commands::CommandRegistry::get().create (name, juce::JSON::parse (params), error);
+        INFO (name << ": " << error);
+        REQUIRE (command != nullptr);
+        auto* raw = command.get();
+        REQUIRE (session->getHistory().perform (std::move (command)).wasOk());
+        return raw->getResult();
+    };
+    const auto channel = run (
+        "channel.add",
+        R"({"name": "Busy", "instrument": {"kind": "plugin", "plugin": {"format": "CLAP", "name": "Spinus Busy Synth", "manufacturer": )" +
+            juce::JSON::toString (synth->manufacturerName) + R"(, "fileOrIdentifier": )" +
+            juce::JSON::toString (file.getFullPathName()) + "}}}");
+    const auto pattern = run ("pattern.add", R"({"name": "P", "length": 3840})");
+    run ("pattern.setNotes", R"({"pattern": )" + pattern["pattern"].toString() + R"(, "channel": )" +
+                                 channel["channel"].toString() +
+                                 R"(, "notes": [{"start": 0, "length": 3600, "pitch": 60, "velocity": 0.9}]})");
+    const auto lane = run ("lane.add", "{}");
+    run ("clip.addPattern", R"({"lane": )" + lane["lane"].toString() + R"(, "pattern": )" +
+                                pattern["pattern"].toString() + R"(, "start": 0})");
+    session->setMode (Session::Mode::song);
+    session->getEdit().dispatchPendingUpdatesSynchronously();
+
+    engine::ExportSettings settings;
+    settings.format = engine::ExportSettings::Format::wav32Float;
+    settings.sampleRate = 48000.0;
+    settings.tailSeconds = 0.5;
+    std::optional<engine::ExportJob::Result> result;
+    const auto out = root.getChildFile ("Song.wav");
+    auto job = session->createExportJob (out, settings, [&] (const engine::ExportJob::Result& r) { result = r; });
+    job->start();
+    for (int i = 0; i < 1200 && ! result; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    job = nullptr;
+    REQUIRE (result.has_value());
+    INFO (result.value_or (engine::ExportJob::Result {}).error);
+    REQUIRE (result.value_or (engine::ExportJob::Result {}).ok);
+
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatReader> reader (wav.createReaderFor (new juce::FileInputStream (out), true));
+    REQUIRE (reader != nullptr);
+    juce::AudioBuffer<float> audio (1, (int)reader->lengthInSamples);
+    reader->read (&audio, 0, audio.getNumSamples(), 0, true, false);
+    // The note from its first beat, and all through its 1.9 seconds.
+    for (const double from : { 0.05, 0.5, 1.0, 1.5 })
+        CHECK (audio.getRMSLevel (0, (int)(from * rate), (int)(0.3 * rate)) > 0.01f);
+    session = nullptr;
+    root.deleteRecursively();
+}

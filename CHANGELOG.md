@@ -20,6 +20,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Scripts and coding agents: `spinus.delay` in `--describe`, with settings as text (`"note": "1/8 dotted"`,
   `"time": "350 ms"`, `"feedback": "40%"`, `"high_cut": "4.5 kHz"`).
 
+### Export
+
+- **Exports wait for plugins that run in a separate process, too**, while they load their sounds: one that was
+  slow to answer while loading was taken for stuck during the wait and switched off, so the export had none
+  of its sound (an export right after the Track creator's Apply, for example).
+
 ## 0.1.0-alpha.4 (2026-10-31)
 
 ### Channel Rack: replace instrument

@@ -71,9 +71,6 @@ what happened, and attach the project if you can.
 
 ## Track creator (experimental)
 
-- **Rendering right after Apply can leave out a plugin that runs in a separate process** (see
-  [Plugins](plugins.md)) while it is still loading its sounds: the export waits for plugins that run inside
-  Spinus, but not yet for those. Save the project and export again, or wait a few seconds after Apply.
 - **Local models in Ollama are slow at writing whole songs:** on a laptop, the models tested (Qwen 3 30B and
   Qwen 3.8 27B) didn't finish a song in an hour and a half;
   for the AI writer, a cloud model is much faster.
