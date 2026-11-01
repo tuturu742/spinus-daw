@@ -62,7 +62,7 @@ sudo pacman -S --needed base-devel git cmake ninja alsa-lib jack2 freetype2 font
 
 git clone https://github.com/tuturu742/spinus-daw.git
 cd spinus-daw
-git submodule update --init                              # JUCE, Tracktion, Catch2, CLAP, FST
+git submodule update --init                              # JUCE, Tracktion, Catch2, CLAP, FST, Rubber Band
 git submodule update --init --recursive external/surge  # Surge XT and its libraries
 cmake --preset release
 cmake --build --preset release
