@@ -233,7 +233,7 @@ juce::File SaveSoundWindow::play()
     const auto audio = hidden->render (phrase, 0.5);
     if (audio.getMagnitude (0, audio.getNumSamples()) <= 1.0e-4f)
         return {};
-    const auto file = played.getFile();
+    auto file = played.getFile();
     file.deleteFile();
     std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
     auto writer = juce::WavAudioFormat().createWriterFor (stream, juce::AudioFormatWriterOptions()
