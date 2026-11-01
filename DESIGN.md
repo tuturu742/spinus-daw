@@ -801,6 +801,17 @@ owner tests on Linux and Windows.
 - **The flaky Windows tests** (the MIDI keyboard, the metronome) fixed at their cause.
 - **Polish:** the README, screenshots, known issues and the manual, ready for 0.1.0's few modest posts.
 
+### Planned: 0.2.0
+
+- **Spinus Tune's note editor at Newtone's level** (owner decision 2026-10-31; §12.6). Editing a recorded
+  clip's notes stays a Spinus feature, not an effect: the edit is non-destructive (the recording is never
+  changed, the tuned clip is rendered in the background) and can be readjusted at any time. Added:
+  - moving notes in time and changing their length (time-stretching each note, its neighbours kept in
+    place);
+  - each note's volume and formant (the voice's character), as Drift and Vibrato are set today;
+  - **Edit notes** in the audio clip's right-click menu, besides the double-click.
+- **Spinus Tune moves to Spinus Plugins** (see Later).
+
 ### Later
 
 - **Dancing Spinus** (for fun): a small "useless" visual plugin like FL
@@ -841,9 +852,8 @@ owner tests on Linux and Windows.
   but what its installer added to Spinus's Windows folder (sample libraries, helper apps such as a
   vendor's download manager) stays; one button clears it.
 - CLAP builds of Spinus's own devices (§11).
-- Hum to pattern: "detect tempo from my take" (§12.8); graphical Spinus Tune: moving notes in time;
-  per-instrument range limits in the pattern generator; a dedicated symbolic-music model for grooves
-  (§12.4).
+- Hum to pattern: "detect tempo from my take" (§12.8); per-instrument range limits in the pattern
+  generator; a dedicated symbolic-music model for grooves (§12.4).
 - Automixer: pan, reverb send and sidechain suggestions (§12.5).
 - Track creator's song (§12.10): the songs' other grooves (only the main one is written), meters other than
   the songs' most common, pre-choruses and key changes, the LLM writing or varying notes (it varies the plan
