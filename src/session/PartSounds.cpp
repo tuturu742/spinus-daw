@@ -1433,15 +1433,18 @@ juce::Array<juce::var> renderInHelper (const SoundIndexer::Options& options, con
 }
 
 std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options& options, const SoundSource& source,
-                                              const juce::String& preset, const juce::File& target, double start,
-                                              double length, const std::vector<OfflineInstrument::Note>& notes,
-                                              int tries, const std::function<bool()>& shouldStop,
+                                              const juce::String& preset, const juce::File& presetState,
+                                              const juce::File& target, double start, double length,
+                                              const std::vector<OfflineInstrument::Note>& notes, int tries,
+                                              const std::function<bool()>& shouldStop,
                                               const std::function<void (int, double)>& progress, juce::String& problem)
 {
     auto request = instrumentRequest (source);
     auto* o = request.getDynamicObject();
     o->setProperty ("mode", "tune");
     o->setProperty ("preset", preset);
+    if (presetState != juce::File())
+        o->setProperty ("state", presetState.getFullPathName());
     o->setProperty ("target",
                     object ({ { "file", target.getFullPathName() }, { "start", start }, { "length", length } }));
     o->setProperty ("notes", notesVar (notes));

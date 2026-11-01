@@ -641,6 +641,7 @@ void PartSoundsPanel::tuneNext (size_t part)
         return tuningOne ? finish ({}) : tuneNext (part + 1);
     const auto source = c->source;
     const auto preset = c->preset;
+    const auto presetState = c->state;
     const auto stem = row.stem;
     const auto excerpt = row.excerpt;
     const auto options = context.helper;
@@ -653,7 +654,8 @@ void PartSoundsPanel::tuneNext (size_t part)
         {
             juce::String problem;
             *found = parts::tuneInHelper (
-                options, source, preset, stem, excerpt.start, excerpt.length, excerpt.notes, tries, shouldStop,
+                options, source, preset, presetState, stem, excerpt.start, excerpt.length, excerpt.notes, tries,
+                shouldStop,
                 [this, a, name, tries, synth = source.name] (int done, double)
                 {
                     juce::MessageManager::callAsync (
@@ -737,6 +739,8 @@ juce::var PartSoundsPanel::renderItem (const Row& row, const parts::Choice& c,
                           { "notes", notesVar (notesPlayed) },
                           { "tail", 0.5 },
                           { "output", output.getFullPathName() } });
+    if (c.state != juce::File()) // a saved sound: the helper puts its state in place
+        item.getDynamicObject()->setProperty ("state", c.state.getFullPathName());
     if (tuned && row.tuned)
     {
         auto* values = new juce::DynamicObject();
@@ -1348,10 +1352,18 @@ bool PartSoundsPanel::saveSound (int index)
         return false;
     }
     context = getContext ? getContext() : Context {};
-    const auto start = *rows[(size_t)index].chosen();
+    const auto& row = rows[(size_t)index];
+    const auto start = *row.chosen();
+    // Play in its window: the phrase Listen plays (a kit's own notes for the drums).
+    auto phrase = parts::auditionPhrase (row.target, start, context.summary["tempo"]["median"], context.summary);
+    if (start.kind == parts::Choice::Kind::kit)
+        for (auto& n : phrase)
+            for (const auto& [drum, note] : start.drumNotes)
+                if (padOf (drum) == n.note)
+                    n.note = note;
     juce::String problem;
     const auto opened = SaveSoundWindow::open (
-        session, start, rows[(size_t)index].part.name + " (" + start.source.name + ")", this,
+        session, start, row.part.name + " (" + start.source.name + ")", std::move (phrase), this,
         [safe = juce::Component::SafePointer<PartSoundsPanel> (this), index, start] (const juce::String& name,
                                                                                      const juce::MemoryBlock& state)
         {

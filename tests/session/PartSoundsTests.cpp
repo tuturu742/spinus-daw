@@ -3,6 +3,7 @@
 
 #include "ai/Proposal.h"
 #include "commands/CommandHistory.h"
+#include "dsp/SpinusPluginFormat.h"
 #include "session/PartSounds.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -656,6 +657,37 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
     CHECK (rendered[0]["output"].toString() == target.getFullPathName());
     CHECK ((double)rendered[0]["peak"] > 0.01);
     CHECK (rendered[1]["problem"].toString().contains ("no preset"));
+    // A saved sound (Save this sound) comes with its state: played from it, or said when it cannot be read.
+    {
+        const auto state = temp.folder.getChildFile ("saved.state");
+        juce::Array<juce::var> saved;
+        saved.add (object ({ { "id", "saved" },
+                             { "preset", "saved:1234" },
+                             { "state", state.getFullPathName() },
+                             { "notes", list },
+                             { "output", temp.folder.getChildFile ("saved.wav").getFullPathName() } }));
+        SoundSource osc;
+        osc.key = "stock-spinus.3x-osc";
+        osc.name = "3x Osc";
+        osc.format = "Spinus";
+        osc.file = "spinus:3x-osc";
+        osc.stockType = "spinus.3x-osc";
+        juce::String why;
+        auto none = renderInHelper (helper(), osc, saved, {}, why);
+        REQUIRE (none.size() == 1);
+        CHECK (none[0]["problem"].toString().contains ("could not read the saved sound"));
+        juce::MemoryBlock data;
+        {
+            auto instance = dsp::SpinusPluginFormat::create ("spinus:3x-osc");
+            REQUIRE (instance != nullptr);
+            instance->getStateInformation (data);
+        }
+        REQUIRE (state.replaceWithData (data.getData(), data.getSize()));
+        const auto heard = renderInHelper (helper(), osc, saved, {}, why);
+        INFO (why);
+        REQUIRE (heard.size() == 1);
+        CHECK_FALSE (heard[0].hasProperty ("problem"));
+    }
     CHECK (temp.folder.getChildFile ("cut.wav").existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader (
         juce::WavAudioFormat().createReaderFor (target.createInputStream().release(), true));
@@ -664,8 +696,8 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
 
     // Tuned from Resonant Saw toward it: closer than where it started.
     int reports = 0;
-    const auto tuned =
-        tuneInHelper (helper(), synth, saw, target, 0.0, 1.8, notes, 60, {}, [&] (int, double) { ++reports; }, problem);
+    const auto tuned = tuneInHelper (
+        helper(), synth, saw, {}, target, 0.0, 1.8, notes, 60, {}, [&] (int, double) { ++reports; }, problem);
     INFO (problem);
     REQUIRE (tuned.has_value());
     CHECK (reports > 0);
@@ -676,7 +708,7 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
     // An instrument with nothing to tune says so.
     const auto organ = testSynth ("test-synth.clap", "Spinus Test Organ");
     problem.clear();
-    CHECK_FALSE (tuneInHelper (helper(), organ, {}, target, 0.0, 1.8, notes, 20, {}, {}, problem).has_value());
+    CHECK_FALSE (tuneInHelper (helper(), organ, {}, {}, target, 0.0, 1.8, notes, 20, {}, {}, problem).has_value());
     CHECK (problem.contains ("no settings"));
 }
 
@@ -726,7 +758,7 @@ TEST_CASE ("Sounds per part: a synth that crashes or hangs while tuned takes onl
     {
         juce::String problem;
         // Only here a short limit: the hang is the point.
-        const auto tuned = tuneInHelper (helper (4000), synth, id, target, 0.0, 1.5, notes, 30, {}, {}, problem);
+        const auto tuned = tuneInHelper (helper (4000), synth, id, {}, target, 0.0, 1.5, notes, 30, {}, {}, problem);
         CHECK_FALSE (tuned.has_value());
         INFO (problem);
         CHECK ((problem.contains ("crashed") || problem.contains ("stopped answering")));
@@ -743,7 +775,7 @@ TEST_CASE ("Sounds per part: a synth that crashes or hangs while tuned takes onl
             stop = true;
         });
     const auto tuned = tuneInHelper (
-        helper(), testSynth(), {}, target, 0.0, 1.5, notes, 5000, [&] { return stop.load(); }, {}, problem);
+        helper(), testSynth(), {}, {}, target, 0.0, 1.5, notes, 5000, [&] { return stop.load(); }, {}, problem);
     stopper.join();
     CHECK_FALSE (tuned.has_value());
     CHECK (problem == "Stopped.");

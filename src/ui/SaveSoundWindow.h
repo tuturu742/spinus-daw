@@ -20,15 +20,21 @@ namespace spinus::ui
     per setting) for a plugin without one. The instrument is loaded as Spinus loads it in a project (Windows
     plugins through Wine among them), into a hidden edit of its own: nothing in the project changes.
 
-    Message thread. The window deletes itself when closed (Save or Cancel). */
+    Play plays the part's phrase with the sound as it is set up now (through Spinus's sample preview), so the
+    user hears it before saving.
+
+    Message thread. The window deletes itself when closed (Save or Cancel). `onSave` is called once it has gone,
+    with its instrument: a plugin may take seconds to close, and is not measured while it does. */
 class SaveSoundWindow final : public juce::DocumentWindow
 {
 public:
     using OnSave = std::function<void (const juce::String& name, const juce::MemoryBlock& state)>;
 
     /** Opens the window for `start`'s instrument with its sound (a preset, a saved sound, or as it opens), the
-        name field holding `name`. False (and `problem` says why) when the instrument cannot be loaded. */
-    static bool open (Session&, const parts::Choice& start, const juce::String& name, juce::Component* near, OnSave,
+        name field holding `name`; Play plays `phrase`. False (and `problem` says why) when the instrument cannot
+        be loaded. */
+    static bool open (Session&, const parts::Choice& start, const juce::String& name,
+                      std::vector<OfflineInstrument::Note> phrase, juce::Component* near, OnSave,
                       juce::String& problem);
 
     /** The open windows (tests). */
@@ -37,20 +43,27 @@ public:
     static void closeAll();
     /** For tests: saves (as the button does) in the window opened last, under `name`. */
     static bool saveLastOpened (const juce::String& name);
+    /** For tests: Play in the window opened last; the file played, or none when nothing was heard. */
+    static juce::File playLastOpened();
 
     ~SaveSoundWindow() override;
     void closeButtonPressed() override;
 
 private:
     class Content;
-    SaveSoundWindow (std::unique_ptr<HiddenInstrument>, const juce::String& title, const juce::String& name, OnSave,
-                     juce::Component* owner);
+    SaveSoundWindow (Session&, std::unique_ptr<HiddenInstrument>, const juce::String& title, const juce::String& name,
+                     std::vector<OfflineInstrument::Note> phrase, OnSave, juce::Component* owner);
     void save (const juce::String& name);
-    void close();
+    juce::File play();
+    void close (std::function<void()> afterwards = {});
 
+    Session& session;
     std::unique_ptr<HiddenInstrument> hidden;
     std::unique_ptr<Content> content;
+    std::vector<OfflineInstrument::Note> phrase;
     OnSave onSave;
+    juce::TemporaryFile played { ".wav" };
+    bool playedOnce = false;
 };
 
 } // namespace spinus::ui

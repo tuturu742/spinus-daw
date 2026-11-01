@@ -2,6 +2,8 @@
 
 #include "WindowStacking.h"
 
+#include "dsp/sampler/SampleStorage.h"
+#include "engine/SamplePreview.h"
 #include "session/HiddenInstrument.h"
 #include "session/InstrumentPresets.h"
 
@@ -36,7 +38,7 @@ model::Device deviceOf (const SoundSource& source)
 }
 } // namespace
 
-/** The plugin's editor, with the name and Save and Cancel under it. */
+/** The plugin's editor, with Play, the name, and Save and Cancel under it. */
 class SaveSoundWindow::Content final : public juce::Component
 {
 public:
@@ -46,16 +48,16 @@ public:
         if (editor == nullptr)
             editor = std::make_unique<juce::GenericAudioProcessorEditor> (instance);
         addAndMakeVisible (*editor);
-        hint.setText ("Set the sound up here (choose a kit or a patch), name it, then Save: the Track creator can "
-                      "use it from then on.",
-                      juce::dontSendNotification);
+        hint.setText (defaultHint, juce::dontSendNotification);
         hint.setMinimumHorizontalScale (1.0f);
         nameEditor.setText (name, false);
         nameEditor.setTooltip ("The name your saved sound is listed under (Your saved sounds)");
+        playButton.setTooltip ("Hear the part's phrase with the sound as it is set up now");
+        playButton.onClick = [this] { showPlayed (window.play()); };
         saveButton.onClick = [this] { window.save (nameEditor.getText()); };
         cancelButton.onClick = [this] { window.close(); };
-        for (auto* c :
-             std::initializer_list<juce::Component*> { &hint, &nameLabel, &nameEditor, &saveButton, &cancelButton })
+        for (auto* c : std::initializer_list<juce::Component*> { &hint, &playButton, &nameLabel, &nameEditor,
+                                                                 &saveButton, &cancelButton })
             addAndMakeVisible (c);
         nameLabel.setText ("Name:", juce::dontSendNotification);
         setSize (juce::jmax (520, editor->getWidth()), editor->getHeight() + bar);
@@ -67,6 +69,15 @@ public:
         if (editor != nullptr)
             instance.editorBeingDeleted (editor.get());
         editor.reset();
+    }
+
+    void showPlayed (const juce::File& file)
+    {
+        hint.setText (file != juce::File()
+                          ? juce::String ("Playing. ") + defaultHint
+                          : "It made no sound: choose a kit or a patch in its window (a big one may still be "
+                            "loading: Play again in a moment).",
+                      juce::dontSendNotification);
     }
 
     void paint (juce::Graphics& g) override
@@ -84,6 +95,8 @@ public:
         bottom.removeFromRight (6);
         saveButton.setBounds (bottom.removeFromRight (80));
         bottom.removeFromRight (10);
+        playButton.setBounds (bottom.removeFromLeft (70));
+        bottom.removeFromLeft (10);
         nameLabel.setBounds (bottom.removeFromLeft (50));
         nameEditor.setBounds (bottom);
         if (editor != nullptr)
@@ -99,16 +112,20 @@ public:
 
 private:
     static constexpr int bar = 64;
+    static constexpr const char* defaultHint =
+        "Set the sound up here (choose a kit or a patch), Play to hear it, name it, then Save: the Track creator "
+        "can use it from then on.";
     SaveSoundWindow& window;
     juce::AudioPluginInstance& instance;
     std::unique_ptr<juce::AudioProcessorEditor> editor;
     juce::Label hint, nameLabel;
     juce::TextEditor nameEditor;
-    juce::TextButton saveButton { "Save" }, cancelButton { "Cancel" };
+    juce::TextButton playButton { "Play" }, saveButton { "Save" }, cancelButton { "Cancel" };
 };
 
 bool SaveSoundWindow::open (Session& session, const parts::Choice& start, const juce::String& name,
-                            juce::Component* near, OnSave onSave, juce::String& problem)
+                            std::vector<OfflineInstrument::Note> phrase, juce::Component* near, OnSave onSave,
+                            juce::String& problem)
 {
     if (start.source.key.isEmpty() || (start.source.stockType.isEmpty() && start.source.file.isEmpty()))
     {
@@ -139,17 +156,19 @@ bool SaveSoundWindow::open (Session& session, const parts::Choice& start, const 
             found != presets.end())
             hidden->loadPreset (*found);
     }
-    auto* window = new SaveSoundWindow (std::move (hidden), "Save this sound: " + start.source.name, name,
-                                        std::move (onSave), near != nullptr ? near->getTopLevelComponent() : nullptr);
+    auto* window = new SaveSoundWindow (session, std::move (hidden), "Save this sound: " + start.source.name, name,
+                                        std::move (phrase), std::move (onSave),
+                                        near != nullptr ? near->getTopLevelComponent() : nullptr);
     if (near != nullptr)
         window->setCentrePosition (near->getScreenBounds().getCentre());
     return true;
 }
 
-SaveSoundWindow::SaveSoundWindow (std::unique_ptr<HiddenInstrument> h, const juce::String& title,
-                                  const juce::String& name, OnSave save, juce::Component* owner)
-    : juce::DocumentWindow (title, juce::Colours::black, juce::DocumentWindow::closeButton, false),
-      hidden (std::move (h)), onSave (std::move (save))
+SaveSoundWindow::SaveSoundWindow (Session& s, std::unique_ptr<HiddenInstrument> h, const juce::String& title,
+                                  const juce::String& name, std::vector<OfflineInstrument::Note> notes, OnSave save,
+                                  juce::Component* owner)
+    : juce::DocumentWindow (title, juce::Colours::black, juce::DocumentWindow::closeButton, false), session (s),
+      hidden (std::move (h)), phrase (std::move (notes)), onSave (std::move (save))
 {
     setUsingNativeTitleBar (true);
     content = std::make_unique<Content> (*this, *hidden->getInstance(), name);
@@ -165,6 +184,8 @@ SaveSoundWindow::SaveSoundWindow (std::unique_ptr<HiddenInstrument> h, const juc
 SaveSoundWindow::~SaveSoundWindow()
 {
     std::erase (openWindows(), this);
+    if (playedOnce)
+        session.getSamplePreview().stop(); // its file goes with the window
     clearContentComponent();
     content = nullptr; // the editor goes before the plugin
     hidden = nullptr;
@@ -186,23 +207,57 @@ bool SaveSoundWindow::saveLastOpened (const juce::String& name)
     return true;
 }
 
+juce::File SaveSoundWindow::playLastOpened()
+{
+    return openWindows().empty() ? juce::File() : openWindows().back()->play();
+}
+
 void SaveSoundWindow::save (const juce::String& name)
 {
     juce::MemoryBlock state;
     if (auto* instance = hidden != nullptr ? hidden->getInstance() : nullptr)
         instance->getStateInformation (state);
-    auto then = std::move (onSave);
-    close();
-    if (then)
-        then (name.trim(), state);
+    close (
+        [then = std::move (onSave), name = name.trim(), state]
+        {
+            if (then)
+                then (name, state);
+        });
 }
 
-void SaveSoundWindow::close()
+juce::File SaveSoundWindow::play()
+{
+    if (hidden == nullptr || hidden->getInstance() == nullptr || phrase.empty())
+        return {};
+    // Offline, on the message thread (as PresetPreviews): a few seconds of sound take a moment to make.
+    const auto audio = hidden->render (phrase, 0.5);
+    if (audio.getMagnitude (0, audio.getNumSamples()) <= 1.0e-4f)
+        return {};
+    auto file = played.getFile();
+    file.deleteFile();
+    std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
+    auto writer = juce::WavAudioFormat().createWriterFor (stream, juce::AudioFormatWriterOptions()
+                                                                      .withSampleRate (HiddenInstrument::sampleRate)
+                                                                      .withNumChannels (1)
+                                                                      .withBitsPerSample (16));
+    if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples()))
+        return {};
+    writer.reset();
+    playedOnce = session.getSamplePreview().play (file, dsp::getAudioFormats()) || playedOnce;
+    return file;
+}
+
+void SaveSoundWindow::close (std::function<void()> afterwards)
 {
     setVisible (false);
-    // Deleted after this call returns (it may be the window's own button calling).
-    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<SaveSoundWindow> (this)]
-                                     { delete safe.getComponent(); });
+    // Deleted after this call returns (it may be the window's own button calling); then what comes after.
+    juce::MessageManager::callAsync (
+        [safe = juce::Component::SafePointer<SaveSoundWindow> (this), afterwards = std::move (afterwards)]
+        {
+            delete safe.getComponent();
+            if (afterwards)
+                afterwards();
+        });
 }
 
 void SaveSoundWindow::closeButtonPressed() { close(); }

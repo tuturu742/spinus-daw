@@ -1593,6 +1593,10 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     REQUIRE (opened);
     REQUIRE (SaveSoundWindow::getNumOpen() == 1);
     CHECK (session.getProject().channels.size() == channelsBefore); // the project does not change
+    // Play: the part's phrase with the sound as it is set up, heard before saving.
+    const auto played = SaveSoundWindow::playLastOpened();
+    CHECK (played.existsAsFile());
+    CHECK (played.getSize() > 1000);
     REQUIRE (SaveSoundWindow::saveLastOpened ("Deep Bass"));
     REQUIRE (waitFor (
         [&]
@@ -1610,6 +1614,12 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     CHECK (picked.reasons().contains ("your saved sound"));
     CHECK_FALSE (picked.reasons().contains ("not measured"));
     CHECK (panel.getStatusText().contains ("Saved Deep Bass"));
+
+    // Listen plays the saved sound (its state, in the helper).
+    REQUIRE (panel.listen (0));
+    REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+    INFO (panel.getStatusText());
+    CHECK (panel.getStatusText().startsWith ("Playing 3x Osc: Deep Bass"));
 
     // Measured in the helper as a preset of 3x Osc, in its own category.
     SoundIndex index (context.indexFolder);
@@ -1697,7 +1707,7 @@ TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screens
     start.source.file = "spinus:3x-osc";
     start.source.stockType = "spinus.3x-osc";
     juce::String problem;
-    REQUIRE (SaveSoundWindow::open (session, start, "Bass (3x Osc)", nullptr, {}, problem));
+    REQUIRE (SaveSoundWindow::open (session, start, "Bass (3x Osc)", {}, nullptr, {}, problem));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
     SaveSoundWindow* window = nullptr;
     for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i)

@@ -979,6 +979,10 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
         const auto why = run.exitCode == -1 ? juce::String ("Spinus's helper program is missing")
                          : run.hung         ? "stopped answering"
                                             : "crashed";
+        if (! run.hung && run.exitCode != -1) // how it ended, to tell a crash from the helper quitting on its own
+            core::Logs::info ("sounds", source.name + ": the helper ended with code " + juce::String (run.exitCode) +
+                                            (run.exitCode > 128 ? " (signal " + juce::String (run.exitCode - 128) + ")"
+                                                                : juce::String()));
         if (run.stuckOn.isNotEmpty() && attempt < options.retries)
         {
             // That preset is left out; the rest are measured in a new helper.
