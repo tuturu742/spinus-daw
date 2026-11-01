@@ -150,6 +150,8 @@ add_library (spinus_core STATIC
     engine/PluginCrashGuard.h
     engine/SamplePreview.cpp
     engine/SamplePreview.h
+    engine/LiveInstrument.cpp
+    engine/LiveInstrument.h
     engine/EngineHost.cpp
     engine/PipeWireInput.cpp
     engine/EngineHost.h

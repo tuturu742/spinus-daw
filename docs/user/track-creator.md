@@ -381,9 +381,11 @@ instrument plugin's own sound); hold the mouse over it to see why.
 
 ![Save this sound: the instrument's own window, with a name and Save](images/track-creator-save-sound.png)
 
-1. Set the sound up in the instrument's window: choose a kit, a patch, turn its knobs.
-2. Click **Play** to hear the part's phrase with the sound as it is now. If it makes no sound, the window says
-   so: choose a kit or a patch, or wait a moment while a big one loads, and Play again.
+1. Set the sound up in the instrument's window: choose a kit, a patch, turn its knobs. While the window is open,
+   the instrument plays through your speakers, so clicking a drum or a key in its window is heard.
+2. Click **Play** to hear the part's phrase with the sound as it is now (on the drums, the standard General
+   MIDI drum notes, or the ones the sound index found for it). If it makes no sound, the window says so: choose
+   a kit or a patch, or wait a moment while a big one loads, and Play again.
 3. Give it a name and click **Save**. Closing the window any other way (**Cancel**, or the window's own close
    button) keeps nothing.
 4. Spinus keeps it as **your saved sound**, listens to it like any preset (in the separate helper program,

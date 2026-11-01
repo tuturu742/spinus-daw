@@ -729,7 +729,9 @@ juce::var PartSoundsPanel::renderItem (const Row& row, const parts::Choice& c,
                          { "output", output.getFullPathName() } });
     }
     auto notesPlayed = played;
-    if (c.kind == Kind::kit) // the excerpt's drums are the Drum Machine's pads: the kit's own notes here
+    // The excerpt's drums are the Drum Machine's pads: a kit's own notes here, or those of an instrument
+    // chosen for the drums.
+    if (c.kind == Kind::kit || row.target.part == "drums")
         for (auto& n : notesPlayed)
             for (const auto& [drum, note] : c.drumNotes)
                 if (padOf (drum) == n.note)
@@ -1354,13 +1356,8 @@ bool PartSoundsPanel::saveSound (int index)
     context = getContext ? getContext() : Context {};
     const auto& row = rows[(size_t)index];
     const auto start = *row.chosen();
-    // Play in its window: the phrase Listen plays (a kit's own notes for the drums).
+    // Play in its window: the phrase Listen plays (on the instrument's own drum notes for the drums).
     auto phrase = parts::auditionPhrase (row.target, start, context.summary["tempo"]["median"], context.summary);
-    if (start.kind == parts::Choice::Kind::kit)
-        for (auto& n : phrase)
-            for (const auto& [drum, note] : start.drumNotes)
-                if (padOf (drum) == n.note)
-                    n.note = note;
     juce::String problem;
     const auto opened = SaveSoundWindow::open (
         session, start, row.part.name + " (" + start.source.name + ")", std::move (phrase), this,

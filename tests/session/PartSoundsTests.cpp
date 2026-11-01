@@ -578,6 +578,13 @@ TEST_CASE ("Sounds per part: an audition phrase in the part's key and register",
     CHECK (std::count_if (beat.begin(), beat.end(), [] (const auto& n) { return n.note == 60; }) == 8);
     CHECK (std::count_if (beat.begin(), beat.end(), [] (const auto& n) { return n.note == 61; }) == 4);
     CHECK (std::count_if (beat.begin(), beat.end(), [] (const auto& n) { return n.note == 63; }) == 16);
+    // An instrument chosen for the drums (Other sound...: not a measured kit) plays on its drum notes.
+    choice.kind = Choice::Kind::preset;
+    choice.drumNotes = { { "kick", 36 }, { "snare", 38 }, { "hat", 42 } };
+    const auto gm = auditionPhrase (targets[2], choice, 120.0, summary);
+    CHECK (std::count_if (gm.begin(), gm.end(), [] (const auto& n) { return n.note == 36; }) == 8);
+    CHECK (std::count_if (gm.begin(), gm.end(), [] (const auto& n) { return n.note == 38; }) == 4);
+    CHECK (std::count_if (gm.begin(), gm.end(), [] (const auto& n) { return n.note == 42; }) == 16);
 }
 
 //==============================================================================

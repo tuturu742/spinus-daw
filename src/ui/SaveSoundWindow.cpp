@@ -2,7 +2,6 @@
 
 #include "WindowStacking.h"
 
-#include "dsp/sampler/SampleStorage.h"
 #include "engine/SamplePreview.h"
 #include "session/HiddenInstrument.h"
 #include "session/InstrumentPresets.h"
@@ -39,7 +38,7 @@ model::Device deviceOf (const SoundSource& source)
 } // namespace
 
 /** The plugin's editor, with Play, the name, and Save and Cancel under it. */
-class SaveSoundWindow::Content final : public juce::Component
+class SaveSoundWindow::Content final : public juce::Component, private juce::Timer
 {
 public:
     Content (SaveSoundWindow& w, juce::AudioPluginInstance& p, const juce::String& name) : window (w), instance (p)
@@ -53,7 +52,7 @@ public:
         nameEditor.setText (name, false);
         nameEditor.setTooltip ("The name your saved sound is listed under (Your saved sounds)");
         playButton.setTooltip ("Hear the part's phrase with the sound as it is set up now");
-        playButton.onClick = [this] { showPlayed (window.play()); };
+        playButton.onClick = [this] { played (window.play()); };
         saveButton.onClick = [this] { window.save (nameEditor.getText()); };
         cancelButton.onClick = [this] { window.close(); };
         for (auto* c : std::initializer_list<juce::Component*> { &hint, &playButton, &nameLabel, &nameEditor,
@@ -71,10 +70,27 @@ public:
         editor.reset();
     }
 
-    void showPlayed (const juce::File& file)
+    /** Says it plays, then, once the phrase has ended, whether anything was heard. */
+    void played (bool playing)
     {
-        hint.setText (file != juce::File()
-                          ? juce::String ("Playing. ") + defaultHint
+        if (! playing)
+        {
+            hint.setText ("There is nothing to play for this part.", juce::dontSendNotification);
+            return;
+        }
+        hint.setText ("Playing...", juce::dontSendNotification);
+        window.live->takePeak();
+        double end = 0.0;
+        for (const auto& n : window.phrase)
+            end = juce::jmax (end, n.start + n.length);
+        startTimer (juce::roundToInt ((end + 0.5) * 1000.0));
+    }
+
+    void timerCallback() override
+    {
+        stopTimer();
+        hint.setText (window.live->takePeak() > 1.0e-4f
+                          ? juce::String (defaultHint)
                           : "It made no sound: choose a kit or a patch in its window (a big one may still be "
                             "loading: Play again in a moment).",
                       juce::dontSendNotification);
@@ -170,6 +186,10 @@ SaveSoundWindow::SaveSoundWindow (Session& s, std::unique_ptr<HiddenInstrument> 
     : juce::DocumentWindow (title, juce::Colours::black, juce::DocumentWindow::closeButton, false), session (s),
       hidden (std::move (h)), phrase (std::move (notes)), onSave (std::move (save))
 {
+    // Live from now on: what the user does in its window is heard (one window at a time: the newest).
+    live = std::make_unique<engine::LiveInstrument> (*hidden->getInstance());
+    live->prepare (session.getSamplePreview().getSampleRate());
+    session.getSamplePreview().setLive (live.get());
     setUsingNativeTitleBar (true);
     content = std::make_unique<Content> (*this, *hidden->getInstance(), name);
     setContentNonOwned (content.get(), true);
@@ -184,8 +204,13 @@ SaveSoundWindow::SaveSoundWindow (Session& s, std::unique_ptr<HiddenInstrument> 
 SaveSoundWindow::~SaveSoundWindow()
 {
     std::erase (openWindows(), this);
-    if (playedOnce)
-        session.getSamplePreview().stop(); // its file goes with the window
+    // Off the sound card before the plugin goes; the window opened before it, if still open, plays again.
+    if (auto& preview = session.getSamplePreview(); preview.getLive() == live.get())
+    {
+        auto* before = openWindows().empty() ? nullptr : openWindows().back();
+        preview.setLive (before != nullptr ? before->live.get() : nullptr);
+    }
+    live = nullptr;
     clearContentComponent();
     content = nullptr; // the editor goes before the plugin
     hidden = nullptr;
@@ -207,9 +232,22 @@ bool SaveSoundWindow::saveLastOpened (const juce::String& name)
     return true;
 }
 
-juce::File SaveSoundWindow::playLastOpened()
+bool SaveSoundWindow::playLastOpened() { return ! openWindows().empty() && openWindows().back()->play(); }
+
+float SaveSoundWindow::mixLastOpened (double seconds)
 {
-    return openWindows().empty() ? juce::File() : openWindows().back()->play();
+    if (openWindows().empty())
+        return 0.0f;
+    auto& instrument = *openWindows().back()->live;
+    juce::AudioBuffer<float> block (2, engine::LiveInstrument::maxBlockSize);
+    float loudest = 0.0f;
+    for (int done = 0; done < (int)(seconds * instrument.getSampleRate()); done += block.getNumSamples())
+    {
+        block.clear();
+        instrument.mix (block.getArrayOfWritePointers(), 2, block.getNumSamples());
+        loudest = juce::jmax (loudest, block.getMagnitude (0, block.getNumSamples()));
+    }
+    return loudest;
 }
 
 void SaveSoundWindow::save (const juce::String& name)
@@ -225,26 +263,15 @@ void SaveSoundWindow::save (const juce::String& name)
         });
 }
 
-juce::File SaveSoundWindow::play()
+bool SaveSoundWindow::play()
 {
-    if (hidden == nullptr || hidden->getInstance() == nullptr || phrase.empty())
-        return {};
-    // Offline, on the message thread (as PresetPreviews): a few seconds of sound take a moment to make.
-    const auto audio = hidden->render (phrase, 0.5);
-    if (audio.getMagnitude (0, audio.getNumSamples()) <= 1.0e-4f)
-        return {};
-    auto file = played.getFile();
-    file.deleteFile();
-    std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
-    auto writer = juce::WavAudioFormat().createWriterFor (stream, juce::AudioFormatWriterOptions()
-                                                                      .withSampleRate (HiddenInstrument::sampleRate)
-                                                                      .withNumChannels (1)
-                                                                      .withBitsPerSample (16));
-    if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples()))
-        return {};
-    writer.reset();
-    playedOnce = session.getSamplePreview().play (file, dsp::getAudioFormats()) || playedOnce;
-    return file;
+    if (live == nullptr || phrase.empty())
+        return false;
+    std::vector<engine::LiveInstrument::Note> notes;
+    notes.reserve (phrase.size());
+    for (const auto& n : phrase)
+        notes.push_back ({ n.note, n.start, n.length, n.velocity });
+    return live->play (notes);
 }
 
 void SaveSoundWindow::close (std::function<void()> afterwards)

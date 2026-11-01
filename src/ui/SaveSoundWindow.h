@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/LiveInstrument.h"
 #include "session/PartSounds.h"
 #include "session/Session.h"
 
@@ -20,8 +21,8 @@ namespace spinus::ui
     per setting) for a plugin without one. The instrument is loaded as Spinus loads it in a project (Windows
     plugins through Wine among them), into a hidden edit of its own: nothing in the project changes.
 
-    Play plays the part's phrase with the sound as it is set up now (through Spinus's sample preview), so the
-    user hears it before saving.
+    The instrument plays live through the sound card while the window is open (LiveInstrument, through the
+    sample preview), so what the user does in its window is heard, and Play plays the part's phrase on it.
 
     Message thread. The window deletes itself when closed (Save or Cancel). `onSave` is called once it has gone,
     with its instrument: a plugin may take seconds to close, and is not measured while it does. */
@@ -43,8 +44,10 @@ public:
     static void closeAll();
     /** For tests: saves (as the button does) in the window opened last, under `name`. */
     static bool saveLastOpened (const juce::String& name);
-    /** For tests: Play in the window opened last; the file played, or none when nothing was heard. */
-    static juce::File playLastOpened();
+    /** For tests: Play in the window opened last. False when there is nothing to play. */
+    static bool playLastOpened();
+    /** For tests (no sound card): what the window opened last plays in the next `seconds`; its loudest sample. */
+    static float mixLastOpened (double seconds);
 
     ~SaveSoundWindow() override;
     void closeButtonPressed() override;
@@ -54,7 +57,7 @@ private:
     SaveSoundWindow (Session&, std::unique_ptr<HiddenInstrument>, const juce::String& title, const juce::String& name,
                      std::vector<OfflineInstrument::Note> phrase, OnSave, juce::Component* owner);
     void save (const juce::String& name);
-    juce::File play();
+    bool play();
     void close (std::function<void()> afterwards = {});
 
     Session& session;
@@ -62,8 +65,7 @@ private:
     std::unique_ptr<Content> content;
     std::vector<OfflineInstrument::Note> phrase;
     OnSave onSave;
-    juce::TemporaryFile played { ".wav" };
-    bool playedOnce = false;
+    std::unique_ptr<engine::LiveInstrument> live;
 };
 
 } // namespace spinus::ui

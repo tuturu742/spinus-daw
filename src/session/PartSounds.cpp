@@ -1192,7 +1192,8 @@ std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const
             return notes;
         auto noteOf = [&] (const char* drum)
         {
-            if (choice.kind == Choice::Kind::kit && choice.drumNotes.contains (drum))
+            // A kit's notes, or those of an instrument chosen for the drums (General MIDI's when unmeasured).
+            if (choice.drumNotes.contains (drum))
                 return choice.drumNotes.at (drum);
             return juce::String (drum) == "kick" ? 60 : juce::String (drum) == "snare" ? 61 : 63; // Drum Machine pads
         };

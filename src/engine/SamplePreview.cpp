@@ -125,9 +125,27 @@ void SamplePreview::freeRetired()
         delete retired[(size_t)scope.startIndex2 + (size_t)i];
 }
 
+void SamplePreview::setLive (LiveInstrument* instrument)
+{
+    live.store (instrument);
+    // The audio thread may still be in the one before: wait for that block to end (a few milliseconds).
+    while (mixingLive.load())
+        juce::Thread::yield();
+}
+
 void SamplePreview::mix (float* const* outputs, int numChannels, int numSamples) noexcept
 {
     juce::ScopedNoDenormals noDenormals;
+    mixFile (outputs, numChannels, numSamples);
+
+    mixingLive.store (true);
+    if (auto* instrument = live.load())
+        instrument->mix (outputs, numChannels, numSamples);
+    mixingLive.store (false);
+}
+
+void SamplePreview::mixFile (float* const* outputs, int numChannels, int numSamples) noexcept
+{
 
     // A new sound replaces the one playing, if the old one can be handed back to be freed.
     if (pending.load() != nullptr && retiredFifo.getFreeSpace() > 0)

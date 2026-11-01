@@ -38,6 +38,7 @@ add_executable (spinus_tests
     engine/SandboxEngineTests.cpp
     engine/ExporterTests.cpp
     engine/TuneRenderTests.cpp
+    engine/LiveInstrumentTests.cpp
     engine/EngineHostTests.cpp
     golden/GoldenAudioTests.cpp
     model/ModelTests.cpp
