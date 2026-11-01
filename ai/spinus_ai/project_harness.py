@@ -275,8 +275,10 @@ TOOLS = [
     Tool(
         "add_effect",
         "Add an effect (found by words: 'EQ', 'Compressor', 'Limiter', 'Filter', 'Ducker', 'Spinus Delay' (note "
-        "'1/8 dotted', feedback '35%', mode 'Ping-pong', mix '30%'), a reverb you have) to a part's insert, a bus, "
-        "or 'master', with settings.",
+        "'1/8 dotted', feedback '35%', mode 'Ping-pong', mix '30%'), a reverb you have, or a kind such as 'Chorus', "
+        "'Phaser', 'Flanger', 'Distortion' that an effect has as a mode (the devices' modes)) to a part's insert, a "
+        "bus, or 'master', with settings by name as it shows them for that mode ('Rate', 'Mix': the words of a "
+        "setting's name are enough).",
         schema({"to": {"type": "string"}, "effect": {"type": "string"}, "settings": SETTINGS}, ["to", "effect"]),
     ),
     Tool(
@@ -1097,18 +1099,44 @@ class ProjectHarness:
             raise Mistake(f"{channel.get('name')} has no mixer insert")
         return insert
 
+    def find_effect(self, words: str) -> tuple[dict[str, Any], dict[str, str]]:
+        """An effect by its name, else one that has `words` as a mode (a type 'Chorus' it is set to): the device
+        and the setting that picks the mode (empty for one found by name)."""
+        try:
+            return self.find_device(words, "effect"), {}
+        except Mistake as by_name:
+            wanted = " ".join(words.lower().split())
+            found: list[tuple[int, dict[str, Any], str, str]] = []  # exact first, then all the words in the mode
+            for d in self.devices:
+                modes = d.get("modes") if d.get("type") == "effect" else None
+                for setting, choices in (modes if isinstance(modes, dict) else {}).items():
+                    for choice in choices if isinstance(choices, list) else []:
+                        name = " ".join(str(choice).lower().split())
+                        if name == wanted or all(w in name.split() for w in wanted.split()):
+                            found.append((name != wanted, d, str(setting), str(choice)))
+            found.sort(key=lambda f: (f[0], not f[1].get("available", True)))
+            if not found:
+                raise by_name
+            _, d, setting, choice = found[0]
+            if not d.get("available", True):
+                raise Mistake(f"{d.get('name')} is not downloaded here (Options > Get free plugins)") from by_name
+            return copy.deepcopy(d.get("device") or {}), {setting: choice}
+
     def tool_add_effect(self, to: str, effect: str, settings: dict[str, Any] | None = None) -> str:
         insert = self.where(to)
-        device = self.find_device(effect, "effect")
+        device, mode = self.find_effect(effect)
         number = self.step(
             "insert.addEffect",
             {"insert": insert.get("id"), "device": device},
             f"{self.device_name(device)} on {insert.get('name') or 'the insert'}",
         )
         insert.setdefault("effects", []).append({"device": {**device, "id": f"${number}.device"}})
-        if settings:
-            self.step("device.setParameters", {"device": f"${number}.device", "text": text_settings(settings)})
-        return f"Added {self.device_name(device)} to {insert.get('name') or 'the insert'}."
+        if settings or mode:
+            # The mode first: Spinus reads the other settings as the effect shows them in that mode.
+            text = {**mode, **(text_settings(settings) if settings else {})}
+            self.step("device.setParameters", {"device": f"${number}.device", "text": text})
+        as_mode = f" as {next(iter(mode.values()))}" if mode else ""
+        return f"Added {self.device_name(device)}{as_mode} to {insert.get('name') or 'the insert'}."
 
     def tool_send(self, part: str, to: str, level: str) -> str:
         insert = self.where(part)

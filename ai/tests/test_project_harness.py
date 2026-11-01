@@ -215,6 +215,28 @@ def test_a_delay_send_makes_a_delay_bus_with_spinus_delay_fully_wet() -> None:
     assert [s["command"] for s in h.steps[before:]] == ["insert.setSend"]
 
 
+def test_a_chorus_is_found_as_a_mode_of_an_effect_and_set_first() -> None:
+    kinds = {"FX Type": ["Delay", "Phaser", "Distortion", "Chorus", "Flanger"]}
+    fx = {**device("Surge XT Effects", "effect", "bundled.surge-xt-effects"), "modes": kinds}
+    missing = {**device("Other Effects", "effect", "bundled.other"), "modes": {"Kind": ["Wobble"]}, "available": False}
+    h = ProjectHarness({"project": song(), "devices": [*DEVICES, fx, missing]})
+    text, failed = h.call("add_effect", {"to": "Pad", "effect": "chorus", "settings": {"Rate": "0.5 Hz", "Mix": "30%"}})
+    assert not failed and "as Chorus" in text, text
+    added = next(s["parameters"] for s in h.steps if s["command"] == "insert.addEffect")
+    assert added["device"] == {"kind": "stock", "stockType": "bundled.surge-xt-effects"}
+    settings = h.steps[-1]["parameters"]["text"]
+    assert next(iter(settings.items())) == ("FX Type", "Chorus") and settings["Mix"] == "30%"
+    assert h.call("add_effect", {"to": "Pad", "effect": "distortion"})[0].endswith("as Distortion to Pad.")
+    assert h.steps[-1]["parameters"]["text"] == {"FX Type": "Distortion"}
+    text, failed = h.call("add_effect", {"to": "Pad", "effect": "wobble"})
+    assert failed and "not downloaded" in text
+    assert h.call("add_effect", {"to": "Pad", "effect": "tremolo"})[1]  # nothing has it
+    # By name first: the limiter is Spinus's, not a mode of another effect.
+    assert h.call("add_effect", {"to": "master", "effect": "limiter"})[0] == "Added Limiter to Master."
+    tools = Tools(Snapshot({"project": song(), "devices": [*DEVICES, fx]}), Manual(None), COMMANDS)
+    assert "bundled.surge-xt-effects" in tools.call("find_devices", {"query": "phaser", "type": "effect"})[0]
+
+
 def test_shaping_a_sound_moves_its_settings_as_they_show() -> None:
     h = harness(
         deviceParameters={

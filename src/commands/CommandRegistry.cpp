@@ -11,6 +11,8 @@
 #include "model/StockDevices.h"
 #include "model/Validation.h"
 
+#include <set>
+
 namespace spinus::commands
 {
 
@@ -1547,14 +1549,77 @@ protected:
             return juce::Result::fail ("Spinus could not open " + effectName (d) +
                                        " here to read its settings as text; use 'values' (0 to 1) for it");
         const engine::ParameterFinder finder (*instance);
-        for (auto& [key, text] : texts)
+        // By ID or name; else the one setting whose name has all the words given ("Rate" for "Modulation Rate").
+        auto findSetting = [&finder, &instance] (const juce::String& key)
         {
             auto* parameter = finder.find (key);
             for (auto* each : instance->getParameters())
                 if (parameter == nullptr && each->getName (200).trim().equalsIgnoreCase (key.trim()))
                     parameter = each;
+            const auto wanted = juce::StringArray::fromTokens (key.toLowerCase(), " /-_", "");
+            juce::AudioProcessorParameter* only = nullptr;
+            int found = 0;
+            for (auto* each : instance->getParameters())
+            {
+                const auto words = juce::StringArray::fromTokens (each->getName (200).toLowerCase(), " /-_", "");
+                bool all = ! wanted.isEmpty();
+                for (auto& w : wanted)
+                    all = all && words.contains (w);
+                if (all && ++found == 1)
+                    only = each;
+            }
+            return parameter != nullptr ? parameter : (found == 1 ? only : nullptr);
+        };
+
+        // Choices first (a choice, or a setting given a word, such as an effect's type): a plugin may name or
+        // describe its other settings by them, so the rest are read once the plugin has taken them in. The plugin
+        // is put back as it was afterwards; the values reach it as the project's change.
+        std::vector<std::pair<juce::AudioProcessorParameter*, float>> chosen, before;
+        std::set<juce::String> read;
+        for (auto& [key, text] : texts)
+            if (auto* parameter = findSetting (key);
+                parameter != nullptr &&
+                (parameter->isDiscrete() || parameter->isBoolean() || dsp::param::isName (text)))
+                if (const auto value = dsp::param::normalisedForText (*parameter, text))
+                {
+                    chosen.emplace_back (parameter, *value);
+                    before.emplace_back (parameter, parameter->getValue());
+                    values[engine::getParameterId (*parameter)] = *value;
+                    read.insert (key);
+                }
+        const struct PutBack
+        {
+            juce::AudioProcessor& plugin;
+            const std::vector<std::pair<juce::AudioProcessorParameter*, float>>& values;
+            ~PutBack()
+            {
+                if (values.empty())
+                    return;
+                engine::setParameterValues (plugin, values);
+                engine::letChangesTakeEffect (plugin);
+            }
+        } putBack { *instance, before };
+        if (! chosen.empty())
+        {
+            engine::setParameterValues (*instance, chosen);
+            engine::letChangesTakeEffect (*instance);
+        }
+
+        for (auto& [key, text] : texts)
+        {
+            if (read.contains (key))
+                continue;
+            auto* parameter = findSetting (key);
             if (parameter == nullptr)
-                return juce::Result::fail (effectName (d) + " has no setting " + quoted (key));
+            {
+                juce::StringArray names;
+                for (auto* each : instance->getParameters())
+                    if (const auto n = each->getName (200).trim(); n.isNotEmpty() && n != "-" && names.size() < 64)
+                        names.addIfNotAlreadyThere (n);
+                return juce::Result::fail (
+                    effectName (d) + " has no setting " + quoted (key) +
+                    (names.isEmpty() ? juce::String() : " (its settings now: " + names.joinIntoString (", ") + ")"));
+            }
             const auto value = dsp::param::normalisedForText (*parameter, text);
             if (! value)
             {

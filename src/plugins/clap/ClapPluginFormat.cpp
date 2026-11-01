@@ -16,6 +16,7 @@
 #endif
 
 #include <atomic>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <numeric>
@@ -403,7 +404,16 @@ public:
         active = plugin->activate (plugin, sampleRate, 1, (uint32_t)maximumBlockSize);
 
         if (active)
+        {
             refreshLatency();
+            // Changes flushed while inactive go again: a plugin may take them in only once it processes.
+            for (auto& [id, change] : changedWhileInactive)
+                if (paramFifo.getFreeSpace() > 0)
+                    paramFifo.write (1).forEach ([&, c = change] (int index)
+                                                 { paramQueue[static_cast<size_t> (index)] = c; });
+            changesWaiting = changesWaiting || ! changedWhileInactive.empty();
+            changedWhileInactive.clear();
+        }
         noteExpressions.reset();
     }
 
@@ -464,12 +474,22 @@ public:
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) override
     {
         juce::ScopedNoDenormals noDenormals;
+
+        // The message thread may be letting changes take effect (applyPendingChanges): this block is silent.
+        if (busy.exchange (true, std::memory_order_acquire))
+        {
+            buffer.clear();
+            midi.clear();
+            return;
+        }
+
         audioThreadId = std::this_thread::get_id();
 
         if (! active)
         {
             buffer.clear();
             midi.clear();
+            busy.store (false, std::memory_order_release);
             return;
         }
 
@@ -485,11 +505,57 @@ public:
         // The plugin was activated for at most maxBlockSize frames, so larger blocks are split.
         const auto total = buffer.getNumSamples();
 
+        changesWaiting.store (false, std::memory_order_relaxed); // drained by the first chunk
         for (int start = 0; start < total; start += maxBlockSize)
             processChunk (buffer, midi, start, std::min (maxBlockSize, total - start));
 
         midi.clear();
+        lastAudioBlockTicks.store (std::chrono::steady_clock::now().time_since_epoch().count(),
+                                   std::memory_order_relaxed);
+        audioBlocks.fetch_add (1, std::memory_order_release);
+        busy.store (false, std::memory_order_release);
     }
+
+    /** Lets setting changes take effect while the plugin is not being played (message thread). Many plugins
+        take in a change only when they next process audio, and some show (or rename) their other settings
+        for it only then: an effect's type picks which settings it has. When no audio thread has processed
+        this plugin lately (Spinus run from the command line, a copy made to read settings, no audio device),
+        this thread processes a short block of silence itself, activating the plugin for it if it was not, and
+        puts it back as it was. When the audio thread is playing it, this waits (a little, at most
+        maxWaitMs) for it to process two blocks instead. Either way the settings' names and values are read
+        again from the plugin afterwards. Quick when no change is waiting. */
+    void applyPendingChanges()
+    {
+        JUCE_ASSERT_MESSAGE_THREAD
+        if (! changesWaiting.load (std::memory_order_relaxed) && paramFifo.getNumReady() == 0)
+            return;
+
+        const auto sinceLastBlock = std::chrono::steady_clock::now() -
+                                    std::chrono::steady_clock::time_point (std::chrono::steady_clock::duration (
+                                        lastAudioBlockTicks.load (std::memory_order_relaxed)));
+        const bool beingPlayed = active && audioBlocks.load() > 0 && sinceLastBlock < std::chrono::milliseconds (250);
+
+        if (! beingPlayed && ! busy.exchange (true, std::memory_order_acquire))
+        {
+            processSilenceHere();
+            busy.store (false, std::memory_order_release);
+        }
+        else
+        {
+            const auto start = audioBlocks.load (std::memory_order_acquire);
+            const auto until = juce::Time::getMillisecondCounter() + (juce::uint32)maxWaitMs;
+            while (audioBlocks.load (std::memory_order_acquire) < start + 2 &&
+                   juce::Time::getMillisecondCounter() < until)
+                juce::Thread::sleep (1);
+        }
+
+        // What the plugin would have asked the message thread to do after that block, now.
+        plugin->on_main_thread (plugin);
+        refreshParameterInfo();
+        refreshParameterValues();
+    }
+
+    static constexpr int maxWaitMs = 200;
 
     using juce::AudioPluginInstance::processBlock;
 
@@ -514,6 +580,7 @@ public:
     {
         JUCE_ASSERT_MESSAGE_THREAD
         destData.reset();
+        applyPendingChanges(); // so the state has every setting set (a plugin may keep a change only once it plays)
 
         if (stateExt == nullptr)
             return;
@@ -535,6 +602,7 @@ public:
         if (stateExt == nullptr)
             return;
 
+        changedWhileInactive.clear(); // the state has the plugin's settings now
         juce::MemoryInputStream in (data, (size_t)sizeInBytes, false);
         clap_istream_t stream {};
         stream.ctx = &in;
@@ -543,6 +611,7 @@ public:
 
         if (stateExt->load (plugin, &stream))
             refreshParameterValues();
+        changesWaiting = true;
     }
 
     //==============================================================================
@@ -554,6 +623,7 @@ public:
         paramFifo.write (1).forEach (
             [&] (int index)
             { paramQueue[static_cast<size_t> (index)] = { p.getClapId(), p.getCookie(), plainValue }; });
+        changesWaiting.store (true, std::memory_order_relaxed);
 
         if (! active && paramsExt != nullptr && juce::MessageManager::existsAndIsCurrentThread())
             flushParametersWhileInactive();
@@ -785,6 +855,7 @@ public:
 
         refreshParameterInfo();
         refreshParameterValues();
+        changesWaiting = true;
         return juce::Result::ok();
     }
 
@@ -978,6 +1049,42 @@ public:
     }
 
 private:
+    /** applyPendingChanges() without an audio thread: this thread stands in for it (busy is held). */
+    void processSilenceHere()
+    {
+        const bool wasActive = active, wasProcessing = processing;
+        if (! active)
+            prepareToPlay (getSampleRate() > 0.0 ? getSampleRate() : 48000.0,
+                           getBlockSize() > 0 ? getBlockSize() : 512);
+        if (active)
+        {
+            standingInForAudioThread = true;
+            if (! processing)
+                processing = plugin->start_processing (plugin);
+            if (processing)
+            {
+                juce::AudioBuffer<float> silence (
+                    juce::jmax (1, getTotalNumInputChannels(), getTotalNumOutputChannels()),
+                    juce::jmin (maxBlockSize, 256));
+                const juce::MidiBuffer none;
+                changesWaiting = false;
+                for (int block = 0; block < 2; ++block)
+                {
+                    silence.clear();
+                    processChunk (silence, none, 0, silence.getNumSamples());
+                }
+                if (! wasProcessing)
+                {
+                    plugin->stop_processing (plugin);
+                    processing = false;
+                }
+            }
+            standingInForAudioThread = false;
+        }
+        if (! wasActive)
+            releaseResources();
+    }
+
     void refreshLatency()
     {
         if (latencyExt != nullptr)
@@ -993,7 +1100,14 @@ private:
     void flushParametersWhileInactive()
     {
         inputEvents.clear();
-        drainParameterQueue();
+        paramFifo.read (paramFifo.getNumReady())
+            .forEach (
+                [this] (int index)
+                {
+                    const auto& change = paramQueue[static_cast<size_t> (index)];
+                    changedWhileInactive[change.id] = change;
+                    inputEvents.addParam (0, change.id, change.cookie, change.value);
+                });
         paramsExt->flush (plugin, inputEvents.get(), &outputEvents);
         inputEvents.clear();
     }
@@ -1232,7 +1346,7 @@ private:
 
     bool isAudioThread() const noexcept
     {
-        return stoppingOnThisThread ||
+        return stoppingOnThisThread || standingInForAudioThread ||
                ((processing || startingOnThisThread) && std::this_thread::get_id() == audioThreadId.load());
     }
 
@@ -1421,6 +1535,7 @@ private:
 
     std::map<clap_id, ClapParameter*> parametersById;
     juce::AbstractFifo paramFifo { 1024 };
+    std::map<clap_id, ParamChange> changedWhileInactive; // sent again on activation (message thread)
     std::vector<ParamChange> paramQueue;
 
     InputEventList inputEvents;
@@ -1437,6 +1552,11 @@ private:
     std::atomic<bool> processing { false };
     std::atomic<bool> stoppingOnThisThread { false };
     std::atomic<bool> startingOnThisThread { false };
+    std::atomic<bool> standingInForAudioThread { false }; // applyPendingChanges() processing on the message thread
+    std::atomic<bool> busy { false };                     // a thread is processing (the audio thread, or that one)
+    std::atomic<bool> changesWaiting { true }; // changed (or loaded, or new) since the plugin last processed audio
+    std::atomic<juce::uint64> audioBlocks { 0 };
+    std::atomic<std::chrono::steady_clock::rep> lastAudioBlockTicks { 0 };
     std::atomic<std::thread::id> audioThreadId {};
     int64_t steadyTime = 0;
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
@@ -1779,6 +1899,12 @@ bool ClapPluginFormat::canLoadPresets (const juce::AudioPluginInstance& instance
 {
     auto* clap = dynamic_cast<const ClapPluginInstance*> (&instance);
     return clap != nullptr && clap->getPresetLoad() != nullptr;
+}
+
+void ClapPluginFormat::applyPendingChanges (juce::AudioProcessor& processor)
+{
+    if (auto* clap = dynamic_cast<ClapPluginInstance*> (&processor))
+        clap->applyPendingChanges();
 }
 
 juce::StringArray ClapPluginFormat::getLoadedFiles() { return ClapModule::getLoadedFiles(); }

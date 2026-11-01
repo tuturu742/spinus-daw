@@ -1,5 +1,7 @@
 #include "ParameterIds.h"
 
+#include "plugins/clap/ClapPluginFormat.h"
+
 namespace spinus::engine
 {
 
@@ -47,6 +49,31 @@ juce::AudioProcessorParameter* ParameterFinder::findSaved (const juce::String& k
     if (legacy != nullptr)
         *legacy = true;
     return it->second;
+}
+
+void letChangesTakeEffect (juce::AudioProcessor& processor)
+{
+    plugins::ClapPluginFormat::applyPendingChanges (processor);
+}
+
+void setParameterValues (juce::AudioProcessor& processor,
+                         const std::vector<std::pair<juce::AudioProcessorParameter*, float>>& values)
+{
+    for (auto& [parameter, value] : values)
+        parameter->setValueNotifyingHost (value);
+    if (values.size() < 2)
+        return; // one setting: nothing to be put back; it takes effect when the plugin next plays or is read
+    letChangesTakeEffect (processor);
+    bool again = false;
+    for (auto& [parameter, value] : values)
+        if (const auto now = parameter->getValue(); // moved, not just rounded to the plugin's own step
+            std::abs (now - value) > 1.0e-4f && parameter->getText (now, 200) != parameter->getText (value, 200))
+        {
+            parameter->setValueNotifyingHost (value);
+            again = true;
+        }
+    if (again)
+        letChangesTakeEffect (processor);
 }
 
 std::map<juce::String, float> readParameterValues (const juce::AudioProcessor& processor)

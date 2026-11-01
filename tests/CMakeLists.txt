@@ -70,6 +70,7 @@ add_executable (spinus_tests
     session/SilenceTests.cpp
     session/AudioRecorderTests.cpp
     session/DeviceParametersTests.cpp
+    session/ModeSettingsTests.cpp
     session/DownloadedPluginsTests.cpp
     session/StemSamplesTests.cpp
     session/AnalysisLibraryTests.cpp
@@ -234,6 +235,17 @@ set_target_properties (spinus_test_param_ids_clap PROPERTIES
     PREFIX "" OUTPUT_NAME "param-ids" SUFFIX ".clap"
     LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
 add_dependencies (spinus_tests spinus_test_param_ids_clap)
+
+# An effect whose type picks its other settings, taken in only when it processes (ModeSettingsTests.cpp).
+add_library (spinus_test_modes_clap MODULE plugins/ModesClap.c)
+target_include_directories (spinus_test_modes_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+if (NOT WIN32)
+    target_link_libraries (spinus_test_modes_clap PRIVATE m)
+endif()
+set_target_properties (spinus_test_modes_clap PROPERTIES
+    PREFIX "" OUTPUT_NAME "modes" SUFFIX ".clap"
+    LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
+add_dependencies (spinus_tests spinus_test_modes_clap)
 
 # Two tiny instruments with named settings, for synth match (one with nothing to tune).
 add_library (spinus_test_synth_clap MODULE plugins/TestSynthClap.c)

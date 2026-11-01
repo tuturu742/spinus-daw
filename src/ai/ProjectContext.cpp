@@ -86,12 +86,29 @@ juce::var projectContext (Session& session, const ContextOptions& options)
             o->removeProperty ("id");
             o->removeProperty ("bypassed");
         }
-        devices.add (object ({ { "name", entry.name },
-                               { "maker", entry.maker },
-                               { "type", entry.instrument ? "instrument" : "effect" },
-                               { "format", entry.badge.isNotEmpty() ? entry.badge : juce::String ("Spinus") },
-                               { "available", entry.available },
-                               { "device", device } }));
+        auto listed = object ({ { "name", entry.name },
+                                { "maker", entry.maker },
+                                { "type", entry.instrument ? "instrument" : "effect" },
+                                { "format", entry.badge.isNotEmpty() ? entry.badge : juce::String ("Spinus") },
+                                { "available", entry.available },
+                                { "device", device } });
+        // An effect of Spinus's or a free one that picks its kind by name (a type "Chorus", "Phaser"...): those
+        // names, so a chorus is found in it. Not for the computer's own plugins (each would be loaded to see).
+        if (options.deviceChoices && ! entry.instrument && entry.available &&
+            entry.origin != plugins::DeviceList::Origin::installed)
+            if (const auto choices = session.getDeviceChoices (entry.device); ! choices.empty())
+            {
+                auto* modes = new juce::DynamicObject();
+                for (auto& [setting, each] : choices)
+                {
+                    juce::Array<juce::var> list;
+                    for (auto& n : each)
+                        list.add (n);
+                    modes->setProperty (setting, list);
+                }
+                listed.getDynamicObject()->setProperty ("modes", juce::var (modes));
+            }
+        devices.add (listed);
     }
     context->setProperty ("devices", devices);
     return juce::var (context);

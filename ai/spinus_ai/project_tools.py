@@ -116,7 +116,10 @@ class Snapshot:
         for d in self.devices:
             if kind in ("instrument", "effect") and d.get("type") != kind:
                 continue
-            text = f"{d.get('name', '')} {d.get('maker', '')} {d.get('format', '')}".lower()
+            listed = d.get("modes")
+            modes: dict[str, Any] = listed if isinstance(listed, dict) else {}
+            kinds = " ".join(str(c) for choices in modes.values() if isinstance(choices, list) for c in choices)
+            text = f"{d.get('name', '')} {d.get('maker', '')} {d.get('format', '')} {kinds}".lower()
             if all(w in text for w in words):
                 found.append(d)
         return found[:25]
@@ -273,8 +276,10 @@ class Tools:
             Tool(
                 "find_devices",
                 "Instruments and effects that can be added (Spinus's own, the free open-source ones, installed "
-                "plugins), searched by words in the name, maker or format. Each result has the exact 'device' "
-                "object to put in channel.add or insert.addEffect. Never invent a device.",
+                "plugins), searched by words in the name, maker or format, or a mode an effect has ('chorus', "
+                "'phaser': its 'modes' list them, by the setting that picks one; set that setting first). Each "
+                "result has the exact 'device' object to put in channel.add or insert.addEffect. Never invent a "
+                "device.",
                 {
                     "type": "object",
                     "properties": {
