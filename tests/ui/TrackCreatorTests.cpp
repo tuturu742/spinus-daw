@@ -1593,10 +1593,11 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     REQUIRE (opened);
     REQUIRE (SaveSoundWindow::getNumOpen() == 1);
     CHECK (session.getProject().channels.size() == channelsBefore); // the project does not change
-    // Play: the part's phrase with the sound as it is set up, heard before saving.
-    const auto played = SaveSoundWindow::playLastOpened();
-    CHECK (played.existsAsFile());
-    CHECK (played.getSize() > 1000);
+    // Live through the sound card while open; Play plays the part's phrase on it, heard before saving.
+    CHECK (session.getSamplePreview().getLive() != nullptr);
+    CHECK (SaveSoundWindow::mixLastOpened (0.5) < 1.0e-4f); // nothing played yet
+    CHECK (SaveSoundWindow::playLastOpened());
+    CHECK (SaveSoundWindow::mixLastOpened (3.0) > 0.01f);
     REQUIRE (SaveSoundWindow::saveLastOpened ("Deep Bass"));
     REQUIRE (waitFor (
         [&]
@@ -1607,6 +1608,7 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
         120000));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
     CHECK (SaveSoundWindow::getNumOpen() == 0);
+    CHECK (session.getSamplePreview().getLive() == nullptr); // off the sound card with its window
     const auto picked = panel.getRows()[0].picked.value_or (parts::Choice {});
     INFO (panel.getStatusText());
     CHECK (picked.name == "Deep Bass");

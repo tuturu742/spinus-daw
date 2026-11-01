@@ -169,7 +169,7 @@ struct Choice
     juce::String roleFrom;   // "name" or "sound"
     juce::String file;       // the sample or the loop
     std::map<juce::String, juce::String> drums; // drumSamples: "kick", "snare", "hat" -> file
-    std::map<juce::String, int> drumNotes;      // kit: the drum -> the note that plays it
+    std::map<juce::String, int> drumNotes;      // for the drums: the drum -> the note that plays it
     int low = 0, high = 0;                      // its register (preset)
     bool polyphonic = false;
     double tempo = 0.0, duration = 0.0; // loop

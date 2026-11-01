@@ -28,6 +28,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   saved.
 - **Play in the Save this sound window:** hear the part's phrase with the sound as you set it up, before you
   save it.
+- **The Save this sound window is heard:** the instrument plays through your speakers while its window is open,
+  so clicking a drum or a key in it is heard (before, nothing in the window made a sound).
+- **Drums on an instrument picked with Other sound...** play on its drum notes (General MIDI's, or the ones the
+  sound index found), not the Drum Machine's pads: Play in BFD Player's window was silent.
 - The saved sound is listened to once its window has closed (some plugins take seconds to close), and the log
   says how the helper program ended when it stops early.
 
