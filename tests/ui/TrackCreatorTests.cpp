@@ -1619,7 +1619,7 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     REQUIRE (panel.listen (0));
     REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
     INFO (panel.getStatusText());
-    CHECK (panel.getStatusText().startsWith ("Playing Deep Bass"));
+    CHECK (panel.getStatusText().startsWith ("Playing 3x Osc: Deep Bass"));
 
     // Measured in the helper as a preset of 3x Osc, in its own category.
     SoundIndex index (context.indexFolder);
