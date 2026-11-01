@@ -423,6 +423,8 @@ void SongWriterPanel::balance (
                               { "notes", played },
                               { "tail", 0.5 },
                               { "output", folder.getChildFile (layer.id + ".wav").getFullPathName() } });
+        if (c.state != juce::File()) // a saved sound: the helper puts its state in place
+            item.getDynamicObject()->setProperty ("state", c.state.getFullPathName());
         if (chosen->tuned)
         {
             auto* values = new juce::DynamicObject();

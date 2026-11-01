@@ -382,9 +382,12 @@ instrument plugin's own sound); hold the mouse over it to see why.
 ![Save this sound: the instrument's own window, with a name and Save](images/track-creator-save-sound.png)
 
 1. Set the sound up in the instrument's window: choose a kit, a patch, turn its knobs.
-2. Give it a name and click **Save**.
-3. Spinus keeps it as **your saved sound**, listens to it like any preset (in the separate helper program,
-   a few seconds; longer for a big instrument) and chooses it for the part.
+2. Click **Play** to hear the part's phrase with the sound as it is now. If it makes no sound, the window says
+   so: choose a kit or a patch, or wait a moment while a big one loads, and Play again.
+3. Give it a name and click **Save**. Closing the window any other way (**Cancel**, or the window's own close
+   button) keeps nothing.
+4. Spinus keeps it as **your saved sound**, listens to it like any preset (in the separate helper program,
+   a few seconds; longer for a big instrument) and chooses it for the part. **Listen** then plays it.
 
 From then on it is one of your sounds: **Choose sounds** can suggest it ("your saved sound"), the AI writer
 can pick it, and **Other sound...** lists all of them first, under **Your saved sounds**. A song that uses it

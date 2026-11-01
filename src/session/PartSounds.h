@@ -234,14 +234,16 @@ juce::Array<juce::var> renderInHelper (const SoundIndexer::Options&, const Sound
                                        const juce::Array<juce::var>& items, const std::function<bool()>& shouldStop,
                                        juce::String& problem);
 
-/** Synth match in the helper: the instrument with the preset (an id; empty for its own sound) tuned toward the
+/** Synth match in the helper: the instrument with the preset (an id; empty for its own sound; for a saved sound,
+    `presetState` is the file with its state) tuned toward the
     excerpt of `target` (an audio file: start, length) playing `notes` (from the excerpt's start), for up to
     `tries`. `progress` gets (tries done, best distance) as it goes. None when it could not be tuned (`problem`
     says why: no settings to tune, a crash, a hang, a stop). */
 std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options&, const SoundSource&,
-                                              const juce::String& preset, const juce::File& target, double start,
-                                              double length, const std::vector<OfflineInstrument::Note>& notes,
-                                              int tries, const std::function<bool()>& shouldStop,
+                                              const juce::String& preset, const juce::File& presetState,
+                                              const juce::File& target, double start, double length,
+                                              const std::vector<OfflineInstrument::Note>& notes, int tries,
+                                              const std::function<bool()>& shouldStop,
                                               const std::function<void (int, double)>& progress, juce::String& problem);
 
 //==============================================================================

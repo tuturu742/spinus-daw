@@ -20,6 +20,17 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Scripts and coding agents: `spinus.delay` in `--describe`, with settings as text (`"note": "1/8 dotted"`,
   `"time": "350 ms"`, `"feedback": "40%"`, `"high_cut": "4.5 kHz"`).
 
+### Track creator: saved sounds
+
+- **Listen plays a saved sound:** after **Save this sound**, **Listen** (and the Track creator playing each part
+  to set its level, and Tune it) played nothing, because Spinus looked for the saved sound among the
+  instrument's own presets. A drum player such as BFD Player, silent until a kit is chosen, now plays the kit you
+  saved.
+- **Play in the Save this sound window:** hear the part's phrase with the sound as you set it up, before you
+  save it.
+- The saved sound is listened to once its window has closed (some plugins take seconds to close), and the log
+  says how the helper program ended when it stops early.
+
 ### Effect types from words
 
 - **A chorus, phaser, flanger or distortion from words:** Surge XT Effects' type (`"FX Type": "Chorus"`) and

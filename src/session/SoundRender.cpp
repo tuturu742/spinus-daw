@@ -109,6 +109,20 @@ model::Device deviceOf (const juce::var& request)
     return device;
 }
 
+/** A sound the user saved (Save this sound): its preset id ("saved:...") and the file with the plugin's state.
+    None when the file cannot be read. */
+std::optional<InstrumentPreset> savedPreset (const juce::String& id, const juce::String& stateFile)
+{
+    InstrumentPreset p;
+    p.kind = InstrumentPreset::Kind::state;
+    p.id = id;
+    p.category = SavedSounds::category;
+    p.file = juce::File::isAbsolutePath (stateFile) ? juce::File (stateFile) : juce::File();
+    if (p.file == juce::File() || ! p.file.loadFileAsData (p.state) || p.state.isEmpty())
+        return std::nullopt;
+    return p;
+}
+
 /** Some instruments load their samples in the background after opening (big sampled guitars, basses and
     drum libraries), silent until then: the test notes are played again, a second apart, until something
     sounds or `seconds` pass (each wait is a line, so Spinus doesn't take the helper for hung). */
@@ -341,8 +355,9 @@ juce::AudioBuffer<float> readStereo (const juce::File& file, double from = 0.0, 
 
 /** Plays an instrument's presets (with settings) or puts audio files together, into WAV files:
     `{"mode": "render", <the instrument, as for "instrument">, "items": [...]}`, each item one of
-    - `{id, preset (its id; "" or none: as the instrument is), settings {parameter ID: 0..1}, notes [{note,
-      start, length, velocity}], tail, output}`: the instrument playing the notes;
+    - `{id, preset (its id; "" or none: as the instrument is), state (for a saved sound, "saved:...": the file
+      with its state), settings {parameter ID: 0..1}, notes [{note, start, length, velocity}], tail, output}`:
+      the instrument playing the notes;
     - `{id, cut: {file, from, length}, output}`: part of an audio file;
     - `{id, mix: [{file, at, gain}], length, output}`: audio files played at those times (a beat of drum samples).
     Writes `{"begin": id}` and `{"rendered": {id, output, peak}}` (or `{rendered: {id, problem}}`) per item. An
@@ -367,9 +382,14 @@ int runRender (const juce::var& request, Lines& out)
             return 0;
         }
         player = std::make_unique<OfflineInstrument> (*instance);
-        // Presets are found only when an item asks for one: finding them crashes some instruments.
+        // Presets are found only when an item asks for one of the plugin's own: finding them crashes some
+        // instruments (a saved sound comes with its state).
         if (std::any_of (items->begin(), items->end(),
-                         [] (const juce::var& i) { return i["preset"].toString().isNotEmpty(); }))
+                         [] (const juce::var& i)
+                         {
+                             const auto id = i["preset"].toString();
+                             return id.isNotEmpty() && ! SavedSounds::isSaved (id);
+                         }))
             presets = InstrumentPresets::find (*instance, deviceOf (request));
     }
     double wait = 40.0;               // seconds an instrument may take to load its sounds (as runInstrument), then 10
@@ -388,7 +408,14 @@ int runRender (const juce::var& request, Lines& out)
             if (item.hasProperty ("notes") && player != nullptr)
             {
                 const auto presetId = item["preset"].toString();
-                if ((presetId != loadedPreset || changed) && presetId.isNotEmpty())
+                if ((presetId != loadedPreset || changed) && SavedSounds::isSaved (presetId))
+                {
+                    if (const auto saved = savedPreset (presetId, item["state"].toString()); ! saved)
+                        problem = "Spinus could not read the saved sound " + presetId + ".";
+                    else if (const auto loaded = player->loadPreset (*saved); loaded.failed())
+                        problem = loaded.getErrorMessage();
+                }
+                else if ((presetId != loadedPreset || changed) && presetId.isNotEmpty())
                 {
                     const auto found = std::find_if (presets.begin(), presets.end(),
                                                      [&] (const InstrumentPreset& p) { return p.id == presetId; });
@@ -461,9 +488,10 @@ int runRender (const juce::var& request, Lines& out)
     return 0;
 }
 
-/** Synth match out of Spinus's process: `{"mode": "tune", <the instrument>, "preset" (its id, optional),
-    "profile" (a synth profile's JSON, optional: else its own or an automatic one), "target": {file, start,
-    length}, "notes" [{note, start, length, velocity}] (from the target's start), "tries"}`. Writes
+/** Synth match out of Spinus's process: `{"mode": "tune", <the instrument>, "preset" (its id, optional; with "state",
+   the file with a saved sound's state), "profile" (a synth profile's JSON, optional: else its own or an automatic one),
+   "target": {file, start, length}, "notes" [{note, start, length, velocity}] (from the target's start), "tries"}`.
+   Writes
     `{"profile": {name, settings, automatic}}`, `{"progress": {tries, best}}` now and then, and
     `{"result": {settings: {parameter ID: value}, startDistance, distance, tries}}` (or `{"error"}`). */
 int runTune (const juce::var& request, Lines& out)
@@ -478,7 +506,17 @@ int runTune (const juce::var& request, Lines& out)
     }
     OfflineInstrument player (*instance);
     const auto device = deviceOf (request);
-    if (const auto presetId = request["preset"].toString(); presetId.isNotEmpty())
+    if (const auto presetId = request["preset"].toString(); SavedSounds::isSaved (presetId))
+    {
+        const auto saved = savedPreset (presetId, request["state"].toString());
+        if (! saved || player.loadPreset (*saved).failed())
+        {
+            out.write ("error", "The saved sound could not be loaded.");
+            out.write ("done", true);
+            return 0;
+        }
+    }
+    else if (presetId.isNotEmpty())
     {
         const auto presets = InstrumentPresets::find (*instance, device);
         const auto found =
