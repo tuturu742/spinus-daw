@@ -45,6 +45,16 @@ ROLE_WORDS: list[tuple[str, tuple[str, ...]]] = [
 ]  # fmt: skip
 SUSTAINED = ("pad", "keys", "guitar", "lead", "bass", "arp")
 
+# A part's family by its role: the Channel Rack group it goes in, and the colour its channel, patterns and Playlist
+# tracks share (all the guitars one colour, all the drums another).
+FAMILIES = {
+    "drums": ("Drums", "#ffd65c5c"), "bass": ("Bass", "#ffd68a4a"), "guitar": ("Guitars", "#ffd6b84a"),
+    "keys": ("Keys", "#ff5cb8d6"), "pad": ("Pads", "#ff8a7cd6"), "lead": ("Leads", "#ff5cd6a0"),
+    "arp": ("Arps", "#ff5c8ad6"), "fx": ("FX", "#ffa8a8a8"), "texture": ("Textures", "#ff7fa88a"),
+    "synth": ("Synths", "#ff6c9fd6"), "audio": ("Audio", "#ffb07cc0"),
+}  # fmt: skip
+EXTRA_COLOURS = ("#ffd65ca8", "#ff9fd65c", "#ff5cd6d6", "#ffd6d65c", "#ffb05cd6", "#ff5c5cd6")
+
 # The Drum Machine's pads (every factory kit uses the Spinus Synth Kit's layout) and General MIDI drums, by name.
 PADS = {
     "kick": 60, "snare": 61, "clap": 62, "closed hat": 63, "hat": 63, "hihat": 63, "hi-hat": 63, "open hat": 64,
@@ -180,7 +190,8 @@ TOOLS = [
     Tool(
         "write_part",
         "Write a part's notes over some bars (replacing what it played there unless replace is false). "
-        "loop_bars repeats the notes every that many bars over the range.",
+        "loop_bars (1, 2 or 4) makes the notes a pattern that many bars long, repeated by clips over the range (use "
+        "it whenever a part repeats; the same loop written again later reuses its pattern).",
         schema(
             {
                 "part": PART,
@@ -217,7 +228,8 @@ TOOLS = [
         "add_part",
         "Add a part: a channel with an instrument found by words (e.g. '3x Osc', 'Drum Machine', 'Sampler', or an "
         "installed plugin's name), an optional preset, its family (Drums, Bass, Synths, Leads, Guitars, Keys, "
-        "Orchestra, FX) and colour.",
+        "Orchestra, FX) and colour. Without them it goes in its family's group and colour (all the guitars one "
+        "colour), which its patterns and Playlist tracks take too.",
         schema(
             {
                 "name": {"type": "string"},
@@ -633,16 +645,13 @@ class ProjectHarness:
                     out.append({**n, "start": at, "length": min(n["length"], span - at)})
         return out
 
-    def lane_for(self, name: str, start: int, end: int) -> Any:
-        """A lane named after the part with nothing in [start, end), else a new one."""
+    def lane_for(self, name: str, start: int, end: int, colour: str = "") -> Any:
+        """A lane named after the part with nothing in [start, end), else a new one (in the part's colour)."""
         lanes = self.project["playlist"]["lanes"]
         for wanted in (name, f"{name} 2", f"{name} 3"):
             lane = next((x for x in lanes if str(x.get("name", "")).lower() == wanted.lower()), None)
             if lane is None:
-                number = self.step("lane.add", {"name": wanted})
-                lane = {"id": f"${number}.lane", "name": wanted}
-                lanes.append(lane)
-                return lane["id"]
+                return self.new_lane(wanted, colour)
             busy = any(
                 c.get("lane") == lane.get("id")
                 and int(c.get("start", 0)) < end
@@ -651,9 +660,32 @@ class ProjectHarness:
             )
             if not busy:
                 return lane.get("id")
-        number = self.step("lane.add", {"name": f"{name} 4"})
-        lanes.append({"id": f"${number}.lane", "name": f"{name} 4"})
-        return f"${number}.lane"
+        return self.new_lane(f"{name} 4", colour)
+
+    def new_lane(self, name: str, colour: str = "") -> str:
+        number = self.step("lane.add", {"name": name})
+        lane = {"id": f"${number}.lane", "name": name}
+        if colour:
+            self.step("lane.set", {"lane": lane["id"], "colour": colour})
+            lane["colour"] = colour
+        self.project["playlist"]["lanes"].append(lane)
+        return lane["id"]
+
+    def family(self, channel: dict[str, Any]) -> str:
+        """The part's family: its Channel Rack group, else its role."""
+        group = str(channel.get("group") or "").strip().lower()
+        if group:
+            return next((role for role, (name, _) in FAMILIES.items() if name.lower() == group), group)
+        return self.role(channel)
+
+    def family_colour(self, family: str, besides: Any = None) -> str:
+        """The colour the family's parts share: an existing part's (the user may have chosen it), else its own."""
+        for c in self.channels():
+            if c.get("id") != besides and c.get("colour") and self.family(c) == family:
+                return str(c["colour"])
+        if family in FAMILIES:
+            return FAMILIES[family][1]
+        return EXTRA_COLOURS[sum(map(ord, family)) % len(EXTRA_COLOURS)]
 
     def clear(self, channel: dict[str, Any], start: int, end: int) -> int:
         """Takes the channel's notes in [start, end) out of the song: from the pattern itself when only that clip
@@ -710,28 +742,63 @@ class ProjectHarness:
             for clip in following:
                 self.step("clip.set", {"clip": clip.get("id"), "length": old})
 
-    def put(self, channel: dict[str, Any], start: int, notes: list[dict[str, Any]], span: int, name: str) -> None:
-        """A new pattern of these notes (ticks from `start`) for the channel, played from `start` on its lane."""
-        number = self.step("pattern.add", {"name": name, "length": span})
-        pid = f"${number}.pattern"
-        self.step("pattern.setNotes", {"pattern": pid, "channel": channel["id"], "notes": notes})
-        self.step("pattern.setLength", {"pattern": pid, "length": span})
-        self.project["patterns"].append(
-            {"id": pid, "name": name, "length": span, "channels": [{"channel": channel["id"], "notes": notes}]}
-        )
-        lane = self.lane_for(str(channel.get("name", "Part")), start, start + span)
-        clip_number = self.step("clip.addPattern", {"lane": lane, "pattern": pid, "start": start, "length": span})
-        self.project["playlist"]["clips"].append(
-            {
-                "id": f"${clip_number}.clip",
-                "lane": lane,
-                "start": start,
-                "length": span,
-                "type": "pattern",
-                "pattern": pid,
-                "offset": 0,
-            }
-        )
+    def put(
+        self, channel: dict[str, Any], start: int, notes: list[dict[str, Any]], span: int, name: str, loop: int = 0
+    ) -> None:
+        """The notes (ticks from `start`) for the channel, played from `start` on its lane over `span`. With a `loop`
+        shorter than the span, the loop's notes are one short pattern repeated by clips on the Playlist (as people
+        work in FL Studio), and a pattern that already holds just these notes is reused."""
+        loop = loop if 0 < loop < span else span
+        notes = [n for n in notes if n["start"] < loop]
+        colour = str(channel.get("colour") or "")
+        pid = self.same_pattern(channel["id"], notes, loop)
+        if pid is None:
+            number = self.step("pattern.add", {"name": name, "length": loop})
+            pid = f"${number}.pattern"
+            self.step("pattern.setNotes", {"pattern": pid, "channel": channel["id"], "notes": notes})
+            self.step("pattern.setLength", {"pattern": pid, "length": loop})
+            if colour:
+                self.step("pattern.set", {"pattern": pid, "colour": colour})
+            self.project["patterns"].append(
+                {
+                    "id": pid,
+                    "name": name,
+                    "length": loop,
+                    "colour": colour,
+                    "channels": [{"channel": channel["id"], "notes": notes}],
+                }
+            )
+        lane = self.lane_for(str(channel.get("name", "Part")), start, start + span, colour)
+        for at in range(start, start + span, loop):
+            length = min(loop, start + span - at)
+            clip_number = self.step("clip.addPattern", {"lane": lane, "pattern": pid, "start": at, "length": length})
+            self.project["playlist"]["clips"].append(
+                {
+                    "id": f"${clip_number}.clip",
+                    "lane": lane,
+                    "start": at,
+                    "length": length,
+                    "type": "pattern",
+                    "pattern": pid,
+                    "offset": 0,
+                }
+            )
+
+    def same_pattern(self, channel_id: Any, notes: list[dict[str, Any]], length: int) -> Any:
+        """A pattern of this length that holds only these notes, on this channel (the chorus's loop again)."""
+        keys = ("start", "length", "pitch")
+        wanted = sorted((tuple(int(n[k]) for k in keys), round(float(n["velocity"]), 2)) for n in notes)
+        for p in self.project["patterns"]:
+            entries = [e for e in p.get("channels", []) if e.get("notes")]
+            if int(p.get("length") or 0) != length or len(entries) != 1 or entries[0].get("channel") != channel_id:
+                continue
+            have = sorted(
+                (tuple(int(n.get(k, 0)) for k in keys), round(float(n.get("velocity", 0.8)), 2))
+                for n in entries[0]["notes"]
+            )
+            if have == wanted:
+                return p.get("id")
+        return None
 
     # ------------------------------------------------------------------------------------------------
     # The tools
@@ -850,11 +917,16 @@ class ProjectHarness:
         parsed = self.parse(channel, notes, span, min(loop, span))
         removed = self.clear(channel, start, end) if replace else 0
         first, last = start // self.bar_ticks + 1, end // self.bar_ticks
+        looped = loop < span
+        loop_bars_text = f"a {loop // self.bar_ticks}-bar pattern played over them" if looped else ""
         if parsed:
-            self.put(channel, start, parsed, span, f"{channel.get('name')} {first}-{last}")
+            last_of_loop = first + loop // self.bar_ticks - 1
+            name = f"{channel.get('name')} {first}" + (f"-{last_of_loop}" if last_of_loop > first else "")
+            self.put(channel, start, parsed, span, name, loop)
         self.changes.append(f"{channel.get('name')}: {len(parsed)} notes in bars {first}-{last}")
         return (
             f"{channel.get('name')}: {len(parsed)} notes in bars {first}-{last}"
+            + (f" ({loop_bars_text})" if looped and parsed else "")
             + (f", {removed} old ones taken out" if removed else "")
             + "."
         )
@@ -923,15 +995,17 @@ class ProjectHarness:
         )
         if preset:
             self.step("device.loadPreset", {"device": f"${number}.device", "preset": preset})
-        look: dict[str, Any] = {}
-        if family:
-            look["group"] = family.strip()
+        # By default in its family's group and colour, shared with the family's other parts.
+        kind = self.family(made)
+        look: dict[str, Any] = {"group": family.strip() or FAMILIES.get(kind, (kind.title(), ""))[0]}
         if colour:
             if not re.fullmatch(r"#[0-9a-fA-F]{6}", colour):
                 raise Mistake("a colour is '#rrggbb'")
             look["colour"] = "#ff" + colour[1:].lower()
-        if look:
-            self.step("channel.set", {"channel": f"${number}.channel", **look})
+        else:
+            look["colour"] = self.family_colour(kind, besides=made["id"])
+        made.update(look)
+        self.step("channel.set", {"channel": f"${number}.channel", **look})
         return f"Added {name} ({self.device_name(device)}{', ' + preset if preset else ''})."
 
     def tool_insert_bars(self, after_bar: int, bars: int, name: str, copy_from: str = "") -> str:
@@ -1081,12 +1155,49 @@ class ProjectHarness:
             time = round((float(p["bar"]) - 1) * self.bar_ticks) - start
             made.append({"time": max(0, time), **point_of(str(p["value"]))})
         length = max(int(made[-1]["time"]) + 1, end - start)
-        self.step(
+        lanes = self.project["playlist"]["lanes"]
+        existing = next((x for x in lanes if str(x.get("name", "")).lower() == lane_name.lower()), None)
+        where = {"lane": existing["id"]} if existing is not None else {"laneName": lane_name}
+        number = self.step(
             "clip.addAutomation",
-            {"laneName": lane_name, "start": start, "length": length, "target": target, "points": made},
+            {**where, "start": start, "length": length, "target": target, "points": made},
             f"{lane_name} automated over bars {bars[0]:g}-{bars[-1]:g}",
         )
+        if existing is None:
+            self.group_under_part(part, f"${number}.lane", lane_name)
         return f"Automated {lane_name} from bar {bars[0]:g} to {bars[-1]:g} ({len(made)} points)."
+
+    def group_under_part(self, part: str, lane: str, name: str) -> None:
+        """A new automation track goes in the part's Playlist group, right under its track, in its colour."""
+        lanes = self.project["playlist"]["lanes"]
+        if part.strip().lower() == "master":
+            lanes.append({"id": lane, "name": name})
+            return
+        channel = self.part(part)
+        index = next(
+            (i for i, x in enumerate(lanes) if str(x.get("name", "")).lower() == str(channel.get("name")).lower()), -1
+        )
+        if index < 0:  # no notes on the Playlist yet: nothing to group under
+            lanes.append({"id": lane, "name": name})
+            return
+        head = lanes[index]
+        end = index + 1
+        while end < len(lanes) and self.grouped_under(lanes[end], head.get("id")):
+            end += 1
+        colour = str(channel.get("colour") or head.get("colour") or "")
+        self.step("lane.set", {"lane": lane, "group": head.get("id"), **({"colour": colour} if colour else {})})
+        self.step("lane.move", {"lane": lane, "index": end})
+        lanes.insert(end, {"id": lane, "name": name, "group": head.get("id"), "colour": colour})
+
+    def grouped_under(self, lane: dict[str, Any], head: Any) -> bool:
+        lanes = {x.get("id"): x for x in self.project["playlist"]["lanes"]}
+        for _ in range(64):
+            if lane.get("group") in (None, 0):
+                return False
+            if lane.get("group") == head:
+                return True
+            lane = lanes.get(lane.get("group"), {})
+        return False
 
     def where(self, said: str) -> dict[str, Any]:
         """An insert by a part's name, an insert's name or 'master'."""

@@ -22,14 +22,15 @@
    "command": "channel.set",
    "parameters": {
     "channel": "$1.channel",
-    "group": "Synths"
+    "group": "Synths",
+    "colour": "#ff5c8dd6"
    }
   },
   {
    "command": "pattern.add",
    "parameters": {
-    "name": "Pads 2-3",
-    "length": 5760
+    "name": "Pads 2",
+    "length": 2880
    }
   },
   {
@@ -49,18 +50,6 @@
       "length": 2880,
       "pitch": 60,
       "velocity": 0.709
-     },
-     {
-      "start": 2880,
-      "length": 2880,
-      "pitch": 57,
-      "velocity": 0.709
-     },
-     {
-      "start": 2880,
-      "length": 2880,
-      "pitch": 60,
-      "velocity": 0.709
      }
     ]
    }
@@ -69,7 +58,14 @@
    "command": "pattern.setLength",
    "parameters": {
     "pattern": "$4.pattern",
-    "length": 5760
+    "length": 2880
+   }
+  },
+  {
+   "command": "pattern.set",
+   "parameters": {
+    "pattern": "$4.pattern",
+    "colour": "#ff5c8dd6"
    }
   },
   {
@@ -79,12 +75,28 @@
    }
   },
   {
+   "command": "lane.set",
+   "parameters": {
+    "lane": "$8.lane",
+    "colour": "#ff5c8dd6"
+   }
+  },
+  {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$7.lane",
+    "lane": "$8.lane",
     "pattern": "$4.pattern",
     "start": 2880,
-    "length": 5760
+    "length": 2880
+   }
+  },
+  {
+   "command": "clip.addPattern",
+   "parameters": {
+    "lane": "$8.lane",
+    "pattern": "$4.pattern",
+    "start": 5760,
+    "length": 2880
    }
   },
   {
@@ -96,7 +108,7 @@
   {
    "command": "pattern.setNotes",
    "parameters": {
-    "pattern": "$9.pattern",
+    "pattern": "$12.pattern",
     "channel": 9,
     "notes": []
    }
@@ -104,7 +116,7 @@
   {
    "command": "pattern.setLength",
    "parameters": {
-    "pattern": "$9.pattern",
+    "pattern": "$12.pattern",
     "length": 15360
    }
   },
@@ -118,14 +130,14 @@
   {
    "command": "pattern.add",
    "parameters": {
-    "name": "Surge 1-1",
+    "name": "Surge 1",
     "length": 2880
    }
   },
   {
    "command": "pattern.setNotes",
    "parameters": {
-    "pattern": "$13.pattern",
+    "pattern": "$16.pattern",
     "channel": 9,
     "notes": [
      {
@@ -152,8 +164,15 @@
   {
    "command": "pattern.setLength",
    "parameters": {
-    "pattern": "$13.pattern",
+    "pattern": "$16.pattern",
     "length": 2880
+   }
+  },
+  {
+   "command": "pattern.set",
+   "parameters": {
+    "pattern": "$16.pattern",
+    "colour": "#ff5c8dd6"
    }
   },
   {
@@ -163,10 +182,17 @@
    }
   },
   {
+   "command": "lane.set",
+   "parameters": {
+    "lane": "$20.lane",
+    "colour": "#ff5c8dd6"
+   }
+  },
+  {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$16.lane",
-    "pattern": "$13.pattern",
+    "lane": "$20.lane",
+    "pattern": "$16.pattern",
     "start": 0,
     "length": 2880
    }
@@ -186,13 +212,6 @@
    }
   },
   {
-   "command": "clip.split",
-   "parameters": {
-    "clip": "$8.clip",
-    "at": 5760
-   }
-  },
-  {
    "command": "clip.set",
    "parameters": {
     "clip": 15,
@@ -202,21 +221,21 @@
   {
    "command": "clip.set",
    "parameters": {
-    "clip": "$18.clip",
+    "clip": "$11.clip",
     "start": 11520
    }
   },
   {
    "command": "clip.set",
    "parameters": {
-    "clip": "$19.clip",
+    "clip": "$23.clip",
     "start": 11520
    }
   },
   {
    "command": "clip.set",
    "parameters": {
-    "clip": "$20.clip",
+    "clip": "$24.clip",
     "start": 11520
    }
   },
@@ -231,7 +250,7 @@
    "command": "clip.addPattern",
    "parameters": {
     "lane": 12,
-    "pattern": "$9.pattern",
+    "pattern": "$12.pattern",
     "start": 5760,
     "length": 5760,
     "offset": 0
@@ -289,7 +308,7 @@
   {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$7.lane",
+    "lane": "$8.lane",
     "pattern": "$4.pattern",
     "start": 8640,
     "length": 2880,
@@ -299,8 +318,8 @@
   {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$16.lane",
-    "pattern": "$13.pattern",
+    "lane": "$20.lane",
+    "pattern": "$16.pattern",
     "start": 5760,
     "length": 2880,
     "offset": 0
@@ -329,6 +348,21 @@
    }
   },
   {
+   "command": "lane.set",
+   "parameters": {
+    "lane": "$35.lane",
+    "group": "$8.lane",
+    "colour": "#ff5c8dd6"
+   }
+  },
+  {
+   "command": "lane.move",
+   "parameters": {
+    "lane": "$35.lane",
+    "index": 3
+   }
+  },
+  {
    "command": "insert.setSend",
    "parameters": {
     "insert": 2,
@@ -349,7 +383,7 @@
   {
    "command": "device.setParameters",
    "parameters": {
-    "device": "$33.device",
+    "device": "$39.device",
     "text": {
      "Amount": "40%"
     }

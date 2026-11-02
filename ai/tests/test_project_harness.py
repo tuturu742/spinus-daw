@@ -114,10 +114,10 @@ def test_writing_a_part_replaces_its_notes_there_through_commands() -> None:
         "write_part", {"part": "Bass", "bars": "5-8", "notes": "0 45 8 110; 8 43 8 90", "loop_bars": 1}
     )
     assert not failed, text
-    assert "8 notes in bars 5-8" in text and "16 old ones taken out" in text
+    assert "8 notes in bars 5-8 (a 1-bar pattern played over them)" in text and "16 old ones taken out" in text
     commands = [s["command"] for s in h.steps]
     # The pattern plays only here, so the bass's notes come out of it (its length and clip kept as they were); a new
-    # pattern holds the new ones.
+    # one-bar pattern holds the new ones, played four times on the Playlist.
     assert commands == [
         "pattern.setNotes",
         "pattern.setLength",
@@ -126,14 +126,64 @@ def test_writing_a_part_replaces_its_notes_there_through_commands() -> None:
         "pattern.setNotes",
         "pattern.setLength",
         "lane.add",
-        "clip.addPattern",
+        *["clip.addPattern"] * 4,
     ]
     assert len(h.steps[0]["parameters"]["notes"]) == 16  # the verse's bass stays
-    assert h.steps[-1]["parameters"]["start"] == 4 * BAR
+    assert h.steps[3]["parameters"] == {"name": "Bass 5", "length": BAR}
+    assert len(h.steps[4]["parameters"]["notes"]) == 2
+    assert [s["parameters"]["start"] for s in h.steps[-4:]] == [4 * BAR, 5 * BAR, 6 * BAR, 7 * BAR]
     valid(h.steps)
     # The working copy follows: the chorus reads as written.
     again = h.call("read_part", {"part": "Bass", "bars": "5"})[0]
     assert again.endswith("0 45 8 110; 8 43 8 90")
+
+
+def test_a_loop_is_one_short_pattern_reused_and_trimmed_to_fit() -> None:
+    h = harness()
+    # A 2-bar loop over 5 bars: three clips, the last one bar long.
+    assert not h.call("write_part", {"part": "Pad", "bars": "1-5", "notes": "0 A4 32", "loop_bars": 2})[1]
+    clips = [s["parameters"] for s in h.steps if s["command"] == "clip.addPattern"]
+    assert [(c["start"], c["length"]) for c in clips] == [(0, 2 * BAR), (2 * BAR, 2 * BAR), (4 * BAR, BAR)]
+    # The same loop later: the pattern is played again, not made again.
+    made = sum(s["command"] == "pattern.add" for s in h.steps)
+    assert not h.call("write_part", {"part": "Pad", "bars": "7-8", "notes": "0 A4 32", "loop_bars": 2})[1]
+    assert sum(s["command"] == "pattern.add" for s in h.steps) == made
+    assert h.steps[-1]["parameters"]["pattern"] == clips[0]["pattern"]
+    # Without a loop, one pattern over the bars, as before.
+    assert not h.call("write_part", {"part": "Keys", "bars": "1-2", "notes": "0 C5 4"})[1]
+    assert h.steps[-1]["command"] == "clip.addPattern" and h.steps[-1]["parameters"]["length"] == 2 * BAR
+    valid(h.steps)
+
+
+def test_parts_share_their_familys_colour_and_automation_goes_in_the_parts_group() -> None:
+    h = harness()
+    assert not h.call("add_part", {"name": "Rhythm Guitar", "instrument": "3x osc"})[1]
+    assert not h.call("add_part", {"name": "Lead Guitar", "instrument": "3x osc"})[1]
+    looks = [s["parameters"] for s in h.steps if s["command"] == "channel.set"]
+    assert looks[0]["group"] == looks[1]["group"] == "Guitars"
+    assert looks[0]["colour"] == looks[1]["colour"]
+    assert not h.call("add_part", {"name": "Drums", "instrument": "3x osc", "colour": "#112233"})[1]
+    assert h.steps[-1]["parameters"]["colour"] == "#ff112233"
+    # Its pattern and Playlist track take its colour.
+    assert not h.call("write_part", {"part": "Lead Guitar", "bars": "1-4", "notes": "0 E4 8", "loop_bars": 1})[1]
+    colour = looks[1]["colour"]
+    assert any(s["command"] == "pattern.set" and s["parameters"]["colour"] == colour for s in h.steps)
+    assert any(s["command"] == "lane.set" and s["parameters"].get("colour") == colour for s in h.steps)
+    # Its automation goes right under its track, in its group and colour; more of it goes on the same track.
+    lanes_before = len(h.project["playlist"]["lanes"])
+    points = [{"bar": 1, "value": "-12 dB"}, {"bar": 4, "value": "0 dB"}]
+    assert not h.call("automate", {"part": "Lead Guitar", "what": "volume", "points": points})[1]
+    guitar_lane = next(x for x in h.project["playlist"]["lanes"] if x["name"] == "Lead Guitar")
+    grouped = h.steps[-2]
+    assert grouped["command"] == "lane.set" and grouped["parameters"]["group"] == guitar_lane["id"]
+    assert grouped["parameters"]["colour"] == colour
+    assert h.steps[-1]["command"] == "lane.move"
+    lanes = [x["name"] for x in h.project["playlist"]["lanes"]]
+    assert lanes.index("Lead Guitar volume") == lanes.index("Lead Guitar") + 1
+    assert len(lanes) == lanes_before + 1
+    assert not h.call("automate", {"part": "Lead Guitar", "what": "volume", "points": points})[1]
+    assert h.steps[-1]["command"] == "clip.addAutomation" and "lane" in h.steps[-1]["parameters"]
+    valid(h.steps)
 
 
 def test_a_shared_pattern_is_copied_before_its_notes_change() -> None:

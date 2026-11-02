@@ -29,6 +29,14 @@ They run in Spinus's own AI service on this computer, without any AI connection 
 agent still has Spinus's own tools: the song's summary, Spinus's commands, the devices that can be added, and
 render.
 
+What the music tools make looks like a song built by hand:
+- **Short patterns:** a part that repeats is one short pattern (1, 2 or 4 bars) placed again and again on the
+  Playlist, not one long pattern.
+- **Family colours:** each new part goes in its family's Channel Rack group (Drums, Bass, Guitars...). All its
+  family's parts share one colour, which their patterns and Playlist tracks take too.
+- **Automation:** a part's automation goes on a track right under the part's own track, in its group, so folding
+  the part's track hides its automation too.
+
 ## While an agent works
 
 - **Changes apply at once,** with no proposal to accept, because an agent works in many small steps. Each change is one

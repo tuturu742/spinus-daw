@@ -74,11 +74,15 @@ It works only on this computer, and the user can **Disconnect** you or **Undo th
 | Purpose | Tools |
 |---|---|
 | Read | `song_overview` (call it first: sections, parts, roles, sounds, mixer), `read_part` |
-| Notes | `write_part` (a part over some bars, `loop_bars` to repeat), `motif`, `place_motif` (transpose, invert, octave, rhythm, displace) |
-| Form | `add_part` (an instrument found by words, a preset, a family, a colour), `insert_bars` (makes room and adds a marker; `copy_from` fills it), `copy_bars` |
+| Notes | `write_part` (a part over some bars; with `loop_bars`, a short pattern repeated on the Playlist), `motif`, `place_motif` (transpose, invert, octave, rhythm, displace) |
+| Form | `add_part` (an instrument found by words, a preset, a family, a colour: by default its family's group and colour), `insert_bars` (makes room and adds a marker; `copy_from` fills it), `copy_bars` |
 | Sound | `set_sound` (a preset and/or named settings), `shape_sound` ("pluckier", "brighter", "warmer", "wider"…) |
 | Mix | `add_effect` (to a part, a bus or `master`), `send` (to "Reverb", "Delay" or any insert), `duck` (sidechain), `bus`, `automate` (bars from 1, values like "-12 dB", "30% L", "1.2 kHz") |
 | Test | `check`: out-of-key notes, masking parts, a muddy low end, unused parts, sections off 4-bar phrases, the master limiter, loudness per section after a render |
+
+Give `write_part` a `loop_bars` (1, 2 or 4) whenever a part repeats: it makes one short pattern and repeats it
+as clips, and writing the same loop again later plays that pattern again. `automate` puts the automation on a
+track right under the part's own, in its Playlist group and colour.
 
 A good loop:
 1. Read with `song_overview`.
@@ -120,6 +124,39 @@ A script is a JSON list of steps:
   - `{"action": "loadSamples", "params": {"device": ..., "files": [...], "pad": 1}}`.
 - Audio files are copied into the project's `audio` folder when it's saved. Give absolute paths, or names
   beside the script.
+
+## Laying out a song
+
+Make it look like a song a person built in Spinus, so the user can find their way around it:
+
+- **Short patterns, repeated on the Playlist.** A pattern is one musical idea of 1, 2, 4 or at most 8 whole
+  bars (`pattern.setLength`), named like "Verse - Bass". When a part repeats, place that pattern again with
+  more `clip.addPattern` clips one after another; don't write its notes out again in a longer pattern. A
+  variation (a fill in the last bar, a new chord) is its own short pattern: `pattern.clone` the loop, change
+  it, and place the copy where it plays.
+- **A Playlist track per part,** named after it, holding its clips. Its automation clips go on tracks right
+  below it, grouped under it: `lane.set` with `group` (the part's lane) and `lane.move` to put it there.
+- **One colour per family,** shared by the channel (`channel.set`), its patterns (`pattern.set`) and its Playlist
+  tracks (`lane.set`). Similar instruments share one: all the guitars one colour, all the drums another. Also
+  put the channel in its family's Channel Rack `group` ("Drums", "Guitars"). Spinus's music tools use:
+
+  | Family | Group | Colour |
+  |---|---|---|
+  | Drums | Drums | `#ffd65c5c` |
+  | Bass | Bass | `#ffd68a4a` |
+  | Guitars | Guitars | `#ffd6b84a` |
+  | Keys | Keys | `#ff5cb8d6` |
+  | Pads | Pads | `#ff8a7cd6` |
+  | Leads | Leads | `#ff5cd6a0` |
+  | Arps | Arps | `#ff5c8ad6` |
+  | Synths | Synths | `#ff6c9fd6` |
+  | FX | FX | `#ffa8a8a8` |
+  | Textures | Textures | `#ff7fa88a` |
+
+  If the user already gave a family a colour, use theirs.
+- **Solo and order:** `lane.set` with `"solo": true` solos a Playlist track (while any track is soloed, only
+  soloed tracks and the tracks grouped under them play); `lane.move` moves a track, with the tracks grouped under
+  it, to another `index`. Leave nothing soloed when you hand the song back, unless the user asked.
 
 ## Facts that are easy to get wrong
 
