@@ -104,12 +104,18 @@ up while it's small:
    `--describe all` lists them. If it doesn't, ask the user to get them in Spinus (Get free plugins).
    Otherwise, fake the space: longer releases, the delay bus, and a widened bus with the Stereo Utility.
 3. **Channels:** each with its instrument and sound (a factory preset, then parameter changes), its own
-   insert routed to its family bus, a colour and a group.
-4. **Patterns:** one per part and section, named "Chorus - Bass". Ticks are 960 per quarter note (3840 per 4/4 bar,
+   insert routed to its family bus, and its family's colour and group (the spinus skill's "Laying out a
+   song" lists them; all the guitars share one colour).
+4. **Patterns:** short loops, one per part and musical idea, 1, 2, 4 or at most 8 whole bars, named "Chorus -
+   Bass". A part that repeats over a 16-bar section is a 2- or 4-bar pattern placed four or eight times, not a
+   16-bar pattern of copies; a fill or a change is its own short pattern (`pattern.clone`, then edit it). Give
+   each pattern its part's colour (`pattern.set`). Ticks are 960 per quarter note (3840 per 4/4 bar,
    240 per 16th). Notes are MIDI numbers: the Piano Roll's C5 is 60, and so is the Drum Machine's pad 1.
    `pattern.setNotes` fits the pattern's length to its notes, so call `pattern.setLength` after it when a
    pattern must be a whole number of bars.
-5. **The Playlist:** a lane per part, clips per section, and markers at section starts.
+5. **The Playlist:** a lane per part in its colour, the loop's clips one after another through each section,
+   and markers at section starts. Each part's automation goes on lanes right below it, grouped under it
+   (`lane.set` `group`, then `lane.move`).
 6. **Transitions:**
    - drum fills on the last bar of phrases;
    - risers (a noise sweep or a sample) into big sections;

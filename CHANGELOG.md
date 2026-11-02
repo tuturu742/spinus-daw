@@ -5,6 +5,16 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Coding agents: songs laid out like by hand
+
+- **Short patterns repeated on the Playlist:** the music tool `write_part` with a loop makes one short pattern
+  and repeats it as clips, instead of one long pattern of copies, and plays the same loop again from its pattern.
+- **Family groups and colours:** a new part goes in its family's group, in one colour per family (all the
+  guitars the same), which its patterns and Playlist tracks share.
+- **Automation in the part's group:** on a track right under the part's own.
+- The agent skills (`skills/spinus`, `skills/spinus-songwriter`) teach the same for agents that use commands
+  directly, and the new Playlist commands: solo and moving tracks.
+
 ### Playlist: move and solo tracks
 
 - **Move a track up or down:** drag it by its name, or right-click it › **Move up** / **Move down**. Its clips
