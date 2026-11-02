@@ -21,6 +21,8 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 | Move with the keys | **Shift+Left** / **Shift+Right** move the selected clips a grid step, **Shift+Up** / **Shift+Down** a track up or down. Each press is one undo step. |
 | Open a clip | Double-click it: an audio clip opens in [Spinus Tune](spinus-tune.md); an automation clip opens in the [Automation editor](#the-automation-editor). |
 | Mute a track | Click the light next to its name. |
+| Solo a track | **Ctrl+click** the light (or right-click the track › **Solo**): only soloed tracks play, the others' lights turn grey and the soloed one's turns amber. Solo more tracks to hear them together; Ctrl+click again to unsolo. Soloing a group plays everything in it. The song exports as you hear it. |
+| Move a track up or down | Drag it by its name, or right-click it › **Move up** / **Move down**. Its clips go with it, and a group moves with the tracks in it. |
 | Rename, colour or delete a track | Right-click its name. The track's name is drawn on its colour, and the track itself is faintly tinted with it. Deleting a track also removes its clips. |
 | Group tracks | Right-click a track › **Group with the track above** (see [Track groups](#track-groups)). |
 | Choose a take | **Alt+click** an audio clip that has other takes at the same time: it plays, they are muted there (see [Takes and comping](audio-tracks.md#takes-and-comping)). |
@@ -56,7 +58,10 @@ Put tracks that belong together (the drums, the synths) in a group, as in FL Stu
 - Click the arrow next to a group's name to **fold** it: the tracks in it are hidden, and their clips show
   faintly on the group's row, so you can still see the song. The name says how many tracks are hidden.
   Click again to unfold.
-- **Muting** a group mutes everything in it (their lights turn grey).
+- **Muting** a group mutes everything in it (their lights turn grey). **Soloing** it (Ctrl+click its light)
+  plays everything in it and silences the rest.
+- **Moving** a group (drag its name, or Move up / Move down) moves the tracks in it too. A track in a group
+  moves among the tracks of its group; to move it out, **Ungroup** it first.
 - **Ungroup** (right-click a grouped track) takes a track out of its group. Deleting a group's track
   keeps the tracks that were in it.
 

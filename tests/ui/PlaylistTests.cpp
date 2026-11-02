@@ -530,6 +530,91 @@ TEST_CASE ("Track groups: grouped tracks fold away and mute with their group", "
     CHECK (loaded.playlist.lanes == project.playlist.lanes);
 }
 
+TEST_CASE ("Playlist tracks: solo, and moving tracks with their groups", "[ui][playlist][groups]")
+{
+    Song s;
+    REQUIRE (s.rack.addChannel ({}, "Kick"));
+    REQUIRE (s.rack.toggleStep (s.session.getSelectedChannel(), 0));
+    for (int row = 0; row < 5; ++row) // Drums, Kick, Snare, Bass, Lead
+        REQUIRE (s.playlist.placePattern (row, 0));
+    for (const auto& [row, name] :
+         { std::pair { 0, "Drums" }, { 1, "Kick" }, { 2, "Snare" }, { 3, "Bass" }, { 4, "Lead" } })
+        REQUIRE (s.playlist.renameLane (row, name));
+    REQUIRE (s.playlist.groupLaneWithAbove (1));
+    REQUIRE (s.playlist.groupLaneWithAbove (2)); // Drums: Kick, Snare
+    const auto& project = s.session.getProject();
+    const auto names = [&s]
+    {
+        juce::StringArray n;
+        for (const auto& l : s.model().lanes)
+            n.add (l.name);
+        return n.joinIntoString (" ");
+    };
+    const auto lane = [&s] (const juce::String& name)
+    {
+        for (const auto& l : s.model().lanes)
+            if (l.name == name)
+                return l.id;
+        return model::LaneId {};
+    };
+
+    // Solo Bass: everything else is muted, Bass plays.
+    REQUIRE (s.playlist.setLaneSolo (3, true));
+    CHECK (! project.isLaneMuted (lane ("Bass")));
+    CHECK (project.isLaneMuted (lane ("Kick")));
+    CHECK (project.isLaneMutedBySolo (lane ("Lead")));
+    CHECK (s.session.getHistory().getUndoDescriptions().strings.getLast() == "Solo playlist track");
+    CHECK (s.session.getAdapter().describe().contains ("muted")); // the others are silent in the song
+    // Solo the Drums group too: what is in it plays with it.
+    REQUIRE (s.playlist.setLaneSolo (0, true));
+    CHECK (! project.isLaneMuted (lane ("Kick")));
+    CHECK (! project.isLaneMuted (lane ("Snare")));
+    CHECK (project.isLaneMuted (lane ("Lead")));
+    // Unsoloing them all plays everything again.
+    REQUIRE (s.playlist.setLaneSolo (0, false));
+    REQUIRE (s.playlist.setLaneSolo (3, false));
+    CHECK (! project.isLaneMuted (lane ("Lead")));
+    CHECK (! project.isLaneMutedBySolo (lane ("Lead")));
+
+    // Move down: Bass and Lead trade places; the group moves as a whole, past Bass.
+    CHECK (names() == "Drums Kick Snare Bass Lead");
+    CHECK_FALSE (s.playlist.canMoveLane (4, 1));  // last
+    CHECK_FALSE (s.playlist.canMoveLane (1, -1)); // first in its group
+    REQUIRE (s.playlist.moveLane (3, 1));
+    CHECK (names() == "Drums Kick Snare Lead Bass");
+    CHECK (s.session.getHistory().getUndoDescriptions().strings.getLast() == "Move playlist track");
+    REQUIRE (s.playlist.moveLane (0, 1));
+    CHECK (names() == "Lead Drums Kick Snare Bass");
+    CHECK (project.getLaneDepth (lane ("Kick")) == 1); // still in its group
+    // Within the group: Snare above Kick.
+    REQUIRE (s.playlist.moveLane (3, -1));
+    CHECK (names() == "Lead Drums Snare Kick Bass");
+
+    // Dragged by its name: Bass onto Lead's row goes to the top; onto Kick (in the group) it goes where the
+    // group is; Kick can't leave its group by dragging.
+    REQUIRE (s.playlist.moveLaneToRow (4, 0));
+    CHECK (names() == "Bass Lead Drums Snare Kick");
+    REQUIRE (s.playlist.moveLaneToRow (0, 4));
+    CHECK (names() == "Lead Drums Snare Kick Bass");
+    CHECK_FALSE (s.playlist.moveLaneToRow (3, 0));
+    CHECK_FALSE (s.playlist.moveLaneToRow (1, 2)); // onto its own group
+    REQUIRE (s.playlist.moveLaneToRow (3, 2));
+    CHECK (names() == "Lead Drums Kick Snare Bass");
+
+    // Clips stay on their tracks; undo puts the order back.
+    for (const auto& clip : s.model().clips)
+        CHECK (project.findLane (clip.lane) != nullptr);
+    REQUIRE (s.session.getHistory().undo());
+    CHECK (names() == "Lead Drums Snare Kick Bass");
+
+    // Saved with the project, solo too.
+    REQUIRE (s.playlist.setLaneSolo (0, true));
+    model::Project loaded;
+    REQUIRE (model::fromJsonText (model::toJsonText (project), loaded).wasOk());
+    CHECK (loaded.playlist.lanes == project.playlist.lanes);
+    CHECK (loaded.playlist.lanes[0].solo);
+}
+
 TEST_CASE ("Clicking a pattern clip makes its pattern the current one, with any tool", "[ui][playlist]")
 {
     EngineHost host { { .openAudioDevice = false } };

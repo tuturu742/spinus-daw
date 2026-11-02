@@ -148,6 +148,15 @@ public:
     bool groupLaneWithAbove (int row);
     bool ungroupLane (int row);
     bool setLaneCollapsed (int row, bool collapsed);
+    /** Solo (Ctrl+click the light): while any track is soloed, only soloed tracks and their groups play. */
+    bool setLaneSolo (int row, bool solo);
+    /** Moves a track (with the tracks grouped under it) one place up (-1) or down (+1) among the tracks of its
+        group, or of the top level. False when it is already first or last there. */
+    bool moveLane (int row, int direction);
+    bool canMoveLane (int row, int direction) const;
+    /** Moves a track (dragged by its name) to where the track on `toRow` is, among the tracks of its group.
+        False when `toRow` is outside its group, or the same place. */
+    bool moveLaneToRow (int row, int toRow);
 
     /** Called with a message when a dropped file cannot be used (e.g. M4A without ffmpeg). */
     std::function<void (const juce::String&)> onProblem;
@@ -201,6 +210,8 @@ public:
     bool keyPressed (const juce::KeyPress&) override;
 
 private:
+    /** The track of the same group that `row`'s track trades places with (moveLane), or -1. */
+    int siblingForMove (int row, int direction) const;
     class Lanes;
     class Headers;
     class Ruler;

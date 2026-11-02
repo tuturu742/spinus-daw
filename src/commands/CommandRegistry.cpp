@@ -2360,9 +2360,9 @@ class SetLane final : public JsonCommand
 public:
     SetLane (juce::var p, LaneId l, std::optional<juce::String> n, std::optional<bool> m,
              std::optional<juce::uint32> c = std::nullopt, std::optional<LaneId> g = std::nullopt,
-             std::optional<bool> folded = std::nullopt)
+             std::optional<bool> folded = std::nullopt, std::optional<bool> s = std::nullopt)
         : JsonCommand ("lane.set", std::move (p)), lane (l), newName (std::move (n)), muted (m), colour (c), group (g),
-          collapsed (folded)
+          collapsed (folded), solo (s)
     {
         changes.lanes.insert (l);
     }
@@ -2375,6 +2375,8 @@ public:
             return *collapsed ? "Fold track group" : "Unfold track group";
         if (newName)
             return "Rename playlist track to " + quoted (*newName);
+        if (solo && ! muted)
+            return *solo ? "Solo playlist track" : "Unsolo playlist track";
         if (colour && ! muted)
             return "Colour playlist track";
         return muted.value_or (false) ? "Mute playlist track" : "Unmute playlist track";
@@ -2405,6 +2407,8 @@ public:
             l->group = *group;
         if (collapsed)
             l->collapsed = *collapsed;
+        if (solo)
+            l->solo = *solo;
         return juce::Result::ok();
     }
 
@@ -2421,7 +2425,50 @@ private:
     std::optional<juce::uint32> colour;
     std::optional<LaneId> group;
     std::optional<bool> collapsed;
+    std::optional<bool> solo;
     Lane old;
+};
+
+/** Moves a playlist track to another place in the list, with the tracks grouped under it (right below it). */
+class MoveLane final : public JsonCommand
+{
+public:
+    MoveLane (juce::var p, LaneId l, int newIndex)
+        : JsonCommand ("lane.move", std::move (p)), lane (l), index (newIndex)
+    {
+        changes.laneOrder = true;
+        changes.lanes.insert (l);
+    }
+
+    juce::String getDescription() const override { return "Move playlist track"; }
+
+    juce::Result perform (Project& p) override
+    {
+        auto& lanes = p.playlist.lanes;
+        const auto from = indexOf (lanes, lane);
+        if (from < 0)
+            return juce::Result::fail ("lane " + juce::String (lane.value) + " does not exist");
+        // The track and the tracks grouped under it that follow it: they move together.
+        auto end = from + 1;
+        while (end < (int)lanes.size() && p.isLaneGroupedUnder (lanes[(size_t)end].id, lane))
+            ++end;
+        const auto count = end - from;
+        if (index < 0 || index > (int)lanes.size() - count)
+            return juce::Result::fail ("index out of range");
+
+        old = lanes;
+        std::vector<Lane> moved (lanes.begin() + from, lanes.begin() + end);
+        lanes.erase (lanes.begin() + from, lanes.begin() + end);
+        lanes.insert (lanes.begin() + index, moved.begin(), moved.end());
+        return juce::Result::ok();
+    }
+
+    void undo (Project& p) override { p.playlist.lanes = old; }
+
+private:
+    LaneId lane;
+    int index;
+    std::vector<Lane> old;
 };
 
 /** Places a pattern on the playlist. */
@@ -3724,26 +3771,44 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
                               return std::make_unique<RemoveLane> (p.json, p.id<LaneId> ("lane"));
                           }));
 
-    list.push_back (info ("lane.set",
-                          "Rename, mute, colour, group or fold a playlist track. A track grouped under another is "
-                          "muted and hidden (folded) with it.",
+    list.push_back (info (
+        "lane.set",
+        "Rename, mute, solo, colour, group or fold a playlist track. A track grouped under another is "
+        "muted and hidden (folded) with it.",
+        ParameterSchema()
+            .id ("lane", "Lane ID")
+            .string ("name", "New name")
+            .boolean ("muted", "Muted")
+            .string ("colour", "Colour as #AARRGGBB")
+            .integer ("group", "The track it is grouped under (lane ID), or 0 for none", false, 0,
+                      std::numeric_limits<int>::max())
+            .boolean ("collapsed", "Folded: the tracks grouped under it are hidden")
+            .boolean ("solo", "Soloed: while any track is, only soloed tracks (and the tracks "
+                              "grouped under them) play"),
+        [] (Params& p) -> std::unique_ptr<Command>
+        {
+            p.allowOnly ({ "lane", "name", "muted", "colour", "group", "collapsed", "solo" });
+            std::optional<LaneId> group;
+            if (auto g = p.number ("group", 0, std::numeric_limits<int>::max()))
+                group = LaneId { (uint32_t)*g };
+            return std::make_unique<SetLane> (p.json, p.id<LaneId> ("lane"), p.string ("name"), p.boolean ("muted"),
+                                              p.colour ("colour"), group, p.boolean ("collapsed"), p.boolean ("solo"));
+        }));
+
+    list.push_back (info ("lane.move",
+                          "Move a playlist track to another position in the list. The tracks grouped under it (right "
+                          "below it) move with it; their groups stay as they are.",
                           ParameterSchema()
                               .id ("lane", "Lane ID")
-                              .string ("name", "New name")
-                              .boolean ("muted", "Muted")
-                              .string ("colour", "Colour as #AARRGGBB")
-                              .integer ("group", "The track it is grouped under (lane ID), or 0 for none", false, 0,
-                                        std::numeric_limits<int>::max())
-                              .boolean ("collapsed", "Folded: the tracks grouped under it are hidden"),
+                              .integer ("index",
+                                        "Its new position (0: the top), counted without it and the tracks "
+                                        "that move with it",
+                                        true, 0, 100000),
                           [] (Params& p) -> std::unique_ptr<Command>
                           {
-                              p.allowOnly ({ "lane", "name", "muted", "colour", "group", "collapsed" });
-                              std::optional<LaneId> group;
-                              if (auto g = p.number ("group", 0, std::numeric_limits<int>::max()))
-                                  group = LaneId { (uint32_t)*g };
-                              return std::make_unique<SetLane> (p.json, p.id<LaneId> ("lane"), p.string ("name"),
-                                                                p.boolean ("muted"), p.colour ("colour"), group,
-                                                                p.boolean ("collapsed"));
+                              p.allowOnly ({ "lane", "index" });
+                              return std::make_unique<MoveLane> (p.json, p.id<LaneId> ("lane"),
+                                                                 (int)p.number ("index", 0, 100000, true).value_or (0));
                           }));
 
     list.push_back (info ("marker.add",

@@ -82,6 +82,8 @@ const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
         { "lane.add", R"({"name": "Drums"})" },
         { "lane.remove", R"({"lane": 12})" },
         { "lane.set", R"({"lane": 12, "name": "Beat", "muted": true})" },
+        { "lane.set", R"({"lane": 12, "solo": true})" },
+        { "lane.move", R"({"lane": 13, "index": 0})" },
         { "clip.addPattern", R"({"lane": 13, "pattern": 11, "start": 7680})" },
         { "clip.set", R"({"clip": 14, "lane": 13, "start": 1920, "length": 3840})" },
         { "clip.remove", R"({"clip": 15})" },

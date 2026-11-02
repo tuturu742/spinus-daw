@@ -528,6 +528,8 @@ juce::var toJson (const Project& p)
             o.set ("group", id (lane.group));
         if (lane.collapsed)
             o.set ("collapsed", true);
+        if (lane.solo)
+            o.set ("solo", true);
         lanes.add (o);
     }
 
@@ -651,7 +653,7 @@ juce::Result fromJson (const juce::var& input, Project& result)
     for (auto& l : r.array (playlist, "lanes"))
         p.playlist.lanes.push_back ({ r.id<LaneId> (l, "id"), r.text (l, "name"), r.colour (l, "colour", 0xff3d4450),
                                       r.boolean (l, "muted", false), r.id<LaneId> (l, "group"),
-                                      r.boolean (l, "collapsed", false) });
+                                      r.boolean (l, "collapsed", false), r.boolean (l, "solo", false) });
 
     for (auto& c : r.array (playlist, "clips"))
         p.playlist.clips.push_back (r.clip (c));

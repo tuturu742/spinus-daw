@@ -871,8 +871,8 @@ class Playlist::Headers final : public juce::Component
 public:
     explicit Headers (Playlist& p) : playlist (p)
     {
-        setHelpText ("Playlist tracks: click the light to mute a track, the arrow to fold a group; right-click a "
-                     "track to rename, colour, group or delete it");
+        setHelpText ("Playlist tracks: click the light to mute a track (Ctrl+click: solo), the arrow to fold a group, "
+                     "drag a name to move the track; right-click a track to rename, colour, group, move or delete it");
     }
 
     /** How far a track's arrow and name are indented: 12 pixels per group it is in. */
@@ -900,11 +900,18 @@ public:
             const bool real = index < (int)lanes.size();
             const auto* lane = real ? &lanes[(size_t)index] : nullptr;
             const bool muted = lane != nullptr && lane->muted;
+            // Grey when muted by its group, or because other tracks are soloed; a soloed track's light is amber.
             const bool mutedByGroup = lane != nullptr && ! muted && project.isLaneMuted (lane->id);
             g.setColour (real ? (muted || mutedByGroup ? theme.get ("textDim").withAlpha (muted ? 0.3f : 0.55f)
+                                 : lane->solo          ? juce::Colour (soloColour)
                                                        : juce::Colour (0xff6ccf6a))
                               : theme.get ("textDim").withAlpha (0.15f));
             g.fillEllipse (8.0f, r.getCentreY() - 5.0f, 10.0f, 10.0f);
+            if (lane != nullptr && lane->solo)
+            {
+                g.setColour (juce::Colour (soloColour));
+                g.drawEllipse (6.0f, r.getCentreY() - 7.0f, 14.0f, 14.0f, 1.2f);
+            }
 
             auto x = 24.0f;
             juce::String name = "Track " + juce::String (row + 1);
@@ -949,6 +956,14 @@ public:
             g.setColour (theme.get ("border"));
             g.drawHorizontalLine ((int)r.getBottom() - 1, 0.0f, (float)getWidth());
         }
+
+        // A track being dragged by its name: where it goes.
+        if (dragging && dropRow >= 0)
+        {
+            const auto y = (float)((dropRow > dragRow ? dropRow + 1 : dropRow) * playlist.rowHeight - playlist.scrollY);
+            g.setColour (theme.get ("text"));
+            g.fillRect (juce::Rectangle<float> (0.0f, y - 1.0f, (float)getWidth(), 2.0f));
+        }
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -962,10 +977,41 @@ public:
             return showMenu (row);
         const auto& lane = project.playlist.lanes[(size_t)index];
         if (e.x < 22)
-            playlist.setLaneMuted (row, ! lane.muted);
+        {
+            // FL: Ctrl+click the light solos the track.
+            if (e.mods.isCommandDown())
+                playlist.setLaneSolo (row, ! lane.solo);
+            else
+                playlist.setLaneMuted (row, ! lane.muted);
+        }
         else if (const auto arrowX = indentOf (project.getLaneDepth (lane.id));
                  countGroupedUnder (lane.id) > 0 && e.position.x >= arrowX - 2.0f && e.position.x <= arrowX + 12.0f)
             playlist.setLaneCollapsed (row, ! lane.collapsed);
+        else
+            dragRow = row; // dragged by its name: moved up or down
+    }
+
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        if (dragRow < 0 || (! dragging && std::abs (e.getDistanceFromDragStartY()) < 4))
+            return;
+        dragging = true;
+        const auto lanes = (int)playlist.getVisibleLanes().size();
+        dropRow = juce::jlimit (0, juce::jmax (0, lanes - 1), playlist.rowAtY (e.position.y));
+        setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+        repaint();
+    }
+
+    void mouseUp (const juce::MouseEvent&) override
+    {
+        const auto from = dragRow, to = dropRow;
+        const bool moved = dragging;
+        dragRow = dropRow = -1;
+        dragging = false;
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+        repaint();
+        if (moved && to >= 0 && to != from)
+            playlist.moveLaneToRow (from, to);
     }
 
     void showMenu (int row)
@@ -1018,6 +1064,25 @@ public:
                                   safe->setLaneCollapsed (row, ! folded);
                           });
         menu.addSeparator();
+        menu.addItem (lane.solo ? "Unsolo" : "Solo (Ctrl+click the light)",
+                      [safe, row, soloed = lane.solo]
+                      {
+                          if (safe != nullptr)
+                              safe->setLaneSolo (row, ! soloed);
+                      });
+        menu.addItem ("Move up", playlist.canMoveLane (row, -1), false,
+                      [safe, row]
+                      {
+                          if (safe != nullptr)
+                              safe->moveLane (row, -1);
+                      });
+        menu.addItem ("Move down", playlist.canMoveLane (row, 1), false,
+                      [safe, row]
+                      {
+                          if (safe != nullptr)
+                              safe->moveLane (row, 1);
+                      });
+        menu.addSeparator();
         menu.addItem ("Delete track" + (clips > 0 ? " (and its " + juce::String (clips) + " clips)" : juce::String()),
                       [safe, row]
                       {
@@ -1028,7 +1093,10 @@ public:
     }
 
 private:
+    static constexpr juce::uint32 soloColour = 0xffe6b84a;
     Playlist& playlist;
+    int dragRow = -1, dropRow = -1;
+    bool dragging = false;
 };
 
 //==============================================================================
@@ -2035,6 +2103,94 @@ bool Playlist::ungroupLane (int row)
     const auto* parent = project.findLane (lane.group);
     return parent != nullptr &&
            perform ("lane.set", object ({ { "lane", (int)lane.id.value }, { "group", (int)parent->group.value } }));
+}
+
+bool Playlist::setLaneSolo (int row, bool solo)
+{
+    const auto& all = session.getProject().playlist.lanes;
+    const auto index = laneIndexOfRow (row);
+    return row >= 0 && index < (int)all.size() &&
+           perform ("lane.set", object ({ { "lane", (int)all[(size_t)index].id.value }, { "solo", solo } }));
+}
+
+namespace
+{
+/** The end of the tracks that move with lane `index`: it, and the tracks grouped under it right below it. */
+int blockEnd (const model::Project& project, int index)
+{
+    const auto& lanes = project.playlist.lanes;
+    auto end = index + 1;
+    while (end < (int)lanes.size() && project.isLaneGroupedUnder (lanes[(size_t)end].id, lanes[(size_t)index].id))
+        ++end;
+    return end;
+}
+
+/** Where lane `index` goes (lane.move's index) to take the place of `sibling`, a track of its group. */
+int indexToTakePlaceOf (const model::Project& project, int index, int sibling)
+{
+    return sibling < index ? sibling : blockEnd (project, sibling) - (blockEnd (project, index) - index);
+}
+} // namespace
+
+int Playlist::siblingForMove (int row, int direction) const
+{
+    const auto& project = session.getProject();
+    const auto& trackList = project.playlist.lanes;
+    const auto index = laneIndexOfRow (row);
+    if (row < 0 || index >= (int)trackList.size() || direction == 0)
+        return -1;
+    const auto group = trackList[(size_t)index].group;
+    if (direction < 0)
+    {
+        for (auto i = index - 1; i >= 0; --i)
+        {
+            if (trackList[(size_t)i].id == group)
+                return -1; // the group's own track: first in it
+            if (trackList[(size_t)i].group == group)
+                return i;
+        }
+        return -1;
+    }
+    const auto next = blockEnd (project, index);
+    return next < (int)trackList.size() && trackList[(size_t)next].group == group ? next : -1;
+}
+
+bool Playlist::canMoveLane (int row, int direction) const { return siblingForMove (row, direction) >= 0; }
+
+bool Playlist::moveLane (int row, int direction)
+{
+    const auto sibling = siblingForMove (row, direction);
+    if (sibling < 0)
+        return false;
+    const auto& project = session.getProject();
+    const auto index = laneIndexOfRow (row);
+    return perform ("lane.move", object ({ { "lane", (int)project.playlist.lanes[(size_t)index].id.value },
+                                           { "index", indexToTakePlaceOf (project, index, sibling) } }));
+}
+
+bool Playlist::moveLaneToRow (int row, int toRow)
+{
+    const auto& project = session.getProject();
+    const auto& trackList = project.playlist.lanes;
+    const auto index = laneIndexOfRow (row), target = laneIndexOfRow (toRow);
+    if (row < 0 || toRow < 0 || index >= (int)trackList.size() || target >= (int)trackList.size())
+        return false;
+    // The track of its group at the drop: the one there, or the group (of its group) that one is in.
+    const auto group = trackList[(size_t)index].group;
+    auto sibling = target;
+    for (int depth = 0; sibling >= 0 && trackList[(size_t)sibling].group != group && depth < 64; ++depth)
+    {
+        const auto up = trackList[(size_t)sibling].group;
+        if (! up.isValid())
+            return false; // outside its group
+        const auto found =
+            std::find_if (trackList.begin(), trackList.end(), [&] (const model::Lane& l) { return l.id == up; });
+        sibling = found != trackList.end() ? (int)(found - trackList.begin()) : -1;
+    }
+    if (sibling < 0 || sibling == index || (sibling > index && sibling < blockEnd (project, index)))
+        return false;
+    return perform ("lane.move", object ({ { "lane", (int)trackList[(size_t)index].id.value },
+                                           { "index", indexToTakePlaceOf (project, index, sibling) } }));
 }
 
 bool Playlist::setLaneCollapsed (int row, bool collapsed)
