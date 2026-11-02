@@ -22,6 +22,14 @@ using PluginForText = std::function<std::shared_ptr<juce::AudioProcessor> (const
 void setPluginForText (const void* owner, PluginForText);
 void clearPluginForText (const void* owner);
 
+/** How device.loadPreset loads a plugin's preset (any instrument or effect but 3x Osc, whose presets are its
+    settings): the plugin's state with the preset named `preset` loaded, and the preset's name as the plugin gives
+    it. Fails, saying which presets there are, when it has no such preset. Set by the Session like PluginForText. */
+using PresetLoader = std::function<juce::Result (const model::Device&, const juce::String& preset,
+                                                 juce::MemoryBlock& state, juce::String& name)>;
+void setPresetLoader (const void* owner, PresetLoader);
+void clearPresetLoader (const void* owner);
+
 /** Builds a JSON Schema (draft 2020-12) object for a command's parameters. */
 class ParameterSchema
 {

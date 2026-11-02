@@ -1363,6 +1363,13 @@ std::pair<const void*, PluginForText>& pluginForText()
     return current;
 }
 
+/** The Session's plugin presets for device.loadPreset (setPresetLoader). */
+std::pair<const void*, PresetLoader>& presetLoader()
+{
+    static std::pair<const void*, PresetLoader> current;
+    return current;
+}
+
 class AddEffect final : public SnapshotCommand
 {
 public:
@@ -1679,7 +1686,27 @@ public:
         if (d == nullptr)
             return juce::Result::fail ("no device " + juce::String (device.value));
         if (d->kind != Device::Kind::stock || d->stockType != "spinus.3x-osc")
-            return juce::Result::fail (effectName (*d) + " has no built-in presets (only 3x Osc has)");
+        {
+            // Another plugin: its state with the preset, found once (a redo puts the same state back).
+            name = effectName (*d);
+            if (state.isEmpty())
+            {
+                const auto& loader = presetLoader().second;
+                if (! loader)
+                    return juce::Result::fail ("Spinus cannot load " + name + "'s presets here");
+                juce::String found;
+                if (auto r = loader (*d, preset, state, found); r.failed())
+                {
+                    state.reset();
+                    return r;
+                }
+                preset = std::move (found);
+            }
+            pluginPreset = true;
+            oldState = d->presetState;
+            d->presetState = state;
+            return juce::Result::ok();
+        }
         const auto* found = dsp::threeOscPresets::find (preset);
         if (found == nullptr && ! preset.trim().equalsIgnoreCase (dsp::threeOscPresets::defaultName))
         {
@@ -1694,8 +1721,18 @@ public:
         return SetParameters::perform (p);
     }
 
+    void undo (Project& p) override
+    {
+        if (! pluginPreset)
+            return SetParameters::undo (p);
+        if (auto* d = find (p))
+            d->presetState = oldState;
+    }
+
 private:
     juce::String preset;
+    bool pluginPreset = false;
+    juce::MemoryBlock state, oldState;
 };
 
 class SetEffect final : public JsonCommand
@@ -3716,11 +3753,16 @@ void addEffectCommands (std::vector<CommandInfo>& list)
 
     list.push_back (info (
         "device.loadPreset",
-        "Load one of 3x Osc's built-in presets: every setting of the instrument is set to the preset's (\"Default\": "
-        "a new 3x Osc's settings). One undo step.",
+        "Load a preset on an instrument or effect, by its name. For 3x Osc, one of its built-in presets: every setting "
+        "is set to the preset's (\"Default\": a new 3x Osc's settings). For another plugin, one of its own presets "
+        "(its programs, the presets it lists, Surge XT's patches) or a sound the user saved for it (Save this sound): "
+        "spinus --presets or the live interface's list_presets lists them. One undo step, also for a plugin.",
         ParameterSchema()
-            .id ("device", "The 3x Osc's device ID")
-            .custom ("preset", "The preset's name, e.g. \"Reese Bass\" (any case), or \"Default\"", true,
+            .id ("device", "The device ID")
+            .custom ("preset",
+                     "The preset's name (any case; \"Category/Name\" when two share a name), e.g. \"Reese Bass\" "
+                     "on 3x Osc",
+                     true,
                      []
                      {
                          juce::Array<juce::var> names;
@@ -4791,6 +4833,14 @@ juce::var CommandRegistry::getSchema() const
 }
 
 void setPluginForText (const void* owner, PluginForText lookup) { pluginForText() = { owner, std::move (lookup) }; }
+
+void setPresetLoader (const void* owner, PresetLoader loader) { presetLoader() = { owner, std::move (loader) }; }
+
+void clearPresetLoader (const void* owner)
+{
+    if (presetLoader().first == owner)
+        presetLoader() = {};
+}
 
 void clearPluginForText (const void* owner)
 {

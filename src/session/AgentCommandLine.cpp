@@ -12,6 +12,7 @@
 #include "engine/ParameterIds.h"
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
+#include "session/PluginPresets.h"
 #include "session/Session.h"
 
 #include <tracktion_engine/tracktion_engine.h>
@@ -652,6 +653,63 @@ juce::var describe (Session& session, const juce::String& stockType)
 }
 
 //==============================================================================
+juce::var presets (Session& session, int device, const juce::String& find)
+{
+    std::vector<model::Device> devices;
+    const auto& project = session.getProject();
+    for (const auto& c : project.channels)
+        if (c.instrument)
+            devices.push_back (*c.instrument);
+    for (const auto* insert : { &project.mixer.master })
+        for (const auto& slot : insert->effects)
+            devices.push_back (slot.device);
+    for (const auto& insert : project.mixer.inserts)
+        for (const auto& slot : insert.effects)
+            devices.push_back (slot.device);
+
+    const auto words = juce::StringArray::fromTokens (find.toLowerCase(), true);
+    const auto wanted = [&words] (const juce::String& name, const juce::String& category)
+    {
+        const auto text = (name + " " + category).toLowerCase();
+        for (const auto& w : words)
+            if (! text.contains (w))
+                return false;
+        return true;
+    };
+    juce::Array<juce::var> out;
+    for (const auto& d : devices)
+    {
+        if (device > 0 && (int)d.id.value != device)
+            continue;
+        // Spinus's own devices have none, but 3x Osc (its built-in presets); the others are plugins.
+        const bool threeOsc = d.kind == model::Device::Kind::stock && d.stockType == "spinus.3x-osc";
+        if (d.kind == model::Device::Kind::stock && d.stockType.startsWith ("spinus.") && ! threeOsc)
+            continue;
+        juce::Array<juce::var> list;
+        juce::String problem;
+        if (threeOsc)
+        {
+            for (auto& p : dsp::threeOscPresets::all())
+                if (wanted (p.name, {}))
+                    list.add (object ({ { "name", p.name } }));
+        }
+        else
+            for (const auto& p : pluginPresets::find (session, d, problem))
+                if (wanted (p.name, p.category))
+                    list.add (p.category.isNotEmpty() ? object ({ { "name", p.name }, { "category", p.category } })
+                                                      : object ({ { "name", p.name } }));
+        if (list.isEmpty() && problem.isEmpty() && device <= 0)
+            continue;
+        auto entry = object (
+            { { "device", (int)d.id.value }, { "name", model::getDeviceDisplayName (d) }, { "presets", list } });
+        if (problem.isNotEmpty())
+            entry.getDynamicObject()->setProperty ("problem", problem);
+        out.add (entry);
+    }
+    return out;
+}
+
+//==============================================================================
 juce::var measureFile (const juce::File& file)
 {
     juce::AudioFormatManager formats;
@@ -776,7 +834,8 @@ const std::map<juce::String, bool>& knownOptions()
         { "--open", true },      { "--save", true },      { "--keep-going", false }, { "--check", true },
         { "--render", true },    { "--out", true },       { "--stems", true },       { "--tail", true },
         { "--describe", true },  { "--commands", false }, { "--self-test", false },  { "--scan-plugins", false },
-        { "--no-audio", false }, { "--snapshot", true },  { "--choose-file", true },
+        { "--no-audio", false }, { "--snapshot", true },  { "--choose-file", true }, { "--presets", true },
+        { "--device", true },    { "--find", true },
     };
     return options;
 }
@@ -792,6 +851,8 @@ juce::String usage()
            "  spinus --render <project> --out <file.wav|.flac|.opus|.mp3> [--stems <folder>] [--tail <seconds>]\n"
            "                                              Render the song (and one file per mixer insert)\n"
            "  spinus --describe <device>|all             A device's settings, choices, presets, pads and kits\n"
+           "  spinus --presets <project> [--device <id>] [--find <words>]\n"
+           "                                              The presets device.loadPreset can load on its devices\n"
            "  spinus --commands                          Every command and its parameters (JSON Schema)\n"
            "  spinus --self-test [<folder>]              Check that Spinus works on this computer\n"
            "  spinus --version                           The version\n"

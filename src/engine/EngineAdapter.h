@@ -250,6 +250,9 @@ private:
     tracktion::Plugin::Ptr ensureDevice (const model::Device&);
 
     void applyParameters (tracktion::Plugin&, const model::Device&);
+    /** A preset device.loadPreset loaded (Device::presetState): put in place when it changes; taken out by an
+        undo, the state the plugin had before the first one. */
+    void applyPresetState (tracktion::Plugin&, const model::Device&);
     void placeDevice (tracktion::PluginList&, model::DeviceId, int index);
     void dropDevice (model::DeviceId);
 
@@ -282,6 +285,7 @@ private:
     std::set<model::DeviceId> reportedFailures;
     // Settings set through commands, as last applied, and what each was before.
     std::map<model::DeviceId, std::map<juce::String, float>> appliedParameters;
+    std::map<model::DeviceId, juce::MemoryBlock> appliedPresetStates, statesBeforePresets;
     float monitorTrimDb = 0.0f;
     std::map<model::DeviceId, std::map<juce::String, float>> originalParameters;
     std::map<model::InsertId, int> returnBuses; // target insert -> aux bus number

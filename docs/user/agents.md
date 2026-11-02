@@ -26,8 +26,8 @@ It uses the same music tools as Spinus's [assistant](assistant.md), plus Spinus'
 
 The music tools (write_part, insert_bars, shape_sound, check...) need AI turned on in Spinus (**Options › AI**).
 They run in Spinus's own AI service on this computer, without any AI connection or internet. With AI off, the
-agent still has Spinus's own tools: the song's summary, Spinus's commands, the devices that can be added, and
-render.
+agent still has Spinus's own tools: the song's summary, Spinus's commands, the devices that can be added, a
+device's presets (plugins too: an agent can load them, and Ctrl+Z undoes it), and render.
 
 What the music tools make looks like a song built by hand:
 - **Short patterns:** a part that repeats is one short pattern (1, 2 or 4 bars) placed again and again on the
