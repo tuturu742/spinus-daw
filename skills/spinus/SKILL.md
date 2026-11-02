@@ -67,6 +67,7 @@ It works only on this computer, and the user can **Disconnect** you or **Undo th
   that `channel.add` and `insert.addEffect` take.
 - `render`: an offline render that measures the mix's LUFS and true peak, each section's LUFS (between
   markers), and with `stems: true` each insert's LUFS and how long it sounds. It takes as long as the song.
+- `list_presets`: the presets `device.loadPreset` can load on a device of the song, plugins too.
 - `undo_last`: undoes your last change, if nothing newer came after it.
 
 **The music tools** need AI turned on in Spinus (**Options › AI**). They run on this computer, with no internet.
@@ -185,8 +186,13 @@ Make it look like a song a person built in Spinus, so the user can find their wa
   "0.5 Hz", "Mix": "30%"}` in one `text` (the type is set first; its other settings are named for that type,
   and a word of a name is enough when only one setting has it). `--describe bundled.surge-xt-effects` lists
   the types under `"FX Type"`'s `choices`.
-- **Plugins the user installed** are named in a project as `--check` shows them. Their own presets, and sounds
-  chosen in their windows, can't be set from a script.
+- **Plugins the user installed** are named in a project as `--check` shows them.
+- **Presets of any plugin** load by name with `device.loadPreset` (`{"device": 12, "preset": "Warm Pad"}`), as
+  3x Osc's do: the plugin's programs, the presets a CLAP plugin lists, Surge XT's patches, and the sounds the user
+  saved for it ("Your saved sounds"). List them first: `list_presets` (live, `{"device": 12, "find": "pad"}`) or
+  `spinus --presets <project> [--device 12] [--find pad]`. A name may be "Category/Name" when two share one. It
+  is one undo step. A plugin that only changes its sound in its own window (BFD, Ample's) lists none: ask the user
+  to set a sound up and keep it with **Save this sound** in the Track creator, then load it by its name.
 - **Project files:** a project is a folder holding a `.spn` file (plain JSON) and an `audio` folder. Change it
   through commands, never by editing the JSON.
 

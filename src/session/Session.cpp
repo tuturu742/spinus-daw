@@ -5,6 +5,7 @@
 #include "dsp/ParameterText.h"
 #include "engine/ParameterIds.h"
 #include "model/ModelJson.h"
+#include "session/PluginPresets.h"
 
 #include "engine/BundledDevices.h"
 
@@ -74,6 +75,9 @@ Session::Session (te::Engine& engine, std::unique_ptr<engine::DeviceFactory> d)
     edit->getParameterChangeHandler().addListener (*controlWatcher);
     commands::setPluginForText (this, [this] (const model::Device& device)
                                 { return pluginForText (edit->engine, *adapter, *devices, device); });
+    commands::setPresetLoader (this, [this] (const model::Device& device, const juce::String& preset,
+                                             juce::MemoryBlock& state, juce::String& name)
+                               { return pluginPresets::stateWith (*this, device, preset, state, name); });
 }
 
 void Session::ControlWatcher::pluginParameterChanged (te::AutomatableParameter& parameter, bool isFollowingAutomation)
@@ -116,6 +120,7 @@ juce::String Session::describeLastMovedControl() const
 Session::~Session()
 {
     commands::clearPluginForText (this);
+    commands::clearPresetLoader (this);
     edit->getParameterChangeHandler().removeListener (*controlWatcher);
     controlWatcher->cancelPendingUpdate();
     history.removeListener (historyListener);

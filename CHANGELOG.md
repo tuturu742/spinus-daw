@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Coding agents and scripts: any plugin's presets
+
+- **`device.loadPreset` loads a preset on any plugin** by its name, not only on 3x Osc: its programs, the presets
+  a CLAP plugin lists, Surge XT's patches, OB-Xf's and Odin 2's, and the sounds you saved for it with Save this
+  sound. It is one undo step: Ctrl+Z (or Undo the agent's changes) gives the plugin back its sound from before.
+- **Listing them:** `spinus --presets <project>` and, for agents connected to Spinus, `list_presets`.
+
 ### Coding agents: songs laid out like by hand
 
 - **Short patterns repeated on the Playlist:** the music tool `write_part` with a loop makes one short pattern

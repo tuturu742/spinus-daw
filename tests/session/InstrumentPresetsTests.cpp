@@ -5,7 +5,11 @@
 #include "engine/EngineHost.h"
 #include "plugins/DeviceList.h"
 #include "plugins/clap/ClapPluginFormat.h"
+#include "commands/CommandRegistry.h"
+#include "model/ModelJson.h"
 #include "session/InstrumentPresets.h"
+#include "session/AgentCommandLine.h"
+#include "session/PluginPresets.h"
 #include "session/PresetPreviews.h"
 #include "session/SynthMatch.h"
 
@@ -447,4 +451,71 @@ TEST_CASE ("Tune from the default sound or from the closest preset (for deciding
     }
     WARN ("average over " << count << ": from the default sound " << fromDefault / juce::jmax (1, count)
                           << ", from the closest preset " << fromPreset / juce::jmax (1, count));
+}
+
+TEST_CASE ("A plugin's preset loads by name with device.loadPreset, as one undo step", "[session][presets]")
+{
+    EngineHost host { { .openAudioDevice = false } };
+    test::ProgramsTestPlugin::install (host.getEngine());
+    Session session (host.getEngine());
+    const auto run = [&session] (const juce::String& command, const juce::var& params)
+    {
+        juce::String error;
+        auto made = commands::CommandRegistry::get().create (command, params, error);
+        INFO (error);
+        REQUIRE (made != nullptr);
+        return session.getHistory().perform (std::move (made));
+    };
+    auto add = juce::JSON::parse (R"({"name": "Lead"})");
+    add.getDynamicObject()->setProperty (
+        "instrument", model::deviceToJson (plugins::DeviceList::makeDevice (test::ProgramsTestPlugin::describe())));
+    REQUIRE (run ("channel.add", add).wasOk());
+    const auto device = session.getProject().channels.back().instrument.value_or (model::Device {});
+    REQUIRE (device.kind == model::Device::Kind::plugin);
+    const auto program = [&session, &device]
+    {
+        auto* external = dynamic_cast<tracktion::ExternalPlugin*> (session.getAdapter().getDevicePlugin (device.id));
+        auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
+        return instance != nullptr ? instance->getCurrentProgram() : -1;
+    };
+    REQUIRE (program() == 0);
+
+    // Listed as agents see them (spinus --presets, list_presets).
+    juce::String problem;
+    const auto presets = pluginPresets::find (session, device, problem);
+    INFO (problem);
+    REQUIRE (presets.size() == 4);
+    CHECK (pluginPresets::match (presets, "bright saw") == &presets[1]);
+    CHECK (pluginPresets::match (presets, "hollow") == &presets[2]);
+    CHECK (pluginPresets::match (presets, "saw") == nullptr); // two fit
+    const auto listed = cli::presets (session, 0, "saw");
+    REQUIRE (listed.size() == 1);
+    CHECK ((int)listed[0]["device"] == (int)device.id.value);
+    CHECK (listed[0]["presets"].size() == 2);
+    CHECK (listed[0]["presets"][0]["name"] == "Bright Saw");
+
+    // Loaded by name (any case): the playing plugin takes it; undo gives back its sound from before, redo the preset.
+    const auto loadPreset = [&] (const juce::String& name)
+    {
+        return run ("device.loadPreset", juce::JSON::parse ("{\"device\": " + juce::String ((int)device.id.value) +
+                                                            ", \"preset\": \"" + name + "\"}"));
+    };
+    REQUIRE (loadPreset ("bright saw").wasOk());
+    CHECK (program() == 2);
+    CHECK (session.getHistory().getUndoDescriptions().strings.getLast().startsWith ("Load preset 'Bright Saw'"));
+    REQUIRE (loadPreset ("Hollow Square").wasOk());
+    CHECK (program() == 3);
+    REQUIRE (session.getHistory().undo());
+    CHECK (program() == 2);
+    REQUIRE (session.getHistory().undo());
+    CHECK (program() == 0);
+    CHECK (session.getProject().channels.back().instrument.value_or (model::Device {}).presetState.isEmpty());
+    REQUIRE (session.getHistory().redo());
+    CHECK (program() == 2);
+
+    // A name it doesn't have: refused, naming some it has.
+    const auto wrong = loadPreset ("saw");
+    CHECK (wrong.failed());
+    CHECK (wrong.getErrorMessage().contains ("Warm Sine"));
+    CHECK (program() == 2);
 }

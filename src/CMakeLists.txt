@@ -257,6 +257,7 @@ add_library (spinus_core STATIC
     session/SongWriter.h
     session/InstrumentPresets.cpp
     session/PresetPreviews.cpp
+    session/PluginPresets.cpp
     session/SynthMatch.cpp
     session/SynthProfile.cpp
     session/Suggestions.cpp
@@ -267,6 +268,7 @@ add_library (spinus_core STATIC
     session/StemSamples.h
     session/HiddenInstrument.h
     session/PresetPreviews.h
+    session/PluginPresets.h
     session/SynthMatch.h
     session/Session.h
     ui/About.cpp

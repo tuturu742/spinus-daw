@@ -375,7 +375,7 @@ private:
     {
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         return args.contains ("--run") || args.contains ("--check") || args.contains ("--render") ||
-               args.contains ("--describe") || args.contains ("--commands");
+               args.contains ("--describe") || args.contains ("--commands") || args.contains ("--presets");
     }
 
     /** --run, --check, --render, --describe (session::AgentCommandLine): JSON lines on the terminal. */
@@ -438,6 +438,20 @@ private:
             summary.getDynamicObject()->setProperty ("ok", clean);
             say (juce::JSON::toString (summary, true));
             return clean ? 0 : 3;
+        }
+
+        if (const auto project = fileOf ("--presets"); args.contains ("--presets"))
+        {
+            if (const auto opened = scratchDocument.open (project); opened.failed())
+                return failed (opened.getErrorMessage());
+            session->getEdit().dispatchPendingUpdatesSynchronously();
+            const auto found = cli::presets (*session, valueOf ("--device").getIntValue(), valueOf ("--find"));
+            for (const auto& entry : *found.getArray())
+                say (juce::JSON::toString (entry, true));
+            if (found.size() == 0)
+                return failed (args.contains ("--device") ? "no device " + valueOf ("--device") + " in the project"
+                                                          : "no device in the project has presets");
+            return 0;
         }
 
         if (const auto project = fileOf ("--render"); args.contains ("--render"))

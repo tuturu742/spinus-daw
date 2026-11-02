@@ -23,7 +23,7 @@ server (`spinus`, `http://127.0.0.1:47219/mcp`), work on their open song through
 tools:
 
 - **Spinus's own:** `song_summary`, `run_commands` (the same commands, with `"$1.channel"` references), `command_help`,
-  `list_devices`, `render` (loudness of the mix, each section and each part), `undo_last`.
+  `list_devices`, `list_presets`, `render` (loudness of the mix, each section and each part), `undo_last`.
 - **With AI on in Spinus,** the music tools: `song_overview`, `read_part`, `write_part`, `motif`, `place_motif`,
   `add_part`, `insert_bars`, `copy_bars`, `automate`, `add_effect`, `send`, `duck`, `bus`, `set_sound`,
   `shape_sound`, `check`.
@@ -229,9 +229,9 @@ everything you did is ordinary Spinus channels, patterns and clips.
 ## Limits
 
 - Plugins the user installed: add one in Spinus by hand, save, and run `--check` to see how it's named in a
-  project. Then a script can add it by that name and set its parameters. Its own presets, and sounds chosen
-  in its window, can't be set from a script. Prefer Spinus's own instruments (3x Osc presets, Drum Machine
-  kits, the Sampler with the starter pack) unless the user asks.
+  project. Then a script can add it by that name, set its parameters and load its presets by name
+  (`device.loadPreset`; `spinus --presets` lists them, the sounds the user saved for it too). Prefer Spinus's
+  own instruments (3x Osc presets, Drum Machine kits, the Sampler with the starter pack) unless the user asks.
 - Free plugins (`bundled.*`, such as Dragonfly reverbs and Surge XT) work only once the user has downloaded
   them in Spinus (`--describe all` lists the ones that are there). Spinus's own effects always work.
 - Don't use copyrighted audio, and don't imitate a real artist's recording note for note. Write

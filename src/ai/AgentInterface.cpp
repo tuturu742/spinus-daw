@@ -540,6 +540,13 @@ juce::var AgentInterface::nativeTools() const
                      "section's loudness (between the Playlist's markers), and with stems each mixer insert's "
                      "loudness and how long it sounds. Takes as long as the song does to render.",
                      schema ({ { "stems", object ({ { "type", "boolean" } }) } })));
+    tools.add (tool (
+        "list_presets",
+        "The presets device.loadPreset can load on a device of the song (an instrument or effect): "
+        "3x Osc's, a plugin's own (its programs, the presets it lists, Surge XT's patches) and the "
+        "sounds the user saved for it. 'find' keeps those whose name or category has all its words.",
+        schema ({ { "device", object ({ { "type", "integer" } }) }, { "find", object ({ { "type", "string" } }) } },
+                { "device" })));
     tools.add (tool ("undo_last", "Undo your last change (only if it is still the newest undo step).", schema ({})));
     return tools;
 }
@@ -592,6 +599,21 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
                 break;
         }
         return reply (text (juce::JSON::toString (found)));
+    }
+    if (name == "list_presets")
+    {
+        const auto found = cli::presets (session, (int)arguments["device"], arguments["find"].toString());
+        if (found.size() == 0)
+            return reply (text ("There is no device " + arguments["device"].toString() + " in the song.", true));
+        const auto& entry = found[0];
+        if (auto* list = entry["presets"].getArray(); list != nullptr && list->size() > 300)
+        {
+            const auto all = list->size();
+            list->removeRange (300, all - 300);
+            entry.getDynamicObject()->setProperty ("more", "the first 300 of " + juce::String (all) +
+                                                               ": give 'find' words to narrow them");
+        }
+        return reply (text (juce::JSON::toString (entry)));
     }
     if (name == "run_commands")
     {

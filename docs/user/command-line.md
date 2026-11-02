@@ -13,6 +13,7 @@ projects or your logs.
 | `spinus --check <project>` | Opens a project and prints what it holds, and what is missing on this computer. |
 | `spinus --render <project> --out <file>` | Renders the song, as File › Export does, and prints how loud it is. |
 | `spinus --describe <device>` | Prints a device's settings, presets, pads and kits. `--describe all` covers every one. |
+| `spinus --presets <project>` | Prints the presets `device.loadPreset` can load on each of the project's devices, plugins too. `--device <id>` for one, `--find <words>` to narrow them. |
 | `spinus --commands` | Prints every command and its parameters (JSON Schema). |
 | `spinus --help` | Lists these options. |
 
@@ -225,7 +226,9 @@ Markdown files (an `AGENTS.md`, for example).
 
 - Plugins you installed yourself work in scripts by their name and file, as `--describe` can't list them:
   add one in Spinus, save, and look at the project with `--check` to see how it is named.
-- A plugin's own presets and the sounds chosen in its window can't be set from a script yet, apart from
-  3x Osc's presets and the Drum Machine's kits.
+- A plugin's presets load by name with `device.loadPreset`, like 3x Osc's: its programs, the presets a CLAP
+  plugin lists, Surge XT's patches, OB-Xf's and Odin 2's, and the sounds you saved for it with **Save this sound**
+  (Track creator). `spinus --presets <project>` lists them. It is one undo step, like any command. Some plugins
+  only change their sound in their own window (BFD, Ample's): save a sound for them first, then load it by name.
 - `--run` and `--render` load Spinus's instruments and effects, and Windows plugins through Wine, as
   Spinus does. A slow plugin makes them slow too.

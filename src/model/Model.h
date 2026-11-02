@@ -108,6 +108,11 @@ struct Device
 
     /** The device's binary state lives in plugin-states/<id>.bin, not in project.json. */
 
+    /** A preset loaded through device.loadPreset on a plugin: the plugin's state with it, which the engine puts in
+        place (and, taken out again by an undo, the state from before it). Empty: none loaded by a command. Not
+        written to project.json: the plugin's saved state holds it once the project is saved. */
+    juce::MemoryBlock presetState;
+
     bool operator== (const Device&) const = default;
 };
 

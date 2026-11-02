@@ -560,8 +560,32 @@ te::Plugin::Ptr EngineAdapter::ensureDevice (const Device& device)
     if (plugin->isEnabled() == device.bypassed)
         plugin->setEnabled (! device.bypassed);
 
+    applyPresetState (*plugin, device);
     applyParameters (*plugin, device);
     return plugin;
+}
+
+void EngineAdapter::applyPresetState (te::Plugin& plugin, const Device& device)
+{
+    auto& applied = appliedPresetStates[device.id];
+    if (applied == device.presetState)
+        return;
+    auto* external = dynamic_cast<te::ExternalPlugin*> (&plugin);
+    auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
+    if (instance == nullptr)
+        return;
+    // The plugin's own state (as it gives it to a host), not Tracktion's.
+    if (applied.isEmpty())
+        instance->getStateInformation (statesBeforePresets[device.id]); // what an undo of every preset gives back
+    const auto& next = device.presetState.isEmpty() ? statesBeforePresets[device.id] : device.presetState;
+    if (! next.isEmpty())
+    {
+        instance->setStateInformation (next.getData(), (int)next.getSize());
+        external->flushPluginStateToValueTree();
+    }
+    if (device.presetState.isEmpty())
+        statesBeforePresets.erase (device.id);
+    applied = device.presetState;
 }
 
 void EngineAdapter::setMonitorTrim (float db, const Project& project)

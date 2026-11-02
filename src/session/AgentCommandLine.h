@@ -61,6 +61,12 @@ juce::var summarize (Session&, const juce::File& projectFolder);
     again (undone). An object with `error` when the type is unknown or its plugin is not installed. */
 juce::var describe (Session&, const juce::String& stockType);
 
+/** The presets device.loadPreset can load on the open project's devices, for --presets and the live interface's
+    list_presets: [{device, name, presets: [{name, category}]}], for one device (when `device` is set) or every
+    one that has presets; `find` keeps the presets whose name or category holds all its words. A device whose
+    plugin can't be loaded here has `problem`. */
+juce::var presets (Session&, int device, const juce::String& find);
+
 /** The stock types --describe all covers: Spinus's own devices and the bundled ones installed here. */
 juce::StringArray describableTypes (Session&);
 
