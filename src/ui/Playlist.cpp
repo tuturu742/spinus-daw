@@ -2135,24 +2135,24 @@ int indexToTakePlaceOf (const model::Project& project, int index, int sibling)
 int Playlist::siblingForMove (int row, int direction) const
 {
     const auto& project = session.getProject();
-    const auto& lanes = project.playlist.lanes;
+    const auto& trackList = project.playlist.lanes;
     const auto index = laneIndexOfRow (row);
-    if (row < 0 || index >= (int)lanes.size() || direction == 0)
+    if (row < 0 || index >= (int)trackList.size() || direction == 0)
         return -1;
-    const auto group = lanes[(size_t)index].group;
+    const auto group = trackList[(size_t)index].group;
     if (direction < 0)
     {
         for (auto i = index - 1; i >= 0; --i)
         {
-            if (lanes[(size_t)i].id == group)
+            if (trackList[(size_t)i].id == group)
                 return -1; // the group's own track: first in it
-            if (lanes[(size_t)i].group == group)
+            if (trackList[(size_t)i].group == group)
                 return i;
         }
         return -1;
     }
     const auto next = blockEnd (project, index);
-    return next < (int)lanes.size() && lanes[(size_t)next].group == group ? next : -1;
+    return next < (int)trackList.size() && trackList[(size_t)next].group == group ? next : -1;
 }
 
 bool Playlist::canMoveLane (int row, int direction) const { return siblingForMove (row, direction) >= 0; }
@@ -2171,24 +2171,25 @@ bool Playlist::moveLane (int row, int direction)
 bool Playlist::moveLaneToRow (int row, int toRow)
 {
     const auto& project = session.getProject();
-    const auto& lanes = project.playlist.lanes;
+    const auto& trackList = project.playlist.lanes;
     const auto index = laneIndexOfRow (row), target = laneIndexOfRow (toRow);
-    if (row < 0 || toRow < 0 || index >= (int)lanes.size() || target >= (int)lanes.size())
+    if (row < 0 || toRow < 0 || index >= (int)trackList.size() || target >= (int)trackList.size())
         return false;
     // The track of its group at the drop: the one there, or the group (of its group) that one is in.
-    const auto group = lanes[(size_t)index].group;
+    const auto group = trackList[(size_t)index].group;
     auto sibling = target;
-    for (int depth = 0; sibling >= 0 && lanes[(size_t)sibling].group != group && depth < 64; ++depth)
+    for (int depth = 0; sibling >= 0 && trackList[(size_t)sibling].group != group && depth < 64; ++depth)
     {
-        const auto up = lanes[(size_t)sibling].group;
+        const auto up = trackList[(size_t)sibling].group;
         if (! up.isValid())
             return false; // outside its group
-        const auto found = std::find_if (lanes.begin(), lanes.end(), [&] (const model::Lane& l) { return l.id == up; });
-        sibling = found != lanes.end() ? (int)(found - lanes.begin()) : -1;
+        const auto found =
+            std::find_if (trackList.begin(), trackList.end(), [&] (const model::Lane& l) { return l.id == up; });
+        sibling = found != trackList.end() ? (int)(found - trackList.begin()) : -1;
     }
     if (sibling < 0 || sibling == index || (sibling > index && sibling < blockEnd (project, index)))
         return false;
-    return perform ("lane.move", object ({ { "lane", (int)lanes[(size_t)index].id.value },
+    return perform ("lane.move", object ({ { "lane", (int)trackList[(size_t)index].id.value },
                                            { "index", indexToTakePlaceOf (project, index, sibling) } }));
 }
 
