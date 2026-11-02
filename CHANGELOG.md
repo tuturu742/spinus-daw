@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Playlist: move and solo tracks
+
+- **Move a track up or down:** drag it by its name, or right-click it › **Move up** / **Move down**. Its clips
+  go with it, and a group moves with the tracks in it.
+- **Solo a track:** **Ctrl+click** its light (or right-click › **Solo**). Only soloed tracks play; soloing a
+  group plays everything in it. Saved with the project.
+
 ### Spinus Delay
 
 - **Spinus Delay**, Spinus's own delay ([manual](docs/user/delay.md)): echoes at a note length locked to the

@@ -1,5 +1,7 @@
 #include "Model.h"
 
+#include <algorithm>
+
 namespace spinus::model
 {
 
@@ -25,19 +27,46 @@ Pattern* Project::findPattern (PatternId id) { return findById (patterns, id); }
 const Pattern* Project::findPattern (PatternId id) const { return findById (patterns, id); }
 Lane* Project::findLane (LaneId id) { return findById (playlist.lanes, id); }
 const Lane* Project::findLane (LaneId id) const { return findById (playlist.lanes, id); }
-bool Project::isLaneMuted (LaneId id) const
+namespace
 {
+/** Whether the lane or a track it is grouped under is muted, and whether one of them is soloed. */
+std::pair<bool, bool> mutedAndSoloed (const Project& project, LaneId id)
+{
+    bool muted = false, soloed = false;
     // Bounded: a damaged file could hold a cycle.
     for (int depth = 0; depth < 64; ++depth)
     {
-        const auto* lane = findLane (id);
+        const auto* lane = project.findLane (id);
         if (lane == nullptr)
-            return false;
-        if (lane->muted)
-            return true;
+            break;
+        muted = muted || lane->muted;
+        soloed = soloed || lane->solo;
         id = lane->group;
     }
-    return false;
+    return { muted, soloed };
+}
+
+bool anyLaneSoloed (const Project& project)
+{
+    return std::any_of (project.playlist.lanes.begin(), project.playlist.lanes.end(),
+                        [] (const Lane& l) { return l.solo; });
+}
+} // namespace
+
+bool Project::isLaneMuted (LaneId id) const
+{
+    if (findLane (id) == nullptr)
+        return false;
+    const auto [muted, soloed] = mutedAndSoloed (*this, id);
+    return muted || (! soloed && anyLaneSoloed (*this));
+}
+
+bool Project::isLaneMutedBySolo (LaneId id) const
+{
+    if (findLane (id) == nullptr)
+        return false;
+    const auto [muted, soloed] = mutedAndSoloed (*this, id);
+    return ! muted && ! soloed && anyLaneSoloed (*this);
 }
 
 bool Project::isLaneHidden (LaneId id) const

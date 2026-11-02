@@ -1194,7 +1194,7 @@
       }
     },
     "lane.set": {
-      "description": "Rename, mute, colour, group or fold a playlist track. A track grouped under another is muted and hidden (folded) with it.",
+      "description": "Rename, mute, solo, colour, group or fold a playlist track. A track grouped under another is muted and hidden (folded) with it.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1224,10 +1224,38 @@
           "collapsed": {
             "type": "boolean",
             "description": "Folded: the tracks grouped under it are hidden"
+          },
+          "solo": {
+            "type": "boolean",
+            "description": "Soloed: while any track is, only soloed tracks (and the tracks grouped under them) play"
           }
         },
         "required": [
           "lane"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "lane.move": {
+      "description": "Move a playlist track to another position in the list. The tracks grouped under it (right below it) move with it; their groups stay as they are.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Lane ID"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Its new position (0: the top), counted without it and the tracks that move with it"
+          }
+        },
+        "required": [
+          "lane",
+          "index"
         ],
         "additionalProperties": false
       }

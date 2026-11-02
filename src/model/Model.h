@@ -326,6 +326,8 @@ struct Lane
         folding a track does the same to the tracks under it. */
     LaneId group;
     bool collapsed = false; // folded: the tracks under it are hidden
+    /** Soloed: while any track is, only soloed tracks (and the tracks grouped under them) play. */
+    bool solo = false;
 
     bool operator== (const Lane&) const = default;
 };
@@ -494,8 +496,11 @@ struct Project
     Ticks fittedLength (const Pattern&) const;
     Lane* findLane (LaneId);
     const Lane* findLane (LaneId) const;
-    /** A lane is muted when it or a track it is grouped under is muted. */
+    /** A lane is muted when it or a track it is grouped under is muted, or when another track is soloed and
+        neither it nor a track it is grouped under is. */
     bool isLaneMuted (LaneId) const;
+    /** Muted only because other tracks are soloed (not muted itself or by its group). */
+    bool isLaneMutedBySolo (LaneId) const;
     /** Hidden: a track it is grouped under is folded. */
     bool isLaneHidden (LaneId) const;
     /** How many groups deep a lane is (0: not grouped). */
