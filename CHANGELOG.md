@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Command line: rendering over an earlier file
+
+- **Fixed:** `spinus --render` to an Opus, FLAC or MP3 file that was already there wrote the new song after the
+  old one (the file got twice as long). Now it replaces the file, as a WAV already did.
 ### Track creator: Variety
 
 - **Variety on Write a song:** choose **Close to my references**, **Balanced** (the default, the same as before)
