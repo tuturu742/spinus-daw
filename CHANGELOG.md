@@ -20,6 +20,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Fixed:** with the master fader away from 0 dB, the loudness step missed its target and could push the
   peaks past the limiter's ceiling (the fader comes after the limiter). Now that step sets the master fader to
   0 dB and gives the limiter the difference.
+### Track creator: Variety
+
+- **Variety on Write a song:** choose **Close to my references**, **Balanced** (the default, the same as before)
+  or **Adventurous**. It sets how far the new song may move from your songs: its tempo, key, chords (Adventurous
+  may borrow chords from the other mode), form and length, and how busy each part is. It works for Spinus's own
+  rules and for your AI connection, and Spinus remembers your choice.
+- **With your AI connection, the checks follow it too:** Close reports a tempo or chords that aren't your songs',
+  and Adventurous lets the song go further without pulling it back toward them.
 
 ### Coding agents and scripts: any plugin's presets
 

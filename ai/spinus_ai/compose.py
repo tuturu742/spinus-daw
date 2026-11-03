@@ -171,6 +171,8 @@ class Setup:
     current: dict[str, str] = field(default_factory=dict)  # part id -> the sound it has now, in words
     # The user's send effects: "reverb" or "delay" -> their names (plugins; Spinus Delay is always there besides).
     effects: dict[str, list[str]] = field(default_factory=dict)
+    # How far the song may move from the references: the brief says so, and the checks loosen or tighten to match.
+    variety: sw.Variety = sw.BALANCED
 
     @staticmethod
     def make(
@@ -180,7 +182,10 @@ class Setup:
         candidates: Any = None,
         current: Any = None,
         effects: Any = None,
+        variety: Any = None,
     ) -> Setup:
+        """The setup, checked; ValueError for what is not usable (an unknown variety among it)."""
+        chosen_variety = sw.variety_of(variety)
         style = sw.Style.from_summary(summary)
         chosen = sw.check_parts(parts) if parts is not None else sw.default_parts(style, size)
         found: dict[str, list[dict[str, str]]] = {}
@@ -199,7 +204,7 @@ class Setup:
                 names = effects.get(kind)
                 if isinstance(names, list):
                     have[kind] = [str(n)[:120] for n in names[:MOST_CANDIDATES] if str(n).strip()]
-        return Setup(summary, style, chosen, found, now, have)
+        return Setup(summary, style, chosen, found, now, have, chosen_variety)
 
     def written(self) -> list[dict[str, str]]:
         """The parts the model writes (the effects are the rules')."""
@@ -268,7 +273,18 @@ def style_brief(setup: Setup) -> dict[str, Any]:
 
 
 def first_message(setup: Setup) -> str:
-    return json.dumps({"style": style_brief(setup), "parts": part_brief(setup)}, indent=1)
+    message: dict[str, Any] = {"style": style_brief(setup), "parts": part_brief(setup)}
+    freedom = variety_words(setup)
+    if freedom:
+        message["variety"] = freedom
+    return json.dumps(message, indent=1)
+
+
+def variety_words(setup: Setup) -> str:
+    """How free the model is to move from the references (nothing when balanced: the brief as it always was)."""
+    style = setup.style
+    scale = style.keys[0][1] if style.key_fixed else max(style.modes, key=lambda m: style.modes[m])
+    return setup.variety.freedom(style, scale)
 
 
 def total_of(requests: list[dict[str, int]], what: str) -> int:
@@ -382,8 +398,9 @@ def check_plan(answer: dict[str, Any], setup: Setup) -> dict[str, Any]:
     tempo = float(tempo_value) if isinstance(tempo_value, int | float) and not isinstance(tempo_value, bool) else 0.0
     if not math.isfinite(tempo) or tempo <= 0:
         tempo = style.tempo
-    low = max(40.0, min(style.tempo_low, style.tempo) * 0.9)
-    high = min(240.0, max(style.tempo_high, style.tempo) * 1.1)
+    room = setup.variety.tempo_room  # 10 % beyond the songs' range (close 5 %, adventurous 25 %)
+    low = max(40.0, min(style.tempo_low, style.tempo) * (1 - room))
+    high = min(240.0, max(style.tempo_high, style.tempo) * (1 + room))
     tempo = float(round(min(max(tempo, low), high)))
 
     parsed = sw.key_of_name(str(answer.get("key") or "").strip())
@@ -580,7 +597,7 @@ def build_song(checked: Checked, setup: Setup, seed: int, size: str) -> dict[str
         ],
         "parts": {},
     }
-    song = sw.build(style, plan, seeds, keep=keep)
+    song = sw.build(style, plan, seeds, keep=keep, variety=setup.variety)
     energy = {s["id"]: s["energy"] for s in plan_in["sections"]}
     kinds = {s["id"]: s["kind"] for s in plan_in["sections"]}
     counts: dict[str, int] = {}
@@ -635,8 +652,10 @@ def build_song(checked: Checked, setup: Setup, seed: int, size: str) -> dict[str
 def review(
     song: dict[str, Any], setup: Setup, checked: Checked | None, levels: Any = None, problems: Any = None
 ) -> list[str]:
-    """What Spinus found in the draft, in plain words (for the model's revision, and shown to the user)."""
-    style = setup.style
+    """What Spinus found in the draft, in plain words (for the model's revision, and shown to the user). How
+    far it may be from the references is the setup's variety."""
+    style, variety = setup.style, setup.variety
+    least, most = variety.per_bar_room
     found: list[str] = []
     by_id = {s["id"]: s for s in song["sections"]}
     bar_ticks = int(song["barTicks"])
@@ -654,14 +673,14 @@ def review(
         per_bar = len(played) / max(1, played_bars)
         if layer["drums"]:
             want = float(((setup.summary.get("parts") or {}).get("drums") or {}).get("notesPerBar") or 0)
-            if layer["role"] == "drums" and want and not 0.4 <= per_bar / want <= 2.5:
+            if layer["role"] == "drums" and want and not least <= per_bar / want <= most:
                 found.append(f"{name} plays {per_bar:.1f} hits a bar; the style's drums play about {want:g}.")
             continue
         pitches = [int(n["pitch"]) for _, n in played]
         if not pitches:
             continue
         outside = sum(1 for p in pitches if p % 12 not in scale)
-        if outside > 0.12 * len(pitches):
+        if outside > variety.outside_key * len(pitches):
             found.append(
                 f"{name}: {round(100 * outside / len(pitches))} % of its notes are outside {song['key']['name']}."
             )
@@ -684,7 +703,7 @@ def review(
                     )
         if layer.get("instance", 0) == 0 and layer["part"] in sw.SUMMARY_PART:
             want = style.parts[sw.SUMMARY_PART[layer["part"]]].per_bar
-            if want and not 0.4 <= per_bar / want <= 2.5:
+            if want and not least <= per_bar / want <= most:
                 found.append(
                     f"{name} plays {per_bar:.1f} notes a bar; the style's {layer['part']} plays about {want:g}."
                 )
@@ -720,8 +739,12 @@ def review(
                 f"The {s['name'].lower()} is {s['bars']} bars: the style's sections are 4-bar phrases "
                 f"({', '.join(map(str, lengths))} bars)."
             )
-    if style.song_bars and not 0.6 <= played_bars / style.song_bars <= 1.5:
+    shortest, longest = variety.song_bars_room
+    if style.song_bars and not shortest <= played_bars / style.song_bars <= longest:
         found.append(f"The song is {played_bars} bars; the style's songs are about {style.song_bars:g}.")
+    if variety.own_chords:
+        romans = [c["roman"] for e in song["arrangement"] for c in by_id[e["section"]]["chords"]]
+        found += closeness_findings(setup, float(song["tempo"]), str(song["key"]["scale"]), romans)
     if checked is not None:
         for pid in checked.filled:
             found.append(
@@ -739,6 +762,25 @@ def review(
                     f"{names[pid]} made no sound with its sound: its notes may be outside the instrument's range, or "
                     "too short for it."
                 )
+    return found
+
+
+def closeness_findings(setup: Setup, tempo: float, scale: str, chords: list[str]) -> list[str]:
+    """Close to the references: a tempo outside their range, and chords outside their vocabulary."""
+    style = setup.style
+    found = []
+    if not style.tempo_low <= tempo <= style.tempo_high:
+        found.append(
+            f"The tempo {tempo:g} BPM is outside the references' {style.tempo_low:g}-{style.tempo_high:g}: "
+            "keep it inside (the variety is close to the references)."
+        )
+    allowed = style.vocabulary(scale).allowed()
+    outside = sorted({c for c in chords if c not in allowed})
+    if allowed and outside:
+        found.append(
+            f"The chords {', '.join(outside)} are not the references' own ({', '.join(allowed)}): use theirs (the "
+            "variety is close to the references)."
+        )
     return found
 
 
@@ -882,7 +924,7 @@ def finish(song: dict[str, Any], setup: Setup, composed: dict[str, Any]) -> dict
 
 
 def rules_song(setup: Setup, seed: int, size: str, note: str, requests: list[dict[str, int]]) -> dict[str, Any]:
-    song = sw.write(setup.summary, seed, size, setup.parts)
+    song = sw.write(setup.summary, seed, size, setup.parts, setup.variety)
     song["note"] = note
     song["usage"] = usage_of([{"round": 0, **r} for r in requests])
     song["plain"] = sw.describe(song)

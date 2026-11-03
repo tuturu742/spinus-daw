@@ -663,7 +663,7 @@ class Workspace:
     @staticmethod
     def start(setup: compose.Setup, seed: int, size: str) -> Workspace:
         """A new song with the rules' form for the style (sections, lengths, chords) and no notes yet."""
-        rules = sw.write(setup.summary, seed, size, setup.parts)
+        rules = sw.write(setup.summary, seed, size, setup.parts, setup.variety)
         ws = Workspace(setup, seed, size, float(rules["tempo"]), dict(rules["key"]))
         ws.setup = ws.own_setup()
         for s in rules["sections"]:
@@ -861,6 +861,9 @@ class Workspace:
                 lines.append(f"Drum groove {lane} (chance a step is hit): " + " ".join(f"{v:.1f}" for v in values))
         if style.without:
             lines.append("Leave out: " + ", ".join(sorted(style.without)))
+        freedom = self.setup.variety.freedom(style, str(self.key.get("scale") or "minor"))
+        if freedom:
+            lines.append(freedom)
         for b in compose.part_brief(self.setup):
             words = f"Part {b['id']} ({b['name']}, role {b['role']}"
             words += (
@@ -1664,7 +1667,8 @@ class Workspace:
                     want = style.parts[sw.SUMMARY_PART[base]].per_bar
                 else:
                     want = 0.0
-                if want and not 0.4 <= per_bar / want <= 2.5:
+                least, most = self.setup.variety.per_bar_room
+                if want and not least <= per_bar / want <= most:
                     out.append(f"{pid}: {per_bar:.1f} notes a bar over the song; the references' play about {want:g}")
         for sid, heights in medians.items():
             ids = sorted(heights)
@@ -1680,7 +1684,7 @@ class Workspace:
             if drum_parts:
                 song = self.song()
                 groove = (sw.compare(song, self.setup.summary, style).get("groove")) or {}
-                low = {lane: v for lane, v in groove.items() if v < 0.6}
+                low = {lane: v for lane, v in groove.items() if v < self.setup.variety.groove_alike}
                 if low:
                     out.append(
                         "drums: the groove is unlike the references' in "
@@ -1695,6 +1699,12 @@ class Workspace:
             out += self.energy_issues()
         if not only_part and not only_section:
             out += self.form_issues()
+        if not only_part and not only_section and self.setup.variety.own_chords:
+            chords = [c for sid in self.order for c in self.sections[sid]["chords"]]
+            out += [
+                "form: " + f[0].lower() + f[1:].rstrip(".")
+                for f in compose.closeness_findings(self.setup, self.tempo, str(self.key["scale"]), chords)
+            ]
         if self.rules_finding and not only_section:
             out += self.rules_issues(only_part)
         if not only_part and not only_section and "mix" in self.groups:
@@ -2165,6 +2175,7 @@ def setup_of(brief: dict[str, Any]) -> compose.Setup:
         brief.get("candidates"),
         brief.get("current"),
         brief.get("effects"),
+        brief.get("variety"),
     )
 
 

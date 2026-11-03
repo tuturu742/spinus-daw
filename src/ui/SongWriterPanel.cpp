@@ -206,6 +206,22 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     roundsBox.setSelectedId (2, juce::dontSendNotification);
     roundsBox.setTooltip ("After the AI finishes, Spinus plays each part with its sound; what it hears (a part that "
                           "made no sound, the balance) goes back to the AI to fix, this many times");
+    // How far the song may move from the references, for both writers (Balanced: as Spinus always wrote).
+    varietyBox.addItem ("Close to my references", 1);
+    varietyBox.addItem ("Balanced", 2);
+    varietyBox.addItem ("Adventurous", 3);
+    varietyBox.setTooltip ("How far the new song may move from your reference songs. Close to my references: the "
+                           "tempo, key, chords, form and how busy each part is stay near theirs. Balanced: a little "
+                           "room, as before. Adventurous: a tempo beyond theirs, a nearby or relative key, borrowed "
+                           "chords, a form of its own and busier or sparser parts; the AI may also add or vary "
+                           "instruments. Spinus's checks follow the same setting");
+    setVariety (
+        session.getEdit().engine.getPropertyStorage().getPropertiesFile().getValue ("trackCreatorVariety", "balanced"));
+    varietyBox.onChange = [this]
+    {
+        session.getEdit().engine.getPropertyStorage().getPropertiesFile().setValue ("trackCreatorVariety",
+                                                                                    getVariety());
+    };
     depthBox.addItem ("Basic", 1);
     depthBox.addItem ("Basic + arrangement", 2);
     depthBox.addItem ("Basic + arrangement + transitions", 3);
@@ -244,9 +260,9 @@ SongWriterPanel::SongWriterPanel (Session& s, std::function<Context()> c) : sess
     text.setReadOnly (true);
     text.setScrollbarsShown (true);
     text.setCaretVisible (false);
-    for (auto* component :
-         std::initializer_list<juce::Component*> { &intro, &refineButton, &writeButton, &againButton, &redoButton,
-                                                   &applyButton, &mixButton, &status, &text, &writerLabel, &writerBox })
+    for (auto* component : std::initializer_list<juce::Component*> {
+             &intro, &refineButton, &writeButton, &againButton, &redoButton, &applyButton, &mixButton, &status, &text,
+             &writerLabel, &writerBox, &varietyLabel, &varietyBox })
         addAndMakeVisible (component);
     addChildComponent (stopButton);
     for (auto* component : std::initializer_list<juce::Component*> { &effortBox, &roundsBox, &infoLabel, &stopNowButton,
@@ -348,7 +364,8 @@ bool SongWriterPanel::write()
     juce::Array<juce::var> list;
     for (const auto& p : context.parts)
         list.add (object ({ { "id", p.id }, { "name", p.name }, { "role", p.role } }));
-    auto params = object ({ { "summary", context.summary }, { "seed", seed }, { "refine", refine } });
+    auto params = object (
+        { { "summary", context.summary }, { "seed", seed }, { "refine", refine }, { "variety", getVariety() } });
     if (! list.isEmpty())
         params.getDynamicObject()->setProperty ("parts", list);
     run (params, refine ? "Writing a song (the AI may vary its plan)..." : "Writing a song...",
@@ -812,6 +829,20 @@ void SongWriterPanel::depthChanged (bool remember)
     updateButtons();
 }
 
+void SongWriterPanel::setVariety (const juce::String& chosen)
+{
+    const juce::StringArray levels { "close", "balanced", "adventurous" };
+    const auto at = levels.indexOf (chosen.trim().toLowerCase());
+    varietyBox.setSelectedId (at < 0 ? 2 : at + 1, juce::dontSendNotification);
+}
+
+juce::String SongWriterPanel::getVariety() const
+{
+    const juce::StringArray levels { "close", "balanced", "adventurous" };
+    const auto id = varietyBox.getSelectedId();
+    return id >= 1 && id <= levels.size() ? levels[id - 1] : juce::String ("balanced");
+}
+
 void SongWriterPanel::setRounds (int rounds)
 {
     roundsBox.setSelectedId (juce::jlimit (0, 3, rounds) + 1, juce::dontSendNotification);
@@ -896,6 +927,7 @@ juce::var SongWriterPanel::composeParams (int seed)
                             { "candidates", candidates },
                             { "current", current },
                             { "effort", getEffort() },
+                            { "variety", getVariety() },
                             { "rounds", getRounds() },
                             { "tools", juce::var (getToolGroups()) },
                             { "rulesFinding", rulesFinding },
@@ -1226,6 +1258,7 @@ void SongWriterPanel::updateButtons()
     const bool ai = writerBox.getSelectedId() == 2;
     refineButton.setVisible (! ai);
     writerBox.setEnabled (! busy);
+    varietyBox.setEnabled (! busy);
     effortBox.setVisible (ai);
     const bool custom = ai && depthBox.getSelectedId() == 5;
     for (auto* c : std::initializer_list<juce::Component*> { &depthLabel, &depthBox, &depthNote })
@@ -1252,6 +1285,11 @@ void SongWriterPanel::resized()
     auto area = getLocalBounds();
     intro.setBounds (area.removeFromTop (36));
     layoutAiRow (area.removeFromTop (26));
+    {
+        auto row = area.removeFromTop (26);
+        varietyLabel.setBounds (row.removeFromLeft (130));
+        varietyBox.setBounds (row.removeFromLeft (juce::jmin (300, row.getWidth())).reduced (0, 1));
+    }
     if (depthBox.isVisible())
     {
         auto row = area.removeFromTop (26);
