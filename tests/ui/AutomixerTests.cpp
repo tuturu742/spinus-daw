@@ -99,8 +99,8 @@ TEST_CASE ("Automixer: measures, plans with reasons, applies as one undo step, c
         automixer.setReference (referenceFile);
         // The master's fader up 3 dB: it comes after the limiter, so the limiter's input makes up for it and the
         // fader goes to 0 dB (a fader left up once pushed the limited mix past its ceiling).
-        perform (session, "insert.set", R"({"insert": )" + juce::String ((int)model::masterInsertId.value) +
-                                            R"(, "volumeDb": 3.0})");
+        perform (session, "insert.set",
+                 R"({"insert": )" + juce::String ((int)model::masterInsertId.value) + R"(, "volumeDb": 3.0})");
         REQUIRE (automixer.analyze (Automixer::Target::streaming));
         REQUIRE (waitFor ([&] { return ! automixer.isBusy(); }, 120000));
         INFO (automixer.getStatusText());

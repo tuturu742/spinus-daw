@@ -505,9 +505,9 @@ ai::Proposal Automixer::makeProposal()
                 gain += insert->volumeDb;
                 step ("insert.set", object ({ { "insert", (int)insertId.value }, { "volumeDb", 0.0 } }));
             }
-            addEffect (insertId, "spinus.limiter",
-                       { { "Input gain", number (gain) + " dB" },
-                         { "Ceiling", number ((double)json["threshold"]) + " dB" } });
+            addEffect (
+                insertId, "spinus.limiter",
+                { { "Input gain", number (gain) + " dB" }, { "Ceiling", number ((double)json["threshold"]) + " dB" } });
         }
         else
             --count;
