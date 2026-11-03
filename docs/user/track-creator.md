@@ -464,6 +464,32 @@ anywhere and no AI connection is needed.
   open chords for an acoustic one, two hands for the piano, held chords for strings and organ, stabs for
   brass. Two parts of one role play different things.
 
+### Variety
+
+**Variety** (under Who writes the notes) sets how far the new song may move from your songs. It works the
+same way for Spinus's own rules and for your AI connection, and Spinus remembers your choice.
+
+- **Close to my references**: the narrowest choices. The tempo stays within 1 % of your songs' usual tempo,
+  the key is one of your songs' keys, the chords are only theirs, and the form and section lengths are the
+  ones your songs use most.
+- **Balanced** (the default): what is described above, the same as before this setting existed.
+- **Adventurous**: wider choices. The tempo may move up to 10 % and go a little past your songs' fastest or
+  slowest. The key may move to a nearby key (a step, a fourth or a fifth away) or to the relative major or
+  minor. A loop may borrow a chord from the other mode (such as bVII or bVI in a major key, IV or V in a minor
+  key). The form and song length vary more, and each part can be busier or sparser than in your songs,
+  section by section.
+
+Each choice still writes the same song from the same seed, so **Another version** is how you get a
+different one. **Redo part...** keeps the variety the song was written with. When the song isn't Balanced,
+the page says which variety wrote it.
+
+With your AI connection, the AI is told how much freedom it has, and Spinus's checks follow the same setting.
+With Close, the checks are stricter: a tempo outside your songs' range, chords your songs don't use, and parts
+much busier or sparser than yours are all reported back to the AI to fix. With Adventurous, the checks allow
+more, so they don't pull the song back toward your references: other tempos, more notes outside the key,
+parts from about a quarter to four times as busy as yours, a groove less like theirs, and longer or shorter
+songs. With Adventurous, the AI may also add or vary instruments when its tools allow it.
+
 ### A full arrangement
 
 **Suggest parts... › Full** proposes a song laid out as a producer would:

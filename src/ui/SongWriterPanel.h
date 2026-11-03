@@ -97,6 +97,10 @@ public:
         owner's A/B test of it against a higher reasoning level). */
     void setRulesFinding (bool on) { rulesFinding = on; }
     bool getRulesFinding() const noexcept { return rulesFinding; }
+    /** How far the song may move from the references, for both writers: "close", "balanced" (the default) or
+        "adventurous" (ai.v1.song.write's and ai.v1.song.compose's `variety`). Remembered. */
+    void setVariety (const juce::String& chosen);
+    juce::String getVariety() const;
     /** How many times what Spinus hears goes back to the AI (0 to 3; 1 by default). */
     void setRounds (int rounds);
     int getRounds() const { return roundsBox.getSelectedId() - 1; }
@@ -179,6 +183,8 @@ private:
     juce::ToggleButton refineButton { "Let the AI vary the plan (uses your AI connection)" };
     juce::Label writerLabel { {}, "Who writes the notes:" };
     juce::ComboBox writerBox, effortBox, roundsBox;
+    juce::Label varietyLabel { {}, "Variety:" };
+    juce::ComboBox varietyBox;
     juce::Label infoLabel;
     juce::Label depthLabel { {}, "AI tools:" }, depthNote;
     juce::ComboBox depthBox;

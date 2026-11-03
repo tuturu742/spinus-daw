@@ -348,6 +348,7 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     panel.setEffort ("high");
     CHECK (panel.getEffort() == "high");
     CHECK (panel.getRounds() == 1);
+    panel.setVariety ("adventurous"); // sent with the AI writer's request too
 
     const auto before = session.getProject();
     REQUIRE (panel.write());
@@ -372,9 +373,58 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     REQUIRE (verseBars > 0);
     CHECK (song["layerParts"]["drums"]["verse"].size() == 4 * verseBars);
     CHECK (song["layerParts"]["lead"].isObject());
+    CHECK (song["variety"].toString() == "adventurous");
+    CHECK (panel.getText().contains ("Variety: adventurous"));
     CHECK (session.getProject() == before); // nothing before Apply
     REQUIRE (panel.apply());
     CHECK (session.getHistory().getUndoDescriptions().size() == 1);
+}
+
+TEST_CASE ("Track creator: the variety goes with Spinus's own writer and is remembered", "[ui][trackcreator][song]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    TempFolder t;
+    EngineHost host { { .openAudioDevice = false } };
+    Session session { host.getEngine(), makeDevices (host.getEngine()) };
+    auto& settings = session.getEdit().engine.getPropertyStorage().getPropertiesFile();
+    settings.removeValue ("trackCreatorVariety");
+    ai::AiService service { t.root, t.root.getChildFile ("models") };
+    service.setEnabled (true);
+    SongWriterPanel::Context context;
+    context.summary = testSummary();
+    context.service = &service;
+    context.workFolder = t.root.getChildFile ("song");
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        panel.setSize (700, 560);
+        panel.setSeed (11);
+        CHECK (panel.getVariety() == "balanced"); // the default: as Spinus always wrote
+        panel.setVariety ("close");
+        CHECK (panel.getVariety() == "close");
+        REQUIRE (panel.write());
+        REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+        INFO (panel.getStatusText());
+        CHECK (panel.getSong()["variety"].toString() == "close");
+        CHECK (panel.getText().contains ("Variety: close to my references"));
+        panel.setVariety ("nonsense");
+        CHECK (panel.getVariety() == "balanced");
+        REQUIRE (panel.write());
+        REQUIRE (waitFor ([&] { return ! panel.isBusy(); }, 120000));
+        CHECK (panel.getSong()["variety"].toString() == "balanced");
+        CHECK_FALSE (panel.getText().contains ("Variety:"));
+    }
+    // As the user left it: setVariety (from code) is not remembered, the user's choice on the page is.
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        CHECK (panel.getVariety() == "balanced");
+    }
+    settings.setValue ("trackCreatorVariety", "adventurous");
+    {
+        SongWriterPanel panel (session, [&context] { return context; });
+        CHECK (panel.getVariety() == "adventurous");
+    }
+    settings.removeValue ("trackCreatorVariety");
 }
 
 TEST_CASE ("Track creator: how deep the AI may go is a list with a Custom choice, remembered",

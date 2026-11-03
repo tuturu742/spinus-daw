@@ -937,8 +937,10 @@ class Service:
         """A new song in the style of a summary (spinus_ai.songwriter): {summary (ai.v1.style.summarize's
         result), seed, parts (the user's list: [{id, name, role}], roles as songwriter.ROLES), arrangement (without
         parts, what proposes them: "sketch", the default, four; "full", about ten), refine
-        (let the AI vary the plan; default false), song and redo ({part} or {section}):
-        that song with one part or section written anew from the seed} -> the song. Rules only, with no model
+        (let the AI vary the plan; default false), variety (how far its choices may move from the songs':
+        "close", "balanced", the default, or "adventurous"; songwriter.VARIETIES), song and redo ({part} or
+        {section}): that song with one part or section written anew from the seed, with the song's own variety} ->
+        the song. Rules only, with no model
         and no AI connection; with refine and a connection, the AI may vary the plan (checked), the rules still
         write every note, and without one (or when it fails) the rules' song stands, with a note saying so."""
         from . import songwriter
@@ -953,6 +955,10 @@ class Service:
         size = str(params.get("arrangement") or "sketch")
         if size not in songwriter.SIZES:
             raise RpcError(-32602, "arrangement is sketch or full.")
+        try:
+            variety = songwriter.variety_of(params.get("variety"))
+        except ValueError as error:
+            raise RpcError(-32602, str(error)) from error
         parts = params.get("parts")
         if parts is not None:
             try:
@@ -975,7 +981,7 @@ class Service:
                 part, section = redo.get("part"), redo.get("section")
                 return redo_kept(dict(params["song"]), summary, seed,
                                  str(part) if part else None, str(section) if section else None)  # fmt: skip
-            song = songwriter.write(summary, seed, size, parts)
+            song = songwriter.write(summary, seed, size, parts, variety)
             if not params.get("refine"):
                 return song
             try:
@@ -1006,14 +1012,16 @@ class Service:
             raise RpcError(-32602, f"The reasoning level is {', '.join(EFFORTS)}, or none for the model's own.")
         try:
             setup = compose.Setup.make(summary, params.get("parts"), size, params.get("candidates"),
-                                       params.get("current"), params.get("effects"))  # fmt: skip
+                                       params.get("current"), params.get("effects"), params.get("variety"))  # fmt: skip
         except ValueError as error:
             raise RpcError(-32602, str(error)) from error
         return setup, effort
 
     async def song_compose(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song written by the AI, opt-in: {summary, seed, parts, arrangement, candidates (part id -> [{id, name}]:
-        sounds from the sound index it may pick), current (part id -> its sound in words), effort ("low", "medium",
+        sounds from the sound index it may pick), current (part id -> its sound in words), variety ("close",
+        "balanced", the default, or "adventurous": the freedom the brief gives and how closely Spinus's checks hold the
+        song to the references), effort ("low", "medium",
         "high", "xhigh" or none: the model's own), tools (the harness's groups of tools allowed: a depth, basic,
         arrangement, transitions or full, or a list of groups; Basic + arrangement by default), rulesFinding (true:
         check names each melodic or harmonic part the rules wrote, for the model to write itself), way ("harness", the

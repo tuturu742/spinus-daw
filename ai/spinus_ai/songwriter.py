@@ -10,7 +10,8 @@ usable, the rules' song stands.
 What is written, from the summary:
 
 - **Tempo and key**: the songs' median tempo moved by up to 3 % (inside their range); the key of one of
-  the songs of a mode drawn by the modes' shares, its tonic sometimes moved a step.
+  the songs of a mode drawn by the modes' shares, its tonic sometimes moved a step. (These numbers are the
+  "balanced" variety's; "close" and "adventurous" narrow or widen this and the choices below: VARIETIES.)
 - **Sections**: a form of intro, verses, choruses, a bridge and an outro, about as many sections and bars
   as the songs have, each section's length drawn from the songs' section lengths, on 4-bar phrases. Alike
   sections share one pattern (so a chorus is the same chorus each time).
@@ -279,6 +280,111 @@ SHARED_TIMES = 3  # as style.SHARED_TIMES: a loop a song plays this often is tha
 LEAST_SHARE = 0.02  # chords heard in fewer of the songs' bars are left out of the vocabulary
 MOST_BARS = 256
 SECTION_BARS = (4, 32)
+
+
+# ---------------------------------------------------------------------------------------------------
+# Variety: how far the song may move from what the analysis inferred
+
+
+@dataclass(frozen=True)
+class Variety:
+    """How far a song may move from the reference songs' numbers: the rules' seeded choices (narrower or wider)
+    and the AI writer's freedom, with Spinus's checks of its song loosened or tightened to match. "balanced" is
+    the writer as it always was: each of its numbers is the one the rules and checks had before there was a
+    choice."""
+
+    name: str
+    words: str  # as the Track creator's list says it
+    # The rules' choices.
+    tempo_spread: float  # the median tempo moved by up to this share...
+    tempo_beyond: float  # ...inside the songs' range widened by this share at each end (0: inside it)
+    key_move: float  # how often the tonic moves to a nearby key
+    key_steps: tuple[int, ...]  # by how many semitones
+    relative: float  # how often the relative major or minor is taken (when the songs have chords in that mode)
+    mode_power: float  # the modes' shares to this power: above 1 the songs' main mode more often, below it less
+    song_length: tuple[float, float]  # the song's bars against the songs', drawn from this range
+    form_reach: int  # forms this many sections further from the songs' count may be taken as well
+    length_power: float  # the section lengths' counts to this power (as mode_power)
+    wander: float  # how often a chord loop takes a less travelled way
+    loop_heat: float  # above 1, the less likely loops are picked more often; below it, less
+    borrowed: float  # how often a section's loop takes a chord borrowed from the other mode
+    busy: tuple[float, float]  # each part's notes a bar in a section, times a factor from this range
+    # Spinus's checks of the AI's song.
+    tempo_room: float  # the tempo taken as said within the songs' range widened by this share (else moved in)
+    per_bar_room: tuple[float, float]  # a part's notes a bar against the references' found off outside this range
+    song_bars_room: tuple[float, float]  # the song's length against theirs, the same
+    groove_alike: float  # the drums found unlike the references' groove below this
+    outside_key: float  # a part found with more than this share of its notes outside the key
+    own_chords: bool  # chords from outside the references' vocabulary, and a tempo outside their range, found
+
+    def freedom(self, style: Style, scale: str) -> str:
+        """What the AI is told of its freedom in the key's mode `scale` (nothing for balanced: its brief as it
+        always was)."""
+        median, low, high = style.tempo, style.tempo_low, style.tempo_high
+        if self.name == "close":
+            return (
+                "Variety: close to the references. Keep the tempo inside the references' range "
+                f"({low:g}-{high:g} BPM, near {median:g}), use one of their keys, only chords from their vocabulary, "
+                "their kind of form and section lengths, and each part about as busy as theirs. Spinus checks the "
+                "song closely against them."
+            )
+        if self.name == "adventurous":
+            borrowed = [c for c in BORROWED.get(scale, ()) if c not in style.vocabulary(scale).allowed()]
+            return (
+                "Variety: adventurous. Go beyond the references where it makes a better song, still recognisably "
+                f"in their style: a tempo up to about {round(100 * self.tempo_spread)} % from {median:g} BPM, "
+                f"even outside their {low:g}-{high:g}; a nearby key (a step, a fourth or a fifth away, or the "
+                "relative major or minor) and modal colour; chords outside their vocabulary"
+                + (f" (borrowed chords such as {', '.join(borrowed)})" if borrowed else "")
+                + "; a form and section lengths of your own; parts busier or sparser than theirs; and, where the "
+                "tools allow, instruments added or varied. Spinus's checks allow for this."
+            )
+        return ""
+
+
+VARIETIES: dict[str, Variety] = {
+    "close": Variety(
+        "close", "Close to my references",
+        tempo_spread=0.01, tempo_beyond=0.0, key_move=0.0, key_steps=(), relative=0.0, mode_power=2.0,
+        song_length=(0.93, 1.0), form_reach=0, length_power=2.0, wander=0.04, loop_heat=0.6, borrowed=0.0,
+        busy=(1.0, 1.0),
+        tempo_room=0.05, per_bar_room=(0.6, 1.7), song_bars_room=(0.75, 1.3), groove_alike=0.7, outside_key=0.08,
+        own_chords=True,
+    ),
+    "balanced": Variety(
+        "balanced", "Balanced",
+        tempo_spread=0.03, tempo_beyond=0.0, key_move=0.35, key_steps=(-2, -1, 1, 2), relative=0.0, mode_power=1.0,
+        song_length=(0.85, 1.0), form_reach=0, length_power=1.0, wander=0.12, loop_heat=1.0, borrowed=0.0,
+        busy=(1.0, 1.0),
+        tempo_room=0.1, per_bar_room=(0.4, 2.5), song_bars_room=(0.6, 1.5), groove_alike=0.6, outside_key=0.12,
+        own_chords=False,
+    ),
+    "adventurous": Variety(
+        "adventurous", "Adventurous",
+        tempo_spread=0.1, tempo_beyond=0.06, key_move=0.5, key_steps=(-2, -1, 1, 2, 5, 7), relative=0.2,
+        mode_power=0.5, song_length=(0.7, 1.15), form_reach=1, length_power=0.5, wander=0.25, loop_heat=2.0,
+        borrowed=0.35, busy=(0.7, 1.45),
+        tempo_room=0.25, per_bar_room=(0.25, 4.0), song_bars_room=(0.4, 2.0), groove_alike=0.4, outside_key=0.25,
+        own_chords=False,
+    ),
+}  # fmt: skip
+BALANCED = VARIETIES["balanced"]
+VARIETY_PLAIN = {
+    "close": "the narrowest choices: tempo, key, chords and form kept near the references",
+    "adventurous": "wider choices than the references: tempo, key, borrowed chords, form, busier or sparser parts",
+}
+# Chords borrowed from the other mode (modal mixture): what an adventurous loop may take beyond the songs' own.
+BORROWED: dict[str, tuple[str, ...]] = {"major": ("bVII", "bVI", "iv", "bIII"), "minor": ("IV", "V", "bII")}
+
+
+def variety_of(value: Any) -> Variety:
+    """The variety named ("close", "balanced", "adventurous"; none: balanced); ValueError for another."""
+    if value is None or value == "":
+        return BALANCED
+    found = VARIETIES.get(str(value).strip().lower())
+    if found is None:
+        raise ValueError(f"The variety is {', '.join(VARIETIES)}, not '{value}'.")
+    return found
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -668,29 +774,46 @@ def check_parts(parts: Any) -> list[dict[str, str]]:
 
 
 def make_plan(
-    style: Style, seed: int, size: str = "sketch", parts: list[dict[str, str]] | None = None
+    style: Style,
+    seed: int,
+    size: str = "sketch",
+    parts: list[dict[str, str]] | None = None,
+    variety: Variety = BALANCED,
 ) -> dict[str, Any]:
     if size not in SIZES:
         raise ValueError(f"The arrangement is {' or '.join(SIZES)}, not '{size}'.")
     chosen = check_parts(parts) if parts is not None else default_parts(style, size)
     rng = rng_for(seed, "plan")
-    # Tempo: the median moved by up to 3 %, inside the songs' range.
-    low = max(style.tempo_low, style.tempo * 0.97)
-    high = min(style.tempo_high, style.tempo * 1.03)
+    # Tempo: the median moved by up to 3 % (the variety's share), inside the songs' range (adventurous: a little
+    # beyond it).
+    low = max(style.tempo_low * (1 - variety.tempo_beyond), style.tempo * (1 - variety.tempo_spread))
+    high = min(style.tempo_high * (1 + variety.tempo_beyond), style.tempo * (1 + variety.tempo_spread))
     tempo = round(rng.uniform(min(low, high), max(low, high)))
+    if variety.tempo_beyond:
+        tempo = max(40, min(240, tempo))
 
-    mode = weighted(rng, style.modes)
+    modes = style.modes if variety.mode_power == 1.0 else {m: v**variety.mode_power for m, v in style.modes.items()}
+    mode = weighted(rng, modes)
     keys = [k for k in style.keys if k[1] == mode] or [(k[0], mode, k[2]) for k in style.keys]
     tonic = weighted(rng, {k[0]: float(k[2]) for k in keys})
-    if rng.random() < 0.35 and not style.key_fixed:  # a little variation: a step up or down
-        tonic = (tonic + rng.choice((-2, -1, 1, 2))) % 12
+    if rng.random() < variety.key_move and not style.key_fixed:  # a little variation: a step up or down
+        tonic = (tonic + rng.choice(variety.key_steps)) % 12
+    if variety.relative and not style.key_fixed:
+        # The relative major or minor, when the songs have chords of that mode to write it with.
+        other = "major" if mode == "minor" else "minor"
+        if style.vocabularies.get(other) and rng_for(seed, "plan", "relative").random() < variety.relative:
+            tonic, mode = (tonic + (3 if other == "major" else 9)) % 12, other
 
     count = max(5, min(10, round(style.sections_per_song)))
     best = min(abs(len(f) - count) for f in FORMS)
-    form = rng.choice([f for f in FORMS if abs(len(f) - count) == best])
-    target_bars = max(32.0, min(float(MOST_BARS - 16), style.song_bars * rng.uniform(0.85, 1.0)))
+    form = rng.choice([f for f in FORMS if abs(len(f) - count) <= best + variety.form_reach])
+    target_bars = max(32.0, min(float(MOST_BARS - 16), style.song_bars * rng.uniform(*variety.song_length)))
 
-    pool = dict(style.lengths)
+    pool = (
+        dict(style.lengths)
+        if variety.length_power == 1.0
+        else {b: float(n) ** variety.length_power for b, n in style.lengths}
+    )
     lengths = sorted(pool)
 
     def draw(kind: str) -> int:
@@ -764,7 +887,13 @@ def new_seeds(seed: int, plan: dict[str, Any]) -> dict[str, Any]:
 
 
 def make_loop(
-    vocab: Vocabulary, rng: random.Random, kind: str, tonic_chord: str, used: set[tuple[str, ...]], length: int = 4
+    vocab: Vocabulary,
+    rng: random.Random,
+    kind: str,
+    tonic_chord: str,
+    used: set[tuple[str, ...]],
+    length: int = 4,
+    variety: Variety = BALANCED,
 ) -> list[str]:
     """A loop of chords from the vocabulary: likely transitions, coming back round to its first chord. A loop a
     reference song plays as its own is less likely, and never twice in a song (`used`)."""
@@ -789,7 +918,7 @@ def make_loop(
         sequence = [weighted(rng, starts)]
         while len(sequence) < length:
             options = follow(sequence[-1])
-            if rng.random() < 0.12:  # now and then a less travelled way, for new combinations
+            if rng.random() < variety.wander:  # now and then a less travelled way, for new combinations
                 options = {c: w for c, w in counts.items() if c != sequence[-1]}
             sequence.append(weighted(rng, options))
         loop = tuple(sequence)
@@ -807,11 +936,26 @@ def make_loop(
         return list(rng.choice(sorted(used))) if used else [tonic_chord] * length
     best = sorted(candidates.items(), key=lambda kv: -kv[1])[:8]
     top = best[0][1]
-    return list(weighted(rng, {loop: math.exp(score - top) for loop, score in best}))
+    return list(weighted(rng, {loop: math.exp((score - top) / variety.loop_heat) for loop, score in best}))
+
+
+def borrow(loop: list[str], scale: str, allowed: list[str], rng: random.Random) -> list[str]:
+    """The loop with one chord (not its first) taken from the other mode: a chord the songs do not play."""
+    options = [c for c in BORROWED.get(scale, ()) if c not in allowed and c not in loop]
+    if not options or len(loop) < 2:
+        return loop
+    out = list(loop)
+    out[rng.randrange(1, len(out))] = rng.choice(options)
+    return out
 
 
 def section_chords(
-    style: Style, plan: dict[str, Any], section: dict[str, Any], seeds: dict[str, Any], used: set[tuple[str, ...]]
+    style: Style,
+    plan: dict[str, Any],
+    section: dict[str, Any],
+    seeds: dict[str, Any],
+    used: set[tuple[str, ...]],
+    variety: Variety = BALANCED,
 ) -> list[dict[str, Any]]:
     """One chord per bar of the section: {bar, roman, name, tones}."""
     key = plan["key"]
@@ -822,7 +966,11 @@ def section_chords(
         loop = [str(c) for c in given]
     else:
         rng = rng_for(seeds["sections"][section["id"]], "chords")
-        loop = make_loop(vocab, rng, base_kind(section["kind"]), tonic_chord, used)
+        loop = make_loop(vocab, rng, base_kind(section["kind"]), tonic_chord, used, variety=variety)
+        if variety.borrowed:
+            chance = rng_for(seeds["sections"][section["id"]], "borrowed")
+            if chance.random() < variety.borrowed:
+                loop = borrow(loop, str(key["scale"]), vocab.allowed(), chance)
     own = rotation_key(tuple(loop))
     if own in vocab.own_loops:
         used.update(vocab.own_loops)  # one reference loop at most: no other section takes one
@@ -858,6 +1006,7 @@ class Context:
     rng: random.Random
     last: bool  # the song's last section
     playing_share: dict[str, float]  # each part's bars played over the song's bars
+    busy: float = 1.0  # the part's notes a bar in this section times this (the variety's)
 
     @property
     def bars(self) -> int:
@@ -1015,7 +1164,7 @@ def density(ctx: Context, part: str, scale: float = 1.0) -> float:
     """Notes a bar while the part plays, so that over the whole song it comes to the songs' notes a bar."""
     style = ctx.style.parts[SUMMARY_PART[part]]
     share = max(0.4, ctx.playing_share.get(part, 1.0))
-    return style.per_bar / share * scale
+    return style.per_bar / share * scale * ctx.busy
 
 
 def nearest_octave(pitch_class: int, centre: float, low: int, high: int) -> int:
@@ -1992,9 +2141,10 @@ def build(
     keep: dict[str, Any] | None = None,
     redo_part: str | None = None,
     redo_section: str | None = None,
+    variety: Variety = BALANCED,
 ) -> dict[str, Any]:
     """The song from its plan and seeds. With `keep` (an earlier song) and a part or section to redo, every
-    other part and section is taken as it was."""
+    other part and section is taken as it was. `variety`: how far the rules' choices may move from the songs'."""
     used: set[tuple[str, ...]] = set()
     shares = playing_shares(plan)
     sections = []
@@ -2015,7 +2165,7 @@ def build(
     # Sections being written anew take their chords after the kept ones (which they must not copy).
     for index, (section, chords) in enumerate(sections):
         if not chords:
-            sections[index] = (section, section_chords(style, plan, section, seeds, used))
+            sections[index] = (section, section_chords(style, plan, section, seeds, used, variety))
 
     out_sections = []
     for section, chords in sections:
@@ -2039,6 +2189,10 @@ def build(
             ctx = Context(
                 style, plan, {**section, "energy": ENERGY[str(section["kind"])]}, chords, rng, sid == last_id, shares
             )
+            if variety.busy != (1.0, 1.0):
+                # Busier or sparser than the songs, by part and section (a chance of its own: the notes stay seeded).
+                busy = rng_for(seeds["parts"][part], seeds["sections"][sid], part, sid, "busy")
+                ctx.busy = busy.uniform(*variety.busy)
             parts[part] = WRITERS[part](ctx)
         for part in PARTS:
             patterns.setdefault(part, {})[sid] = parts[part]
@@ -2081,19 +2235,26 @@ def build(
         "refinedBy": "",
         "note": "",
         "size": str(plan.get("size", "sketch")),
+        "variety": variety.name,
     }
     song["layers"], song["layerParts"], song["fx"] = make_layers(style, plan, seeds, out_sections, patterns)
     return song
 
 
 def write(
-    summary: dict[str, Any], seed: int, size: str = "sketch", parts: list[dict[str, str]] | None = None
+    summary: dict[str, Any],
+    seed: int,
+    size: str = "sketch",
+    parts: list[dict[str, str]] | None = None,
+    variety: Variety | str = BALANCED,
 ) -> dict[str, Any]:
     """A new song in the summary's style, the same for the same seed. Rules only. `parts`: the user's list
-    ({id, name, role}); without one, `size` proposes it: "sketch" (four parts) or "full" (about ten)."""
+    ({id, name, role}); without one, `size` proposes it: "sketch" (four parts) or "full" (about ten). `variety`
+    (VARIETIES): how far its choices may move from the songs' numbers, "balanced" by default."""
+    chosen = variety if isinstance(variety, Variety) else variety_of(variety)
     style = Style.from_summary(summary)
-    plan = make_plan(style, seed, size, parts)
-    song = build(style, plan, new_seeds(seed, plan))
+    plan = make_plan(style, seed, size, parts, chosen)
+    song = build(style, plan, new_seeds(seed, plan), variety=chosen)
     return finish(song, summary, style)
 
 
@@ -2101,8 +2262,9 @@ def redo(
     song: dict[str, Any], summary: dict[str, Any], seed: int, part: str | None = None, section: str | None = None
 ) -> dict[str, Any]:
     """The song with one part (in every section) or one section (every part, and its chords) written anew from
-    `seed`; the rest as it was."""
+    `seed`; the rest as it was (with the song's variety)."""
     check_song(song)
+    variety = song_variety(song)
     style = Style.from_summary(summary)
     plan = json.loads(json.dumps(song["plan"]))
     seeds = json.loads(json.dumps(song["seeds"]))
@@ -2118,7 +2280,7 @@ def redo(
             part = layer["role"]
         elif layer is not None:
             seeds.setdefault("layers", {})[part] = mix_seed(seed, "layer", part)
-            again = build(style, plan, seeds, keep=song)
+            again = build(style, plan, seeds, keep=song, variety=variety)
             again["refinedBy"] = song.get("refinedBy", "")
             return finish(again, summary, style)
         if part not in PARTS:
@@ -2132,9 +2294,14 @@ def redo(
         seeds["sections"][section] = mix_seed(seed, "section", section)
     if part is None and section is None:
         raise ValueError("Say which part or section to write again.")
-    again = build(style, plan, seeds, keep=song, redo_part=part, redo_section=section)
+    again = build(style, plan, seeds, keep=song, redo_part=part, redo_section=section, variety=variety)
     again["refinedBy"] = song.get("refinedBy", "")
     return finish(again, summary, style)
+
+
+def song_variety(song: dict[str, Any]) -> Variety:
+    """The variety a song was written with (balanced for one written before there was a choice)."""
+    return VARIETIES.get(str(song.get("variety") or ""), BALANCED)
 
 
 def check_song(song: Any) -> None:
@@ -2321,6 +2488,9 @@ def describe(song: dict[str, Any]) -> list[str]:
             + ", ".join(str(layer["name"]) for layer in song["layers"])
             + ". Thin verses, full choruses."
         )
+    variety = song_variety(song)
+    if variety is not BALANCED:
+        lines.append(f"Variety: {variety.words.lower()} ({VARIETY_PLAIN[variety.name]}).")
     if song.get("refinedBy"):
         lines.append(f"Varied by the AI ({song['refinedBy']}); every note written by the rules.")
     if song.get("note"):
@@ -2375,8 +2545,10 @@ REFINE_SONG = Tool(
 
 def describe_for_ai(style: Style, song: dict[str, Any]) -> str:
     vocab = style.vocabulary(str(song["key"]["scale"]))
+    freedom = song_variety(song).freedom(style, str(song["key"]["scale"]))
     return json.dumps(
         {
+            **({"variety": freedom} if freedom else {}),
             "style": {
                 "tempo": style.tempo,
                 "sectionLengths": [{"bars": b, "count": n} for b, n in style.lengths],
@@ -2414,6 +2586,10 @@ def check_refinement(answer: Any, style: Style, song: dict[str, Any]) -> tuple[d
     plan = json.loads(json.dumps(song["plan"]))
     vocab = style.vocabulary(str(plan["key"]["scale"]))
     allowed = set(vocab.allowed())
+    variety = song_variety(song)
+    if variety.borrowed:  # adventurous: chords borrowed from the other mode too
+        allowed |= set(BORROWED.get(str(plan["key"]["scale"]), ()))
+    lengths = {b for b, _ in style.lengths}
     taken: list[str] = []
 
     sections = answer.get("sections")
@@ -2427,6 +2603,9 @@ def check_refinement(answer: Any, style: Style, song: dict[str, Any]) -> tuple[d
                 break
             kind, length = str(s["kind"]), int(s["bars"])
             if length % 4 or not SECTION_BARS[0] <= length <= SECTION_BARS[1]:
+                ok = False
+                break
+            if variety.own_chords and length not in lengths:  # close: only the songs' own section lengths
                 ok = False
                 break
             bars.setdefault(kind, length)  # one length per kind (one pattern)
@@ -2507,7 +2686,7 @@ async def refine(
         seeds = json.loads(json.dumps(song["seeds"]))
         for s in plan["sections"]:
             seeds["sections"].setdefault(s["id"], mix_seed(seeds["song"], "section", s["id"]))
-        varied = build(style, plan, seeds)
+        varied = build(style, plan, seeds, variety=song_variety(song))
         varied["refinedBy"] = answered_by(completion.model, failed)
         varied["note"] = "The AI changed " + "; ".join(taken) + "."
         return finish(varied, summary, style)
