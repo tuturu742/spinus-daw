@@ -245,6 +245,14 @@ TEST_CASE ("Command line: a script's song is saved, checked and rendered with so
     INFO (said.back());
     CHECK (opus.existsAsFile());
     CHECK (lossy["mix"].hasProperty ("unencodedTruePeakDb"));
+
+    // Again over the same file: replaced, not the old song followed by the new (it once appended).
+    said.clear();
+    REQUIRE (cli::render (f.session, document.getFolder().getChildFile ("audio"), opus, {}, 1.0,
+                          [&] (const juce::String& line) { said.push_back (line); }) == 0);
+    const auto again = juce::JSON::parse (said.back());
+    INFO (said.back());
+    CHECK (std::abs ((double)again["mix"]["seconds"] - (double)lossy["mix"]["seconds"]) < 0.1);
 }
 
 TEST_CASE ("Command line: --help and unknown options are told apart from projects", "[cli]")
