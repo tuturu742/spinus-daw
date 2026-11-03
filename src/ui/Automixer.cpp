@@ -495,9 +495,20 @@ ai::Proposal Automixer::makeProposal()
                          { "Release", number ((double)json["release"]) + " ms" },
                          { "Makeup", number ((double)json["makeup"]) + " dB" } });
         else if (kind == "limiter")
+        {
+            // The master's fader comes after its effects, and the plan's gain is from the mix as it is heard
+            // (after the fader): a fader away from 0 dB moved the limited mix off the loudness and its peaks past
+            // the ceiling (+0.6 dB peaked over 0 dB). The fader goes to 0 dB; the limiter's input makes up for it.
+            auto gain = (double)json["gain"];
+            if (insertId == model::masterInsertId && std::abs (insert->volumeDb) > 0.01)
+            {
+                gain += insert->volumeDb;
+                step ("insert.set", object ({ { "insert", (int)insertId.value }, { "volumeDb", 0.0 } }));
+            }
             addEffect (insertId, "spinus.limiter",
-                       { { "Input gain", number ((double)json["gain"]) + " dB" },
+                       { { "Input gain", number (gain) + " dB" },
                          { "Ceiling", number ((double)json["threshold"]) + " dB" } });
+        }
         else
             --count;
     }

@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Automixer: the loudness target with the master fader moved
+
+- **Fixed:** with the master fader away from 0 dB, the loudness step missed its target and could push the
+  peaks past the limiter's ceiling (the fader comes after the limiter). Now that step sets the master fader to
+  0 dB and gives the limiter the difference.
+
 ### Coding agents and scripts: any plugin's presets
 
 - **`device.loadPreset` loads a preset on any plugin** by its name, not only on 3x Osc: its programs, the presets
