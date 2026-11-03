@@ -538,6 +538,10 @@ find](images/track-creator-ai-writer.png)
 composes the whole song: the form, the chords, every part's notes, and a sound for each part you didn't
 choose yourself in step 3 (from a few that fit in your sound index). Your own choices in step 3 always win.
 
+While Spinus is still checking your connection, it says **(checking...)**, and Write waits until it knows. If
+the connection doesn't work, Spinus switches back to **Spinus (offline)** and says so. A song is never written
+by Spinus's own rules while the box shows your AI connection.
+
 It works like a programmer with tools, which Spinus calls the **music harness**. The song is a working copy
 kept on your computer; the AI never sends it whole. It reads the brief (your style and your parts), looks at
 the form, writes each part (a loop once, repeated), names a riff and places it again, copies a section that

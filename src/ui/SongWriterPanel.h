@@ -135,6 +135,10 @@ public:
     void visibilityChanged() override;
 
 private:
+    /** If the AI connection is chosen but turns out not to work, choose Spinus (offline) and say so. */
+    void fallBackToOffline();
+    /** Renames the AI connection item, keeping it chosen if it was. */
+    void renameAiChoice (const juce::String& itemText);
     void run (const juce::var& params, const juce::String& words, std::function<void (const juce::var&)> then,
               const juce::String& method = "ai.v1.song.write");
     /** The AI writer's request: the summary, the parts, the candidate sounds, the reasoning level. */
@@ -197,6 +201,7 @@ private:
     bool effectSettingsOff = false; // Apply's second try: the AI's effects without their settings
     juce::TextButton stopNowButton { "Stop now, keep the best" };
     bool aiAvailable = false, composing = false, stopRequested = false;
+    bool connectionChecked = false; // the last check of the AI connection has answered
     int roundsLeft = 0;
     juce::String connectionName;
     juce::var composeRequest; // the AI writer's request, for its revision rounds

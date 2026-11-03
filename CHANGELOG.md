@@ -9,6 +9,17 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - **Fixed:** `spinus --render` to an Opus, FLAC or MP3 file that was already there wrote the new song after the
   old one (the file got twice as long). Now it replaces the file, as a WAV already did.
+### Track creator: the writer you see is the writer that writes
+
+- **Fixed:** with Your AI connection chosen, Spinus could write the song with its own rules after it checked the
+  connection again (the choice was quietly lost while the box still showed it). Now the choice stays, Write
+  waits while the connection is being checked, and a connection that doesn't work switches the box back to
+  Spinus (offline) with a note.
+### Automixer: the loudness target with the master fader moved
+
+- **Fixed:** with the master fader away from 0 dB, the loudness step missed its target and could push the
+  peaks past the limiter's ceiling (the fader comes after the limiter). Now that step sets the master fader to
+  0 dB and gives the limiter the difference.
 ### Track creator: Variety
 
 - **Variety on Write a song:** choose **Close to my references**, **Balanced** (the default, the same as before)

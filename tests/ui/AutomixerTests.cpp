@@ -97,6 +97,10 @@ TEST_CASE ("Automixer: measures, plans with reasons, applies as one undo step, c
             writer->writeFromAudioSampleBuffer (noise, 0, noise.getNumSamples());
         }
         automixer.setReference (referenceFile);
+        // The master's fader up 3 dB: it comes after the limiter, so the limiter's input makes up for it and the
+        // fader goes to 0 dB (a fader left up once pushed the limited mix past its ceiling).
+        perform (session, "insert.set",
+                 R"({"insert": )" + juce::String ((int)model::masterInsertId.value) + R"(, "volumeDb": 3.0})");
         REQUIRE (automixer.analyze (Automixer::Target::streaming));
         REQUIRE (waitFor ([&] { return ! automixer.isBusy(); }, 120000));
         INFO (automixer.getStatusText());
@@ -123,8 +127,9 @@ TEST_CASE ("Automixer: measures, plans with reasons, applies as one undo step, c
         auto proposal = automixer.makeProposal();
         INFO (proposal.error);
         REQUIRE (proposal.canApply());
-        CHECK (std::none_of (proposal.steps.begin(), proposal.steps.end(),
-                             [] (auto& s) { return s.command == "insert.set"; }));
+        // The one insert.set: the master's fader to 0 dB, for the limiter.
+        CHECK (std::count_if (proposal.steps.begin(), proposal.steps.end(),
+                              [] (auto& s) { return s.command == "insert.set"; }) == 1);
 
         const auto steps = session.getHistory().getUndoDescriptions().size();
         REQUIRE (automixer.apply());
@@ -138,6 +143,7 @@ TEST_CASE ("Automixer: measures, plans with reasons, applies as one undo step, c
         CHECK (masterEffects.back().device.stockType == "spinus.limiter");
         CHECK (masterEffects.front().device.stockType == "spinus.eq"); // the tone before the limiter
         CHECK (masterEffects.back().device.parameters.size() == 2);
+        CHECK (juce::approximatelyEqual (session.getProject().mixer.master.volumeDb, 0.0f));
         const auto eqs =
             std::count_if (session.getProject().mixer.inserts.begin(), session.getProject().mixer.inserts.end(),
                            [] (auto& insert)
