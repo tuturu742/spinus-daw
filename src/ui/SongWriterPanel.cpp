@@ -1040,13 +1040,13 @@ void SongWriterPanel::refreshConnection()
         });
 }
 
-void SongWriterPanel::renameAiChoice (const juce::String& text)
+void SongWriterPanel::renameAiChoice (const juce::String& itemText)
 {
     // A ComboBox reports no selection once the chosen item's text changes under it (its label still shows the old
     // text), so isAiWriter() turned false and Spinus's rules wrote while the box showed the AI connection: choose
     // the item again so the label and the choice agree.
     const bool chosen = writerBox.getSelectedId() == 2;
-    writerBox.changeItemText (2, text);
+    writerBox.changeItemText (2, itemText);
     if (chosen)
         writerBox.setSelectedId (2, juce::dontSendNotification);
 }

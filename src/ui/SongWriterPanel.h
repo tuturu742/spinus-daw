@@ -134,7 +134,7 @@ private:
     /** If the AI connection is chosen but turns out not to work, choose Spinus (offline) and say so. */
     void fallBackToOffline();
     /** Renames the AI connection item, keeping it chosen if it was. */
-    void renameAiChoice (const juce::String& text);
+    void renameAiChoice (const juce::String& itemText);
     void run (const juce::var& params, const juce::String& words, std::function<void (const juce::var&)> then,
               const juce::String& method = "ai.v1.song.write");
     /** The AI writer's request: the summary, the parts, the candidate sounds, the reasoning level. */
