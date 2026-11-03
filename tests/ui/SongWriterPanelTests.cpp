@@ -316,9 +316,16 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     panel.setSize (900, 600);
     panel.setSeed (3);
 
-    // Without a connection the AI can't be chosen, and Spinus writes as before.
+    // While the connection is still being checked, the AI can be chosen but Write waits: Spinus's rules never
+    // write while the box names the AI connection (a song would look AI-written).
     panel.refreshConnection();
-    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("Options > AI"); }));
+    panel.setAiWriter (true);
+    CHECK_FALSE (panel.write());
+    CHECK (panel.getStatusText().contains ("Still checking your AI connection"));
+    CHECK_FALSE (panel.isComposing());
+    // Without a connection: the choice falls back to Spinus (offline), and says so; it can't be chosen again.
+    REQUIRE (waitFor ([&] { return panel.getStatusText().contains ("Spinus (offline) is chosen"); }));
+    CHECK (panel.getInfoText().contains ("Options > AI"));
     panel.setAiWriter (true);
     CHECK_FALSE (panel.isAiWriter());
 
@@ -343,6 +350,12 @@ TEST_CASE ("Track creator: the AI connection composes the song with the harness'
     CHECK_FALSE (panel.getInfoText().contains ("About"));
     panel.setAiWriter (true);
     REQUIRE (panel.isAiWriter());
+    // Checking the connection again renames the choice: it stays chosen (it once read as no choice, and Spinus's
+    // rules wrote while the box showed the AI connection).
+    panel.refreshConnection();
+    CHECK (panel.isAiWriter());
+    REQUIRE (waitFor ([&] { return panel.getInfoText().contains ("My local model"); }));
+    CHECK (panel.isAiWriter());
     panel.setEffort ("xhigh"); // where the model offers it
     CHECK (panel.getEffort() == "xhigh");
     panel.setEffort ("high");
