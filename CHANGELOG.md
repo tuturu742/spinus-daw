@@ -15,6 +15,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   connection again (the choice was quietly lost while the box still showed it). Now the choice stays, Write
   waits while the connection is being checked, and a connection that doesn't work switches the box back to
   Spinus (offline) with a note.
+### Automixer: the loudness target with the master fader moved
+
+- **Fixed:** with the master fader away from 0 dB, the loudness step missed its target and could push the
+  peaks past the limiter's ceiling (the fader comes after the limiter). Now that step sets the master fader to
+  0 dB and gives the limiter the difference.
 
 ### Coding agents and scripts: any plugin's presets
 
