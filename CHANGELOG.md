@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Command line: rendering over an earlier file
+
+- **Fixed:** `spinus --render` to an Opus, FLAC or MP3 file that was already there wrote the new song after the
+  old one (the file got twice as long). Now it replaces the file, as a WAV already did.
+
 ### Coding agents and scripts: any plugin's presets
 
 - **`device.loadPreset` loads a preset on any plugin** by its name, not only on 3x Osc: its programs, the presets
