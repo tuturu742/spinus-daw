@@ -64,6 +64,11 @@ def test_a_described_song_is_understood_as_written() -> None:
         ("afrobeats", "afrobeats", (95, 116), None),
         ("hyperpop", "hyperpop", (140, 180), None),
         ("doom metal", "doom", (50, 80), "minor"),
+        ("gothic rock like the Sisters of Mercy", "gothrock", (115, 155), "minor"),
+        ("a dark goth rock song", "gothrock", (115, 155), "minor"),
+        ("melancholic gothic metal", "gothmetal", (70, 120), "minor"),
+        ("goth metal with a female voice", "gothmetal", (70, 120), "minor"),
+        ("epic symphonic metal", "symphmetal", (100, 165), "minor"),
     ],
 )
 def test_genres_and_moods_from_short_phrases(
@@ -505,6 +510,83 @@ def test_a_beat_and_drums_are_one_drums_part() -> None:
 )
 def test_a_genres_adjective_names_it(text: str, genre: str) -> None:
     assert describe.read(text).genre == genre
+
+
+@pytest.mark.parametrize(
+    ("text", "genre"),
+    [
+        ("gothic rock", "gothrock"),
+        ("goth rock", "gothrock"),
+        ("goth", "gothrock"),
+        ("something gothic", "gothrock"),
+        ("deathrock", "gothrock"),
+        ("gothic metal", "gothmetal"),  # not metal: the longer name wins
+        ("goth metal", "gothmetal"),
+        ("gothic doom metal", "gothmetal"),  # not doom metal
+        ("symphonic metal", "symphmetal"),  # not cinematic ("symphonic") or metal
+        ("symphonic gothic metal", "symphmetal"),
+        ("orchestral metal", "symphmetal"),
+        ("power metal", "powermetal"),
+        ("post-punk", "postpunk"),
+        ("darkwave", "darkwave"),
+        ("gothic darkwave", "darkwave"),  # "gothic" is an adjective: another genre named wins
+        ("goth synthpop", "synthpop"),
+        ("heavy metal", "metal"),
+        ("symphonic", "cinematic"),
+    ],
+)
+def test_gothic_and_symphonic_names_find_their_genre(text: str, genre: str) -> None:
+    assert describe.read(text).genre == genre
+
+
+def test_gothic_rock_gothic_metal_and_symphonic_metal_play_as_they_do() -> None:
+    goth = describe.describe("gothic rock like the Sisters of Mercy")
+    assert goth["described"]["suggested"] == ["drums", "bass", "clean-guitar", "rhythm-guitar", "pad", "lead"]
+    assert goth["drums"]["doubleKick"] is False and goth["parts"]["bass"]["notesPerBar"] == 8.0  # a driving bass
+    assert goth["parts"]["vocals"]["median"] < 60  # a low, baritone lead
+    assert not songwriter.is_heavy(songwriter.Style.from_summary(goth))  # ringing guitars, no chugs
+
+    gothic_metal = describe.describe("gothic metal")
+    assert gothic_metal["described"]["suggested"] == [
+        "drums",
+        "bass",
+        "rhythm-guitar",
+        "rhythm-guitar",
+        "lead-guitar",
+        "piano",
+        "strings",
+        "organ",
+    ]
+    assert gothic_metal["tempo"]["median"] < describe.describe("heavy metal")["tempo"]["median"]  # slower
+    assert gothic_metal["modes"]["minor"] >= 0.95
+    assert gothic_metal["chords"]["barsPerChord"] == 2.0
+
+    symphonic = describe.describe("symphonic metal")
+    assert symphonic["described"]["suggested"] == [
+        "drums",
+        "bass",
+        "rhythm-guitar",
+        "rhythm-guitar",
+        "lead-guitar",
+        "strings",
+        "choir",
+        "brass",
+        "piano",
+    ]
+    assert symphonic["drums"]["doubleKick"] is True
+    assert symphonic["described"]["sounds"]["pad"] == "string"
+
+    # Each writes its suggested parts in its style, every harmonic note on the chord.
+    for summary in (goth, gothic_metal, symphonic):
+        roles = summary["described"]["suggested"]
+        parts = [{"id": f"{r}-{i}", "name": r, "role": r} for i, r in enumerate(roles)]
+        song = songwriter.write(summary, 4, parts=parts)
+        assert [layer["id"] for layer in song["layers"]] == [p["id"] for p in parts]
+        assert song["checks"]["notesFitChords"] >= 0.95
+        assert all(any(notes for notes in song["layerParts"][p["id"]].values()) for p in parts)
+    bar_ticks = song["barTicks"]
+    kicks = [n for n in song["layerParts"]["drums-0"]["chorus"] if n["drum"] == "kick" and n["start"] < bar_ticks]
+    assert len(kicks) >= 12  # symphonic metal's double kick in the choruses
 
 
 def test_a_mode_alone_changes_the_references_mode_but_keeps_their_key() -> None:
