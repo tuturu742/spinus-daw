@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Command line: rendering over an earlier file
+
+- **Fixed:** `spinus --render` to an Opus, FLAC or MP3 file that was already there wrote the new song after the
+  old one (the file got twice as long). Now it replaces the file, as a WAV already did.
 ### Track creator: the writer you see is the writer that writes
 
 - **Fixed:** with Your AI connection chosen, Spinus could write the song with its own rules after it checked the
