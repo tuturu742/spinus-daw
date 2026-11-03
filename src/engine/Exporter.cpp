@@ -570,6 +570,10 @@ juce::String encodeMp3 (const juce::File& wavFile, const juce::File& mp3File, in
 juce::String ExportJob::encodeFile (const juce::File& wav, const juce::File& target, const ExportSettings& settings,
                                     const ProjectSettings& song)
 {
+    // The encoders write through a FileOutputStream, which appends to a file that is there: a render over an
+    // earlier one became the old song followed by the new.
+    if (target.existsAsFile() && ! target.deleteFile())
+        return "Could not replace " + target.getFullPathName() + ".";
     std::unordered_map<juce::String, juce::String> metadata;
     using F = ExportSettings::Format;
     switch (settings.format)
