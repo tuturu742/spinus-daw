@@ -1022,7 +1022,7 @@ void SongWriterPanel::refreshConnection()
             aiAvailable = error.isEmpty() && (bool)result["available"];
             connectionName = result["connection"].toString();
             renameAiChoice (aiAvailable ? "Your AI connection (" + connectionName + ")"
-                                                     : "Your AI connection (none set up: Options > AI)");
+                                        : "Your AI connection (none set up: Options > AI)");
             writerBox.setItemEnabled (2, aiAvailable);
             connectionChecked = true;
             if (! aiAvailable)
