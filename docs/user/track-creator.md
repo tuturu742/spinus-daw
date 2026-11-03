@@ -176,7 +176,7 @@ If something is missing or wrong, change the words and **Read** again. What it u
 
 | You write | What it does |
 |---|---|
-| A **genre**, by any of its usual names: pop, indie pop, K-pop, J-pop, city pop, hyperpop, synthpop, new wave, synthwave, darksynth, darkwave, coldwave, post-punk, dream pop, shoegaze, chillwave, vaporwave, rock, indie rock, punk, pop punk, emo, metal, thrash, doom, power metal, black metal, DSBM, EDM, house, disco, nu-disco, techno, trance, hardstyle, drum and bass, jungle, breakbeat, UK garage, dubstep, future bass, hip hop (boom bap), trap, phonk, lo-fi hip hop, trip-hop, downtempo, reggae, dub, ska, reggaeton, latin, bossa nova, afrobeats, funk, soul, R&B, gospel, jazz, blues, folk, country, bluegrass, cinematic (orchestral), chiptune (video game music), ambient... Adjectives count too: funky, jazzy, bluesy, punky, poppy, rocky, dubby, soulful, folky ("funky disco" is still disco). | That genre's usual tempo, chord loops, drum groove, parts, section lengths, loudness and sound palette (a cold synth palette for darkwave, acoustic guitar for folk...). |
+| A **genre**, by any of its usual names: pop, indie pop, K-pop, J-pop, city pop, hyperpop, synthpop, new wave, synthwave, darksynth, darkwave, coldwave, post-punk, gothic rock (goth, deathrock), dream pop, shoegaze, chillwave, vaporwave, rock, indie rock, punk, pop punk, emo, metal, thrash, gothic metal, symphonic metal, doom, power metal, black metal, DSBM, EDM, house, disco, nu-disco, techno, trance, hardstyle, drum and bass, jungle, breakbeat, UK garage, dubstep, future bass, hip hop (boom bap), trap, phonk, lo-fi hip hop, trip-hop, downtempo, reggae, dub, ska, reggaeton, latin, bossa nova, afrobeats, funk, soul, R&B, gospel, jazz, blues, folk, country, bluegrass, cinematic (orchestral), chiptune (video game music), ambient... Adjectives count too: funky, jazzy, bluesy, punky, poppy, rocky, dubby, soulful, folky, gothic, goth ("funky disco" is still disco, "gothic darkwave" is darkwave). | That genre's usual tempo, chord loops, drum groove, parts, section lengths, loudness and sound palette (a cold synth palette for darkwave, acoustic guitar for folk, chorus-drenched clean guitars and a driving bass for gothic rock, heavy guitars under piano, strings and organ for gothic metal, guitars under strings, choir and brass for symphonic metal...). |
 | No genre Spinus knows | It says "genre: not recognized (using a neutral style)" and leans on your mood words for the tempo and for minor or major. |
 | A **tempo**: "72 BPM", "tempo 90" | That tempo. |
 | A **key**: "D minor", "F#m", "Bb major" | That key. Without one, a usual key of the mode, not always the same. |
@@ -298,7 +298,9 @@ and drums": those three), or empty. Then:
   and **Use as** gives that preset one. Your roles come first wherever roles are used (choosing sounds,
   parts from an instrument), are kept beside the sound index, and stay when the index is updated or deleted.
 - **Suggest parts...** fills the list with the parts a song like this usually has: your genre's (rock: drums,
-  bass, two rhythm guitars and a lead guitar), a **sketch** (drums, bass, chords, lead) or a **full**
+  bass, two rhythm guitars and a lead guitar; gothic rock: drums, bass, a clean guitar, a rhythm guitar, a pad and a
+  lead; gothic metal: the rock band plus piano, strings and organ; symphonic metal: the rock band plus strings,
+  choir, brass and piano), a **sketch** (drums, bass, chords, lead) or a **full**
   arrangement (see [A full arrangement](#a-full-arrangement)).
 - The list beside a part's name changes its **role**; **x** removes it. A new description or a new summary
   of your songs starts the list again; the page says so.

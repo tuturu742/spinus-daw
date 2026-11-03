@@ -75,6 +75,26 @@ FILM_MIN: Loops = [("i", "bVI", "bIII", "bVII"), ("i", "bVI", "iv", "V"), ("i", 
 FILM_MAJ: Loops = [("I", "iii", "IV", "I"), ("I", "V", "vi", "IV"), ("IV", "I", "V", "vi")]
 FUNK_MAJ: Loops = [("I7", "IV7", "I7", "V7"), ("ii7", "V7", "ii7", "V7")]
 FUNK_MIN: Loops = [("i7", "iv7", "i7", "bVII"), ("i7", "i7", "iv7", "bVII")]
+# Gothic rock: a minor chord held over a driving bass, the loops slow to change (two bars a chord).
+GOTH_MIN: Loops = [
+    ("i", "bVI", "bIII", "bVII"),
+    ("i", "i", "bVI", "bVII"),
+    ("i", "bVII", "bVI", "bVII"),
+    ("i", "iv", "i", "bVI"),
+]
+# Gothic and symphonic metal: minor, with the harmonic minor's major V for the tragic turn.
+GOTH_METAL_MIN: Loops = [
+    ("i", "bVI", "bIII", "bVII"),
+    ("i", "iv", "bVI", "V"),
+    ("i", "bVI", "iv", "V"),
+    ("i", "bVII", "bVI", "V"),
+]
+SYMPH_MIN: Loops = [
+    ("i", "bVI", "bIII", "bVII"),
+    ("i", "bVI", "bVII", "i"),
+    ("i", "bVI", "iv", "V"),
+    ("i", "bIII", "bVII", "bVI"),
+]
 
 # Drum lanes.
 FOUR = lane(0, 4, 8, 12)
@@ -140,6 +160,28 @@ FEELS: dict[str, Feel] = {
     "metal": Feel({"minor": DARK_MIN, "major": ROCK_MAJ}, 1.0, lane(0, 2, 8, 10, rest=0.2, also={4: 0.4, 12: 0.4}),
                   BACKBEAT, EIGHTHS, 0.5, (28, 38, 50, 8.0), (40, 52, 64, 12.0, 2.0), (52, 62, 72, 2.0), 18.0,
                   {8: 6, 16: 4}, 8, 128, -8.0, "distorted guitars", {"chords": "guitar"}, guitar_keys=True),
+    # Gothic rock (Sisters of Mercy, Fields of the Nephilim, The Mission, Bauhaus): chorus-drenched clean or lightly
+    # driven guitars, a melodic bass on the eighths, a steady drum machine, dark pads and a low (baritone) lead.
+    "gothrock": Feel({"minor": GOTH_MIN, "major": ROCK_MAJ}, 2.0, lane(0, 8, also={4: 0.4, 12: 0.4, 10: 0.3}),
+                     BACKBEAT, lane(*range(0, 16, 2), rest=0.35), 0.5, (28, 40, 52, 8.0), (48, 62, 76, 8.0, 2.5),
+                     (48, 57, 67, 3.0), 14.0, {8: 8, 16: 3}, 8, 120, -9.0,
+                     "chorus-drenched clean guitars, a melodic driving bass, a steady drum machine and dark pads",
+                     {"chords": "guitar", "pad": "pad"}, guitar_keys=True),
+    # Gothic metal (Type O Negative, Paradise Lost, Theatre of Tragedy, Tiamat, Moonspell): slower and heavier than
+    # metal, power chords on the eighths rather than chugs, a chord every two bars, piano, strings and organ over
+    # them; melancholic, almost always minor.
+    "gothmetal": Feel({"minor": GOTH_METAL_MIN, "major": ROCK_MAJ}, 2.0, lane(0, 8, also={2: 0.3, 10: 0.5}),
+                      BACKBEAT, EIGHTHS, 0.5, (28, 36, 48, 8.0), (40, 52, 67, 6.0, 2.5), (50, 60, 72, 2.0), 14.0,
+                      {8: 6, 16: 4}, 8, 112, -9.0,
+                      "heavy distorted guitars under piano, strings and organ, slow and melancholic",
+                      {"chords": "guitar", "pad": "string"}, guitar_keys=True),
+    # Symphonic metal (Nightwish, Therion, Epica, Within Temptation): metal's guitars and double kick under a full
+    # orchestra (strings, choir, brass) and keyboards, an operatic lead high above.
+    "symphmetal": Feel({"minor": SYMPH_MIN, "major": FILM_MAJ + ROCK_MAJ}, 1.0,
+                       lane(0, 2, 8, 10, rest=0.2, also={4: 0.4, 12: 0.4}), BACKBEAT, EIGHTHS, 0.5,
+                       (28, 38, 50, 8.0), (40, 55, 72, 8.0, 3.0), (57, 67, 79, 2.5), 18.0, {8: 6, 16: 4}, 9, 144,
+                       -8.0, "distorted guitars under a full orchestra: strings, choir and brass, with keyboards",
+                       {"chords": "guitar", "pad": "string", "counter": "brass"}, guitar_keys=True),
     "blast": Feel({"minor": [*DARK_MIN, ("i", "bII", "i", "bVII")], "major": ROCK_MAJ}, 2.0, SIXTEENTHS,
                   lane(2, 6, 10, 14), lane(*range(0, 16, 2), rest=0.3), 0.5, (31, 40, 52, 8.0),
                   (52, 64, 79, 16.0, 2.0), (55, 62, 72, 2.0), 30.0, {16: 6, 8: 4}, 7, 160, -9.0,
@@ -237,6 +279,10 @@ ROCK_BAND = ("drums", "bass", "rhythm-guitar", "rhythm-guitar", "lead-guitar")
 SUGGEST: dict[str, tuple[str, ...]] = {
     "rock": ROCK_BAND, "punk": ROCK_BAND, "metal": ROCK_BAND, "blast": ROCK_BAND,
     "dsbm": ("drums", "bass", "rhythm-guitar", "lead-guitar", "piano"),
+    "gothrock": ("drums", "bass", "clean-guitar", "rhythm-guitar", "pad", "lead"),
+    "gothmetal": ("drums", "bass", "rhythm-guitar", "rhythm-guitar", "lead-guitar", "piano", "strings", "organ"),
+    "symphmetal": ("drums", "bass", "rhythm-guitar", "rhythm-guitar", "lead-guitar", "strings", "choir", "brass",
+                   "piano"),
     "indiepop": ("drums", "bass", "acoustic-guitar", "clean-guitar", "piano", "lead"),
     "folk": ("drums", "bass", "acoustic-guitar", "piano", "lead"),
     "dream": ("drums", "bass", "clean-guitar", "pad", "lead"),
@@ -269,7 +315,7 @@ SUGGEST: dict[str, tuple[str, ...]] = {
 }  # fmt: skip
 for _feel, _parts in SUGGEST.items():
     FEELS[_feel].suggest = _parts
-for _feel in ("metal", "blast"):
+for _feel in ("metal", "blast", "symphmetal"):
     FEELS[_feel].double_kick = True
 
 
@@ -312,8 +358,7 @@ GENRES: tuple[Genre, ...] = (
     G("darkwave", "darkwave", ("darkwave", "dark wave", "minimal wave", "ebm", "electronic body music"), "coldsynth",
       112, (95, 130), 0.9),
     G("coldwave", "coldwave", ("coldwave", "cold wave"), "coldsynth", 120, (100, 140), 0.9),
-    G("postpunk", "post-punk", ("post-punk", "post punk", "postpunk", "gothic rock", "goth rock", "goth"), "coldsynth",
-      138, (115, 160), 0.85),
+    G("postpunk", "post-punk", ("post-punk", "post punk", "postpunk"), "coldsynth", 138, (115, 160), 0.85),
     G("dreampop", "dream pop", ("dream pop", "dream-pop", "dreampop", "ethereal wave"), "dream", 96, (80, 115), 0.5),
     G("shoegaze", "shoegaze", ("shoegaze", "shoegazing", "nu gaze", "blackgaze"), "dream", 112, (90, 130), 0.55),
     G("chillwave", "chillwave", ("chillwave", "glo-fi"), "vapor", 100, (85, 115), 0.4),
@@ -331,8 +376,14 @@ GENRES: tuple[Genre, ...] = (
                          "sludge"), "metal", 120, (90, 160), 0.9),
     G("thrash", "thrash metal", ("thrash", "thrash metal", "speed metal", "death metal", "deathcore", "grindcore"),
       "metal", 180, (150, 220), 0.95),
+    G("gothrock", "gothic rock", ("gothic rock", "goth rock", "goth", "gothic", "deathrock", "death rock",
+                                  "batcave"), "gothrock", 132, (115, 155), 0.85),
+    G("gothmetal", "gothic metal", ("gothic metal", "goth metal", "gothic doom", "gothic doom metal"), "gothmetal",
+      92, (70, 120), 0.95),
+    G("symphmetal", "symphonic metal", ("symphonic metal", "symphonic gothic metal", "orchestral metal",
+                                        "operatic metal", "opera metal"), "symphmetal", 138, (100, 165), 0.85),
     G("doom", "doom metal", ("doom", "doom metal", "funeral doom", "drone metal"), "dsbm", 64, (50, 80), 0.95),
-    G("powermetal", "power metal", ("power metal", "symphonic metal"), "metal", 160, (130, 190), 0.6),
+    G("powermetal", "power metal", ("power metal",), "metal", 160, (130, 190), 0.6),
     G("blackmetal", "black metal", ("black metal", "blackened", "blast beats", "atmospheric black metal"), "blast", 170,
       (140, 200), 0.95),
     G("dsbm", "depressive black metal", ("depressive suicidal black metal", "depressive black metal", "dsbm"), "dsbm",
@@ -423,7 +474,7 @@ MOODS: dict[str, tuple[float, float, float]] = {
     "haunting": (0.95, 1.0, -0.3), "eerie": (0.95, 1.0, -0.3), "lonely": (0.92, 1.0, -0.5),
     "mournful": (0.88, 1.0, -0.5), "moody": (0.97, 0.7, 0.0), "ominous": (0.95, 1.0, 0.0),
     "desperate": (1.0, 1.0, 0.5), "nostalgic": (0.97, 0.3, -0.3), "bittersweet": (0.97, 0.3, -0.3),
-    "mysterious": (0.95, 0.7, -0.3), "tense": (1.0, 0.7, 0.5),
+    "mysterious": (0.95, 0.7, -0.3), "tense": (1.0, 0.7, 0.5), "gothic": (0.97, 1.0, 0.0), "goth": (0.97, 1.0, 0.0),
     "happy": (1.03, -1.0, 0.3), "bright": (1.0, -1.0, 0.0), "uplifting": (1.03, -1.0, 0.5),
     "joyful": (1.03, -1.0, 0.5), "cheerful": (1.03, -1.0, 0.3), "sunny": (1.0, -1.0, 0.3),
     "upbeat": (1.06, -1.0, 0.5), "hopeful": (1.0, -0.7, 0.0), "euphoric": (1.04, -1.0, 1.0),
@@ -556,7 +607,7 @@ def words_in(text: str, words: tuple[str, ...]) -> list[str]:
 
 # A genre's adjective ("funky"): it names the genre unless another genre is named.
 GENRE_ADJECTIVES = ("poppy", "rocky", "rockin", "punky", "dubby", "funky", "soulful", "jazzy", "bluesy", "folky",
-                    "trancey", "trancy", "housey")  # fmt: skip
+                    "trancey", "trancy", "housey", "goth", "gothic")  # fmt: skip
 NEGATIONS = ("no", "not", "without", "never", "nothing", "non", "don't", "dont", "doesn't", "isn't", "aren't")
 # Words that may stand between a negation and what it negates: "not too fast", "no real synth leads".
 HEDGES = ("too", "so", "very", "overly", "really", "real", "any", "a", "an", "the", "much", "super", "that", "use",

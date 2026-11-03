@@ -5,6 +5,17 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: gothic rock, gothic metal and symphonic metal
+
+- **Gothic rock** ("gothic rock", "goth rock", "goth", "deathrock") is its own style now, not post-punk's cold
+  synths: chorus-drenched clean guitars, a driving melodic bass, a steady drum machine, dark pads and a low lead,
+  about 132 BPM, minor. **Suggest parts** gives drums, bass, a clean guitar, a rhythm guitar, a pad and a lead.
+- **Gothic metal** ("gothic metal", "goth metal", "gothic doom") was plain metal: now slower (about 92 BPM),
+  almost always minor, a chord every two bars, with piano, strings and organ over the guitars.
+- **Symphonic metal** ("symphonic metal", "orchestral metal", "operatic metal") was power metal: now metal's
+  guitars and double kick under strings, choir, brass and piano, about 138 BPM, mostly minor.
+- "Gothic" or "goth" beside another genre darkens it ("gothic darkwave" is darkwave, in minor).
+
 ### Command line: rendering over an earlier file
 
 - **Fixed:** `spinus --render` to an Opus, FLAC or MP3 file that was already there wrote the new song after the
