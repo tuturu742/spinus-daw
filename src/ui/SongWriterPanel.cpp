@@ -323,6 +323,16 @@ bool SongWriterPanel::write()
                         juce::dontSendNotification);
         return false;
     }
+    if (writerBox.getSelectedId() == 2 && ! aiAvailable)
+    {
+        // Never write with Spinus's rules while the box says the AI connection: the song would look AI-written.
+        status.setText (connectionChecked
+                            ? "Your AI connection can't write now (see above): choose it again once it works, or "
+                              "choose Spinus (offline)."
+                            : "Still checking your AI connection: Write again in a moment.",
+                        juce::dontSendNotification);
+        return false;
+    }
     const auto seed = fixedSeed >= 0 ? fixedSeed++ : juce::Random::getSystemRandom().nextInt (0x7fffffff);
     if (isAiWriter())
     {
@@ -744,7 +754,8 @@ void SongWriterPanel::stop()
 
 void SongWriterPanel::setAiWriter (bool on)
 {
-    writerBox.setSelectedId (on ? 2 : 1, juce::dontSendNotification);
+    // A connection known not to work can't be chosen; one still being checked can (Write waits for it).
+    writerBox.setSelectedId (on && (aiAvailable || ! connectionChecked) ? 2 : 1, juce::dontSendNotification);
     updateButtons();
 }
 
@@ -992,12 +1003,16 @@ void SongWriterPanel::refreshConnection()
     if (context.service == nullptr || ! context.service->isEnabled())
     {
         aiAvailable = false;
-        writerBox.changeItemText (2, "Your AI connection (turn AI on in Options > AI)");
+        connectionChecked = true;
+        renameAiChoice ("Your AI connection (turn AI on in Options > AI)");
         writerBox.setItemEnabled (2, false);
+        fallBackToOffline();
         infoLabel.setText ("Turn AI on in Options > AI to let your AI connection write.", juce::dontSendNotification);
         updateButtons();
         return;
     }
+    connectionChecked = false;
+    renameAiChoice ("Your AI connection (checking...)");
     context.service->call (
         "ai.v1.song.composer", object ({}),
         [this, a = alive] (const juce::var& result, const juce::String& error)
@@ -1006,9 +1021,12 @@ void SongWriterPanel::refreshConnection()
                 return;
             aiAvailable = error.isEmpty() && (bool)result["available"];
             connectionName = result["connection"].toString();
-            writerBox.changeItemText (2, aiAvailable ? "Your AI connection (" + connectionName + ")"
+            renameAiChoice (aiAvailable ? "Your AI connection (" + connectionName + ")"
                                                      : "Your AI connection (none set up: Options > AI)");
             writerBox.setItemEnabled (2, aiAvailable);
+            connectionChecked = true;
+            if (! aiAvailable)
+                fallBackToOffline();
             infoLabel.setText (
                 aiAvailable ? "Sends the style, your parts and their sounds' names to " + connectionName + " (" +
                                   result["model"].toString() +
@@ -1020,6 +1038,26 @@ void SongWriterPanel::refreshConnection()
                 juce::dontSendNotification);
             updateButtons();
         });
+}
+
+void SongWriterPanel::renameAiChoice (const juce::String& text)
+{
+    // A ComboBox reports no selection once the chosen item's text changes under it (its label still shows the old
+    // text), so isAiWriter() turned false and Spinus's rules wrote while the box showed the AI connection: choose
+    // the item again so the label and the choice agree.
+    const bool chosen = writerBox.getSelectedId() == 2;
+    writerBox.changeItemText (2, text);
+    if (chosen)
+        writerBox.setSelectedId (2, juce::dontSendNotification);
+}
+
+void SongWriterPanel::fallBackToOffline()
+{
+    if (writerBox.getSelectedId() != 2)
+        return;
+    writerBox.setSelectedId (1, juce::dontSendNotification);
+    status.setText ("Your AI connection isn't available, so Spinus (offline) is chosen to write.",
+                    juce::dontSendNotification);
 }
 
 bool SongWriterPanel::mix()

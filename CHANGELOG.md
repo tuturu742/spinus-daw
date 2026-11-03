@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: the writer you see is the writer that writes
+
+- **Fixed:** with Your AI connection chosen, Spinus could write the song with its own rules after it checked the
+  connection again (the choice was quietly lost while the box still showed it). Now the choice stays, Write
+  waits while the connection is being checked, and a connection that doesn't work switches the box back to
+  Spinus (offline) with a note.
+
 ### Coding agents and scripts: any plugin's presets
 
 - **`device.loadPreset` loads a preset on any plugin** by its name, not only on 3x Osc: its programs, the presets
