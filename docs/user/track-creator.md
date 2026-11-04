@@ -301,7 +301,9 @@ and drums": those three), or empty. Then:
   bass, two rhythm guitars and a lead guitar; gothic rock: drums, bass, a clean guitar, a rhythm guitar, a pad and a
   lead; gothic metal: the rock band plus piano, strings and organ; symphonic metal: the rock band plus strings,
   choir, brass and piano), a **sketch** (drums, bass, chords, lead) or a **full**
-  arrangement (see [A full arrangement](#a-full-arrangement)).
+  arrangement (see [A full arrangement](#a-full-arrangement)). When your description names three or more
+  parts ("with drums, bass, a clean guitar and electric piano"), the genre's list is those parts; fewer ("add a
+  guitar") are added to the genre's own.
 - The list beside a part's name changes its **role**; **x** removes it. A new description or a new summary
   of your songs starts the list again; the page says so.
 
