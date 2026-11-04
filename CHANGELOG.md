@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: Suggest parts keeps the instruments you name
+
+- **Suggest parts › For <genre>** gave the genre's usual band and dropped the instruments the description names:
+  "neo-soul with drums, bass, a clean guitar, a lead guitar and electric piano" got soul's piano, organ and brass
+  and no guitar at all. Now, when the description names three or more parts, those are the parts; fewer ("add a
+  guitar") are added to the genre's list.
+
 ### Automixer: the mix reaches the loudness you chose
 
 - With **Streaming (-14 LUFS)** or **Club (-9 LUFS)**, the master's limiter was set from the mix as it was

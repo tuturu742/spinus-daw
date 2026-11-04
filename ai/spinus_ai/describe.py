@@ -748,6 +748,16 @@ def modes_of(reading: Reading) -> dict[str, float]:
     return {m: round(v, 3) for m, v in (("minor", minor), ("major", 1.0 - minor)) if v > 0}
 
 
+def suggested_parts(genre_parts: tuple[str, ...] | list[str], reading: Reading) -> list[str]:
+    """Suggest parts' list: the parts the description names when it names a band (three or more: "with drums,
+    bass, a clean guitar and electric piano"), else the genre's with any part it names added ("add a guitar");
+    never one it leaves out."""
+    named = [str(p["role"]) for p in reading.parts]
+    roles = named if len(set(named)) >= 3 else list(genre_parts) + [r for r in named if r not in genre_parts]
+    return [r for r in roles if not ((r == "drums" and "drums" in reading.without) or
+                                     (r == "lead" and "lead" in reading.without))]  # fmt: skip
+
+
 def understood(reading: Reading, tempo: float, modes: dict[str, float]) -> str:
     """'Understood: 72 BPM, D minor, slow, dark; genre: depressive black metal'."""
     said = [f"{tempo:g} BPM" if reading.tempo else f"about {tempo:g} BPM"]
@@ -849,7 +859,7 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
             "sounds": sounds,
             "named": dict(reading.sounds),
             "parts": [dict(p) for p in reading.parts],
-            "suggested": list(feel.suggest),
+            "suggested": suggested_parts(feel.suggest, reading),
             "palette": feel.palette,
             "readBy": read_by,
         },
@@ -1080,7 +1090,7 @@ def with_references(
         "sounds": {**(feel.sounds if genre is not None else {}), **reading.sounds},
         "named": dict(reading.sounds),
         "parts": [dict(p) for p in reading.parts],
-        "suggested": list(feel.suggest),
+        "suggested": suggested_parts(feel.suggest, reading),
         "palette": feel.palette if genre is not None else "your songs' own",
         "readBy": read_by,
         "references": True,

@@ -675,3 +675,17 @@ def test_the_reference_songs_guitars_are_named_and_read_back_as_parts() -> None:
     assert [p["role"] for p in describe.read(describe.prompt_from(jangle)).parts] == ["drums", "bass", "clean-guitar"]
     few = {**base, "guitars": {"measured": 4, "songs": 1, "distorted": 1, "clean": 0, "lead": 1}}
     assert "guitar" not in describe.prompt_from(few)
+
+
+def test_suggest_parts_keeps_the_parts_a_description_names() -> None:
+    # A band named: those parts (soul's own list has no guitar; the guitars were dropped).
+    named = describe.describe(
+        "Neo-soul with jazzy chords, with drums, bass, a clean guitar, a lead guitar, electric piano and a lead melody"
+    )
+    assert named["described"]["suggested"] == ["drums", "bass", "clean-guitar", "lead-guitar", "piano", "lead"]
+    # One part named: the genre's list with it added.
+    added = describe.describe("soul, add a guitar")["described"]["suggested"]
+    assert added[: len(describe.SUGGEST["soul"])] == list(describe.SUGGEST["soul"])
+    assert added[-1] == "rhythm-guitar"
+    # Nothing named: the genre's own.
+    assert describe.describe("gothic rock")["described"]["suggested"] == list(describe.SUGGEST["gothrock"])
