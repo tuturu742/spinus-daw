@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: "a melodic bass" is an instrument
+
+- A description such as "gothic rock with drums and a melodic bass" was read as future bass, because "melodic
+  bass" is also that genre's other name and the longer name won. "Dark synth" and "80s synth" had the same
+  problem ("synthpop with a dark synth lead" became darksynth). These names now count as the genre only when no
+  other genre is named.
+
 ### Track creator: gothic rock, gothic metal and symphonic metal
 
 - **Gothic rock** ("gothic rock", "goth rock", "goth", "deathrock") is its own style now, not post-punk's cold

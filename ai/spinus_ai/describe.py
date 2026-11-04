@@ -608,6 +608,9 @@ def words_in(text: str, words: tuple[str, ...]) -> list[str]:
 # A genre's adjective ("funky"): it names the genre unless another genre is named.
 GENRE_ADJECTIVES = ("poppy", "rocky", "rockin", "punky", "dubby", "funky", "soulful", "jazzy", "bluesy", "folky",
                     "trancey", "trancy", "housey", "goth", "gothic")  # fmt: skip
+# A genre's name that also names an instrument ("gothic rock with a melodic bass", "synthpop with a dark synth lead"):
+# like an adjective, it names the genre unless another genre is named.
+INSTRUMENT_LIKE = ("melodic bass", "dark synth", "80s synth")
 NEGATIONS = ("no", "not", "without", "never", "nothing", "non", "don't", "dont", "doesn't", "isn't", "aren't")
 # Words that may stand between a negation and what it negates: "not too fast", "no real synth leads".
 HEDGES = ("too", "so", "very", "overly", "really", "real", "any", "a", "an", "the", "much", "super", "that", "use",
@@ -632,13 +635,13 @@ def read(text: str) -> Reading:
     reading = Reading()
 
     # The genre: the longest name found (the earliest on a tie), so "indie pop" wins over "pop" and "indie"; a
-    # genre's name wins over another's adjective ("funky disco" is disco).
+    # genre's name wins over another's adjective ("funky disco" is disco) or an instrument-like name.
     best: tuple[bool, int, int, Genre, str] | None = None
     for g in GENRES:
         for w in g.words:
             if (m := found(lower, w)) is None:
                 continue
-            rank = (w not in GENRE_ADJECTIVES, len(w), -m.start())
+            rank = (w not in GENRE_ADJECTIVES and w not in INSTRUMENT_LIKE, len(w), -m.start())
             if best is None or rank > (best[0], best[1], -best[2]):
                 best = (rank[0], len(w), m.start(), g, w)
     named = ""
