@@ -581,8 +581,10 @@ void Automixer::measureApplied (int corrections)
 
 bool Automixer::correctLoudness (float after, int corrections)
 {
-    const float wanted = target == Target::streaming ? -14.0f : target == Target::club ? -9.0f : 0.0f;
-    if (wanted == 0.0f || after <= -70.0f || corrections >= 2 || std::abs (wanted - after) < 0.5f)
+    if (target != Target::streaming && target != Target::club)
+        return false;
+    const float wanted = target == Target::streaming ? -14.0f : -9.0f;
+    if (after <= -70.0f || corrections >= 2 || std::abs (wanted - after) < 0.5f)
         return false;
     auto limiter = std::find_if (items.begin(), items.end(),
                                  [] (auto& i) { return i.ticked && i.json["kind"].toString() == "limiter"; });
