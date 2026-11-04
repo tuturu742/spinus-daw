@@ -540,19 +540,34 @@ bool Automixer::apply()
         status.setText (result.getErrorMessage(), juce::dontSendNotification);
         return false;
     }
-    // Measure the mix after the changes, for the comparison at matched loudness.
     busy = true;
-    status.setText ("Applied. Measuring the result for the comparison...", juce::dontSendNotification);
     updateButtons();
+    measureApplied (0);
+    return true;
+}
+
+void Automixer::measureApplied (int corrections)
+{
+    // Measure the mix after the changes, for the comparison at matched loudness.
+    status.setText (corrections == 0 ? "Applied. Measuring the result for the comparison..."
+                                     : "Measuring the corrected loudness...",
+                    juce::dontSendNotification);
     render (false,
-            [this] (const std::vector<juce::File>& files)
+            [this, corrections] (const std::vector<juce::File>& files)
             {
                 juce::Array<juce::var> whole;
                 whole.add (object ({ { "name", "Master" }, { "file", files.front().getFullPathName() } }));
                 runJob ("ai.v1.mix.analyze", object ({ { "inserts", whole } }),
-                        [this] (const juce::var& measured)
+                        [this, corrections] (const juce::var& measured)
                         {
                             const auto after = (float)(double)measured["inserts"]["Master"]["loudness"];
+                            // The loudness item's limiter gain was worked out from the mix before the other
+                            // changes: turning parts down (or up) moves the result off the target. Its gain is
+                            // corrected by what is still missing and the changes applied again (still one undo
+                            // step), at most twice.
+                            if (correctLoudness (after, corrections))
+                                return measureApplied (corrections + 1);
+                            loudnessAfter = after;
                             // The after, brought to the before's loudness while comparing.
                             matchTrim = after > -70.0f && loudnessBefore > -70.0f ? loudnessBefore - after : 0.0f;
                             compareReady = true;
@@ -562,6 +577,34 @@ bool Automixer::apply()
                                     "Click Keep when done.");
                         });
             });
+}
+
+bool Automixer::correctLoudness (float after, int corrections)
+{
+    if (target != Target::streaming && target != Target::club)
+        return false;
+    const float wanted = target == Target::streaming ? -14.0f : -9.0f;
+    if (after <= -70.0f || corrections >= 2 || std::abs (wanted - after) < 0.5f)
+        return false;
+    auto limiter = std::find_if (items.begin(), items.end(),
+                                 [] (auto& i) { return i.ticked && i.json["kind"].toString() == "limiter"; });
+    if (limiter == items.end())
+        return false;
+    const auto before = (float)(double)limiter->json["gain"];
+    const auto gain = std::round (juce::jlimit (-12.0f, 12.0f, before + wanted - after) * 10.0f) / 10.0f;
+    if (std::abs (gain - before) < 0.1f)
+        return false;
+    auto& history = session.getHistory();
+    if (history.getUndoDescriptions().strings.getLast() != undoName || ! history.undo())
+        return false;
+    limiter->json.getDynamicObject()->setProperty ("gain", gain);
+    auto proposal = makeProposal();
+    if (proposal.apply (history).failed())
+    {
+        limiter->json.getDynamicObject()->setProperty ("gain", before);
+        makeProposal().apply (history); // what was applied before
+        return false;
+    }
     return true;
 }
 
