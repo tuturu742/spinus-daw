@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: a sound you marked stays in its role
+
+- A sound marked **Mark it as › Clean guitar** was only ranked lower for other parts, so with few good choices it
+  could still be picked for, say, the choir. A sound marked as something a part is not is no longer offered for
+  that part; for a part its role fits it still comes first.
+
 ### Track creator: Suggest parts keeps the instruments you name
 
 - **Suggest parts › For <genre>** gave the genre's usual band and dropped the instruments the description names:

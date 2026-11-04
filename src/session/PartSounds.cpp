@@ -830,6 +830,9 @@ std::vector<Choice> chooseMelodic (const Target& target, const Reference& refere
             // could not be measured.
             const auto mine = marked.get (key, sound["id"].toString());
             const bool forThis = mine.isNotEmpty() && mine == target.role;
+            // Marked as something this part is not (a clean guitar, for the choir): not offered for it.
+            if (mine.isNotEmpty() && ! forThis && ! target.roles.contains (mine))
+                continue;
             if (! forThis && (sound.hasProperty ("problem") || (bool)sound["silent"] || (bool)sound["invalid"] ||
                               ! (bool)sound["tracksPitch"]))
                 continue;
