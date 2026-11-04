@@ -65,6 +65,7 @@ TEST_CASE ("Automixer: measures, plans with reasons, applies as one undo step, c
     const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
                           .getChildFile ("spinus-automixer-test-" + juce::Uuid().toString());
     root.createDirectory();
+    juce::File work;
     {
         EngineHost host { { .openAudioDevice = false } };
         auto devices = std::make_unique<engine::DefaultDeviceFactory>();
@@ -167,7 +168,14 @@ TEST_CASE ("Automixer: measures, plans with reasons, applies as one undo step, c
         CHECK (juce::approximatelyEqual (session.getAdapter().getMonitorTrim(), 0.0f));
         CHECK (! automixer.canCompare());
         service.setEnabled (false);
+
+        // Its recordings: only the latest (after Apply) is kept while it is open, and none once it closes (each
+        // Mix it... once left a gigabyte in the temporary folder).
+        work = automixer.getWorkFolder();
+        CHECK (work.findChildFiles (juce::File::findDirectories, false).size() == 1);
     }
+    CHECK (work != juce::File());
+    CHECK (! work.exists());
     root.deleteRecursively();
 }
 

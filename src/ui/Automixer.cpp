@@ -135,6 +135,10 @@ Automixer::~Automixer()
     if (compareReady)
         session.getAdapter().setMonitorTrim (0.0f, session.getProject());
     setService (nullptr);
+    // Its recordings (the mix and each insert, often a gigabyte) are not needed any more.
+    exporter = nullptr;
+    if (workFolder != juce::File())
+        workFolder.deleteRecursively();
 }
 
 void Automixer::setService (ai::AiService* newService)
@@ -206,6 +210,9 @@ void Automixer::render (bool withStems, const std::function<void (const std::vec
     settings.format = engine::ExportSettings::Format::wav24;
     settings.stems = withStems;
     settings.tailSeconds = 1.0;
+    // A new recording: the ones before it have been measured (the reference song's file stays).
+    for (const auto& old : getWorkFolder().findChildFiles (juce::File::findDirectories, false))
+        old.deleteRecursively();
     const auto folder = getWorkFolder().getChildFile (juce::String (juce::Time::currentTimeMillis()));
     folder.createDirectory();
     progress = 0.0;

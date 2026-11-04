@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Automixer: no gigabytes left behind
+
+- **Mix it...** records the mix and every insert to measure them, often a gigabyte, in the computer's temporary
+  folder. Those recordings were never deleted: each mix left one more folder behind, and on many Linux systems
+  that folder is in memory. Now only the latest recording is kept while the automixer is open, and it is deleted
+  when the automixer closes.
+
 ### Track creator: "a melodic bass" is an instrument
 
 - A description such as "gothic rock with drums and a melodic bass" was read as future bass, because "melodic
