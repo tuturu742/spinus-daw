@@ -73,6 +73,9 @@ public:
     juce::String getStatusText() const { return status.getText(); }
     juce::String getNote() const { return note.getText(); }
     const juce::var& getMeasurements() const noexcept { return mix; }
+    /** Where it records the mix and each insert (a temporary folder: only the latest recording is kept, and the
+        folder goes when the automixer closes). */
+    juce::File getWorkFolder() const;
 
     juce::Rectangle<int> getDefaultBounds() const override { return { 120, 80, 620, 480 }; }
     void resized() override;
@@ -92,7 +95,6 @@ private:
     void finish (const juce::String&);
     void updateRows();
     void updateButtons();
-    juce::File getWorkFolder() const;
     juce::var settingValues (const juce::String& stockType,
                              const std::vector<std::pair<juce::String, juce::String>>& settings, juce::String& error);
 
