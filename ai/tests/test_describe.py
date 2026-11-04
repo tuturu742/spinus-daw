@@ -533,6 +533,11 @@ def test_a_genres_adjective_names_it(text: str, genre: str) -> None:
         ("goth synthpop", "synthpop"),
         ("heavy metal", "metal"),
         ("symphonic", "cinematic"),
+        ("gothic rock with drums and a melodic bass", "gothrock"),  # an instrument, not future bass
+        ("synthpop with a dark synth lead", "synthpop"),  # not darksynth
+        ("darkwave with an 80s synth pad", "darkwave"),  # not synthwave
+        ("melodic bass", "futurebass"),  # on its own, still the genre
+        ("dark synth", "darksynth"),
     ],
 )
 def test_gothic_and_symphonic_names_find_their_genre(text: str, genre: str) -> None:
