@@ -44,6 +44,11 @@ def test_the_rules_find_headroom_masking_rumble_dynamics_and_loudness() -> None:
     assert by_kind[("limiter", "Master")]["gain"] == 4.0  # -18 to -14 LUFS
     assert not any(i["insert"] == "Silent" for i in items)
     assert not any(i["kind"] == "limiter" for i in rules(MIX, MASTER, "none"))
+    # A mix already about at the loudness still gets the limiter: the other changes move the loudness (Spinus
+    # corrects the gain after Apply) and its peaks are held at -1 dB (a mix once went over 0 dB without one).
+    near = rules(MIX, {**MASTER, "loudness": -14.2}, "streaming")
+    held = [i for i in near if i["kind"] == "limiter"]
+    assert len(held) == 1 and held[0]["gain"] == 0.2 and "keeps it at" in held[0]["reason"]
 
 
 def test_every_item_is_checked_and_kept_inside_its_limits() -> None:

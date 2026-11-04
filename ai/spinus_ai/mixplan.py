@@ -137,16 +137,17 @@ def rules(
                           "reason": f"Next to the reference, the mix needs {told}: a gentle EQ on the master "
                                     f"moves the {_and(names)} towards it."})  # fmt: skip
 
-    # The master's loudness.
+    # The master's loudness: a limiter whenever a loudness is chosen, also when the mix already measures about
+    # that (the other changes move it, and Spinus corrects its gain after Apply; its peaks are held at -1 dB).
     if master is not None and target in TARGETS and master["loudness"] > -70:
         wanted = TARGETS[target]
         gain = round(wanted - master["loudness"], 1)
-        if abs(gain) >= 0.5:
-            items.append({"kind": "limiter", "insert": "Master", "threshold": -1.0, "gain": max(-12.0, min(12.0, gain)),
-                          "title": f"Master to {wanted:.0f} LUFS",
-                          "reason": f"The mix measures {master['loudness']:.1f} LUFS; a limiter with "
-                                    f"{gain:+.1f} dB in, peaks held at -1 dB, brings it to about {wanted:.0f} LUFS "
-                                    f"for {target}."})  # fmt: skip
+        brings = "brings it to" if abs(gain) >= 0.5 else "keeps it at"
+        items.append({"kind": "limiter", "insert": "Master", "threshold": -1.0, "gain": max(-12.0, min(12.0, gain)),
+                      "title": f"Master to {wanted:.0f} LUFS",
+                      "reason": f"The mix measures {master['loudness']:.1f} LUFS; a limiter with "
+                                f"{gain:+.1f} dB in, peaks held at -1 dB, {brings} about {wanted:.0f} LUFS "
+                                f"for {target}."})  # fmt: skip
     return items[:MOST_ITEMS]
 
 

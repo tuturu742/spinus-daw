@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Automixer: the master is always limited when you choose a loudness
+
+- When the mix already measured about the chosen loudness, the plan had no limiter: its EQ cuts then left it
+  quieter (-15.8 LUFS for -14) and its peaks were not held (one went over 0 dB). With a loudness chosen, the plan
+  now always ends with the master's limiter, peaks held at -1 dB, and Spinus corrects its gain after Apply.
+
 ### Track creator: a sound you marked stays in its role
 
 - A sound marked **Mark it as › Clean guitar** was only ranked lower for other parts, so with few good choices it
