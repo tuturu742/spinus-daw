@@ -642,10 +642,15 @@ TEST_CASE ("Track creator: a sound the user marked is chosen first for its role,
     REQUIRE_FALSE (found.empty());
     CHECK (found.front().name == "Plain Patch");
     CHECK (found.front().reasons().contains ("you marked it as rhythm guitar"));
-    // Marked as something else, it comes after.
+    // Marked as something this part is not, it is not offered for it at all (a clean guitar once played a choir).
     roles.set ("synth-x", "Plain Patch", "strings");
     REQUIRE (roles.save());
-    CHECK (parts::choose (target, {}, again, 5).front().name != "Plain Patch");
+    REQUIRE (! target.roles.contains ("strings"));
+    const auto others = parts::choose (target, {}, again, 5);
+    CHECK (std::none_of (others.begin(), others.end(), [] (const auto& c) { return c.name == "Plain Patch"; }));
+    // For a part it fits, it is still offered first.
+    parts::SongPart strings { "strings", "Strings", "strings" };
+    CHECK (parts::choose (parts::targetFor (strings, 0, {}), {}, again, 5).front().name == "Plain Patch");
 }
 
 TEST_CASE ("Track creator describe a song screenshot for the manual", "[.screenshot][manual]")
