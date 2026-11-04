@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Automixer: the mix reaches the loudness you chose
+
+- With **Streaming (-14 LUFS)** or **Club (-9 LUFS)**, the master's limiter was set from the mix as it was
+  before the other changes. When the same plan also turned loud parts down (often 4 to 6 dB for guitars), the
+  mix ended 3 to 5 dB too quiet (-17 to -19 LUFS for -14). After Apply, Spinus now measures the result and
+  corrects the limiter (still one undo step), so the mix lands within about half a dB of the target.
+
 ### Automixer: no gigabytes left behind
 
 - **Mix it...** records the mix and every insert to measure them, often a gigabyte, in the computer's temporary

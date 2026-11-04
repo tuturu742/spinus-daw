@@ -24,7 +24,9 @@ changes to keep, apply them in one go, and compare the mix before and after.
    other up in which frequencies.
 4. Read the suggestions. Untick any you do not want.
 5. Click **Apply ticked changes**. Everything happens as **one undo step** ("Automixer: 3 changes"), so
-   one **Ctrl+Z** takes it all back.
+   one **Ctrl+Z** takes it all back. Spinus then measures the result. When you chose a loudness, it
+   adjusts the master's limiter until the mix gets there: the other changes (a part turned down, say) move
+   the loudness too, and the suggestion could only guess that beforehand.
 6. Compare with **Before** and **After**. While you compare, Spinus plays both equally loud (the "after"
    is turned up or down to match), because louder always sounds better at first. Click **Keep** when you
    are done.

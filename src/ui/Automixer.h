@@ -70,6 +70,8 @@ public:
     bool canCompare() const noexcept { return compareReady; }
     bool isHearingBefore() const noexcept { return hearingBefore; }
     float getMatchTrim() const noexcept { return matchTrim; }
+    /** The mix's loudness as measured after Apply (LUFS; -100 before). */
+    float getLoudnessAfter() const noexcept { return loudnessAfter; }
     juce::String getStatusText() const { return status.getText(); }
     juce::String getNote() const { return note.getText(); }
     const juce::var& getMeasurements() const noexcept { return mix; }
@@ -89,6 +91,10 @@ private:
     void plan();
     void measureReference();
     void measureAfter();
+    /** After Apply: the result measured (and, once or twice, its loudness corrected), then compared. */
+    void measureApplied (int corrections);
+    /** Whether the limiter's gain was changed (and the changes applied again) to bring `after` to the target. */
+    bool correctLoudness (float after, int corrections);
     void runJob (const juce::String& method, const juce::var& params,
                  const std::function<void (const juce::var&)>& done);
     void fail (const juce::String&);
@@ -111,7 +117,7 @@ private:
     std::map<juce::String, model::InsertId> insertsByName; // as the measurements name them
     juce::var mix, master, referenceMeasured;
     juce::File reference;
-    float loudnessBefore = 0.0f, matchTrim = 0.0f;
+    float loudnessBefore = 0.0f, matchTrim = 0.0f, loudnessAfter = -100.0f;
     std::vector<Item> items;
     std::map<juce::String, std::unique_ptr<HiddenInstrument>> converters; // to turn "250 Hz" into 0..1
     mutable juce::File workFolder;

@@ -139,6 +139,9 @@ TEST_CASE ("Automixer: measures, plans with reasons, applies as one undo step, c
         REQUIRE (automixer.canCompare());
         CHECK (session.getHistory().getUndoDescriptions().size() == steps + 1);
         CHECK (session.getHistory().getUndoDescriptions().strings.getLast().startsWith ("Automixer: "));
+        // The mix reaches the target loudness, whatever the other changes did to it (the limiter's gain is
+        // corrected after measuring; it was once 4 to 5 dB short when the plan also turned parts down).
+        CHECK (std::abs (automixer.getLoudnessAfter() - -14.0f) < 1.0f);
         const auto& masterEffects = session.getProject().mixer.master.effects;
         REQUIRE (! masterEffects.empty());
         CHECK (masterEffects.back().device.stockType == "spinus.limiter");
