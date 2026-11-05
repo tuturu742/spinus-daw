@@ -151,6 +151,7 @@ TEST_CASE ("Browser projects and Manual screenshots for the manual", "[.screensh
             REQUIRE (project::saveProject (library.getChildFile (name), {}).wasOk());
         REQUIRE (browser.addProjectFolder (library));
         browser.getProjects().waitForScan();
+        browser.toggleProjectFolder (library.getChildFile ("2025"));
         browser.toggleOpen ("samples");
         juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
         write (browser.createComponentSnapshot (browser.getLocalBounds(), true, 1.0f), "browser-projects.png");

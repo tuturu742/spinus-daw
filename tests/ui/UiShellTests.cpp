@@ -3,6 +3,7 @@
 #include "commands/CommandRegistry.h"
 #include "engine/EngineHost.h"
 #include "ai/AiService.h"
+#include "ui/Browser.h"
 #include "ui/MainView.h"
 #include "ui/Playlist.h"
 #include "ui/AudioSettings.h"
@@ -294,6 +295,23 @@ TEST_CASE ("The assistant is as wide as dragged, within limits", "[ui]")
     CHECK (ui.view.getAssistantWidth() == 220);
     ui.view.setAssistantWidth (5000);
     CHECK (ui.view.getAssistantWidth() == 800); // half the window
+}
+
+TEST_CASE ("The Browser is as wide as dragged, within limits, and keeps it with the layout", "[ui][browser]")
+{
+    Ui ui;
+    ui.view.setSize (1600, 900);
+    CHECK (ui.view.getBrowserWidth() == 220);
+    CHECK (ui.view.getBrowser().getWidth() == 220);
+    ui.view.setBrowserWidth (400);
+    CHECK (ui.view.getBrowser().getWidth() == 400);
+    ui.view.setBrowserWidth (50);
+    CHECK (ui.view.getBrowserWidth() == 180);
+    ui.view.setBrowserWidth (5000);
+    CHECK (ui.view.getBrowserWidth() == 800); // half the window
+
+    ui.view.setBrowserWidth (360);
+    CHECK ((int)ui.view.getCurrentLayout().getProperty ("browserWidth") == 360);
 }
 
 TEST_CASE ("Every top bar button fits a 1280-pixel window", "[ui]")

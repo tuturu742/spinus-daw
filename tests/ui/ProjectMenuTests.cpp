@@ -364,16 +364,34 @@ TEST_CASE ("Projects in the Browser's folders open from there", "[ui][document][
     CHECK (rowTexts (browser, Browser::RowKind::project).isEmpty());
     CHECK (songs.getChildFile ("Ballad").isDirectory());
 
-    // Another folder of projects: its projects, with the subfolder each is in.
+    // Another folder of projects: its subfolders as a tree, closed at first; a project's own folder is only a
+    // project, never a subfolder.
     const auto library = ui.root.getChildFile ("Library");
     REQUIRE (project::saveProject (library.getChildFile ("2024/Summer"), {}).wasOk());
+    REQUIRE (project::saveProject (library.getChildFile ("2024/Live/Encore"), {}).wasOk());
     REQUIRE (project::saveProject (library.getChildFile ("Winter"), {}).wasOk());
+    REQUIRE (library.getChildFile ("Empty").createDirectory());
     REQUIRE (browser.addProjectFolder (library));
     browser.getProjects().waitForScan();
-    CHECK (rowTexts (browser, Browser::RowKind::group).contains ("Library  (2)"));
+    CHECK (rowTexts (browser, Browser::RowKind::group).contains ("Library  (3)"));
+    CHECK (rowTexts (browser, Browser::RowKind::projectFolder) == juce::StringArray { "2024  (2)" });
+    CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Winter" });
+    browser.toggleProjectFolder (library.getChildFile ("2024"));
+    CHECK (rowTexts (browser, Browser::RowKind::projectFolder) == juce::StringArray { "2024  (2)", "Live  (1)" });
     CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Summer", "Winter" });
-    CHECK (browser.getRows()[(size_t)rowOf (browser, "Summer")].note == "2024");
+    browser.toggleProjectFolder (library.getChildFile ("2024/Live"));
+    CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Encore", "Summer", "Winter" });
+    CHECK (browser.getRows()[(size_t)rowOf (browser, "Encore")].depth == 3);
+    CHECK (browser.getRows()[(size_t)rowOf (browser, "Summer")].depth == 2);
+    CHECK (browser.getRows()[(size_t)rowOf (browser, "Winter")].depth == 1);
     CHECK (rowTexts (browser, Browser::RowKind::action).contains ("+ Add a folder of projects..."));
+
+    // Searching opens the subfolders the projects found are in, and leaves out the others.
+    browser.toggleProjectFolder (library.getChildFile ("2024"));
+    browser.setSearchText ("enc");
+    CHECK (rowTexts (browser, Browser::RowKind::projectFolder) == juce::StringArray { "2024  (1)", "Live  (1)" });
+    CHECK (rowTexts (browser, Browser::RowKind::project) == juce::StringArray { "Encore" });
+    browser.setSearchText ({});
     browser.toggleOpen ("projects.folder:" + library.getFullPathName());
     CHECK (! rowTexts (browser, Browser::RowKind::project).contains ("Summer"));
 }

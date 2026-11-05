@@ -24,8 +24,10 @@ namespace spinus::ui
     drag it onto the Channel Rack, the Playlist or Audio tracks (sampleFromDrag reads the drag).
 
     Projects (the ProjectList, kept in the settings): the demo songs (when they are installed) and the projects
-    in folders the user adds ("+ Add a folder of projects"), searched in the background. Double-click one to
-    open it (onOpenProject, onOpenDemo: MainView asks to save changes first).
+    in folders the user adds ("+ Add a folder of projects"), searched in the background. Each folder shows its
+    subfolders as a tree (only those with projects in them; a project's own folder is the project, not a
+    subfolder), closed until clicked. Double-click a project to open it (onOpenProject, onOpenDemo: MainView
+    asks to save changes first).
 */
 class Browser final : public juce::Component,
                       private juce::ListBoxModel,
@@ -71,8 +73,9 @@ public:
     juce::Array<juce::File> getAllSampleFolders() const;
     bool addSampleFolder (const juce::File&);
     void removeSampleFolder (const juce::File&);
-    /** Opens or closes a folder in the list. */
+    /** Opens or closes a folder in the list (a sample folder, or a subfolder of a folder of projects). */
     void toggleFolder (const juce::File&);
+    void toggleProjectFolder (const juce::File&);
 
     /** Double-click or "Add to the Channel Rack" on a sample. */
     std::function<void (const juce::File&)> onUseSample;
@@ -107,10 +110,11 @@ public:
         device,
         problem,
         message,
-        folder, // a sample folder (`path`), indented by `depth`; the starter pack's has key "starter"
-        sample, // an audio file (`path`)
-        action, // "+ Add a folder of samples" (key "addSamples"), "+ Add a folder of projects" ("addProjects")
-        project // a project folder (`path`); a demo song (its shipped folder) has key "demo"
+        folder,       // a sample folder (`path`), indented by `depth`; the starter pack's has key "starter"
+        sample,       // an audio file (`path`)
+        action,       // "+ Add a folder of samples" (key "addSamples"), "+ Add a folder of projects" ("addProjects")
+        project,      // a project folder (`path`), indented by `depth`; a demo song (its shipped folder) has key "demo"
+        projectFolder // a subfolder of a folder of projects that has projects in it (`path`), indented by `depth`
     };
 
     struct Row
@@ -123,7 +127,7 @@ public:
         bool available = true;         // device rows: false for a free plugin not downloaded yet; project
                                        // rows: false for one that is missing
         juce::String path;             // folder, sample and project rows; a project folder's group
-        int depth = 0;                 // folder and sample rows: how far inside a sample folder
+        int depth = 0;                 // folder, sample and project rows: how far inside the folder added
     };
 
     const std::vector<Row>& getRows() const noexcept { return rows; }
@@ -172,7 +176,7 @@ private:
     juce::File sampleFoldersFile;
     juce::File starterPack;
     bool starterHidden = false;
-    std::set<juce::String> openFolders;
+    std::set<juce::String> openFolders, openProjectFolders;
     std::vector<juce::File> sampleIndex;
     bool sampleIndexValid = false;
     std::unique_ptr<core::FileDialog> folderChooser;
