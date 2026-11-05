@@ -39,6 +39,19 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
                                     "guitar, handclaps and a catchy whistled lead",
                                     juce::Colours::grey);
     textBox.onTextChange = [this] { updateButtons(); };
+    lyricsLabel.setText ("Lyrics (optional): the song's words, a section tag on its own line before each part",
+                         juce::dontSendNotification);
+    lyricsBox.setMultiLine (true, true);
+    lyricsBox.setReturnKeyStartsNewLine (true);
+    lyricsBox.setScrollbarsShown (true);
+    lyricsBox.setTextToShowWhenEmpty ("[Verse 1]\nThe city lights are fading out\n...\n\n[Chorus]\nHold on to the "
+                                      "night\n\n[Guitar Solo]",
+                                      juce::Colours::grey);
+    lyricsBox.setTooltip ("Spinus sizes the song's sections to the words and writes a vocal line for them, played by "
+                          "an instrument (it sings nothing). A tag with no lines is an instrumental section; a tag "
+                          "used again with no lines repeats its words");
+    noVocalsButton.setTooltip ("An instrumental song: the lyrics stay in the box but are not used");
+    noVocalsButton.onClick = [this] { updateButtons(); };
     aiButton.setTooltip ("Ask your AI connection (Options > AI) to read the description; Spinus checks its reading "
                          "and writes every note itself. Off: Spinus's own rules, nothing is sent anywhere");
     readButton.setTooltip ("Read the description into a style to write a song in");
@@ -58,8 +71,9 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
     details.setReadOnly (true);
     details.setScrollbarsShown (true);
     details.setCaretVisible (false);
-    for (auto* c : std::initializer_list<juce::Component*> { &intro, &textBox, &aiButton, &readButton, &understood,
-                                                             &status, &details })
+    for (auto* c :
+         std::initializer_list<juce::Component*> { &intro, &textBox, &lyricsLabel, &lyricsBox, &noVocalsButton,
+                                                   &aiButton, &readButton, &understood, &status, &details })
         addAndMakeVisible (c);
     addChildComponent (againButton);
     updateButtons();
@@ -96,6 +110,8 @@ bool DescribeSongPanel::read()
                     juce::dontSendNotification);
     updateButtons();
     auto params = object ({ { "text", text }, { "ai", useAi } });
+    if (const auto words = lyricsBox.getText().trim(); words.isNotEmpty() && ! noVocalsButton.getToggleState())
+        params.getDynamicObject()->setProperty ("lyrics", words);
     if (references.isObject())
     {
         params.getDynamicObject()->setProperty ("summary", references);
@@ -132,9 +148,11 @@ void DescribeSongPanel::show (const juce::var& read)
                 lines.add (line.toString());
     details.setText (lines.joinIntoString ("\n"), false);
     const auto by = described["readBy"].toString();
-    status.setText ((described["note"].toString().isNotEmpty() ? described["note"].toString() + " "
-                     : by.isNotEmpty()                         ? "Read by the AI (" + by + "). "
-                                                               : juce::String()) +
+    const auto lyricsNote = read["lyrics"]["note"].toString();
+    status.setText ((lyricsNote.isNotEmpty() ? lyricsNote + " " : juce::String()) +
+                        (described["note"].toString().isNotEmpty() ? described["note"].toString() + " "
+                         : by.isNotEmpty()                         ? "Read by the AI (" + by + "). "
+                                                                   : juce::String()) +
                         "Next: 3. Parts, then 4. Write a song.",
                     juce::dontSendNotification);
 }
@@ -154,6 +172,12 @@ void DescribeSongPanel::setReferences (const juce::var& songs, const juce::Strin
     resized();
 }
 
+void DescribeSongPanel::setNoVocals (bool on)
+{
+    noVocalsButton.setToggleState (on, juce::dontSendNotification);
+    updateButtons();
+}
+
 void DescribeSongPanel::updateButtons()
 {
     againButton.setVisible (references.isObject() && generated.isNotEmpty());
@@ -161,12 +185,16 @@ void DescribeSongPanel::updateButtons()
     readButton.setEnabled (! busy && textBox.getText().trim().isNotEmpty());
     aiButton.setEnabled (! busy);
     textBox.setReadOnly (busy);
+    noVocalsButton.setEnabled (! busy);
+    lyricsBox.setReadOnly (busy || noVocalsButton.getToggleState());
+    lyricsBox.setAlpha (noVocalsButton.getToggleState() ? 0.5f : 1.0f);
 }
 
 void DescribeSongPanel::paint (juce::Graphics&)
 {
     const auto& theme = themeOf (*this);
     intro.setColour (juce::Label::textColourId, theme.get ("text"));
+    lyricsLabel.setColour (juce::Label::textColourId, theme.get ("textDim"));
     understood.setColour (juce::Label::textColourId, theme.get ("accent"));
     status.setColour (juce::Label::textColourId, theme.get ("textDim"));
 }
@@ -176,7 +204,15 @@ void DescribeSongPanel::resized()
     auto area = getLocalBounds();
     intro.setBounds (area.removeFromTop (56));
     area.removeFromTop (4);
-    textBox.setBounds (area.removeFromTop (juce::jlimit (60, 140, area.getHeight() / 4)));
+    const auto boxHeight = juce::jlimit (60, 140, area.getHeight() / 5);
+    textBox.setBounds (area.removeFromTop (boxHeight));
+    area.removeFromTop (4);
+    {
+        auto r = area.removeFromTop (22);
+        noVocalsButton.setBounds (r.removeFromRight (190));
+        lyricsLabel.setBounds (r);
+    }
+    lyricsBox.setBounds (area.removeFromTop (boxHeight));
     area.removeFromTop (4);
     {
         auto r = area.removeFromTop (28);

@@ -1129,10 +1129,11 @@ class Service:
     async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read
         it; default false), summary and generated (the reference songs' summary and the prompt written for it:
-        the description then changes it where it differs)} -> the summary, its `described` saying what was
-        understood. Rules only by default; with ai and a connection the AI reads it (checked), and without one
-        (or when it fails) the rules' reading stands, with a note saying so."""
-        from . import describe
+        the description then changes it where it differs), lyrics (the song's words, tagged by section: read into
+        the summary's `lyrics`, spinus_ai.lyrics; the AI counts their syllables when it reads)} -> the summary, its
+        `described` saying what was understood. Rules only by default; with ai and a connection the AI reads it
+        (checked), and without one (or when it fails) the rules' reading stands, with a note saying so."""
+        from . import describe, lyrics
 
         text = params.get("text")
         if not isinstance(text, str) or not text.strip():
@@ -1144,8 +1145,26 @@ class Service:
         if base is not None and base.get("kind") != "spinus.style-summary":
             raise RpcError(-32602, "summary must be the Track creator's style summary.")
         generated = str(params.get("generated") or "")
+        words: str = params["lyrics"] if isinstance(params.get("lyrics"), str) else ""
+        if words.strip():
+            try:
+                lyrics.split(words)  # too long or too many lines: said now, before any work
+            except lyrics.LyricsError as error:
+                raise RpcError(-32602, str(error)) from error
 
-        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+        async def read_words(say: Callable[[dict[str, Any]], Awaitable[None]]) -> dict[str, Any]:
+            if not params.get("ai"):
+                return lyrics.read(words)
+            try:
+                return await lyrics.read_with_ai(self.client, self.connections, self.routing, self.usage, words, say)
+            except NoConnection:
+                return lyrics.read(words)
+            except ProviderError as error:
+                read = lyrics.read(words)
+                read["note"] = f"Spinus counted the syllables itself: the AI failed ({error})."
+                return read
+
+        async def read_text(say: Callable[[dict[str, Any]], Awaitable[None]]) -> dict[str, Any]:
             if not params.get("ai"):
                 return describe.describe(text, base, generated)
             try:
@@ -1157,6 +1176,13 @@ class Service:
                 note = f"Read by Spinus's own rules: the AI failed ({error})."
             summary = describe.describe(text, base, generated)
             summary["described"]["note"] = note
+            return summary
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            summary = await read_text(say)
+            if words.strip():
+                summary["lyrics"] = await read_words(say)
+                summary["plain"] = [*summary.get("plain", []), lyrics.words(summary["lyrics"])]
             return summary
 
         return {"job": self.job(notify, work)}

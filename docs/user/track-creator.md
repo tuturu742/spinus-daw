@@ -195,7 +195,46 @@ part), which start step 3; when it names none, the parts come from the instrumen
 AI isn't reachable or answers something unusable, Spinus's own reading stays, and the page
 says so. The page names the model that read it; when your first choice didn't answer and another
 connection or model did, it says why: "Read by the AI (claude-sonnet-5-5, because Claude
-(claude-opus-5-5) did not answer: ...)". This sends your description, and nothing else, to your AI provider.
+(claude-opus-5-5) did not answer: ...)". This sends your description (and your [lyrics](#lyrics), if any), and
+nothing else, to your AI provider.
+
+### Lyrics
+
+Under the description is a box for the song's **lyrics** (optional). Write them the way song generators take
+them: a section tag on a line of its own, in square brackets, then that section's lines.
+
+```
+[Verse 1]
+Sunlight on the windowsill
+Coffee's warm and the morning's still
+
+[Chorus]
+Oh, we've got all summer long
+Singing out our summer song
+
+[Whistle Solo]
+
+[Chorus]
+```
+
+- A tag names the section: Intro, Verse, Pre-Chorus, Chorus, Hook, Bridge, Solo, Break, Instrumental, Outro
+  and the other usual ones; "[Guitar Solo]" is a solo, "[Verse 2]" a verse. Words after a dash are a note for
+  that section: "[Outro - fade out]".
+- A tag with no lines under it is an **instrumental** section.
+- A tag used again with no lines **repeats** the words it had: write a chorus out once. "[Chorus x2]" plays it
+  twice in a row.
+- Lyrics with no tags at all are one verse.
+
+**Read** reads the lyrics with the description. Spinus counts the syllables in each line and guesses which
+are stressed, on your computer and roughly: well enough in English and in languages written in Cyrillic, more
+roughly in others. With **Let the AI read it**, the AI counts them instead, in any language, and Spinus checks
+each line it counts (a line it gets wrong keeps Spinus's count). The details say what was read: "Lyrics: Verse
+1, Chorus, Whistle Solo (instrumental), Chorus; 4 lines, about 29 syllables (counted by Spinus, roughly)".
+
+Spinus never sings: the lyrics are for the song's sections and a vocal line played by an instrument, which come
+in later versions of the Track creator. Tick **This song has no vocals** for an instrumental song: the lyrics
+stay in the box but are not read. Spinus remembers the lyrics and the tick with the description. With **Let the
+AI read it**, the lyrics are sent to your AI provider too.
 
 Then go on to step 3, [Parts](#sounds-for-each-part), and step 4, [Write a song](#write-a-song), which
 says "From your description" at the top. Reading a description (or your songs being summed up again)

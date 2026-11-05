@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: lyrics (first step)
+
+- The Description page has a box for the song's lyrics, tagged by section the way song generators take them
+  ("[Verse 1]", "[Chorus]", "[Guitar Solo]"), and a **This song has no vocals** tick. **Read** reads the sections
+  and counts each line's syllables, on your computer (roughly) or, with **Let the AI read it**, by the AI. Next:
+  the song's sections sized to the words, and a vocal part played by an instrument of your choice.
+
 ### Browser: folders of projects show their subfolders, and the Browser can be made wider
 
 - A folder of projects listed every project in one long list, with its subfolder after the name. Now its
