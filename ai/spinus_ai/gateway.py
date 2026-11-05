@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import json
 import re
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -155,6 +156,10 @@ ANSWER_TIMEOUT = httpx.Timeout(600.0, connect=15.0)
 # A dropped connection, or a provider's passing trouble in the middle of an answer ("internal error" in its stream),
 # is asked again twice: a step of a long tool loop is not lost to one bad answer.
 NETWORK_RETRY_WAITS = (2.0, 8.0)
+# A provider waiting to start an answer may send only keep-alive comments (DeepSeek does, for up to half an hour),
+# which the read timeout never sees: after this long with nothing else the answer is asked again, as when the
+# connection drops.
+KEEPALIVE_LIMIT = 300.0
 
 
 def network_trouble(error: httpx.TransportError) -> str:
@@ -182,19 +187,27 @@ def error_for_status(status: int, body: str) -> ProviderError:
 
 
 async def sse_events(response: httpx.Response) -> AsyncIterator[tuple[str, str]]:
-    """Server-sent events as (event, data)."""
+    """Server-sent events as (event, data). Nothing but keep-alives (comments, blank lines) for KEEPALIVE_LIMIT
+    seconds is a passing network trouble (ProviderError "network": asked again)."""
     event, data = "", list[str]()
+    heard = time.monotonic()
     async for line in response.aiter_lines():
-        if line == "":
-            if data:
-                yield event, "\n".join(data)
-            event, data = "", list[str]()
-        elif line.startswith(":"):
-            continue
-        elif line.startswith("event:"):
+        if line.startswith("event:"):
             event = line[6:].strip()
         elif line.startswith("data:"):
             data.append(line[5:].lstrip())
+        elif line == "" and data:
+            yield event, "\n".join(data)
+            event, data = "", list[str]()
+        else:
+            if line == "":
+                event = ""
+            if time.monotonic() - heard > KEEPALIVE_LIMIT:
+                raise ProviderError(
+                    "network", f"The provider sent nothing but keep-alives for {KEEPALIVE_LIMIT:g} seconds."
+                )
+            continue
+        heard = time.monotonic()
     if data:
         yield event, "\n".join(data)
 
