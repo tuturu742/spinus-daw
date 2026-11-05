@@ -245,7 +245,9 @@ syllable**, a line at a time with a breath before the next, the stressed syllabl
 many lines share their music, as verses do; the tune follows the first verse's syllables. The plan on the page
 says what is sung where: "Verse (bar 9): 4 lines, “Sunlight on the windowsill / Coffee's warm and the
 morning's still / ...”". With the AI as the writer, it gets the lyrics' form (their tags, lines and
-syllables, not their words).
+syllables, not their words) and keeps it: the sung sections stay as long as their lines need and in the lyrics'
+order, while the AI may add instrumental sections (an intro, a break, a solo) around them. Spinus checks that the
+tune it writes plays about one note a syllable, line by line, and asks it to fix the lines that don't.
 
 Tick **This song has no vocals** for an instrumental song: the lyrics
 stay in the box but are not read. Spinus remembers the lyrics and the tick with the description. With **Let the

@@ -12,6 +12,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   a syllable, a line at a time, stressed syllables on the beats. The Vocals part plays where words are sung, the
   Lead the tune of the instrumental sections. The Write page's plan says which lines go in which section.
   Songs without lyrics are written exactly as before.
+- With the AI as the writer the lyrics' form holds too: the AI may add instrumental sections and choose the
+  chords, but the sung sections keep their length and order, and Spinus checks that its tune plays one note a syllable.
 
 ### Track creator: a Vocals part for a song with lyrics
 
