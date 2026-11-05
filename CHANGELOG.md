@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: saved drum kits load
+
+- A drum kit kept with **Save this sound** (a plugin's kit, set up as you like it) is chosen for a drum part again
+  and now loads as you saved it. Before, adding the chosen sounds said the plugin "no longer has" it, and the drums
+  played the plugin's default sound.
+
 ### Track creator: a Vocals part for a song with lyrics
 
 - With lyrics on the Description page, the Parts page suggests a **Vocals** part: an instrument plays the sung
