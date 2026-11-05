@@ -68,7 +68,7 @@ private:
     std::function<bool (juce::CommandID)> included;
 };
 
-constexpr int menuBarHeight = 24, topBarHeight = 40, hintBarHeight = 22, browserWidth = 220;
+constexpr int menuBarHeight = 24, topBarHeight = 40, hintBarHeight = 22;
 constexpr int recentMenuBase = 0x2000, clearRecentMenuId = 0x2100;
 
 const Theme& themeOf (const juce::Component& c)
@@ -568,6 +568,7 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     addAndMakeVisible (workspace);
     addAndMakeVisible (hintBar);
     addChildComponent (assistantResizer);
+    addChildComponent (browserResizer);
 
     auto rack = std::make_unique<ChannelRack> (session);
     rack->onOpenPianoRoll = [this] { workspace.showPanel ("pianoRoll"); };
@@ -831,6 +832,7 @@ juce::ValueTree MainView::getCurrentLayout() const
 {
     auto layout = workspace.getLayout();
     layout.setProperty ("browser", browserVisible, nullptr);
+    layout.setProperty ("browserWidth", browserWidth, nullptr);
     layout.setProperty ("assistant", assistantVisible, nullptr);
     return layout;
 }
@@ -838,6 +840,7 @@ juce::ValueTree MainView::getCurrentLayout() const
 void MainView::applyLayout (const juce::ValueTree& layout)
 {
     browserVisible = layout.getProperty ("browser", browserVisible);
+    browserWidth = layout.getProperty ("browserWidth", browserWidth);
     assistantVisible = layout.getProperty ("assistant", assistantVisible);
     resized(); // the workspace gets its size first: the panels are placed in it
     workspace.setLayout (layout);
@@ -1860,8 +1863,13 @@ void MainView::resized()
     hintBar.setBounds (area.removeFromBottom (hintBarHeight));
 
     browser->setVisible (browserVisible);
+    browserResizer.setVisible (browserVisible);
     if (browserVisible)
+    {
+        browserWidth = juce::jlimit (180, juce::jmax (180, getWidth() / 2), browserWidth);
         browser->setBounds (area.removeFromLeft (browserWidth));
+        browserResizer.setBounds (area.removeFromLeft (5));
+    }
 
     assistant->setVisible (assistantVisible);
     assistantResizer.setVisible (assistantVisible);

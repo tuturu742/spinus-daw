@@ -3,7 +3,8 @@
 ![The Browser on the left of the main window](images/main-window.png)
 
 The Browser is on the left of the main window. Show or hide it with **F8** or the **Browser**
-button. It lists your projects, your samples and everything you can play or put on a mixer insert:
+button. Drag the thin bar on its right edge to make it wider or narrower (up to half the window); Spinus
+remembers the width with the window layout. It lists your projects, your samples and everything you can play or put on a mixer insert:
 
 | Section | What is in it |
 |---|---|
@@ -70,17 +71,20 @@ The **Projects** section at the top is the quick way back to your songs.
   [Your first beat](getting-started.md#listen-to-the-demo-songs-first)).
 - **Your folders of projects:** click **+ Add a folder of projects...** (or right-click **Projects**) and
   choose a folder, for example the one you keep all your songs in. Spinus looks through it and its
-  subfolders (up to six folders deep) and lists every project it finds, with the subfolder it is in after
-  the name. It skips hidden folders (and, on Windows too, folders whose name starts with a dot, such as
+  subfolders (up to six folders deep) and lists every project it finds. Subfolders show as a tree, the
+  way your file manager shows them: click a subfolder to open or close it, and the number after its name
+  says how many projects are inside. Only subfolders with projects in them are shown, and a project's own
+  folder shows as the project, not as a folder. It skips hidden folders (and, on Windows too, folders whose name starts with a dot, such as
   `.git`) and doesn't look inside projects. Looking happens in the background,
   so Spinus stays quick even with a big folder; the list from last time shows at once on the next start.
   A project you save into one of your folders shows up there at once.
 
 Double-click a project to open it. If the open project has unsaved changes, Spinus asks whether to save them
-first, as **File › Open** does. Type in the **Search** box to find a project by name.
+first, as **File › Open** does. Type in the **Search** box to find a project by name; the subfolders it is in open by themselves.
 
 Right-click a project for **Open**, **Show in the file manager** and **Remove from the list** (the files
-stay where they are). Right-click a folder for **Look again for projects** (after you add or move songs),
+stay where they are). Right-click a subfolder for **Look again for projects** and **Show in the file manager**. Right-click a
+folder you added for **Look again for projects** (after you add or move songs),
 **Remove from the Browser** and **Show in the file manager**.
 
 A project that is gone from one of your folders drops out the next time Spinus looks; a folder that is gone

@@ -5,6 +5,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Browser: folders of projects show their subfolders, and the Browser can be made wider
+
+- A folder of projects listed every project in one long list, with its subfolder after the name. Now its
+  subfolders show as a tree you open and close with a click, each with how many projects are inside; a
+  project's own folder shows only as the project. Searching opens the subfolders the projects found are in.
+- Drag the thin bar on the Browser's right edge to make it wider or narrower (up to half the window); the
+  width is kept with the window layout.
+
 ### Automixer: the master is always limited when you choose a loudness
 
 - When the mix already measured about the chosen loudness, the plan had no limiter: its EQ cuts then left it

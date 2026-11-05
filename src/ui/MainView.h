@@ -117,6 +117,14 @@ public:
         assistantWidth = width;
         resized();
     }
+    /** The Browser's width (dragging the bar on its right), between 180 and half the window; kept with the
+        window layout. */
+    int getBrowserWidth() const noexcept { return browserWidth; }
+    void setBrowserWidth (int width)
+    {
+        browserWidth = width;
+        resized();
+    }
 
     void setTheme (Theme);
 
@@ -345,20 +353,24 @@ private:
     TypingKeyboard typingKeyboard { [this] (int note, bool down)
                                     { session.getRecorder().playComputerKey (note, down); } };
     bool browserVisible = true, assistantVisible = false;
-    int assistantWidth = 300;
+    int assistantWidth = 300, browserWidth = 220;
 
-    /** The bar left of the assistant: drag it to make the assistant wider or narrower. */
+    /** The bar beside the Browser or the assistant: drag it to make that panel wider or narrower. */
     struct WidthHandle final : juce::Component
     {
-        explicit WidthHandle (MainView& v) : view (v)
+        WidthHandle (MainView& v, bool forBrowser) : view (v), browser (forBrowser)
         {
             setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
-            setHelpText ("Drag to make the assistant wider or narrower");
+            setHelpText (browser ? "Drag to make the Browser wider or narrower"
+                                 : "Drag to make the assistant wider or narrower");
         }
-        void mouseDown (const juce::MouseEvent&) override { start = view.assistantWidth; }
+        void mouseDown (const juce::MouseEvent&) override { start = browser ? view.browserWidth : view.assistantWidth; }
         void mouseDrag (const juce::MouseEvent& e) override
         {
-            view.setAssistantWidth (start - e.getDistanceFromDragStartX());
+            if (browser)
+                view.setBrowserWidth (start + e.getDistanceFromDragStartX());
+            else
+                view.setAssistantWidth (start - e.getDistanceFromDragStartX());
         }
         void paint (juce::Graphics& g) override
         {
@@ -368,9 +380,10 @@ private:
         void mouseEnter (const juce::MouseEvent&) override { repaint(); }
         void mouseExit (const juce::MouseEvent&) override { repaint(); }
         MainView& view;
-        int start = 300;
+        const bool browser;
+        int start = 0;
     };
-    WidthHandle assistantResizer { *this };
+    WidthHandle assistantResizer { *this, false }, browserResizer { *this, true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainView)
 };

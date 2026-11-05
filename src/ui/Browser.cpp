@@ -309,14 +309,6 @@ void Browser::addProjectRows (const juce::String& query)
     const bool searching = query.isNotEmpty();
     auto matches = [&] (const juce::String& name) { return ! searching || name.containsIgnoreCase (query); };
     auto isOpen = [&] (const juce::String& key) { return searching || ! closed.contains (key); };
-    auto projectRow = [] (const ProjectList::Project& p, const juce::String& note)
-    {
-        Row row { RowKind::project, p.name };
-        row.path = p.folder.getFullPathName();
-        row.note = note;
-        row.depth = 1;
-        return row;
-    };
 
     // The demo songs that come with Spinus, first.
     int shown = 0;
@@ -329,25 +321,82 @@ void Browser::addProjectRows (const juce::String& query)
             ++shown;
         }
 
-    // The folders added, each with the projects found in it (and the subfolder each is in).
-    std::vector<Row> items;
+    // The subfolders a folder's projects are in, as a tree: each subfolder holds the ones further in, then its
+    // projects. Only subfolders with projects in them are known (and a project's own folder is the project).
+    struct Node
+    {
+        juce::File folder;
+        std::vector<std::unique_ptr<Node>> subfolders; // by name
+        std::vector<const ProjectList::Project*> projects;
+        int count = 0; // projects in it and further in
+
+        Node& subfolder (const juce::File& f)
+        {
+            for (auto& n : subfolders)
+                if (n->folder == f)
+                    return *n;
+            subfolders.push_back (std::make_unique<Node>());
+            subfolders.back()->folder = f;
+            return *subfolders.back();
+        }
+    };
+
+    std::function<void (const Node&, int)> addNode = [&] (const Node& node, int depth)
+    {
+        for (auto& sub : node.subfolders)
+        {
+            Row row { RowKind::projectFolder, sub->folder.getFileName() + "  (" + juce::String (sub->count) + ")" };
+            row.path = sub->folder.getFullPathName();
+            row.depth = depth;
+            rows.push_back (std::move (row));
+            if (searching || openProjectFolders.contains (sub->folder.getFullPathName()))
+                addNode (*sub, depth + 1);
+        }
+        for (auto* p : node.projects)
+        {
+            Row row { RowKind::project, p->name };
+            row.path = p->folder.getFullPathName();
+            row.depth = depth;
+            rows.push_back (std::move (row));
+        }
+    };
+
+    // The folders added, each with the projects found in it.
     for (auto& folder : projects.getFolders())
     {
-        items.clear();
+        Node tree;
+        tree.folder = folder.folder;
         for (auto& p : folder.projects)
-            if (matches (p.name))
+        {
+            if (! matches (p.name))
+                continue;
+            juce::Array<juce::File> path; // the subfolders between the folder added and the project
+            for (auto f = p.folder.getParentDirectory(); f.isAChildOf (folder.folder); f = f.getParentDirectory())
+                path.insert (0, f);
+            auto* node = &tree;
+            ++node->count;
+            for (auto& f : path)
             {
-                const auto parent = p.folder.getParentDirectory();
-                items.push_back (projectRow (p, parent == folder.folder ? juce::String()
-                                                                        : parent.getRelativePathFrom (folder.folder)));
+                node = &node->subfolder (f);
+                ++node->count;
             }
-        if (searching && items.empty())
+            node->projects.push_back (&p);
+        }
+        if (searching && tree.count == 0)
             continue;
 
-        const auto key = "projects.folder:" + folder.folder.getFullPathName();
-        Row group {
-            RowKind::group, folder.folder.getFileName() + "  (" + juce::String ((int)items.size()) + ")", {}, key
+        auto byName = [] (const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b)
+        { return a->folder.getFileName().compareNatural (b->folder.getFileName()) < 0; };
+        std::function<void (Node&)> sort = [&] (Node& n)
+        {
+            std::sort (n.subfolders.begin(), n.subfolders.end(), byName);
+            for (auto& sub : n.subfolders)
+                sort (*sub);
         };
+        sort (tree);
+
+        const auto key = "projects.folder:" + folder.folder.getFullPathName();
+        Row group { RowKind::group, folder.folder.getFileName() + "  (" + juce::String (tree.count) + ")", {}, key };
         group.path = folder.folder.getFullPathName();
         group.note = folder.missing                                     ? juce::String ("missing")
                      : projects.isScanning() && folder.projects.empty() ? juce::String ("searching...")
@@ -356,13 +405,12 @@ void Browser::addProjectRows (const juce::String& query)
         rows.push_back (std::move (group));
         if (isOpen (key))
         {
-            for (auto& r : items)
-                rows.push_back (r);
-            if (items.empty())
+            addNode (tree, 1);
+            if (tree.count == 0)
                 rows.push_back ({ RowKind::message,
                                   projects.isScanning() ? "Looking for projects..." : "No projects in this folder" });
         }
-        shown += (int)items.size();
+        shown += tree.count;
     }
 
     const bool anyListed = ! demos.isEmpty() || ! projects.getAllProjects().isEmpty();
@@ -545,6 +593,13 @@ void Browser::toggleFolder (const juce::File& folder)
     rebuildRows();
 }
 
+void Browser::toggleProjectFolder (const juce::File& folder)
+{
+    if (! openProjectFolders.erase (folder.getFullPathName()))
+        openProjectFolders.insert (folder.getFullPathName());
+    rebuildRows();
+}
+
 void Browser::chooseSampleFolder()
 {
     folderChooser = std::make_unique<core::FileDialog> (
@@ -651,7 +706,7 @@ void Browser::paintListBoxItem (int row, juce::Graphics& g, int width, int heigh
     }
     case RowKind::project:
     {
-        area.removeFromLeft (r.depth == 0 ? 18 : 30);
+        area.removeFromLeft (r.depth == 0 ? 18 : 30 + 12 * (r.depth - 1));
         const bool demo = r.key == "demo";
         g.setColour (! r.available ? theme.get ("textDim").withAlpha (0.5f)
                      : demo        ? theme.get ("accent")
@@ -707,9 +762,10 @@ void Browser::paintListBoxItem (int row, juce::Graphics& g, int width, int heigh
         g.drawText (r.text, area.withTrimmedLeft (30 + 12 * r.depth), juce::Justification::centredLeft, true);
         break;
     case RowKind::folder:
+    case RowKind::projectFolder:
     {
         area.removeFromLeft (16 + 12 * r.depth);
-        const bool open = openFolders.contains (r.path);
+        const bool open = (r.kind == RowKind::folder ? openFolders : openProjectFolders).contains (r.path);
         g.setColour (theme.get ("textDim"));
         g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
         g.drawText (open ? juce::CharPointer_UTF8 ("\xe2\x96\xbe") : juce::CharPointer_UTF8 ("\xe2\x96\xb8"),
@@ -773,6 +829,8 @@ void Browser::listBoxItemClicked (int row, const juce::MouseEvent& e)
         toggleOpen (r.key);
     else if (r.kind == RowKind::folder)
         toggleFolder (juce::File (r.path));
+    else if (r.kind == RowKind::projectFolder)
+        toggleProjectFolder (juce::File (r.path));
     else if (r.kind == RowKind::action)
     {
         if (r.key == "addProjects")
@@ -913,6 +971,13 @@ void Browser::showRowMenu (int row)
                       [folder] { project::findProjectFile (folder).revealToUser(); });
         menu.addItem ("Remove from the list (the files stay)", [this, folder] { projects.remove (folder); });
     }
+    else if (r.kind == RowKind::projectFolder)
+    {
+        const juce::File folder (r.path);
+        menu.addSectionHeader (folder.getFileName());
+        menu.addItem ("Look again for projects", [this] { projects.rescan(); });
+        menu.addItem ("Show in the file manager", [folder] { folder.revealToUser(); });
+    }
     else if (r.kind == RowKind::group && r.key.startsWith ("projects.folder:"))
     {
         const juce::File folder (r.path);
@@ -970,6 +1035,8 @@ void Browser::mouseMove (const juce::MouseEvent& e)
                 r.path + (r.available ? juce::String (": double-click to open; right-click to show it in the file "
                                                       "manager or remove it from the list")
                                       : juce::String (": not there any more; right-click to remove it from the list"));
+        else if (r.kind == RowKind::projectFolder)
+            hint = r.path + ": click to open or close; right-click to look again for projects";
         else if (r.kind == RowKind::group && r.path.isNotEmpty())
             hint = r.path + ": the projects found in this folder and its subfolders; right-click to look again or "
                             "remove it";
