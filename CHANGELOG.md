@@ -11,6 +11,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   and now loads as you saved it. Before, adding the chosen sounds said the plugin "no longer has" it, and the drums
   played the plugin's default sound.
 
+### Track creator: the song follows the lyrics
+
+- With lyrics, Spinus's writer takes the song's form from their tags, in order (a repeated chorus, "[Chorus
+  x2]", instrumental sections), makes each sung section as long as its lines need, and plays the tune one note
+  a syllable, a line at a time, stressed syllables on the beats. The Vocals part plays where words are sung, the
+  Lead the tune of the instrumental sections. The Write page's plan says which lines go in which section.
+  Songs without lyrics are written exactly as before.
+
 ### Track creator: a Vocals part for a song with lyrics
 
 - With lyrics on the Description page, the Parts page suggests a **Vocals** part: an instrument plays the sung
@@ -32,8 +40,7 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - The Description page has a box for the song's lyrics, tagged by section the way song generators take them
   ("[Verse 1]", "[Chorus]", "[Guitar Solo]"), and a **This song has no vocals** tick. **Read** reads the sections
-  and counts each line's syllables, on your computer (roughly) or, with **Let the AI read it**, by the AI. Next:
-  the song's sections sized to the words, and a vocal part played by an instrument of your choice.
+  and counts each line's syllables, on your computer (roughly) or, with **Let the AI read it**, by the AI.
 
 ### Browser: folders of projects show their subfolders, and the Browser can be made wider
 
