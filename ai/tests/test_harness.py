@@ -1241,6 +1241,16 @@ def test_with_lyrics_the_ai_keeps_their_form_and_sings_a_note_a_syllable() -> No
     assert "Kept for the lyrics: the verse stays" in said
     assert ws.sections["verse"]["bars"] == verse["bars"] and ws.order == with_break
     assert ws.plan()["lyrics"]["sung"][2] == [] and "words" not in ws.sections["break"]
+    # Sections of the sung kinds in the lyrics' order stand for them, by any ids.
+    renamed = [f"{o}-{i}" if ws.sections[o].get("words") else o for i, o in enumerate(order)]
+    ws.tool_set_form(
+        [
+            {"id": r, "kind": ws.sections[o]["kind"], "bars": 8, "chords": ["vi", "IV"]}
+            for r, o in zip(renamed, order, strict=True)
+        ],
+        renamed,
+    )
+    assert ws.order == order and ws.sections["verse"]["chords"] == ["vi", "IV"] and ws.sections["verse"]["words"]
     # Leaving out or moving a sung section is refused.
     with pytest.raises(harness.Mistake, match="sung in this order"):
         ws.tool_set_form(form([o for o in order if o != "bridge"]), [o for o in order if o != "bridge"])

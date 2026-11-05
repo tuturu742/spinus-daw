@@ -352,28 +352,45 @@ def sung_of(order: list[str], setup: Setup, tempo: float) -> dict[str, Any] | No
 def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[str, Any], list[str]]:
     """The checked plan with the lyrics' form kept: each sung section as long as its lines need (with their
     syllables, for the tune), the sung sections in the lyrics' order; instrumental sections where the plan puts
-    them. An order that leaves out or moves a sung section raises Unusable when `strict` (the harness's model
-    sets the form again); otherwise the lyrics' own order is used. Also what was kept, in words."""
+    them. The plan's sections stand for the sung ones by their ids or, in order, by their kinds ("verse1" and
+    "verse2" for the lyrics' verse sung twice), giving them their chords and energy. An order that leaves out or
+    moves a sung section raises Unusable when `strict` (the harness's model sets the form again); otherwise the
+    lyrics' own order is used. Also what was kept, in words."""
     found = lyric_form(setup.summary, setup.style, float(plan["tempo"]))
     if found is None:
         return plan, []
     form, form_order, _ = found
     fixed = {s["id"]: s for s in form if s.get("words")}
     by_id = {s["id"]: s for s in plan["sections"]}
-    order = list(plan["order"])
     sung_order = [o for o in form_order if o in fixed]
     kept: list[str] = []
-    if [o for o in order if o in fixed] != sung_order:
+    order: list[str] = []
+    stands: dict[str, dict[str, Any]] = {}  # a sung section's id -> the plan's section that gives its music
+    at = 0
+    for o in plan["order"]:
+        if at < len(sung_order) and (o == sung_order[at] or by_id[o]["kind"] == fixed[sung_order[at]]["kind"]):
+            stands.setdefault(sung_order[at], by_id[o])
+            order.append(sung_order[at])
+            at += 1
+        elif o in fixed:
+            at = -1  # a sung section out of its place
+            break
+        else:
+            order.append(o)
+    if at != len(sung_order):
         if strict:
+            wanted = ", ".join(f"{o} ({fixed[o]['kind']})" for o in sung_order)
             raise Unusable(
-                f"the lyrics' sections are sung in this order: {' '.join(sung_order)}; keep each of them, in that "
-                "order (instrumental sections may go before, between and after them)"
+                f"the lyrics are sung in this order: {wanted}. Give the order these sections, by these ids or by "
+                "sections of these kinds in this order (a section sung again is its id again); instrumental "
+                "sections may go before, between and after them"
             )
-        order = form_order
+        order, stands = list(form_order), {}
         kept.append("the lyrics' order of sections")
     sections: list[dict[str, Any]] = []
     for sid in dict.fromkeys(order):
-        section = dict(by_id[sid]) if sid in by_id else None
+        given = stands.get(sid) or by_id.get(sid)
+        section = {**given, "id": sid} if given is not None else None
         shape = next((s for s in form if s["id"] == sid), None)
         if section is None:
             assert shape is not None  # only the lyrics' own order names sections the plan does not have
