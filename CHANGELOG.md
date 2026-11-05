@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: a Vocals part for a song with lyrics
+
+- With lyrics on the Description page, the Parts page suggests a **Vocals** part: an instrument plays the sung
+  tune in the voice's place (Spinus never sings). Its sound is suggested like any part's, in the singers' range,
+  and you can change it; a Lead beside it harmonises. Without lyrics, or with **This song has no vocals**
+  ticked, there is no Vocals part.
+
 ### Track creator: several sounds from one window, and the notes an instrument may play
 
 - **Save this sound** has **Save and keep open**: save one preset or kit, set up the next and save it too, from

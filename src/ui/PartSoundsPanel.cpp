@@ -121,6 +121,8 @@ public:
     void update (const Row& row)
     {
         title.setText (row.part.name, juce::dontSendNotification);
+        // Vocals only for a song with lyrics (the Description tab's).
+        role.setItemEnabled (parts::songRoles().indexOf ("vocals") + 1, parts::hasLyrics (panel.context.summary));
         role.setSelectedId (parts::songRoles().indexOf (row.part.role) + 1, juce::dontSendNotification);
         choice.clear (juce::dontSendNotification);
         for (size_t i = 0; i < row.choices.size(); ++i)
@@ -1049,6 +1051,8 @@ bool PartSoundsPanel::addPart (const juce::String& role)
     if (busy || ! parts::songRoles().contains (role) || rows.size() >= 16)
         return false;
     context = getContext ? getContext() : Context {};
+    if (role == "vocals" && ! parts::hasLyrics (context.summary))
+        return false;
     Row row;
     row.part = parts::newPart (getParts(), role);
     row.target = parts::targetFor (row.part, 0, context.summary);
@@ -1077,6 +1081,8 @@ bool PartSoundsPanel::setRole (int index, const juce::String& role)
     if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()) || ! parts::songRoles().contains (role))
         return false;
     context = getContext ? getContext() : Context {};
+    if (role == "vocals" && ! parts::hasLyrics (context.summary))
+        return false;
     auto& row = rows[(size_t)index];
     if (row.part.role == role)
         return true;
@@ -1097,6 +1103,8 @@ void PartSoundsPanel::setParts (const std::vector<parts::SongPart>& wanted)
     std::map<juce::String, int> instances;
     for (const auto& part : wanted)
     {
+        if (part.role == "vocals" && ! parts::hasLyrics (context.summary)) // the lyrics were taken away
+            continue;
         Row row;
         row.part = part;
         row.target = parts::targetFor (part, instances[part.role]++, context.summary);
@@ -1143,9 +1151,14 @@ void PartSoundsPanel::showSuggestMenu()
 
 void PartSoundsPanel::showAddMenu()
 {
+    context = getContext ? getContext() : Context {};
     juce::PopupMenu menu;
     for (const auto& role : parts::songRoles())
-        menu.addItem (parts::roleName (role), [this, role] { addPart (role); });
+    {
+        const bool can = role != "vocals" || parts::hasLyrics (context.summary);
+        menu.addItem (parts::roleName (role) + (can ? "" : ": add lyrics on the Description tab first"), can, false,
+                      [this, role] { addPart (role); });
+    }
     menu.addSeparator();
     // A part from an instrument: its role the one you marked it with, or what its name says ("Steel Guitar": an
     // acoustic guitar); its sound that one.
@@ -1508,9 +1521,16 @@ void PartSoundsPanel::restore (const juce::var& from)
     if ((int)from["version"] != 1 || saved == nullptr || busy)
         return;
     context = getContext ? getContext() : Context {};
+    // A part of a known role; a Vocals part only while the song has lyrics (setParts leaves it out otherwise).
+    auto kept = [this] (const juce::var& p)
+    {
+        const auto role = p["role"].toString();
+        return parts::songRoles().contains (role) && p["id"].toString().isNotEmpty() &&
+               (role != "vocals" || parts::hasLyrics (context.summary));
+    };
     std::vector<parts::SongPart> wanted;
     for (const auto& p : *saved)
-        if (parts::songRoles().contains (p["role"].toString()) && p["id"].toString().isNotEmpty())
+        if (kept (p))
             wanted.push_back ({ p["id"].toString(), p["name"].toString(), p["role"].toString() });
     if (wanted.empty())
         return;
@@ -1518,7 +1538,7 @@ void PartSoundsPanel::restore (const juce::var& from)
     for (size_t i = 0, j = 0; i < (size_t)saved->size() && j < rows.size(); ++i)
     {
         const auto& p = (*saved)[(int)i];
-        if (! parts::songRoles().contains (p["role"].toString()) || p["id"].toString().isEmpty())
+        if (! kept (p))
             continue;
         auto& row = rows[j++];
         row.tune = (bool)p["tune"];

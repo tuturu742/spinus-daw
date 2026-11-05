@@ -215,8 +215,9 @@ std::vector<Layer> layersOf (const juce::var& song)
 juce::String familyColour (const juce::String& family)
 {
     static const std::map<juce::String, juce::String> colours {
-        { "Drums", "#ffff3fa4" },  { "Bass", "#ff2fd5e8" },      { "Guitars", "#ffe8663a" }, { "Keys", "#ff57c27a" },
-        { "Synths", "#ff6e59d9" }, { "Orchestra", "#ffd1a94f" }, { "Leads", "#ffff9a3c" },   { "FX", "#ffa0a8b8" }
+        { "Drums", "#ffff3fa4" }, { "Bass", "#ff2fd5e8" },   { "Guitars", "#ffe8663a" },
+        { "Keys", "#ff57c27a" },  { "Synths", "#ff6e59d9" }, { "Orchestra", "#ffd1a94f" },
+        { "Leads", "#ffff9a3c" }, { "FX", "#ffa0a8b8" },     { "Vocals", "#ffff7eb6" }
     };
     const auto found = colours.find (family);
     return found != colours.end() ? found->second : juce::String ("#ff9b5cff");
@@ -254,6 +255,7 @@ Sound defaultSound (const Layer& layer)
                                                                 { "pad", "Warm Pad" },
                                                                 { "arp", "Pluck" },
                                                                 { "lead", "Saw Lead" },
+                                                                { "vocals", "Flute Lead" }, // a tune that breathes
                                                                 { "counter", "Bell" },
                                                                 { "riser", "Noise Riser" },
                                                                 { "rhythm-guitar", "Square Lead" },
@@ -880,6 +882,7 @@ double roleLevelDb (const juce::String& role)
         { "lead-guitar", -2.0 },
         { "clean-guitar", -4.0 },
         { "acoustic-guitar", -4.0 },
+        { "vocals", -1.0 }, // the voice sits on top of the mix
         { "lead", -2.0 },
         { "counter", -5.0 },
         { "chords", -5.0 },

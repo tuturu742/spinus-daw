@@ -273,6 +273,28 @@ def test_the_users_parts_are_written_two_of_a_role_unlike_each_other() -> None:
             songwriter.write(s, 1, parts=bad)
 
 
+def test_a_vocals_part_plays_the_tune_and_a_lead_beside_it_harmonises() -> None:
+    s = summary()
+    parts = [
+        {"id": "drums", "name": "Drums", "role": "drums"},
+        {"id": "vocals", "name": "Vocals", "role": "vocals"},
+        {"id": "lead", "name": "Lead", "role": "lead"},
+    ]
+    song = songwriter.write(s, 4, parts=parts)
+    layers = {layer["id"]: layer for layer in song["layers"]}
+    assert layers["vocals"]["family"] == "Vocals" and layers["vocals"]["part"] == "lead"
+    notes = song["layerParts"]
+    assert notes["vocals"] == song["parts"]["lead"]  # the song's tune, on the stand-in instrument
+    by_id = {x["id"]: x for x in song["sections"]}
+    for sid, harmony in notes.get("lead", {}).items():
+        tune = {n["start"]: n["pitch"] for n in song["parts"]["lead"][sid]}
+        assert not harmony or by_id[sid]["kind"] in ("chorus", "bridge")
+        assert all(3 <= tune[n["start"]] - n["pitch"] <= 5 for n in harmony)
+    # In the vocals' register.
+    register = layers["vocals"]["register"]
+    assert register == songwriter.layer_register(songwriter.Style.from_summary(s), "lead")
+
+
 def test_a_high_bass_gets_a_sub_and_redoing_a_part_redoes_its_layers() -> None:
     s = summary()
     s["parts"]["bass"] = {**s["parts"]["bass"], "low": 38, "median": 45, "high": 57}

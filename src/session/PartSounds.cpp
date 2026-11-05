@@ -102,11 +102,11 @@ juce::String displayName (const juce::String& part)
 
 const juce::StringArray& songRoles()
 {
-    static const juce::StringArray roles { "drums",           "percussion",   "bass",        "sub",     "rhythm-guitar",
-                                           "acoustic-guitar", "clean-guitar", "lead-guitar", "chords",  "piano",
-                                           "organ",           "pad",          "strings",     "choir",   "brass",
-                                           "woodwinds",       "arp",          "lead",        "counter", "riser",
-                                           "impact" };
+    static const juce::StringArray roles { "drums",           "percussion",   "bass",        "sub",    "rhythm-guitar",
+                                           "acoustic-guitar", "clean-guitar", "lead-guitar", "chords", "piano",
+                                           "organ",           "pad",          "strings",     "choir",  "brass",
+                                           "woodwinds",       "arp",          "vocals",      "lead",   "counter",
+                                           "riser",           "impact" };
     return roles;
 }
 
@@ -130,6 +130,7 @@ juce::String roleName (const juce::String& role)
         { "brass", "Brass" },
         { "woodwinds", "Woodwinds" },
         { "arp", "Arpeggio" },
+        { "vocals", "Vocals (an instrument for the voice)" },
         { "lead", "Lead melody" },
         { "counter", "Counter-melody" },
         { "riser", "Riser (effect)" },
@@ -143,13 +144,10 @@ namespace
 {
 juce::String defaultName (const juce::String& role)
 {
-    static const std::map<juce::String, juce::String> names { { "chords", "Chords" },
-                                                              { "piano", "Piano" },
-                                                              { "lead", "Lead" },
-                                                              { "riser", "Riser" },
-                                                              { "impact", "Impacts" },
-                                                              { "choir", "Choir" },
-                                                              { "clean-guitar", "Clean guitar" } };
+    static const std::map<juce::String, juce::String> names {
+        { "chords", "Chords" }, { "piano", "Piano" },    { "lead", "Lead" },   { "vocals", "Vocals" },
+        { "riser", "Riser" },   { "impact", "Impacts" }, { "choir", "Choir" }, { "clean-guitar", "Clean guitar" }
+    };
     const auto found = names.find (role);
     return found != names.end() ? found->second : roleName (role);
 }
@@ -173,6 +171,8 @@ juce::StringArray nameWords (const juce::String& role)
         return { "flute", "clarinet", "oboe", "bassoon", "sax", "wood", "recorder" };
     if (role == "choir")
         return { "choir", "vox", "voice", "vocal", "aah", "ooh", "chant" };
+    if (role == "vocals") // a sung-like lead: a voice patch, or an instrument that sings a tune
+        return { "vox", "voice", "vocal", "flute", "violin", "lead" };
     if (role == "percussion")
         return { "perc", "conga", "bongo", "shaker", "tamb", "hand" };
     return {};
@@ -221,6 +221,26 @@ juce::String roleFromName (const juce::String& name)
     return {};
 }
 
+bool hasLyrics (const juce::var& summary) { return (int)summary["lyrics"]["lines"] > 0; }
+
+std::vector<SongPart> withVocals (std::vector<SongPart> list, const juce::var& summary)
+{
+    auto isVocals = [] (const SongPart& p) { return p.role == "vocals"; };
+    if (! hasLyrics (summary))
+    {
+        list.erase (std::remove_if (list.begin(), list.end(), isVocals), list.end());
+        return list;
+    }
+    if (list.empty() || std::any_of (list.begin(), list.end(), isVocals))
+        return list;
+    // Before the lead (the tune is the vocals' now, the lead harmonises it), or before the effects.
+    static const juce::StringArray after { "lead", "lead-guitar", "counter", "woodwinds", "riser", "impact" };
+    const auto at = std::find_if (list.begin(), list.end(), [] (const SongPart& p) { return after.contains (p.role); });
+    const auto vocals = newPart (list, "vocals");
+    list.insert (at, vocals);
+    return list;
+}
+
 std::vector<SongPart> describedParts (const juce::var& summary)
 {
     std::vector<SongPart> list;
@@ -235,19 +255,19 @@ std::vector<SongPart> describedParts (const juce::var& summary)
                     part.name = name;
                 list.push_back (part);
             }
-    return list;
+    return withVocals (std::move (list), summary);
 }
 
 std::vector<SongPart> suggestedParts (const juce::String& which, const juce::var& summary)
 {
     if (which != "genre")
-        return defaultParts (which, summary);
+        return withVocals (defaultParts (which, summary), summary);
     std::vector<SongPart> list;
     if (const auto* roles = summary["described"]["suggested"].getArray())
         for (const auto& role : *roles)
             if (songRoles().contains (role.toString()))
                 list.push_back (newPart (list, role.toString()));
-    return list;
+    return withVocals (std::move (list), summary);
 }
 
 std::vector<Choice> vary (std::vector<Choice> candidates, const std::set<juce::String>& avoid, juce::uint32 seed,
@@ -368,7 +388,7 @@ Target targetFor (const SongPart& part, int instance, const juce::var& summary)
 {
     const auto& role = part.role;
     static const juce::StringArray drums { "drums", "impact", "percussion" }, bass { "bass", "sub" },
-        lead { "lead", "counter", "lead-guitar", "woodwinds" };
+        lead { "vocals", "lead", "counter", "lead-guitar", "woodwinds" };
     // Guitar parts follow the reference songs' guitar stem when they have one (a 6-stem analysis).
     const bool guitarStem = role.endsWith ("guitar") && (int)summary["parts"]["guitar"]["songs"] > 0;
     const auto stem = guitarStem              ? juce::String ("guitar")
@@ -394,7 +414,8 @@ Target targetFor (const SongPart& part, int instance, const juce::var& summary)
     t.id = part.id;
     t.name = part.name;
     t.role = role;
-    t.measure = instance == 0 && (role == "drums" || role == "bass" || role == "chords" || role == "lead");
+    t.measure =
+        instance == 0 && (role == "drums" || role == "bass" || role == "chords" || role == "lead" || role == "vocals");
     const auto up = instance % 2 == 1 && role != "drums" && role != "impact" && role != "sub" ? 12 : 0;
     if (role == "sub")
     {
@@ -419,6 +440,8 @@ Target targetFor (const SongPart& part, int instance, const juce::var& summary)
         t.median = juce::jmax (52, t.median - 7), t.low = t.median - 7, t.high = t.median + 7;
         t.roles = { "lead", "keys", "pad" };
     }
+    else if (role == "vocals") // the sung tune: a sound that holds a note and sings it, a lead or a soft keys
+        t.roles = { "lead", "keys", "pad" };
     else if (role == "riser")
     {
         t.low = 60, t.median = 66, t.high = 71;

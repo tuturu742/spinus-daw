@@ -49,15 +49,22 @@ struct SongPart
     bool operator== (const SongPart&) const = default;
 };
 /** drums, percussion, bass, sub, rhythm-guitar, acoustic-guitar, clean-guitar, lead-guitar, chords, piano, organ,
-    pad, strings, choir, brass, woodwinds, arp, lead, counter, riser, impact (spinus_ai.songwriter.ROLES). */
+    pad, strings, choir, brass, woodwinds, arp, vocals, lead, counter, riser, impact (spinus_ai.songwriter.ROLES).
+    "vocals" (an instrument playing the sung tune) is only for a song with lyrics (hasLyrics). */
 const juce::StringArray& songRoles();
 /** The role generic instrument words in an instrument's or preset's name say ("Steel Guitar": acoustic-guitar,
     "Fingered Bass": bass, "Grand Piano": piano), or empty. No vendor or product names: what the user marked
     (UserRoles) comes first where roles are used. */
 juce::String roleFromName (const juce::String& name);
+/** The summary has lyrics (the Description tab's, read): a Vocals part may be on the list. */
+bool hasLyrics (const juce::var& summary);
+/** The list with a Vocals part when the summary has lyrics (before the lead, or the effects), and without any
+    when it has none. An empty list stays empty. */
+std::vector<SongPart> withVocals (std::vector<SongPart> list, const juce::var& summary);
 /** The parts a description names (its `described.parts`: "guitar, bass and drums"), none otherwise. */
 std::vector<SongPart> describedParts (const juce::var& summary);
-/** Suggest parts: "genre" (the described genre's usual parts), "sketch" or "full" (defaultParts). */
+/** Suggest parts: "genre" (the described genre's usual parts), "sketch" or "full" (defaultParts); with Vocals
+    when the summary has lyrics (withVocals). */
 std::vector<SongPart> suggestedParts (const juce::String& which, const juce::var& summary);
 /** How the page names a role: "Chords (rhythm)", "Arpeggio", "Riser (effect)"... */
 juce::String roleName (const juce::String& role);

@@ -60,6 +60,7 @@ NOTES_PER_BAR = 64  # most notes a bar a part may play (after the loop is repeat
 # The notes a part of each role may play (MIDI), wider than its usual register (songwriter.layer_register).
 RANGES: dict[str, tuple[int, int]] = {
     "bass": (24, 60), "sub": (21, 45), "chords": (40, 86), "pad": (36, 90), "arp": (45, 98), "lead": (45, 96),
+    "vocals": (45, 91),
     "counter": (40, 91), "rhythm-guitar": (40, 79), "lead-guitar": (50, 93), "acoustic-guitar": (40, 86),
     "clean-guitar": (40, 88), "piano": (21, 108), "organ": (36, 96), "strings": (28, 98), "brass": (40, 86),
     "woodwinds": (50, 98), "choir": (43, 81), "riser": (36, 96),
@@ -225,6 +226,8 @@ def part_brief(setup: Setup) -> list[dict[str, Any]]:
             register = sw.layer_register(setup.style, role, k)
             if register:
                 brief["usualNotes"] = register
+        if role == "vocals":
+            brief["plays"] = "the sung tune, on an instrument standing in for the voice (Spinus does not sing)"
         if setup.candidates.get(p["id"]):
             brief["sounds"] = setup.candidates[p["id"]]
         if setup.current.get(p["id"]):
@@ -636,7 +639,11 @@ def build_song(checked: Checked, setup: Setup, seed: int, size: str) -> dict[str
 
     # The four parts the checks compare (and Redo part keeps): the first part of each, as the project plays it.
     for base in sw.PARTS:
-        source = next((layer["id"] for layer in layers if layer["role"] == base and layer["id"] in layer_parts), None)
+        # The tune is the vocals part's when the song has one.
+        roles = ("vocals", base) if base == "lead" else (base,)
+        source = next(
+            (layer["id"] for r in roles for layer in layers if layer["role"] == r and layer["id"] in layer_parts), None
+        )
         source = source or next(
             (layer["id"] for layer in layers if layer["part"] == base and layer["id"] in layer_parts), None
         )
