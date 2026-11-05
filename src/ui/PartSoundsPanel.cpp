@@ -1367,19 +1367,19 @@ bool PartSoundsPanel::saveSound (int index)
     // Play in its window: the phrase Listen plays (on the instrument's own drum notes for the drums).
     auto phrase = parts::auditionPhrase (row.target, start, context.summary["tempo"]["median"], context.summary);
     juce::String problem;
-    SaveSoundWindow::Notes notes;
+    SaveSoundWindow::Notes playable;
     if (row.target.part != "drums" && start.kind != parts::Choice::Kind::kit)
     {
-        notes.range = parts::noteRangeFor (start, context.indexFolder);
-        notes.onChange = [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
-                          key = parts::instrumentKey (start)] (std::optional<NoteRanges::Range> range)
+        playable.range = parts::noteRangeFor (start, context.indexFolder);
+        playable.onChange = [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
+                             key = parts::instrumentKey (start)] (std::optional<NoteRanges::Range> range)
         {
             if (safe != nullptr)
                 safe->setNoteRange (key, range);
         };
     }
     const auto opened = SaveSoundWindow::open (
-        session, start, row.part.name + " (" + start.source.name + ")", std::move (phrase), std::move (notes), this,
+        session, start, row.part.name + " (" + start.source.name + ")", std::move (phrase), std::move (playable), this,
         [safe = juce::Component::SafePointer<PartSoundsPanel> (this), index,
          start] (std::vector<SaveSoundWindow::Saved> saved)
         {
@@ -1410,7 +1410,7 @@ bool PartSoundsPanel::keepSavedSounds (int index, const parts::Choice& start,
     context = getContext ? getContext() : Context {};
     SavedSounds saved (context.indexFolder);
     saved.load();
-    std::vector<SavedSounds::Sound> added;
+    std::vector<SavedSounds::Sound> keptSounds;
     juce::StringArray empty;
     for (const auto& [name, state] : sounds)
     {
@@ -1425,9 +1425,9 @@ bool PartSoundsPanel::keepSavedSounds (int index, const parts::Choice& start,
             fail ("Spinus could not keep that sound (the settings folder cannot be written).");
             return false;
         }
-        added.push_back (*sound);
+        keptSounds.push_back (*sound);
     }
-    if (added.empty())
+    if (keptSounds.empty())
     {
         fail (start.source.name + " gave Spinus nothing to keep: its sound was not saved.");
         return false;
@@ -1439,25 +1439,25 @@ bool PartSoundsPanel::keepSavedSounds (int index, const parts::Choice& start,
     const auto folder = context.indexFolder;
     const auto helper = context.helper;
     juce::StringArray names;
-    for (const auto& sound : added)
+    for (const auto& sound : keptSounds)
         names.add (sound.name);
     auto measured = std::make_shared<juce::var>(); // the first one's measurement
     runInBackground (
-        "Saved " + names.joinIntoString (", ") + ": Spinus is listening to " + (added.size() == 1 ? "it" : "them") +
-            " (a few seconds each, longer for a big instrument)...",
-        [folder, helper, source, id = added.front().id, measured] (const std::function<bool()>& shouldStop)
+        "Saved " + names.joinIntoString (", ") + ": Spinus is listening to " +
+            (keptSounds.size() == 1 ? "it" : "them") + " (a few seconds each, longer for a big instrument)...",
+        [folder, helper, source, id = keptSounds.front().id, measured] (const std::function<bool()>& shouldStop)
         {
-            SoundIndex index (folder);
-            index.load();
-            SoundIndexer::updateInstrument (index, helper, source, shouldStop);
-            if (const auto found = index.instruments.find (source.key); found != index.instruments.end())
+            SoundIndex soundIndex (folder);
+            soundIndex.load();
+            SoundIndexer::updateInstrument (soundIndex, helper, source, shouldStop);
+            if (const auto found = soundIndex.instruments.find (source.key); found != soundIndex.instruments.end())
                 for (const auto& s : found->second.sounds)
                     if (s["id"].toString() == id)
                         *measured = s;
             return measured->isObject() && ! measured->hasProperty ("problem") ? juce::String()
                                                                                : juce::String ("not measured");
         },
-        [this, index, source, first = added.front(), names, empty, measured] (const juce::String& problem)
+        [this, index, source, first = keptSounds.front(), names, empty, measured] (const juce::String& problem)
         {
             busy = false;
             const auto measuredSound = measured->isObject() ? *measured : savedSoundVar (first);
