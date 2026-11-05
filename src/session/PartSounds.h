@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NoteRanges.h"
 #include "Session.h"
 #include "SoundDescriptors.h"
 #include "SoundIndex.h"
@@ -253,7 +254,14 @@ std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options&, cons
     a short phrase in the part's register (bass: roots, other: chords or a line, lead: a tune), or a beat
     (drums: kick, snare and hats from the summary's most played steps). Times in seconds at `tempo`. */
 std::vector<OfflineInstrument::Note> auditionPhrase (const Target&, const Choice&, double tempo,
-                                                     const juce::var& summary = {});
+                                                     const juce::var& summary = {},
+                                                     std::optional<NoteRanges::Range> range = {});
+
+/** The instrument a choice plays, as the sound index, the user's roles and note ranges know it. */
+juce::String instrumentKey (const Choice&);
+/** The notes the user lets a choice's instrument play (NoteRanges, kept beside the index in `indexFolder`), if
+    any. Never for the drums' own kit notes (a kit or a loop). */
+std::optional<NoteRanges::Range> noteRangeFor (const Choice&, const juce::File& indexFolder);
 
 /** What the user adds: a sound per part, its tuning and effects, and the mix. */
 struct Plan
@@ -263,8 +271,9 @@ struct Plan
         Target target; // its id, name and role: the part of the list
         Choice choice;
         std::optional<SynthMatchResult> tuned;
-        juce::Array<juce::var> effects; // spinus_ai.mixplan items for its insert (eq, compressor, gate)
-        double volumeDb = 0.0;          // its insert's fader
+        juce::Array<juce::var> effects;         // spinus_ai.mixplan items for its insert (eq, compressor, gate)
+        double volumeDb = 0.0;                  // its insert's fader
+        std::optional<NoteRanges::Range> notes; // the notes its instrument may play (noteRangeFor), if limited
     };
     std::vector<Part> parts;
     juce::Array<juce::var> master; // items for the master (limiter, eq)

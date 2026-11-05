@@ -220,6 +220,27 @@ TEST_CASE ("Song writer: the sounds for each part's channels are written into, t
     CHECK (project.playlist.lanes.front().muted); // the song's drums instead
 }
 
+TEST_CASE ("Song writer: a part keeps to the notes its instrument may play, moved by octaves", "[song]")
+{
+    const auto song = makeSong();
+    // The bass's instrument switches with its keys below E2 (40): its notes 45, 41, 48 stay or move up an octave.
+    const auto kept = song::keepToRanges (song, { { "bass", NoteRanges::Range { 42, 60 } } });
+    auto pitches = [] (const juce::var& s, const char* part, const char* section)
+    {
+        std::vector<int> found;
+        for (const auto& n : *s["parts"][part][section].getArray())
+            found.push_back ((int)n["pitch"]);
+        return found;
+    };
+    CHECK (pitches (kept, "bass", "verse") == std::vector<int> { 45, 53 });
+    CHECK (pitches (kept, "bass", "chorus") == std::vector<int> { 48 });
+    // The others and the song it came from are untouched; the drums have no pitches to move.
+    CHECK (pitches (song, "bass", "verse") == std::vector<int> { 45, 41 });
+    CHECK (pitches (kept, "chords", "verse") == pitches (song, "chords", "verse"));
+    CHECK (juce::JSON::toString (kept["parts"]["drums"]) == juce::JSON::toString (song["parts"]["drums"]));
+    CHECK (juce::JSON::toString (song::keepToRanges (song, {})) == juce::JSON::toString (song));
+}
+
 TEST_CASE ("Song writer: one part or one section written again, the rest kept, one undo step each", "[song]")
 {
     commands::CommandHistory history { model::Project {} };

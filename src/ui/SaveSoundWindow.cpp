@@ -1,4 +1,5 @@
 #include "SaveSoundWindow.h"
+#include "NoteRangeMenu.h"
 
 #include "WindowStacking.h"
 
@@ -53,13 +54,34 @@ public:
         nameEditor.setTooltip ("The name your saved sound is listed under (Your saved sounds)");
         playButton.setTooltip ("Hear the part's phrase with the sound as it is set up now");
         playButton.onClick = [this] { played (window.play()); };
+        notesButton.setTooltip ("The notes it may play: for an instrument whose other keys switch what it plays "
+                                "(Play, Listen and the song keep to them)");
+        notesButton.onClick = [this]
+        {
+            makeNoteRangeMenu (window.notes.range,
+                               [safe = juce::Component::SafePointer<Content> (this)] (auto range)
+                               {
+                                   if (safe != nullptr)
+                                       safe->window.setNotes (range);
+                               })
+                .showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&notesButton));
+        };
+        notesButton.setVisible (window.notes.onChange != nullptr);
         saveButton.onClick = [this] { window.save (nameEditor.getText()); };
-        cancelButton.onClick = [this] { window.close(); };
+        saveButton.setTooltip ("Keep this sound under its name and close the window");
+        keepButton.setTooltip ("Keep this sound under its name and leave the window open: set up the next sound "
+                               "(another preset or kit), name it and save it too");
+        keepButton.onClick = [this] { kept (nameEditor.getText()); };
+        cancelButton.setTooltip ("Close without saving the sound as it is now");
+        cancelButton.onClick = [this] { window.finish(); };
         for (auto* c : std::initializer_list<juce::Component*> { &hint, &playButton, &nameLabel, &nameEditor,
-                                                                 &saveButton, &cancelButton })
+                                                                 &keepButton, &saveButton, &cancelButton })
             addAndMakeVisible (c);
+        addChildComponent (notesButton);
+        notesButton.setVisible (window.notes.onChange != nullptr);
+        updateNotesText();
         nameLabel.setText ("Name:", juce::dontSendNotification);
-        setSize (juce::jmax (520, editor->getWidth()), editor->getHeight() + bar);
+        setSize (juce::jmax (minWidth, editor->getWidth()), editor->getHeight() + bar);
     }
 
     ~Content() override
@@ -68,6 +90,38 @@ public:
         if (editor != nullptr)
             instance.editorBeingDeleted (editor.get());
         editor.reset();
+    }
+
+    /** Save and keep open: kept, said, and the name ready for the next one. */
+    void kept (const juce::String& name)
+    {
+        const auto ok = window.keep (name);
+        names.add (name.trim());
+        hint.setText (ok ? "Kept " + names.joinIntoString (", ") +
+                               ". Set up the next sound, name it and save it too; Close keeps what you saved."
+                         : "The instrument gave nothing to keep for " + name.trim() + ".",
+                      juce::dontSendNotification);
+        cancelButton.setButtonText ("Close");
+        cancelButton.setTooltip ("Close the window, keeping the sounds saved so far (not the one set up now)");
+        nameEditor.setText (nextName (name.trim()), false);
+        nameEditor.selectAll();
+        nameEditor.grabKeyboardFocus();
+    }
+
+    /** "Clean 2" after "Clean", "Clean 3" after "Clean 2". */
+    static juce::String nextName (const juce::String& name)
+    {
+        const auto number = name.fromLastOccurrenceOf (" ", false, false);
+        if (number.containsOnly ("0123456789") && number.isNotEmpty())
+            return name.upToLastOccurrenceOf (" ", false, false) + " " + juce::String (number.getIntValue() + 1);
+        return name + " 2";
+    }
+
+    void updateNotesText()
+    {
+        notesButton.setButtonText ("Notes: " + (window.notes.range.has_value()
+                                                    ? NoteRanges::describe (*window.notes.range)
+                                                    : juce::String ("any")));
     }
 
     /** Says it plays, then, once the phrase has ended, whether anything was heard. */
@@ -81,7 +135,7 @@ public:
         hint.setText ("Playing...", juce::dontSendNotification);
         window.live->takePeak();
         double end = 0.0;
-        for (const auto& n : window.phrase)
+        for (const auto& n : window.playedPhrase())
             end = juce::jmax (end, n.start + n.length);
         startTimer (juce::roundToInt ((end + 0.5) * 1000.0));
     }
@@ -109,10 +163,17 @@ public:
         bottom.removeFromTop (4);
         cancelButton.setBounds (bottom.removeFromRight (80));
         bottom.removeFromRight (6);
-        saveButton.setBounds (bottom.removeFromRight (80));
+        saveButton.setBounds (bottom.removeFromRight (70));
+        bottom.removeFromRight (6);
+        keepButton.setBounds (bottom.removeFromRight (150));
         bottom.removeFromRight (10);
         playButton.setBounds (bottom.removeFromLeft (70));
-        bottom.removeFromLeft (10);
+        bottom.removeFromLeft (6);
+        if (notesButton.isVisible())
+        {
+            notesButton.setBounds (bottom.removeFromLeft (150));
+            bottom.removeFromLeft (10);
+        }
         nameLabel.setBounds (bottom.removeFromLeft (50));
         nameEditor.setBounds (bottom);
         if (editor != nullptr)
@@ -123,25 +184,28 @@ public:
     {
         // The plugin resized its editor: follow it.
         if (child == editor.get())
-            setSize (juce::jmax (520, editor->getWidth()), editor->getHeight() + bar);
+            setSize (juce::jmax (minWidth, editor->getWidth()), editor->getHeight() + bar);
     }
 
 private:
-    static constexpr int bar = 64;
+    static constexpr int bar = 64, minWidth = 760;
     static constexpr const char* defaultHint =
-        "Set the sound up here (choose a kit or a patch), Play to hear it, name it, then Save: the Track creator "
-        "can use it from then on.";
+        "Set the sound up (a kit, a patch), Play, name it and Save. Several? Save and keep open for each.";
     SaveSoundWindow& window;
     juce::AudioPluginInstance& instance;
     std::unique_ptr<juce::AudioProcessorEditor> editor;
     juce::Label hint, nameLabel;
     juce::TextEditor nameEditor;
-    juce::TextButton playButton { "Play" }, saveButton { "Save" }, cancelButton { "Cancel" };
+    juce::TextButton playButton { "Play" }, saveButton { "Save" }, keepButton { "Save and keep open" },
+        cancelButton { "Cancel" }, notesButton;
+    juce::StringArray names; // kept so far
+
+    friend class SaveSoundWindow;
 };
 
 bool SaveSoundWindow::open (Session& session, const parts::Choice& start, const juce::String& name,
-                            std::vector<OfflineInstrument::Note> phrase, juce::Component* near, OnSave onSave,
-                            juce::String& problem)
+                            std::vector<OfflineInstrument::Note> phrase, Notes notes, juce::Component* near,
+                            OnSave onSave, juce::String& problem)
 {
     if (start.source.key.isEmpty() || (start.source.stockType.isEmpty() && start.source.file.isEmpty()))
     {
@@ -173,7 +237,7 @@ bool SaveSoundWindow::open (Session& session, const parts::Choice& start, const 
             hidden->loadPreset (*found);
     }
     auto* window = new SaveSoundWindow (session, std::move (hidden), "Save this sound: " + start.source.name, name,
-                                        std::move (phrase), std::move (onSave),
+                                        std::move (phrase), std::move (notes), std::move (onSave),
                                         near != nullptr ? near->getTopLevelComponent() : nullptr);
     if (near != nullptr)
         window->setCentrePosition (near->getScreenBounds().getCentre());
@@ -181,10 +245,10 @@ bool SaveSoundWindow::open (Session& session, const parts::Choice& start, const 
 }
 
 SaveSoundWindow::SaveSoundWindow (Session& s, std::unique_ptr<HiddenInstrument> h, const juce::String& title,
-                                  const juce::String& name, std::vector<OfflineInstrument::Note> notes, OnSave save,
-                                  juce::Component* owner)
+                                  const juce::String& name, std::vector<OfflineInstrument::Note> played, Notes range,
+                                  OnSave save, juce::Component* owner)
     : juce::DocumentWindow (title, juce::Colours::black, juce::DocumentWindow::closeButton, false), session (s),
-      hidden (std::move (h)), phrase (std::move (notes)), onSave (std::move (save))
+      hidden (std::move (h)), phrase (std::move (played)), notes (std::move (range)), onSave (std::move (save))
 {
     // Live from now on: what the user does in its window is heard (one window at a time: the newest).
     live = std::make_unique<engine::LiveInstrument> (*hidden->getInstance());
@@ -232,7 +296,36 @@ bool SaveSoundWindow::saveLastOpened (const juce::String& name)
     return true;
 }
 
+bool SaveSoundWindow::keepLastOpened (const juce::String& name)
+{
+    if (openWindows().empty())
+        return false;
+    openWindows().back()->content->kept (name);
+    return true;
+}
+
+void SaveSoundWindow::closeLastOpened()
+{
+    if (! openWindows().empty())
+        openWindows().back()->finish();
+}
+
 bool SaveSoundWindow::playLastOpened() { return ! openWindows().empty() && openWindows().back()->play(); }
+
+std::vector<int> SaveSoundWindow::playedNotesLastOpened()
+{
+    std::vector<int> played;
+    if (! openWindows().empty())
+        for (const auto& n : openWindows().back()->playedPhrase())
+            played.push_back (n.note);
+    return played;
+}
+
+void SaveSoundWindow::setNotesLastOpened (std::optional<NoteRanges::Range> range)
+{
+    if (! openWindows().empty())
+        openWindows().back()->setNotes (range);
+}
 
 float SaveSoundWindow::mixLastOpened (double seconds)
 {
@@ -250,28 +343,61 @@ float SaveSoundWindow::mixLastOpened (double seconds)
     return loudest;
 }
 
-void SaveSoundWindow::save (const juce::String& name)
+bool SaveSoundWindow::keep (const juce::String& name)
 {
     juce::MemoryBlock state;
     if (auto* instance = hidden != nullptr ? hidden->getInstance() : nullptr)
         instance->getStateInformation (state);
+    kept.push_back ({ name.trim(), state });
+    return ! state.isEmpty();
+}
+
+void SaveSoundWindow::save (const juce::String& name)
+{
+    keep (name);
+    finish();
+}
+
+void SaveSoundWindow::finish()
+{
     close (
-        [then = std::move (onSave), name = name.trim(), state]
+        [then = std::move (onSave), saved = std::move (kept)]() mutable
         {
-            if (then)
-                then (name, state);
+            if (then && ! saved.empty())
+                then (std::move (saved));
         });
+}
+
+std::vector<OfflineInstrument::Note> SaveSoundWindow::playedPhrase() const
+{
+    auto played = phrase;
+    if (notes.range.has_value())
+        for (auto& n : played)
+            n.note = NoteRanges::fit (n.note, *notes.range);
+    return played;
+}
+
+void SaveSoundWindow::setNotes (std::optional<NoteRanges::Range> range)
+{
+    notes.range = range;
+    if (notes.onChange)
+        notes.onChange (range);
+    if (content != nullptr)
+    {
+        content->updateNotesText();
+        content->resized();
+    }
 }
 
 bool SaveSoundWindow::play()
 {
     if (live == nullptr || phrase.empty())
         return false;
-    std::vector<engine::LiveInstrument::Note> notes;
-    notes.reserve (phrase.size());
-    for (const auto& n : phrase)
-        notes.push_back ({ n.note, n.start, n.length, n.velocity });
-    return live->play (notes);
+    std::vector<engine::LiveInstrument::Note> played;
+    played.reserve (phrase.size());
+    for (const auto& n : playedPhrase())
+        played.push_back ({ n.note, n.start, n.length, n.velocity });
+    return live->play (played);
 }
 
 void SaveSoundWindow::close (std::function<void()> afterwards)
@@ -287,6 +413,6 @@ void SaveSoundWindow::close (std::function<void()> afterwards)
         });
 }
 
-void SaveSoundWindow::closeButtonPressed() { close(); }
+void SaveSoundWindow::closeButtonPressed() { finish(); }
 
 } // namespace spinus::ui

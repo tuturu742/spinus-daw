@@ -427,6 +427,7 @@ void SongWriterPanel::balance (
     const auto folder = context.workFolder.getChildFile ("levels");
     folder.deleteRecursively();
     folder.createDirectory();
+    const auto fitted = songForProject();
     for (const auto& layer : song::layersOf (song))
     {
         const auto chosen = layer.part == "fx" ? std::nullopt : chosenForLayer (layer);
@@ -436,7 +437,7 @@ void SongWriterPanel::balance (
         using Kind = parts::Choice::Kind;
         if ((c.kind != Kind::preset && c.kind != Kind::kit) || (layer.drums && c.drumNotes.empty()))
             continue;
-        const auto notes = song::layerExcerpt (song, layer, c.drumNotes);
+        const auto notes = song::layerExcerpt (fitted, layer, c.drumNotes);
         if (notes.empty())
             continue;
         juce::Array<juce::var> played;
@@ -572,6 +573,20 @@ bool SongWriterPanel::redo (const juce::String& part, const juce::String& sectio
     return true;
 }
 
+juce::var SongWriterPanel::songForProject()
+{
+    std::map<juce::String, NoteRanges::Range> ranges;
+    for (const auto& layer : song::layersOf (song))
+        if (const auto chosen = layer.drums || layer.part == "fx" ? std::nullopt : chosenForLayer (layer))
+            if (const auto range = parts::noteRangeFor (chosen->choice, context.indexFolder))
+                ranges[layer.id] = *range;
+    for (const auto& part : song::partNames())
+        if (const auto* chosen = part == "drums" ? nullptr : chosenFor (context.sounds, part))
+            if (const auto range = parts::noteRangeFor (chosen->choice, context.indexFolder))
+                ranges[part] = *range;
+    return song::keepToRanges (song, ranges);
+}
+
 song::Options SongWriterPanel::optionsFor (const model::Project& project, const juce::String& replace)
 {
     song::Options options;
@@ -619,14 +634,14 @@ juce::var SongWriterPanel::makeProposal (juce::String* error, const juce::String
         return fail ("Write a song first.");
     const auto& project = session.getProject();
     if (whole || ! applied.isIn (project))
-        return song::makeProposal (song, project, optionsFor (project, replace), error);
+        return song::makeProposal (songForProject(), project, optionsFor (project, replace), error);
     if (redoneParts.isEmpty() && redoneSections.isEmpty())
         return fail ("The song is in the project as it is: write another version or redo a part first.");
     juce::Array<juce::var> steps;
     juce::StringArray summaries;
     for (const auto& part : redoneParts)
     {
-        const auto made = song::makeRedoProposal (song, applied, part, {}, error);
+        const auto made = song::makeRedoProposal (songForProject(), applied, part, {}, error);
         if (! made.isObject())
             return {};
         steps.addArray (*made["steps"].getArray());
@@ -634,7 +649,7 @@ juce::var SongWriterPanel::makeProposal (juce::String* error, const juce::String
     }
     for (const auto& section : redoneSections)
     {
-        const auto made = song::makeRedoProposal (song, applied, {}, section, error);
+        const auto made = song::makeRedoProposal (songForProject(), applied, {}, section, error);
         if (! made.isObject())
             return {};
         steps.addArray (*made["steps"].getArray());

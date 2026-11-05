@@ -336,6 +336,14 @@ and drums": those three), or empty. Then:
   (for example a plugin whose default sound is a rhythm guitar); in **Show sounds...**, right-click a preset
   and **Use as** gives that preset one. Your roles come first wherever roles are used (choosing sounds,
   parts from an instrument), are kept beside the sound index, and stay when the index is updated or deleted.
+- **Notes it plays.** Many sampled instruments (guitars and basses especially) use keys outside their playing
+  range as switches: a low key changes the guitar to palm mutes or slides instead of playing a note. In the
+  instrument menu, **Notes it plays** sets the lowest and the highest note the instrument may play (named as the
+  Piano roll names them, middle C being C5, with the MIDI number beside each, since instruments' manuals number
+  octaves differently: look up where your instrument's switches are). From then on **Listen**, **Play** in
+  [Save this sound](#save-this-sound), the sounds added to the project and the written song keep to those notes,
+  moving a note up or down by octaves (as few as it takes) when it falls outside. **Any note again** takes the
+  limit away. It is kept per instrument, beside the sound index, like your roles.
 - **Suggest parts...** fills the list with the parts a song like this usually has: your genre's (rock: drums,
   bass, two rhythm guitars and a lead guitar; gothic rock: drums, bass, a clean guitar, a rhythm guitar, a pad and a
   lead; gothic metal: the rock band plus piano, strings and organ; symphonic metal: the rock band plus strings,
@@ -431,6 +439,16 @@ instrument plugin's own sound); hold the mouse over it to see why.
    a kit or a patch, or wait a moment while a big one loads, and Play again.
 3. Give it a name and click **Save**. Closing the window any other way (**Cancel**, or the window's own close
    button) keeps nothing.
+
+**Several sounds from one window:** click **Save and keep open** instead of **Save**. The sound is kept under its
+name, the window stays open and the name is ready for the next one ("Clean" becomes "Clean 2"): choose the next
+preset or kit, name it and click **Save and keep open** again (or **Save** for the last one). **Close** then keeps
+every sound you saved (not the one set up after the last save). The part plays the first of them; the others are
+in **Other sound...** under **Your saved sounds**, for any part. This is the quick way to go through an
+instrument's presets when Spinus can't list them itself.
+
+**Notes: any** (beside **Play**) sets the notes the instrument may play, the same as **Notes it plays** in the
+instrument menu: Play keeps to them, so a phrase doesn't hit keys that switch what the instrument plays.
 4. Spinus keeps it as **your saved sound**, listens to it like any preset (in the separate helper program,
    a few seconds; longer for a big instrument) and chooses it for the part. **Listen** then plays it.
 

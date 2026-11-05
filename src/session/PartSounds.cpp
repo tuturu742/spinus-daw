@@ -1182,8 +1182,40 @@ std::pair<int, bool> keyOf (const juce::var& summary)
 }
 } // namespace
 
+namespace
+{
+std::vector<OfflineInstrument::Note> auditionPhraseInRegister (const Target&, const Choice&, double tempo,
+                                                               const juce::var& summary);
+}
+
+juce::String instrumentKey (const Choice& choice)
+{
+    return choice.instrument.isNotEmpty() ? choice.instrument : choice.source.key;
+}
+
+std::optional<NoteRanges::Range> noteRangeFor (const Choice& choice, const juce::File& indexFolder)
+{
+    if (choice.kind == Choice::Kind::kit || choice.kind == Choice::Kind::loop || indexFolder == juce::File())
+        return std::nullopt;
+    NoteRanges ranges (indexFolder);
+    ranges.load();
+    return ranges.get (instrumentKey (choice));
+}
+
 std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const Choice& choice, double tempo,
-                                                     const juce::var& summary)
+                                                     const juce::var& summary, std::optional<NoteRanges::Range> range)
+{
+    auto notes = auditionPhraseInRegister (target, choice, tempo, summary);
+    if (range.has_value() && target.part != "drums")
+        for (auto& n : notes)
+            n.note = NoteRanges::fit (n.note, *range);
+    return notes;
+}
+
+namespace
+{
+std::vector<OfflineInstrument::Note> auditionPhraseInRegister (const Target& target, const Choice& choice, double tempo,
+                                                               const juce::var& summary)
 {
     std::vector<OfflineInstrument::Note> notes;
     if (tempo <= 0.0)
@@ -1255,6 +1287,7 @@ std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const
     }
     return notes;
 }
+} // namespace
 
 //==============================================================================
 void addItemSteps (juce::Array<juce::var>& steps, const juce::var& item, const juce::var& insert)
@@ -1367,7 +1400,7 @@ juce::var makeProposal (const Plan& plan)
             step ("insert.set", object ({ { "insert", channel + ".insert" },
                                           { "volumeDb", juce::jlimit (-100.0, 12.0, part.volumeDb) } }));
         juce::Array<juce::var> notes;
-        for (const auto& n : auditionPhrase (part.target, c, tempo, plan.summary))
+        for (const auto& n : auditionPhrase (part.target, c, tempo, plan.summary, part.notes))
             notes.add (object ({ { "start", ticks (n.start) },
                                  { "length", std::max<juce::int64> (1, ticks (n.length)) },
                                  { "pitch", n.note },
