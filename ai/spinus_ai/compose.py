@@ -272,7 +272,33 @@ def style_brief(setup: Setup) -> dict[str, Any]:
         out["understood"] = str(described["understood"])
     if summary.get("plain"):
         out["inWords"] = [str(line) for line in summary["plain"]][:12]
+    if form := lyrics_brief(summary, style):
+        out["lyrics"] = form
     return out
+
+
+def lyrics_brief(summary: dict[str, Any], style: sw.Style) -> dict[str, Any] | None:
+    """The lyrics' form for the model, without their words (only their structure: tags, lines, syllables)."""
+    lyrics = summary.get("lyrics")
+    if not isinstance(lyrics, dict) or not any(s.get("lines") for s in lyrics.get("sections") or []):
+        return None
+    form = []
+    for s in lyrics["sections"][: sw.MOST_BARS // 4]:
+        lines = [line for line in s.get("lines") or [] if isinstance(line, dict)]
+        entry: dict[str, Any] = {"tag": str(s.get("tag") or ""), "kind": str(s.get("kind") or "verse")}
+        if lines:
+            entry["syllables"] = [int(line.get("syllables") or 1) for line in lines]
+            entry["stress"] = [str(line.get("stress") or "") for line in lines]
+            entry["barsPerLine"] = max(sw.line_bars(n, style.tempo, style.beats_per_bar) for n in entry["syllables"])
+        else:
+            entry["instrumental"] = True
+        form.append(entry)
+    return {
+        "note": "The song has lyrics. Spinus does not sing: the vocals part (or the lead) plays the sung tune. "
+        "Keep their form: their sections in this order, a sung line a phrase of one note a syllable (stressed "
+        "syllables, '1', on the beats), a line every barsPerLine bars; instrumental sections have no tune.",
+        "form": form,
+    }
 
 
 def first_message(setup: Setup) -> str:
