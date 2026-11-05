@@ -1625,6 +1625,20 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     CHECK (SaveSoundWindow::mixLastOpened (0.5) < 1.0e-4f); // nothing played yet
     CHECK (SaveSoundWindow::playLastOpened());
     CHECK (SaveSoundWindow::mixLastOpened (3.0) > 0.01f);
+    // Notes...: an instrument whose low keys switch what it plays. Play keeps to the notes set, and so does the
+    // rest of the Track creator (kept beside the index for this instrument).
+    SaveSoundWindow::setNotesLastOpened (NoteRanges::Range { 60, 84 });
+    for (const auto note : SaveSoundWindow::playedNotesLastOpened())
+    {
+        CHECK (note >= 60);
+        CHECK (note <= 84);
+    }
+    {
+        NoteRanges kept (context.indexFolder);
+        kept.load();
+        CHECK (kept.get (osc.key) == std::optional<NoteRanges::Range> ({ 60, 84 }));
+    }
+    CHECK (parts::noteRangeFor (start, context.indexFolder).has_value());
     REQUIRE (SaveSoundWindow::saveLastOpened ("Deep Bass"));
     REQUIRE (waitFor (
         [&]
@@ -1660,6 +1674,34 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     REQUIRE (measured != nullptr);
     CHECK ((*measured)["category"].toString() == SavedSounds::category);
     CHECK_FALSE ((bool)(*measured)["silent"]);
+
+    // Several sounds from one window: Save and keep open for each, then Close keeps them all; the first is chosen.
+    REQUIRE (panel.pickSound (0, start));
+    REQUIRE (panel.saveSound (0));
+    REQUIRE (SaveSoundWindow::keepLastOpened ("Clean"));
+    REQUIRE (SaveSoundWindow::keepLastOpened ("Crunch"));
+    CHECK (SaveSoundWindow::getNumOpen() == 1); // still open for the next one
+    SaveSoundWindow::closeLastOpened();
+    REQUIRE (waitFor (
+        [&]
+        {
+            const auto& rows = panel.getRows();
+            return ! panel.isBusy() && rows[0].picked && rows[0].picked->name == "Clean";
+        },
+        120000));
+    INFO (panel.getStatusText());
+    CHECK (panel.getStatusText().contains ("Saved Clean, Crunch and chose Clean"));
+    {
+        SavedSounds all (context.indexFolder);
+        all.load();
+        juce::StringArray names;
+        for (const auto& sound : all.all())
+            names.add (sound.name);
+        CHECK (names.contains ("Deep Bass"));
+        CHECK (names.contains ("Clean"));
+        CHECK (names.contains ("Crunch"));
+    }
+    REQUIRE (panel.pickSound (0, picked));
 
     // Other sound... lists it first, under Your saved sounds.
     juce::PopupMenu menu;
@@ -1713,7 +1755,7 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     CHECK (view.deleteSoundIndex());
     SavedSounds kept (context.indexFolder);
     kept.load();
-    CHECK (kept.all().size() == 1);
+    CHECK (kept.all().size() == 3); // Deep Bass, Clean and Crunch
     CHECK (view.deleteSoundIndex (true));
     kept.load();
     CHECK (kept.all().empty());
@@ -1736,7 +1778,10 @@ TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screens
     start.source.file = "spinus:3x-osc";
     start.source.stockType = "spinus.3x-osc";
     juce::String problem;
-    REQUIRE (SaveSoundWindow::open (session, start, "Bass (3x Osc)", {}, nullptr, {}, problem));
+    SaveSoundWindow::Notes notes;
+    notes.range = NoteRanges::Range { 40, 76 };
+    notes.onChange = [] (std::optional<NoteRanges::Range>) {};
+    REQUIRE (SaveSoundWindow::open (session, start, "Bass (3x Osc)", {}, std::move (notes), nullptr, {}, problem));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
     SaveSoundWindow* window = nullptr;
     for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i)

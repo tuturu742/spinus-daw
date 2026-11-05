@@ -252,6 +252,8 @@ add_library (spinus_core STATIC
     session/PartSounds.cpp
     session/PartSounds.h
     session/SongWriter.cpp
+    session/NoteRanges.cpp
+    session/NoteRanges.h
     session/UserRoles.cpp
     session/UserRoles.h
     session/SongWriter.h

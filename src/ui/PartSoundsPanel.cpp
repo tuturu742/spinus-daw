@@ -1,4 +1,5 @@
 #include "PartSoundsPanel.h"
+#include "NoteRangeMenu.h"
 #include "SaveSoundWindow.h"
 
 #include "ai/AnalysisJobs.h"
@@ -947,7 +948,8 @@ bool PartSoundsPanel::listen (int index)
     const auto& c = *row.chosen();
     const auto output = work ("listen/" + row.target.id + "-" + juce::String (row.selected) + ".wav");
     output.deleteFile();
-    const auto phrase = parts::auditionPhrase (row.target, c, context.summary["tempo"]["median"], context.summary);
+    const auto phrase = parts::auditionPhrase (row.target, c, context.summary["tempo"]["median"], context.summary,
+                                               parts::noteRangeFor (c, context.indexFolder));
     const auto item = renderItem (row, c, phrase, true, output);
     const auto source =
         c.kind == parts::Choice::Kind::preset || c.kind == parts::Choice::Kind::kit ? c.source : SoundSource {};
@@ -1317,6 +1319,12 @@ void PartSoundsPanel::fillInstrumentMenu (juce::PopupMenu& menu,
         presets.addSubMenu (
             "Mark it as" + (mine.isNotEmpty() ? " (now " + parts::roleName (mine).toLowerCase() + ")" : juce::String()),
             markAs);
+        NoteRanges ranges (context.indexFolder);
+        ranges.load();
+        presets.addSubMenu ("Notes it plays" + (ranges.get (source.key).has_value()
+                                                    ? " (now " + NoteRanges::describe (*ranges.get (source.key)) + ")"
+                                                    : juce::String (" (any)")),
+                            noteRangeMenu (source.key, ranges.get (source.key)));
         menu.addSubMenu (source.name + " (" + (source.badge.isNotEmpty() ? source.badge : source.format) + ")" +
                              (measured ? "" : ", not measured") +
                              (mine.isNotEmpty() ? ", yours: " + parts::roleName (mine).toLowerCase() : juce::String()),
@@ -1359,13 +1367,27 @@ bool PartSoundsPanel::saveSound (int index)
     // Play in its window: the phrase Listen plays (on the instrument's own drum notes for the drums).
     auto phrase = parts::auditionPhrase (row.target, start, context.summary["tempo"]["median"], context.summary);
     juce::String problem;
-    const auto opened = SaveSoundWindow::open (
-        session, start, row.part.name + " (" + start.source.name + ")", std::move (phrase), this,
-        [safe = juce::Component::SafePointer<PartSoundsPanel> (this), index, start] (const juce::String& name,
-                                                                                     const juce::MemoryBlock& state)
+    SaveSoundWindow::Notes notes;
+    if (row.target.part != "drums" && start.kind != parts::Choice::Kind::kit)
+    {
+        notes.range = parts::noteRangeFor (start, context.indexFolder);
+        notes.onChange = [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
+                          key = parts::instrumentKey (start)] (std::optional<NoteRanges::Range> range)
         {
             if (safe != nullptr)
-                safe->keepSavedSound (index, start, name, state);
+                safe->setNoteRange (key, range);
+        };
+    }
+    const auto opened = SaveSoundWindow::open (
+        session, start, row.part.name + " (" + start.source.name + ")", std::move (phrase), std::move (notes), this,
+        [safe = juce::Component::SafePointer<PartSoundsPanel> (this), index,
+         start] (std::vector<SaveSoundWindow::Saved> saved)
+        {
+            std::vector<std::pair<juce::String, juce::MemoryBlock>> sounds;
+            for (auto& s : saved)
+                sounds.emplace_back (s.name, std::move (s.state));
+            if (safe != nullptr)
+                safe->keepSavedSounds (index, start, sounds);
         },
         problem);
     status.setText (opened ? "Set the sound up in " + start.source.name + "'s window, name it, then Save."
@@ -1377,20 +1399,37 @@ bool PartSoundsPanel::saveSound (int index)
 bool PartSoundsPanel::keepSavedSound (int index, const parts::Choice& start, const juce::String& name,
                                       const juce::MemoryBlock& state)
 {
-    if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()))
+    return keepSavedSounds (index, start, { { name, state } });
+}
+
+bool PartSoundsPanel::keepSavedSounds (int index, const parts::Choice& start,
+                                       const std::vector<std::pair<juce::String, juce::MemoryBlock>>& sounds)
+{
+    if (busy || ! juce::isPositiveAndBelow (index, (int)rows.size()) || sounds.empty())
         return false;
     context = getContext ? getContext() : Context {};
-    if (state.isEmpty())
-    {
-        fail (start.source.name + " gave Spinus nothing to keep: its sound was not saved.");
-        return false;
-    }
     SavedSounds saved (context.indexFolder);
     saved.load();
-    const auto sound = saved.add (start.source.key, name, state);
-    if (! sound)
+    std::vector<SavedSounds::Sound> added;
+    juce::StringArray empty;
+    for (const auto& [name, state] : sounds)
     {
-        fail ("Spinus could not keep that sound (the settings folder cannot be written).");
+        if (state.isEmpty())
+        {
+            empty.add (name);
+            continue;
+        }
+        const auto sound = saved.add (start.source.key, name, state);
+        if (! sound)
+        {
+            fail ("Spinus could not keep that sound (the settings folder cannot be written).");
+            return false;
+        }
+        added.push_back (*sound);
+    }
+    if (added.empty())
+    {
+        fail (start.source.name + " gave Spinus nothing to keep: its sound was not saved.");
         return false;
     }
     busy = true;
@@ -1399,36 +1438,45 @@ bool PartSoundsPanel::keepSavedSound (int index, const parts::Choice& start, con
     const auto source = start.source;
     const auto folder = context.indexFolder;
     const auto helper = context.helper;
-    auto measured = std::make_shared<juce::var>();
+    juce::StringArray names;
+    for (const auto& sound : added)
+        names.add (sound.name);
+    auto measured = std::make_shared<juce::var>(); // the first one's measurement
     runInBackground (
-        "Saved " + sound->name + ": Spinus is listening to it (a few seconds, longer for a big instrument)...",
-        [folder, helper, source, id = sound->id, measured] (const std::function<bool()>& shouldStop)
+        "Saved " + names.joinIntoString (", ") + ": Spinus is listening to " + (added.size() == 1 ? "it" : "them") +
+            " (a few seconds each, longer for a big instrument)...",
+        [folder, helper, source, id = added.front().id, measured] (const std::function<bool()>& shouldStop)
         {
-            SoundIndex sounds (folder);
-            sounds.load();
-            SoundIndexer::updateInstrument (sounds, helper, source, shouldStop);
-            if (const auto found = sounds.instruments.find (source.key); found != sounds.instruments.end())
+            SoundIndex index (folder);
+            index.load();
+            SoundIndexer::updateInstrument (index, helper, source, shouldStop);
+            if (const auto found = index.instruments.find (source.key); found != index.instruments.end())
                 for (const auto& s : found->second.sounds)
                     if (s["id"].toString() == id)
                         *measured = s;
             return measured->isObject() && ! measured->hasProperty ("problem") ? juce::String()
                                                                                : juce::String ("not measured");
         },
-        [this, index, source, sound = *sound, measured] (const juce::String& problem)
+        [this, index, source, first = added.front(), names, empty, measured] (const juce::String& problem)
         {
             busy = false;
-            const auto measuredSound = measured->isObject() ? *measured : savedSoundVar (sound);
+            const auto measuredSound = measured->isObject() ? *measured : savedSoundVar (first);
             const bool silent = (bool)measuredSound["silent"];
             pickSound (index, choiceOf (source, measuredSound, problem.isEmpty()));
-            status.setText ("Saved " + sound.name + " and chose it for " +
-                                (juce::isPositiveAndBelow (index, (int)rows.size()) ? rows[(size_t)index].part.name
-                                                                                    : juce::String ("the part")) +
-                                (problem.isNotEmpty() ? ". Spinus could not listen to it yet; Update sound index "
-                                                        "tries again."
-                                 : silent ? ". It made no sound when Spinus played it: open it again and check its "
+            const auto part = juce::isPositiveAndBelow (index, (int)rows.size()) ? rows[(size_t)index].part.name
+                                                                                 : juce::String ("the part");
+            status.setText (
+                "Saved " + names.joinIntoString (", ") +
+                    (names.size() > 1 ? " and chose " + first.name : juce::String (" and chose it")) + " for " + part +
+                    (empty.isEmpty() ? juce::String()
+                                     : " (" + empty.joinIntoString (", ") + ": the instrument gave nothing to keep)") +
+                    (problem.isNotEmpty() ? ". Spinus could not listen to it yet; Update sound index "
+                                            "tries again."
+                     : silent             ? ". It made no sound when Spinus played it: open it again and check its "
                                             "window."
-                                          : ". Choose sounds and the AI writer can use it from now on."),
-                            juce::dontSendNotification);
+                                          : ". Choose sounds and the AI writer can use " +
+                                                juce::String (names.size() > 1 ? "them" : "it") + " from now on."),
+                juce::dontSendNotification);
             updateButtons();
         });
     return true;
@@ -1519,6 +1567,32 @@ bool PartSoundsPanel::markInstrument (const juce::String& instrument, const juce
     return true;
 }
 
+bool PartSoundsPanel::setNoteRange (const juce::String& instrument, std::optional<NoteRanges::Range> range)
+{
+    context = getContext ? getContext() : Context {};
+    NoteRanges ranges (context.indexFolder);
+    ranges.load();
+    ranges.set (instrument, range);
+    if (! ranges.save())
+        return false;
+    status.setText (range.has_value() ? "It plays only " + NoteRanges::describe (*range) +
+                                            " now: Listen, Save this sound's Play and the song keep to them."
+                                      : juce::String ("It plays any note again."),
+                    juce::dontSendNotification);
+    return true;
+}
+
+juce::PopupMenu PartSoundsPanel::noteRangeMenu (const juce::String& instrument, std::optional<NoteRanges::Range> now)
+{
+    return makeNoteRangeMenu (now,
+                              [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
+                               instrument] (std::optional<NoteRanges::Range> range)
+                              {
+                                  if (safe != nullptr)
+                                      safe->setNoteRange (instrument, range);
+                              });
+}
+
 void PartSoundsPanel::showOtherMenu (int index)
 {
     juce::PopupMenu menu;
@@ -1583,6 +1657,7 @@ parts::Plan PartSoundsPanel::makePlan() const
         part.tuned = row.tuned;
         part.effects = row.effects;
         part.volumeDb = row.volumeDb;
+        part.notes = parts::noteRangeFor (part.choice, context.indexFolder);
         plan.parts.push_back (std::move (part));
     }
     plan.master = master;

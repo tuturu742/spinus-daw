@@ -95,6 +95,10 @@ public:
     bool pickSound (int row, const parts::Choice&);
     /** Gives an instrument the user's own role (empty: forgets it), kept beside the sound index. */
     bool markInstrument (const juce::String& instrument, const juce::String& role);
+    /** The notes an instrument may play (NoteRanges; nullopt: any): Listen, Play in Save this sound, the sounds
+        added and the written song keep to them, moving notes by octaves. For instruments whose other keys switch
+        what they play. False when it cannot be saved. */
+    bool setNoteRange (const juce::String& instrument, std::optional<NoteRanges::Range>);
     /** Every instrument with its presets (or "Default sound"), for picking, and Mark it as; the user's saved
         sounds first, under "Your saved sounds". */
     void fillInstrumentMenu (juce::PopupMenu&, const std::function<void (const parts::Choice&)>& picked);
@@ -109,6 +113,10 @@ public:
         instrument named `name` (SavedSounds), measures it in the sound helper, and picks it for the part. The
         result arrives asynchronously. */
     bool keepSavedSound (int row, const parts::Choice& start, const juce::String& name, const juce::MemoryBlock& state);
+    /** Several sounds saved in one window (Save and keep open): all kept and listened to, the first chosen for the
+        part. */
+    bool keepSavedSounds (int row, const parts::Choice& start,
+                          const std::vector<std::pair<juce::String, juce::MemoryBlock>>& sounds);
 
     /** The parts list as the Track creator remembers it between runs: each part (id, name, role), its sound
         (the chosen one, the user's own pick) and "Tune toward the references". */
@@ -178,6 +186,7 @@ private:
     void showAddMenu();
     void showSuggestMenu();
     void showOtherMenu (int row);
+    juce::PopupMenu noteRangeMenu (const juce::String& instrument, std::optional<NoteRanges::Range> now);
     /** A sound of the index as a choice of its instrument (Other sound..., a saved sound just measured). */
     parts::Choice choiceOf (const SoundSource&, const juce::var& sound, bool measured) const;
     /** The role of a sound: the user's mark, else what its name says. */

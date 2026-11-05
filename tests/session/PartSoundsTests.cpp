@@ -587,6 +587,59 @@ TEST_CASE ("Sounds per part: an audition phrase in the part's key and register",
     CHECK (std::count_if (gm.begin(), gm.end(), [] (const auto& n) { return n.note == 42; }) == 16);
 }
 
+TEST_CASE ("Sounds per part: the notes an instrument may play keep its phrases off its switching keys",
+           "[sounds][parts]")
+{
+    // Folding by octaves: inside stays, outside moves to its nearest octave inside; a range under an octave clamps.
+    const NoteRanges::Range guitar { 40, 76 };
+    CHECK (NoteRanges::fit (52, guitar) == 52);
+    CHECK (NoteRanges::fit (28, guitar) == 40);
+    CHECK (NoteRanges::fit (24, guitar) == 48);
+    CHECK (NoteRanges::fit (90, guitar) == 66);
+    CHECK (NoteRanges::fit (30, { 40, 45 }) == 42);
+    CHECK (NoteRanges::fit (37, { 40, 45 }) == 40);
+    CHECK (NoteRanges::describe (guitar) == "E3 to E6");
+
+    // Kept beside the index, by instrument, and forgotten when set to any note.
+    const auto root = juce::File::createTempFile ("noteranges");
+    const auto indexFolder = root.getChildFile ("sound-index");
+    {
+        NoteRanges ranges (indexFolder);
+        ranges.set ("ample-metal", guitar);
+        REQUIRE (ranges.save());
+    }
+    CHECK (NoteRanges::fileIn (indexFolder).existsAsFile());
+    Choice choice;
+    choice.kind = Choice::Kind::preset;
+    choice.instrument = "ample-metal";
+    REQUIRE (noteRangeFor (choice, indexFolder).has_value());
+    CHECK (*noteRangeFor (choice, indexFolder) == guitar);
+    choice.kind = Choice::Kind::kit;
+    CHECK_FALSE (noteRangeFor (choice, indexFolder).has_value()); // a kit's notes are its drums
+
+    // The bass phrase, low in E minor, played on it: every note inside, the tune's shape kept by octaves.
+    const auto summary =
+        summaryWith (R"({"bass": {"songs": 1, "low": 28, "median": 36, "high": 45, "notesPerBar": 6, "voices": 1.0},
+        "other": {"songs": 1, "low": 48, "median": 60, "high": 72, "notesPerBar": 4, "voices": 2.5},
+        "drums": {"songs": 1, "notesPerBar": 12}})");
+    const auto targets = targetsFromSummary (summary);
+    choice.kind = Choice::Kind::preset;
+    const auto plain = auditionPhrase (targets[0], choice, 128.0, summary);
+    const auto kept = auditionPhrase (targets[0], choice, 128.0, summary, guitar);
+    REQUIRE (plain.size() == kept.size());
+    for (size_t i = 0; i < kept.size(); ++i)
+    {
+        CHECK (kept[i].note >= 40);
+        CHECK (kept[i].note <= 76);
+        CHECK ((kept[i].note - plain[i].note) % 12 == 0);
+    }
+    // The drums are never moved.
+    choice.kind = Choice::Kind::drumSamples;
+    const auto beat = auditionPhrase (targets[2], choice, 120.0, summary, guitar);
+    CHECK (std::count_if (beat.begin(), beat.end(), [] (const auto& n) { return n.note == 60; }) == 8);
+    root.deleteRecursively();
+}
+
 //==============================================================================
 #if defined(SPINUS_PLUGIN_SCANNER) && defined(SPINUS_BROKEN_PLUGINS_DIR)
 namespace

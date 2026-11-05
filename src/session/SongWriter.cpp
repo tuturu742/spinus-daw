@@ -156,6 +156,28 @@ std::map<juce::String, int> drumNotesFor (const model::Channel& channel)
              { "tomLow", 45 }, { "tomMid", 47 }, { "tomHigh", 50 }, { "crash", 49 } };
 }
 
+juce::var keepToRanges (const juce::var& song, const std::map<juce::String, NoteRanges::Range>& ranges)
+{
+    if (ranges.empty() || ! song.isObject())
+        return song;
+    auto copy = song.clone(); // deep: the notes are changed in place below
+    auto fold = [] (const juce::var& sections, NoteRanges::Range range)
+    {
+        if (auto* bySection = sections.getDynamicObject())
+            for (const auto& [section, notes] : bySection->getProperties())
+                if (auto* list = notes.getArray())
+                    for (auto& n : *list)
+                        if (auto* o = n.getDynamicObject(); o != nullptr && ! o->hasProperty ("drum"))
+                            o->setProperty ("pitch", NoteRanges::fit ((int)o->getProperty ("pitch"), range));
+    };
+    for (const auto& [id, range] : ranges)
+    {
+        fold (copy["layerParts"][juce::Identifier (id)], range);
+        fold (copy["parts"][juce::Identifier (id)], range);
+    }
+    return copy;
+}
+
 bool isFull (const juce::var& song) { return song["layers"].isArray() && ! arrayOf (song["layers"]).isEmpty(); }
 
 std::vector<Layer> layersOf (const juce::var& song)

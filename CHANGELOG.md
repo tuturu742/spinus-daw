@@ -5,6 +5,16 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: several sounds from one window, and the notes an instrument may play
+
+- **Save this sound** has **Save and keep open**: save one preset or kit, set up the next and save it too, from
+  the same window; **Close** keeps all of them. Going through an instrument's presets no longer means reopening
+  the window for each.
+- Many sampled guitars and basses switch what they play with keys outside their range, so Play and Listen could
+  change the instrument instead of playing it. **Notes it plays** (in the instrument menu, and **Notes** beside
+  Play in Save this sound) sets the lowest and highest note an instrument may play; Listen, Play, the sounds
+  added to the project and the written song keep to them, moving notes by octaves.
+
 ### Track creator: lyrics (first step)
 
 - The Description page has a box for the song's lyrics, tagged by section the way song generators take them
