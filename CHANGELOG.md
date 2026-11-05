@@ -5,6 +5,15 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: lyrics written any way, in any language
+
+- Lyrics need not use square-bracket tags: sections named in parentheses or before a colon ("(Verse 1)",
+  "Chorus:"), in any language, are read by their layout; a title, "Title:"/"BPM:" lines and directions in
+  parentheses are not sung; lyrics with no section names are split at their blank lines, a stanza sung again
+  being the chorus. With **Let the AI read it**, the AI reads the lyrics' structure and counts their syllables in
+  any language, and Spinus checks that each line it gives is one of yours. "[Pre-Chorus]" and "[Build-up]" keep
+  their whole names.
+
 ### Track creator: a Vocals part for a song with lyrics
 
 - With lyrics on the Description page, the Parts page suggests a **Vocals** part: an instrument plays the sung

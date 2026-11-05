@@ -223,12 +223,20 @@ Singing out our summer song
 - A tag with no lines under it is an **instrumental** section.
 - A tag used again with no lines **repeats** the words it had: write a chorus out once. "[Chorus x2]" plays it
   twice in a row.
-- Lyrics with no tags at all are one verse.
+- Lyrics written another way are read too, in any language, by how they are laid out: a short name on a line
+  of its own at the start of a stanza, in parentheses or before a colon ("(Verse 1)", "Chorus:", "(Intro: soft
+  piano)", "Couplet 2 :"), is a section. A title line and lines like "Title: ..." or "BPM: 174" before the
+  first section are left out. A line in parentheses that is a direction ("(the band drops out)") is a note for
+  its section, not a sung line. Names other than the usual English ones are verses, or the chorus when their
+  lines come back.
+- Lyrics with no section names at all are split at their blank lines; a stanza sung again is the chorus.
 
 **Read** reads the lyrics with the description. Spinus counts the syllables in each line and guesses which
 are stressed, on your computer and roughly: well enough in English and in languages written in Cyrillic, more
-roughly in others. With **Let the AI read it**, the AI counts them instead, in any language, and Spinus checks
-each line it counts (a line it gets wrong keeps Spinus's count). The details say what was read: "Lyrics: Verse
+roughly in others. With **Let the AI read it**, the AI reads the lyrics instead, in any language and any
+layout: their sections and what kind each is, what is sung and what is a title or a direction, and each line's
+syllables and stresses. Spinus checks its reading: every line it gives must be one of your lines (if too many
+are not, Spinus reads the lyrics itself), and a line it miscounts keeps Spinus's count. The details say what was read: "Lyrics: Verse
 1, Chorus, Whistle Solo (instrumental), Chorus; 4 lines, about 29 syllables (counted by Spinus, roughly)".
 
 Spinus never sings. With lyrics, the [Parts](#sounds-for-each-part) page adds a **Vocals** part: an instrument
