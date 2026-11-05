@@ -231,6 +231,44 @@ TEST_CASE ("Sounds per part: guitars in the reference songs make guitar parts th
     CHECK_FALSE (none.measure);
 }
 
+TEST_CASE ("Sounds per part: a Vocals part only with lyrics, before the lead, in the vocals' register",
+           "[sounds][parts]")
+{
+    auto summary = summaryWith (R"({"bass": {"songs": 4, "low": 28, "median": 36, "high": 45, "notesPerBar": 6},
+        "vocals": {"songs": 4, "low": 57, "median": 64, "high": 72, "notesPerBar": 5},
+        "drums": {"songs": 4, "notesPerBar": 12}})");
+    auto roles = [] (const std::vector<SongPart>& list)
+    {
+        juce::StringArray r;
+        for (const auto& p : list)
+            r.add (p.role);
+        return r.joinIntoString (" ");
+    };
+    CHECK_FALSE (hasLyrics (summary));
+    CHECK (roles (suggestedParts ("sketch", summary)) == "drums bass chords lead");
+    // A list with a Vocals part loses it without lyrics.
+    CHECK (roles (withVocals ({ { "vocals", "Vocals", "vocals" }, { "bass", "Bass", "bass" } }, summary)) == "bass");
+
+    summary.getDynamicObject()->setProperty ("lyrics", juce::JSON::parse (R"({"lines": 12, "syllables": 96})"));
+    REQUIRE (hasLyrics (summary));
+    CHECK (roles (suggestedParts ("sketch", summary)) == "drums bass chords vocals lead");
+    CHECK (roles (suggestedParts ("full", summary)) == "drums bass chords pad arp vocals lead counter riser impact");
+    CHECK (roles (withVocals ({ { "drums", "Drums", "drums" }, { "pad", "Pad", "pad" } }, summary)) ==
+           "drums pad vocals");
+    CHECK (withVocals ({}, summary).empty()); // the user adds parts or asks for some
+    // One Vocals part only: one already there stays where the user put it.
+    CHECK (roles (withVocals ({ { "vocals", "Vocals", "vocals" }, { "lead", "Lead", "lead" } }, summary)) ==
+           "vocals lead");
+
+    const auto vocals = targetFor ({ "vocals", "Vocals", "vocals" }, 0, summary);
+    CHECK (vocals.part == "vocals");
+    CHECK (vocals.measure); // compared with the songs' vocals
+    CHECK (vocals.median == 64);
+    CHECK (vocals.roles[0] == "lead");
+    CHECK (vocals.names.contains ("voice"));
+    CHECK (roleName ("vocals").startsWith ("Vocals"));
+}
+
 TEST_CASE ("Sounds per part: a stem is measured over its own notes", "[sounds][parts]")
 {
     Voice v;

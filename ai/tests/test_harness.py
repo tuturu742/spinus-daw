@@ -583,6 +583,7 @@ def test_the_ai_adds_its_own_parts_with_a_family_and_colour() -> None:
         ({"id": "shaker", "role": "percussion"}, "already"),
         ({"id": "Big Pad!", "role": "pad"}, "lowercase"),
         ({"id": "kz", "role": "kazoo"}, "not a role"),
+        ({"id": "voice", "role": "vocals"}, "lyrics"),  # the setup's song has no lyrics
     ]:
         with pytest.raises(harness.Mistake, match=why):
             ws.call("add_part", bad)

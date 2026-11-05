@@ -40,7 +40,9 @@ in the choruses; "riser" (a held note over the two bars before each chorus) and 
 where each chorus and bridge starts) are effects placed on the Playlist (song["fx"]). Two parts of one role
 get complementary material: a second chords part breaks the chords into an arpeggio an octave up, a third
 plays off-beat stabs; a second lead harmonises the first a third below; a second bass, pad, arp or
-counter-melody plays an octave higher with a rhythm of its own; a second drums part plays percussion. The
+counter-melody plays an octave higher with a rhythm of its own; a second drums part plays percussion. A
+"vocals" part (the song has lyrics) plays the tune on an instrument standing in for the voice, and a lead beside
+it harmonises it. The
 sections set who plays: thin verses, full choruses, a bridge that breaks down and builds again. Without a
 list, the plan's "size" proposes one: "sketch" the four parts, "full" about ten (with a sub bass when the bass
 sits high enough to leave room for one). Parts of the four roles' first instances follow those parts' seeds,
@@ -254,6 +256,7 @@ ROLES: dict[str, tuple[str, str, str, str, bool]] = {
     "chords": ("Chords", "Synths", "chords", "keys", False),
     "pad": ("Pad", "Synths", "chords", "pad", False),
     "arp": ("Arp", "Synths", "chords", "pluck", False),
+    "vocals": ("Vocals", "Vocals", "lead", "lead", False),
     "lead": ("Lead", "Leads", "lead", "lead", False),
     "counter": ("Counter-melody", "Leads", "lead", "lead", False),
     "riser": ("Riser", "FX", "fx", "fx", False),
@@ -1976,6 +1979,9 @@ def make_layers(
     instances: dict[str, int] = {}
     notes: dict[str, dict[str, list[dict[str, Any]]]] = {}
     layers: list[dict[str, Any]] = []
+    # With lyrics the first vocals part plays the song's tune (an instrument for the voice), and a lead beside it
+    # a harmony to it.
+    sung = any(p["role"] == "vocals" for p in wanted)
     for part in wanted:
         role = part["role"]
         k = instances.get(role, 0)
@@ -2002,8 +2008,8 @@ def make_layers(
             sid = section["id"]
             if role in ("riser", "impact"):
                 break
-            if k == 0 and role in PARTS:
-                by_section[sid] = parts[role].get(sid, [])
+            if k == 0 and (role == "vocals" or (role in PARTS and not (role == "lead" and sung))):
+                by_section[sid] = parts["lead" if role == "vocals" else role].get(sid, [])
                 continue
             # The first pad, arp... follows its part's seed (redoing the chords redoes them); others their own.
             if k == 0 or base == "fx":
@@ -2025,7 +2031,7 @@ def make_layers(
                 ]
             elif role == "chords":
                 by_section[sid] = write_arp(ctx, 1, True, "chords") if k == 1 else write_stabs(ctx)
-            elif role == "lead":
+            elif role in ("lead", "vocals"):  # a second voice, or a lead beside the vocals
                 by_section[sid] = write_harmony(ctx, parts["lead"].get(sid, []))
             elif role == "pad":
                 by_section[sid] = write_pad(ctx, octave)
@@ -2076,7 +2082,7 @@ def make_layers(
 
 def layer_register(style: Style, role: str, instance: int = 0) -> list[int] | None:
     """The notes a part of a role plays (low, middle, high), for choosing its sound."""
-    up = 12 if instance % 2 == 1 and role not in ("lead", "sub") else 0
+    up = 12 if instance % 2 == 1 and role not in ("lead", "vocals", "sub") else 0
     if role == "pad":
         return [n + up for n in pad_register(style)]
     if role == "arp" or (role == "chords" and instance == 1):
@@ -2096,7 +2102,7 @@ def layer_register(style: Style, role: str, instance: int = 0) -> list[int] | No
     }  # fmt: skip
     if role in fixed:
         return [n + up for n in fixed[role]]
-    found = {"bass": "bass", "chords": "other", "lead": "vocals"}.get(role)
+    found = {"bass": "bass", "chords": "other", "lead": "vocals", "vocals": "vocals"}.get(role)
     if found:
         p = style.parts[found]
         return [p.low + up, p.median + up, p.high + up]

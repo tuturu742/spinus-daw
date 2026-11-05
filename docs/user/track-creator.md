@@ -231,8 +231,11 @@ roughly in others. With **Let the AI read it**, the AI counts them instead, in a
 each line it counts (a line it gets wrong keeps Spinus's count). The details say what was read: "Lyrics: Verse
 1, Chorus, Whistle Solo (instrumental), Chorus; 4 lines, about 29 syllables (counted by Spinus, roughly)".
 
-Spinus never sings: the lyrics are for the song's sections and a vocal line played by an instrument, which come
-in later versions of the Track creator. Tick **This song has no vocals** for an instrumental song: the lyrics
+Spinus never sings. With lyrics, the [Parts](#sounds-for-each-part) page adds a **Vocals** part: an instrument
+that plays the sung tune in the voice's place. Spinus suggests a sound for it like for any part (a lead or a
+voice-like patch in the singers' range, compared with your songs' vocals), and you can pick another. A Lead
+part beside it plays a harmony to the tune. Sizing the song's sections to the words, and a tune of one note a
+syllable, come in a later version. Tick **This song has no vocals** for an instrumental song: the lyrics
 stay in the box but are not read. Spinus remembers the lyrics and the tick with the description. With **Let the
 AI read it**, the lyrics are sent to your AI provider too.
 
@@ -324,6 +327,7 @@ and drums": those three), or empty. Then:
   | **Brass** | Short stabs on the bar's first beat and with the snare, in the choruses |
   | **Woodwinds**, **Counter-melody** | A slower line answering the lead |
   | **Arpeggio**, **Lead melody** | The chord's notes one after another; the tune |
+  | **Vocals (an instrument for the voice)** | The tune, where a singer would sing it; a Lead melody beside it harmonises. Only for a song with [lyrics](#lyrics), and then suggested |
   | **Riser**, **Impacts** | Effects before and where each chorus starts |
 
   Two parts may share a role, such as two guitars: the second then plays something else (a second guitar or

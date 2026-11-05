@@ -308,7 +308,7 @@ def depth_words(groups: tuple[str, ...]) -> str:
 # ---------------------------------------------------------------------------------------------------
 # Arrangement
 
-FAMILIES = ("Drums", "Bass", "Synths", "Leads", "Guitars", "Keys", "Orchestra", "FX")
+FAMILIES = ("Drums", "Bass", "Synths", "Leads", "Vocals", "Guitars", "Keys", "Orchestra", "FX")
 COLOUR = re.compile(r"^#[0-9a-fA-F]{6}$")
 VARIATIONS = ("rhythm", "notes", "invert", "displace")
 FILLS = ("snare", "toms", "build")
@@ -1406,6 +1406,8 @@ class Workspace:
             raise Mistake(f"there is a part '{pid}' already")
         if role not in sw.ROLES:
             raise Mistake(f"'{role}' is not a role (the roles: {', '.join(sw.ROLES)})")
+        if role == "vocals" and not (self.setup.summary.get("lyrics") or {}).get("lines"):
+            raise Mistake("a vocals part is for a song with lyrics, and this one has none")
         if len(self.setup.parts) >= sw.MOST_PARTS:
             raise Mistake(f"the song has {sw.MOST_PARTS} parts, the most it can have")
         part = {"id": pid, "name": (str(name).strip() or sw.ROLES[role][0])[:60], "role": role}

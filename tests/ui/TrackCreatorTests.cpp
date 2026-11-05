@@ -559,6 +559,29 @@ TEST_CASE ("Track creator: the parts are the user's list: none at first, what th
     CHECK (panel.getParts().size() == 9);
     CHECK_FALSE (panel.addPart ("kazoo"));
 
+    // Vocals (an instrument playing the sung tune) only for a song with lyrics.
+    CHECK_FALSE (panel.addPart ("vocals"));
+    CHECK_FALSE (panel.setRole (0, "vocals"));
+    const auto withoutLyrics = context.summary;
+    auto sung = juce::JSON::parse (juce::JSON::toString (context.summary));
+    sung.getDynamicObject()->setProperty ("lyrics", juce::JSON::parse (R"({"kind": "spinus.lyrics", "lines": 8})"));
+    context.summary = sung;
+    REQUIRE (panel.suggestParts ("sketch"));
+    CHECK (roles() == "drums bass chords vocals lead");
+    CHECK (panel.getParts()[3].name == "Vocals");
+    REQUIRE (panel.removePart (3));
+    REQUIRE (panel.addPart ("vocals"));
+    CHECK (roles() == "drums bass chords lead vocals");
+    // The lyrics taken away (or "This song has no vocals" ticked): the list has no Vocals part again.
+    const auto remembered = panel.getRemembered();
+    context.summary = withoutLyrics;
+    panel.restore (remembered);
+    CHECK (roles() == "drums bass chords lead");
+    REQUIRE (panel.suggestParts ("full"));
+    REQUIRE (panel.addPart ("piano"));
+    REQUIRE (panel.setRole (3, "strings"));
+    REQUIRE (panel.removePart (8));
+
     // Any instrument, measured or not: a part from it takes the role its name says, and plays it.
     parts::Choice guitar;
     guitar.kind = parts::Choice::Kind::preset;
