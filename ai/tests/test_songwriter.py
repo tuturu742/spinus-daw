@@ -13,7 +13,7 @@ import pytest
 from test_service import anthropic_reply, make_service, no_notify, run_job
 from test_style import add_drums, song_with
 
-from spinus_ai import songwriter, style
+from spinus_ai import compose, lyrics, songwriter, style
 from spinus_ai.service import RpcError
 
 KICK = [0.95, 0, 0.1, 0, 0.9, 0, 0.3, 0, 0.92, 0, 0.1, 0.2, 0.9, 0, 0.1, 0]
@@ -486,3 +486,104 @@ def test_a_guitar_bands_chords_come_from_the_guitar_stem() -> None:
     guitars = {**band, "songs": 4, "guitars": {"measured": 4, "songs": 4, "distorted": 4, "clean": 0, "lead": 0}}
     written = songwriter.write(guitars, 3, "full")
     assert any(layer["role"] == "rhythm-guitar" for layer in written["layers"])
+
+
+SONG_LYRICS = """[Intro]
+[Verse 1]
+Sunlight on the windowsill
+Coffee's warm and the morning's still
+Every road is open wide
+Nothing left to hide
+[Chorus]
+Oh, we've got all summer long
+Singing out our summer song
+[Verse 2]
+Footprints running to the sea
+Waves that whisper back to me
+Every road is open wide
+Nothing left to hide
+[Bridge]
+Hold on
+[Chorus]
+[Guitar Solo]
+[Chorus x2]
+[Outro]
+"""
+
+
+def test_a_line_takes_the_bars_its_syllables_need() -> None:
+    assert songwriter.line_bars(8, 120, 4) == 2  # eighths over two bars, a beat to breathe
+    assert songwriter.line_bars(15, 120, 4) == 4
+    assert songwriter.line_bars(6, 70, 4) == 1  # a slow song: a short line a bar
+    assert songwriter.line_bars(8, 170, 4) == 4  # fast: quarters
+    # One note a syllable inside the line's bars less a beat; a stressed syllable on a beat while there is room.
+    onsets = songwriter.sung_rhythm(5, "10101", 32, 4)
+    assert len(onsets) == 5 and onsets == sorted(set(onsets)) and onsets[-1] < 28
+    assert all(onsets[i] % 4 == 0 for i in (0, 2, 4))
+    assert len(songwriter.sung_rhythm(30, "", 32, 4)) == 28  # sixteenths, as many as fit
+    assert songwriter.sung_rhythm(3, "", 32, 4) == [0, 4, 8]  # a short line on quarters
+
+
+def test_with_lyrics_the_form_is_theirs_and_the_tune_one_note_a_syllable() -> None:
+    s = summary()
+    s["lyrics"] = lyrics.read(SONG_LYRICS)
+    parts = [
+        {"id": "drums", "name": "Drums", "role": "drums"},
+        {"id": "vocals", "name": "Vocals", "role": "vocals"},
+        {"id": "lead", "name": "Lead", "role": "lead"},
+    ]
+    song = songwriter.write(s, 4, parts=parts)
+    plan = song["plan"]
+    # The tags' order; a chorus written once comes back the same, "x2" plays it twice; verses of as many lines
+    # share their section (and music); a bridge of one line is a section of its own.
+    assert plan["order"] == [
+        "intro",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "solo",
+        "chorus",
+        "chorus",
+        "outro",
+    ]
+    by_id = {x["id"]: x for x in plan["sections"]}
+    each = by_id["verse"]["lineBars"]
+    assert by_id["verse"]["bars"] == 4 * each and by_id["chorus"]["bars"] == max(4, 2 * each)
+    assert by_id["bridge"]["bars"] == 4 and "words" not in by_id["solo"]
+    assert len(plan["lyrics"]["sung"]) == len(plan["order"])
+    assert plan["lyrics"]["sung"][3][0] == "Footprints running to the sea"
+
+    # The tune: in each sung section, as many notes as the lines have syllables, each line starting on its bar.
+    bar_ticks = song["barTicks"]
+    for sid in ("verse", "chorus"):
+        words = by_id[sid]["words"]
+        notes = song["parts"]["lead"][sid]
+        assert len(notes) == sum(w["syllables"] for w in words)
+        starts = {int(n["start"]) // bar_ticks for n in notes}
+        assert {i * by_id[sid]["lineBars"] for i in range(len(words))} <= starts
+    # The vocals play where words are sung, the lead takes the tune in the solo.
+    layer = song["layerParts"]
+    assert layer["vocals"]["verse"] == song["parts"]["lead"]["verse"]
+    assert not layer["vocals"].get("solo") and layer["lead"]["solo"] == song["parts"]["lead"]["solo"]
+    # The Write page's plan says what is sung where.
+    shown = songwriter.describe(song)
+    assert any(line.startswith("Verse (bar ") and "Sunlight on the windowsill" in line for line in shown)
+
+    # The same seed, the same song; without lyrics the rules' own form.
+    assert songwriter.write(s, 4, parts=parts)["plan"] == plan
+    s.pop("lyrics")
+    assert "lyrics" not in songwriter.write(s, 4, parts=parts)["plan"]
+
+
+def test_the_ai_writer_gets_the_lyrics_form_without_their_words() -> None:
+    s = summary()
+    s["lyrics"] = lyrics.read(SONG_LYRICS)
+    brief = compose.lyrics_brief(s, songwriter.Style.from_summary(s))
+    assert brief is not None
+    assert [e["kind"] for e in brief["form"]][:3] == ["intro", "verse", "chorus"]
+    assert brief["form"][1]["syllables"] == [line["syllables"] for line in s["lyrics"]["sections"][1]["lines"]]
+    assert "Sunlight" not in json.dumps(brief)
+    s.pop("lyrics")
+    assert compose.lyrics_brief(s, songwriter.Style.from_summary(s)) is None

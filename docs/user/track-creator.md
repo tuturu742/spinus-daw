@@ -242,8 +242,20 @@ are not, Spinus reads the lyrics itself), and a line it miscounts keeps Spinus's
 Spinus never sings. With lyrics, the [Parts](#sounds-for-each-part) page adds a **Vocals** part: an instrument
 that plays the sung tune in the voice's place. Spinus suggests a sound for it like for any part (a lead or a
 voice-like patch in the singers' range, compared with your songs' vocals), and you can pick another. A Lead
-part beside it plays a harmony to the tune. Sizing the song's sections to the words, and a tune of one note a
-syllable, come in a later version. Tick **This song has no vocals** for an instrumental song: the lyrics
+part beside it plays a harmony to the tune.
+
+**The song follows the lyrics.** On [Write a song](#write-a-song), Spinus's writer takes the song's form from
+your tags, in their order: a chorus written out once comes back each time its tag does, "[Chorus x2]" plays
+it twice, a tag with no lines is an instrumental section (where the Lead, not the Vocals, plays the tune: a
+solo, an intro). Each sung section is as long as its lines need: a line every two bars at most tempos (one bar
+in a slow song, four for a long line or a fast one), rounded up to whole 4 bars. The tune plays **one note a
+syllable**, a line at a time with a breath before the next, the stressed syllables on the beats. Verses with as
+many lines share their music, as verses do; the tune follows the first verse's syllables. The plan on the page
+says what is sung where: "Verse (bar 9): 4 lines, “Sunlight on the windowsill / Coffee's warm and the
+morning's still / ...”". With the AI as the writer, it gets the lyrics' form (their tags, lines and
+syllables, not their words).
+
+Tick **This song has no vocals** for an instrumental song: the lyrics
 stay in the box but are not read. Spinus remembers the lyrics and the tick with the description. With **Let the
 AI read it**, the lyrics are sent to your AI provider too.
 

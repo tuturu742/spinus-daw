@@ -478,6 +478,18 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
         CHECK (writer.getText().contains ("Spinus's own instruments for: Drums"));
         CHECK ((int)writer.getSong()["tempo"] == 72);
         CHECK (song::isFull (writer.getSong()));
+        // The lyrics' form: their sections in order, sized to their lines; the Write page says what is sung where,
+        // and an instrument plays the vocals.
+        juce::StringArray order;
+        for (const auto& sid : *writer.getSong()["plan"]["order"].getArray())
+            order.add (sid.toString());
+        CHECK (order.joinIntoString (" ") == "verse chorus solo");
+        CHECK (writer.getText().contains ("Verse (bar 1): 2 lines"));
+        CHECK (writer.getText().contains ("The city lights are fading out / I walk alone without a doubt"));
+        bool vocals = false;
+        for (const auto& layer : *writer.getSong()["layers"].getArray())
+            vocals = vocals || layer["role"].toString() == "vocals";
+        CHECK (vocals);
         const auto channels = a.session.getProject().channels.size();
         REQUIRE (writer.apply());
         CHECK (a.session.getProject().channels.size() > channels + 8);

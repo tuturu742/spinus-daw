@@ -65,6 +65,7 @@ import math
 import random
 import re
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -782,7 +783,10 @@ def make_plan(
     size: str = "sketch",
     parts: list[dict[str, str]] | None = None,
     variety: Variety = BALANCED,
+    lyrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """The song's plan: tempo, key, sections and their order, and the parts. With `lyrics` (spinus.lyrics, with
+    sung lines) the form is the lyrics' and each sung section as long as its lines need (lyric_form)."""
     if size not in SIZES:
         raise ValueError(f"The arrangement is {' or '.join(SIZES)}, not '{size}'.")
     chosen = check_parts(parts) if parts is not None else default_parts(style, size)
@@ -865,15 +869,125 @@ def make_plan(
     sections = [
         {"id": kind, "kind": kind, "bars": bars[kind], "contour": contour[kind]} for kind in BASE_KINDS if kind in form
     ]
+    order = list(form)
+    sung: dict[str, Any] | None = None
+    if lyrics and any(s.get("lines") for s in lyrics.get("sections") or []):
+        drawn: dict[str, int] = {}
+
+        def instrumental(kind: str) -> int:
+            """An instrumental section's bars: as the rules draw them, one length a kind."""
+            return drawn.setdefault(kind, draw(base_kind(kind)))
+
+        sections, order, sung = lyric_form(lyrics, tempo, style, instrumental, contour)
     return {
         "tempo": tempo,
         "key": {"tonic": tonic, "scale": mode, "name": key_name(tonic, mode)},
         "beatsPerBar": style.beats_per_bar,
         "sections": sections,
-        "order": list(form),
+        "order": order,
         "size": size,
         "parts": chosen,
+        **({"lyrics": sung} if sung else {}),
     }
+
+
+# ---------------------------------------------------------------------------------------------------
+# Lyrics: the form the tags give, sections as long as their lines, one note a syllable
+
+
+def line_bars(syllables: int, tempo: float, beats: int) -> int:
+    """The bars a sung line takes: its syllables on eighths (on quarters past 150 BPM) with a beat left to
+    breathe; two bars at least from 80 BPM up, four at most."""
+    per_beat = 2 if tempo <= 150 else 1
+    for bars in (1, 2, 4):
+        if bars == 1 and tempo >= 80:
+            continue
+        if syllables <= (bars * beats - 1) * per_beat:
+            return bars
+    return 4
+
+
+def lyric_form(
+    lyrics: dict[str, Any],
+    tempo: float,
+    style: Style,
+    instrumental: Any,
+    contour: dict[str, str],
+) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
+    """The plan's sections and order from the lyrics' sections, in their order (a repeat plays the same
+    section): a sung section is its lines' bars (line_bars of its longest line, a line after another), rounded
+    up to whole 4 bars, and carries each line's syllables and stress ("words") for the tune; an instrumental one
+    (a tag with no lines) is drawn like the rules' sections (`instrumental(kind)`). Sections of a kind with as
+    many lines and bars are one section: the same music, the tune from the first one's syllables (as verses
+    share a tune whose words differ a syllable here and there); otherwise "verse-2"... Also
+    what is sung where: {"language", "sung": the lines of each entry of the order}."""
+    sections: list[dict[str, Any]] = []
+    order: list[str] = []
+    sung: list[list[str]] = []
+    by_shape: dict[tuple[str, int, int, int], str] = {}
+    counts: dict[str, int] = {}
+    total = 0
+    for found in lyrics.get("sections") or []:
+        kind = str(found.get("kind") or "verse")
+        kind = kind if kind in KINDS else "verse"
+        lines = [line for line in found.get("lines") or [] if isinstance(line, dict)]
+        each = 0
+        if lines:
+            each = max(line_bars(int(line.get("syllables") or 1), tempo, style.beats_per_bar) for line in lines)
+            while len(lines) * each > SECTION_BARS[1] and each > 1:
+                each //= 2
+            lines = lines[: SECTION_BARS[1] // each]
+            bars = max(SECTION_BARS[0], -(-len(lines) * each // 4) * 4)
+        else:
+            bars = int(instrumental(kind))
+        if total + bars > MOST_BARS:
+            break  # the song is as long as it may be: the rest of the lyrics is left out
+        total += bars
+        shape = (kind, bars, each, len(lines))
+        sid = by_shape.get(shape)
+        if sid is None:
+            counts[kind] = counts.get(kind, 0) + 1
+            sid = kind if counts[kind] == 1 else f"{kind}-{counts[kind]}"
+            by_shape[shape] = sid
+            section: dict[str, Any] = {
+                "id": sid,
+                "kind": kind,
+                "bars": bars,
+                "contour": KIND_CONTOUR.get(kind) or contour.get(base_kind(kind), "arch"),
+            }
+            if lines:
+                section["words"] = [
+                    {"syllables": int(line.get("syllables") or 1), "stress": str(line.get("stress") or "")}
+                    for line in lines
+                ]
+                section["lineBars"] = each
+            if found.get("cue"):
+                section["cue"] = str(found["cue"])[:80]
+            sections.append(section)
+        order.append(sid)
+        sung.append([str(line.get("text") or "") for line in lines])
+    return sections, order, {"language": str(lyrics.get("language") or ""), "sung": sung}
+
+
+def sung_rhythm(syllables: int, stress: str, slots: int, beat: int) -> list[int]:
+    """Where each syllable of a line starts (steps), one note a syllable, inside `slots` less a beat to breathe:
+    on quarters when the line is short, on eighths, on sixteenths when eighths do not fit. A stressed syllable
+    ("1" in `stress`) moves on to the next beat while the rest still fit."""
+    room = max(1, slots - beat)
+    eighth = max(1, beat // 2)
+    grid = beat if syllables * beat * 2 <= room else eighth if syllables * eighth <= room else 1
+    count = min(syllables, max(1, room // grid))
+    marks = stress if len(stress) == syllables else ""
+    onsets: list[int] = []
+    at = 0
+    for i in range(count):
+        if marks and marks[i] == "1" and at % beat:
+            on_beat = at + beat - at % beat
+            if on_beat + (count - i) * grid <= room:
+                at = on_beat
+        onsets.append(at)
+        at += grid
+    return onsets
 
 
 def new_seeds(seed: int, plan: dict[str, Any]) -> dict[str, Any]:
@@ -1407,31 +1521,50 @@ def write_lead(ctx: Context) -> list[dict[str, Any]]:
         count = max(1, round(per_bar * phrase + rng.uniform(-1, 1)))
         return rhythm(rng, phrase * steps, count, weights)
 
-    rhythms = {"A": phrase_rhythm(), "B": phrase_rhythm()}
-    plan = ("A", "A", "B", "A")
+    # The phrases, one after another: (first bar, bars, onsets in steps, where the last note ends at the latest).
+    # A generator, so each phrase draws its variation after the notes before it (songs without lyrics stay as
+    # they were written before).
+    def phrases() -> Iterator[tuple[int, int, list[int], int]]:
+        words = ctx.section.get("words")
+        if words:
+            # Lyrics: a line a phrase, one note a syllable, the last held until the breath before the next line.
+            each = max(1, int(ctx.section.get("lineBars") or 2))
+            beat = max(1, steps // max(1, int(ctx.plan.get("beatsPerBar") or 4)))
+            for i, line in enumerate(words):
+                if (i + 1) * each > ctx.bars:
+                    break
+                onsets = sung_rhythm(int(line["syllables"]), str(line.get("stress") or ""), each * steps, beat)
+                yield (i * each, each, onsets, each * steps - beat)
+        else:
+            rhythms = {"A": phrase_rhythm(), "B": phrase_rhythm()}
+            plan = ("A", "A", "B", "A")
+            for start in range(0, ctx.bars, phrase):
+                if not plays("lead", kind, start, ctx.bars):
+                    continue
+                letter = plan[(start // phrase) % len(plan)]
+                onsets = list(rhythms[letter])
+                if letter == "A" and (start // phrase) % len(plan) == 1 and len(onsets) > 2 and rng.random() < 0.6:
+                    # A': the same rhythm with one note moved, so it answers rather than repeats.
+                    i = rng.randrange(1, len(onsets))
+                    moved = onsets[i] + rng.choice((-2, 2))
+                    if 0 < moved < phrase * steps - 4 and moved not in onsets:
+                        onsets[i] = moved
+                        onsets.sort()
+                onsets = [s for s in onsets if start + s // steps < ctx.bars]
+                last = onsets[-1] if onsets else 0
+                yield (start, phrase, onsets, min(phrase * steps, last + steps // 2 + 4))
+
     notes: list[dict[str, Any]] = []
     previous = round(centre)
-    for start in range(0, ctx.bars, phrase):
-        if not plays("lead", kind, start, ctx.bars):
-            continue
-        letter = plan[(start // phrase) % len(plan)]
-        onsets = list(rhythms[letter])
-        if letter == "A" and (start // phrase) % len(plan) == 1 and len(onsets) > 2 and rng.random() < 0.6:
-            # A': the same rhythm with one note moved, so it answers rather than repeats.
-            i = rng.randrange(1, len(onsets))
-            moved = onsets[i] + rng.choice((-2, 2))
-            if 0 < moved < phrase * steps - 4 and moved not in onsets:
-                onsets[i] = moved
-                onsets.sort()
-        onsets = [s for s in onsets if start + s // steps < ctx.bars]
+    for start, length_bars, onsets, last_end in phrases():
         for i, s in enumerate(onsets):
             bar, step = start + s // steps, s % steps
-            end = onsets[i + 1] if i + 1 < len(onsets) else min(phrase * steps, s + steps // 2 + 4)
+            end = onsets[i + 1] if i + 1 < len(onsets) else max(s + 1, last_end)
             held = end - s >= 4
             chord = ctx.chords[bar]["tones"] or [int(ctx.plan["key"]["tonic"])]
             strong = step % (steps // 2) == 0 or held or i == len(onsets) - 1
             fits = set(chord) if strong else allowed_pitch_classes(chord, scale) & (scale | set(chord))
-            target = centre + span * contour_at(contour, s / (phrase * steps))
+            target = centre + span * contour_at(contour, s / (length_bars * steps))
             candidates = [p for p in range(style.low, style.high + 1) if p % 12 in fits]
             if not candidates:
                 continue
@@ -1980,8 +2113,10 @@ def make_layers(
     notes: dict[str, dict[str, list[dict[str, Any]]]] = {}
     layers: list[dict[str, Any]] = []
     # With lyrics the first vocals part plays the song's tune (an instrument for the voice), and a lead beside it
-    # a harmony to it.
+    # a harmony to it. When the plan follows the lyrics, the vocals play only where words are sung and the lead
+    # takes the tune in the sections without words (an intro, a solo).
     sung = any(p["role"] == "vocals" for p in wanted)
+    worded = {s["id"] for s in plan["sections"] if s.get("words")}
     for part in wanted:
         role = part["role"]
         k = instances.get(role, 0)
@@ -2008,8 +2143,11 @@ def make_layers(
             sid = section["id"]
             if role in ("riser", "impact"):
                 break
-            if k == 0 and (role == "vocals" or (role in PARTS and not (role == "lead" and sung))):
-                by_section[sid] = parts["lead" if role == "vocals" else role].get(sid, [])
+            if k == 0 and role == "vocals":
+                by_section[sid] = parts["lead"].get(sid, []) if not worded or sid in worded else []
+                continue
+            if k == 0 and role in PARTS and not (role == "lead" and sung and (not worded or sid in worded)):
+                by_section[sid] = parts[role].get(sid, [])
                 continue
             # The first pad, arp... follows its part's seed (redoing the chords redoes them); others their own.
             if k == 0 or base == "fx":
@@ -2259,7 +2397,8 @@ def write(
     (VARIETIES): how far its choices may move from the songs' numbers, "balanced" by default."""
     chosen = variety if isinstance(variety, Variety) else variety_of(variety)
     style = Style.from_summary(summary)
-    plan = make_plan(style, seed, size, parts, chosen)
+    lyrics = summary.get("lyrics") if isinstance(summary.get("lyrics"), dict) else None
+    plan = make_plan(style, seed, size, parts, chosen, lyrics)
     song = build(style, plan, new_seeds(seed, plan), variety=chosen)
     return finish(song, summary, style)
 
@@ -2469,6 +2608,12 @@ def describe(song: dict[str, Any]) -> list[str]:
         loop = " - ".join(s["loop"])
         cue = f" {s['cue']}." if s.get("cue") else ""
         lines.append(f"{s['name']} chords: {loop} ({' '.join(names[:4])}).{cue}")
+    sung = ((song.get("plan") or {}).get("lyrics") or {}).get("sung") or []
+    for entry, words in zip(song["arrangement"], sung, strict=False):
+        if words:
+            section = by_id[entry["section"]]
+            shown = " / ".join(words[:2]) + (" / ..." if len(words) > 2 else "")
+            lines.append(f"{section['name']} (bar {entry['bar'] + 1}): {len(words)} lines, \u201c{shown}\u201d")
     checks = song.get("checks") or {}
     parts = checks.get("parts") or {}
     if parts:
@@ -2599,7 +2744,8 @@ def check_refinement(answer: Any, style: Style, song: dict[str, Any]) -> tuple[d
     taken: list[str] = []
 
     sections = answer.get("sections")
-    if isinstance(sections, list) and 4 <= len(sections) <= 12:
+    # A song that follows lyrics keeps their form.
+    if isinstance(sections, list) and not plan.get("lyrics") and 4 <= len(sections) <= 12:
         order: list[str] = []
         bars: dict[str, int] = {}
         ok = True
