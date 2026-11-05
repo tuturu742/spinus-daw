@@ -1384,6 +1384,7 @@ bool PartSoundsPanel::saveSound (int index)
          start] (std::vector<SaveSoundWindow::Saved> saved)
         {
             std::vector<std::pair<juce::String, juce::MemoryBlock>> sounds;
+            sounds.reserve (saved.size());
             for (auto& s : saved)
                 sounds.emplace_back (s.name, std::move (s.state));
             if (safe != nullptr)

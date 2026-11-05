@@ -1781,7 +1781,9 @@ TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screens
     SaveSoundWindow::Notes notes;
     notes.range = NoteRanges::Range { 40, 76 };
     notes.onChange = [] (std::optional<NoteRanges::Range>) {};
-    REQUIRE (SaveSoundWindow::open (session, start, "Bass (3x Osc)", {}, std::move (notes), nullptr, {}, problem));
+    const auto opened =
+        SaveSoundWindow::open (session, start, "Bass (3x Osc)", {}, std::move (notes), nullptr, {}, problem);
+    REQUIRE (opened);
     juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
     SaveSoundWindow* window = nullptr;
     for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i)

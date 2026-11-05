@@ -612,8 +612,8 @@ TEST_CASE ("Sounds per part: the notes an instrument may play keep its phrases o
     Choice choice;
     choice.kind = Choice::Kind::preset;
     choice.instrument = "ample-metal";
-    REQUIRE (noteRangeFor (choice, indexFolder).has_value());
-    CHECK (*noteRangeFor (choice, indexFolder) == guitar);
+    const auto found = noteRangeFor (choice, indexFolder);
+    CHECK (found == std::optional<NoteRanges::Range> (guitar));
     choice.kind = Choice::Kind::kit;
     CHECK_FALSE (noteRangeFor (choice, indexFolder).has_value()); // a kit's notes are its drums
 

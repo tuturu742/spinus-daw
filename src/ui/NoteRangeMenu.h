@@ -14,7 +14,7 @@ namespace spinus::ui
     the Piano roll names them (with the MIDI number, since instruments' manuals name octaves differently), and
     "Any note again". `set` gets the new range (nullopt: any). */
 inline juce::PopupMenu makeNoteRangeMenu (std::optional<NoteRanges::Range> now,
-                                          std::function<void (std::optional<NoteRanges::Range>)> set)
+                                          const std::function<void (std::optional<NoteRanges::Range>)>& set)
 {
     auto ends = [now, set] (bool lowest)
     {
