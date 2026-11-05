@@ -21,6 +21,12 @@ namespace spinus::ui
     understood is shown in plain words ("Understood: 118 BPM, G major, sunny, upbeat; genre: indie pop"); the
     Sounds for each part and Write a song pages then work from it, with the sounds you have.
 
+    Lyrics (optional, in their own box under the description): the song's words, tagged by section the way song
+    generators take them ("[Verse 1]", "[Chorus]", "[Guitar Solo]"). Read reads them too (spinus_ai/lyrics.py): the
+    sections and each line's syllables, counted by rules on this computer, or by the AI when it reads. They go into
+    the summary as its `lyrics`, for the vocal part and the song's form. "This song has no vocals" leaves them out
+    (kept in the box, not read).
+
     Nothing changes the project. Without the AI service the page says so. Message thread only. */
 class DescribeSongPanel final : public juce::Component
 {
@@ -36,6 +42,11 @@ public:
     void setText (const juce::String& text) { textBox.setText (text, false); }
     juce::String getText() const { return textBox.getText(); }
     void setUseAi (bool on) { aiButton.setToggleState (on, juce::dontSendNotification); }
+    void setLyrics (const juce::String& text) { lyricsBox.setText (text, false); }
+    juce::String getLyrics() const { return lyricsBox.getText(); }
+    /** "This song has no vocals": the lyrics are kept but not read. */
+    void setNoVocals (bool on);
+    bool hasNoVocals() const { return noVocalsButton.getToggleState(); }
     /** A summary read before (the Track creator remembers it), shown as if just read. */
     void show (const juce::var& summary);
     /** The reference songs' summary and the description written from it (ai.v1.song.prompt): Read then changes
@@ -65,7 +76,9 @@ private:
     juce::String generated;
 
     juce::Label intro;
-    juce::TextEditor textBox;
+    juce::TextEditor textBox, lyricsBox;
+    juce::Label lyricsLabel;
+    juce::ToggleButton noVocalsButton { "This song has no vocals" };
     juce::ToggleButton aiButton { "Let the AI read it (uses your AI connection)" };
     juce::TextButton readButton { "Read" }, againButton { "Your songs again" };
     MessageLabel understood, status;

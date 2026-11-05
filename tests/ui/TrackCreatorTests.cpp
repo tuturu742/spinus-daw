@@ -431,6 +431,8 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
         auto& describer = creator.getDescriber();
         CHECK (describer.isVisible());
         describer.setText (text);
+        describer.setLyrics ("[Verse 1]\nThe city lights are fading out\nI walk alone without a doubt\n\n[Chorus]\n"
+                             "Hold on to the night\n\n[Guitar Solo]");
         // AI off: the page says what to do, and nothing starts.
         CHECK_FALSE (describer.read());
         CHECK (describer.getStatusText().contains ("Options > AI"));
@@ -444,6 +446,22 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
         CHECK (describer.getDetailsText().contains ("As depressive black metal usually is"));
         REQUIRE (creator.isFromDescription());
         CHECK (creator.getActiveSummary()["described"]["genre"].toString() == "dsbm");
+        // The lyrics, read with it: the sections and their lines.
+        const auto lyrics = creator.getActiveSummary()["lyrics"];
+        CHECK (lyrics["sections"].size() == 3);
+        CHECK ((int)lyrics["lines"] == 3);
+        CHECK ((bool)lyrics["sections"][2]["instrumental"]);
+        CHECK (describer.getDetailsText().contains ("Lyrics: Verse 1, Chorus, Guitar Solo (instrumental); 3 lines"));
+        // "This song has no vocals": the lyrics stay in the box and are not read.
+        describer.setNoVocals (true);
+        REQUIRE (describer.read());
+        REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
+        CHECK_FALSE (creator.getActiveSummary().hasProperty ("lyrics"));
+        CHECK (describer.getLyrics().isNotEmpty());
+        describer.setNoVocals (false);
+        REQUIRE (describer.read());
+        REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
+        CHECK (creator.getActiveSummary().hasProperty ("lyrics"));
 
         // The song is written from it, in a full arrangement.
         auto& writer = creator.getSongWriter();
@@ -472,6 +490,8 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
     creator.setService (&next);
     CHECK (creator.isFromDescription());
     CHECK (creator.getDescriber().getText() == text);
+    CHECK (creator.getDescriber().getLyrics().startsWith ("[Verse 1]"));
+    CHECK_FALSE (creator.getDescriber().hasNoVocals());
     CHECK (creator.getDescriber().getUnderstoodText().startsWith ("Understood: 72 BPM, D minor"));
     CHECK ((int)creator.getActiveSummary()["tempo"]["median"] == 72);
     CHECK (next.getState() != ai::AiService::State::running);
@@ -667,6 +687,8 @@ TEST_CASE ("Track creator describe a song screenshot for the manual", "[.screens
     auto& describer = creator.getDescriber();
     describer.setText ("A sunny, upbeat indie pop song at 118 BPM in G major, with acoustic guitar, handclaps and a "
                        "catchy whistled lead");
+    describer.setLyrics ("[Verse 1]\nSunlight on the windowsill\nCoffee's warm and the morning's still\n\n[Chorus]\n"
+                         "Oh, we've got all summer long\nSinging out our summer song\n\n[Whistle Solo]\n\n[Chorus]");
     REQUIRE (describer.read());
     REQUIRE (waitFor ([&] { return ! describer.isBusy(); }, 120000));
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);

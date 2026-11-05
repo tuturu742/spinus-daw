@@ -605,6 +605,8 @@ void TrackCreator::remember() const
                                 { "summary", summary },
                                 { "summarized", summarized },
                                 { "description", describer != nullptr ? describer->getText() : juce::String() },
+                                { "lyrics", describer != nullptr ? describer->getLyrics() : juce::String() },
+                                { "noVocals", describer != nullptr && describer->hasNoVocals() },
                                 { "described", described },
                                 { "generated", describer != nullptr ? describer->getGenerated() : juce::String() },
                                 { "parts", partSounds != nullptr ? partSounds->getRemembered() : juce::var() } })) +
@@ -650,6 +652,8 @@ void TrackCreator::recall()
         }
     // The description and its summary, as they were.
     describer->setText (saved["description"].toString());
+    describer->setLyrics (saved["lyrics"].toString());
+    describer->setNoVocals ((bool)saved["noVocals"]);
     if (saved["described"]["described"].isObject())
     {
         described = saved["described"];
