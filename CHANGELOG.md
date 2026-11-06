@@ -11,6 +11,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   their default sound was measured, and going through them meant Save this sound for each one. Now, in the
   instrument's menu, **Preset files › Add a folder of its preset files...**: Spinus gives each file to the
   instrument as its settings and the sound index measures it like any preset.
+- An instrument whose sound as it opens was already measured (most with a saved sound) could not be measured
+  again: the sound index reported it as "crashed while listing its presets", so a preset folder added to it
+  measured nothing. It is measured again now.
 
 ### Coding agents: ready-made requests, your edits kept in view, playback
 

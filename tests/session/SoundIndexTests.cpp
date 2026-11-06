@@ -597,6 +597,30 @@ TEST_CASE ("Sound index: a sound an older helper found silent is measured again,
     CHECK_FALSE (index.needsVisit (source));
 }
 
+TEST_CASE ("Sound index: an instrument measured with its sound as it opens can be visited again",
+           "[sounds][index][helper]")
+{
+    // Its sound as it opens has no id. Visited again (a preset folder, a saved sound, Measure again), the helper
+    // still reads the request: before, it quit at once and the instrument was "crashed while listing its presets".
+    TempFolder temp;
+    SoundIndex index (temp.folder);
+    const auto source = testSynth ("difficult-synth.clap", "Spinus Difficult Synth"); // only its sound as it opens
+    SoundIndexer::update (index, helperOptions(), { source }, {}, {}, {});
+    const auto& first = index.instruments.at (source.key);
+    REQUIRE (first.problem.isEmpty());
+    bool asItOpens = false;
+    for (const auto& s : first.sounds)
+        asItOpens = asItOpens || s["id"].toString().isEmpty();
+    REQUIRE (asItOpens);
+
+    const auto result = SoundIndexer::updateInstrument (index, helperOptions(), source, {});
+    const auto& again = index.instruments.at (source.key);
+    CHECK (result.problems == 0);
+    CHECK (again.problem.isEmpty());
+    CHECK (again.complete);
+    CHECK (again.sounds.size() == first.sounds.size());
+}
+
 TEST_CASE ("Sound index: an instrument that crashes listing its presets and loads its sounds late is still measured",
            "[sounds][index][helper]")
 {

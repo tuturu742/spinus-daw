@@ -916,9 +916,12 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
     bool defaultOnly = false;
     for (int attempt = 0;; ++attempt)
     {
+        // The instrument's sound as it opens has no id: a JSON object can't hold it as a name (the helper could
+        // not read the request), so that one sound is measured again at each visit.
         auto* known = new juce::DynamicObject();
         for (const auto& s : entry.sounds)
-            known->setProperty (s["id"].toString(), s["version"]);
+            if (const auto id = s["id"].toString(); id.isNotEmpty())
+                known->setProperty (id, s["version"]);
         juce::Array<juce::var> skip;
         for (const auto& b : entry.problemPresets)
             skip.add (b);
