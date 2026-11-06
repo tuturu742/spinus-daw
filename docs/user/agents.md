@@ -5,6 +5,9 @@ Spinus, while you watch and play it here:
 
 - **Reading the song:** its sections, parts, sounds and mix.
 - **Changing it:** writing parts, adding a bridge, shaping a sound, automating, mixing.
+- **Looking things up:** Spinus's manual, and the style of your reference songs in the
+  [Track creator](track-creator.md) (what they share: tempo, key, chords, drums, parts), so "make it like my
+  references" works.
 - **Listening by numbers:** rendering it to measure the mix's loudness and peaks, each section's loudness and
   each part's.
 
@@ -53,7 +56,7 @@ ready-made requests. Each starts the agent on a common job, with steps that work
 ## Tools that only look
 
 Each tool tells the agent's client what it does: **only looks** (the song's summary, a part's notes, a sound's
-settings, the device and preset lists, check, render), **adds** (a part, an effect, a send, bars) or **may
+settings, the device and preset lists, the manual, your references' style, check, render), **adds** (a part, an effect, a send, bars) or **may
 replace** what is there (writing notes over a part's, copying bars, automation, a new sound, Spinus's
 commands). Clients that use this can run the ones that only look without asking you each time and ask before
 the rest. Every change is still one undo step.

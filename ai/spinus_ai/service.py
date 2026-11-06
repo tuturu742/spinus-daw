@@ -25,7 +25,7 @@ from .compute.environments import InstallError
 from .compute.weights import WeightStore, find_model
 from .connections import DEFAULT_BASE_URLS, ConnectionStore, KeyStore, key_mismatch
 from .embeddings import ModelStore, default_models_folder, missing_dependencies, run_blocking
-from .gateway import ProviderError, list_models
+from .gateway import ProviderError, Tool, list_models
 from .manual import Manual
 from .project_harness import TOOLS as PROJECT_TOOLS
 from .project_harness import ProjectHarness
@@ -51,6 +51,24 @@ def file_digest(path: Path) -> str:
         for block in iter(lambda: file.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+# The manual's search for outside agents (the live interface): how-to answers from Spinus's own manual.
+SEARCH_MANUAL = Tool(
+    "search_manual",
+    "Search Spinus's user manual (how a device, a command or a feature works, its settings and their units). Use "
+    "it instead of guessing.",
+    {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+)
+# The user's reference songs in the Track creator (track-creator.json, which Spinus keeps in this service's folder):
+# what their style shares, in plain words, with the song the user described.
+REFERENCE_STYLE = Tool(
+    "reference_style",
+    "The user's reference songs in Spinus's Track creator: their names, the style they share in plain words "
+    "(tempo, key, chords, drums, parts, sections, loudness), and the song the user described there (and its "
+    "lyrics). Use it when the user asks for a song like their references.",
+    {"type": "object", "properties": {}, "required": []},
+)
 
 
 class RpcError(Exception):
@@ -1376,7 +1394,8 @@ class Service:
         return {"job": job}
 
     async def project_tools(self, params: dict[str, Any], notify: Notify) -> Any:
-        """The project harness's tools, for Spinus's live interface to offer outside agents."""
+        """The project harness's tools, for Spinus's live interface to offer outside agents, and the manual's search
+        (the assistant's), so an agent looks up how a device or a command works instead of guessing."""
         return {
             "tools": [
                 {
@@ -1385,7 +1404,7 @@ class Service:
                     "inputSchema": t.input_schema,
                     "annotations": project_tool_hints(t.name),
                 }
-                for t in PROJECT_TOOLS
+                for t in [*PROJECT_TOOLS, SEARCH_MANUAL, REFERENCE_STYLE]
             ]
         }
 
@@ -1400,9 +1419,46 @@ class Service:
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
             raise RpcError(-32602, "arguments must be an object")
+        if name == SEARCH_MANUAL.name:
+            found = self.manual.search(str(arguments.get("query", "")), limit=5)
+            said = "\n\n".join(f"[{s.page}] {s.title}\n{s.text[:1500]}" for s in found)
+            return {"text": said or "Nothing found in the manual.", "isError": False, "proposal": None}
+        if name == REFERENCE_STYLE.name:
+            return {"text": self.reference_style(), "isError": False, "proposal": None}
         text, failed = harness.call(name, arguments)
         proposal = None if failed else harness.take_proposal(f"{name}: " + "; ".join(harness.changes))
         return {"text": text, "isError": failed, "proposal": proposal}
+
+    def reference_style(self) -> str:
+        """What the Track creator knows of the user's references, for an agent (names only, never paths)."""
+        try:
+            saved = json.loads((self.config / "track-creator.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            saved = {}
+        if not isinstance(saved, dict):
+            saved = {}
+        songs = [Path(str(r.get("path", ""))).stem for r in saved.get("references") or [] if isinstance(r, dict)]
+        summary = saved.get("summary")
+        plain = summary.get("plain") if isinstance(summary, dict) else None
+        lines = [str(line) for line in plain] if isinstance(plain, list) else []
+        if not songs and not lines:
+            return (
+                "The user has no reference songs in the Track creator. They add songs they like there "
+                "(Track creator, Reference songs) and Spinus measures their style."
+            )
+        said = [f"Reference songs: {', '.join(songs) or 'none'}."]
+        said += (
+            ["What they share:", *lines]
+            if lines
+            else ["Their style isn't measured yet (Analyze in the Track creator)."]
+        )
+        if description := str(saved.get("description") or "").strip():
+            said.append(f"The song the user described: {description}")
+        if lyrics := str(saved.get("lyrics") or "").strip():
+            said.append(f"Its lyrics:\n{lyrics}")
+        elif saved.get("noVocals"):
+            said.append("The song has no vocals.")
+        return "\n".join(said)
 
     async def cancel_job(self, params: dict[str, Any], notify: Notify) -> Any:
         task = self.jobs.get(str(params.get("job", "")))

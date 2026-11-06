@@ -371,6 +371,31 @@ async def test_the_live_interface_gets_the_tools_and_each_calls_steps(tmp_path: 
     assert hints["write_part"]["destructiveHint"] and not hints["write_part"]["readOnlyHint"]
     classified = project_harness.READS + project_harness.ADDS + project_harness.REPLACES
     assert sorted(classified) == sorted(names)
+    # The manual's search: how-to answers for agents, changing nothing.
+    found, _ = await collect(
+        service,
+        "ai.v1.project.tool",
+        {"tool": "search_manual", "arguments": {"query": "sidechain ducking"}, "context": {"project": song()}},
+    )
+    assert not found["isError"] and found["proposal"] is None and found["text"].startswith("[")
+
+    # The Track creator's references: none yet, then their names (never their paths) and what they share.
+    def style() -> str:
+        return str(service.reference_style())
+
+    assert "no reference songs" in style()
+    (tmp_path / "config").mkdir(exist_ok=True)
+    (tmp_path / "config" / "track-creator.json").write_text(
+        json.dumps({
+            "references": [{"path": "/home/someone/Music/Night Drive.flac"}],
+            "summary": {"plain": ["Tempo: about 100 BPM", "Key: A minor"]},
+            "description": "a slow synthwave song",
+            "noVocals": True,
+        })
+    )  # fmt: skip
+    said = style()
+    assert said.startswith("Reference songs: Night Drive.") and "/home" not in said
+    assert "Key: A minor" in said and "a slow synthwave song" in said and "no vocals" in said
     result, _ = await collect(
         service,
         "ai.v1.project.tool",

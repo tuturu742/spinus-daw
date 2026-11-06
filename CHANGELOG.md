@@ -13,6 +13,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   that only look without asking you each time.
 - **Your edits are safe while an agent works:** it's told what you changed or undid since it last looked, and
   its next change waits until it has heard.
+- **The manual and your references:** agents can search Spinus's manual, and read the style your reference songs
+  share in the Track creator.
 - **Play for you:** an agent can play a section (looped) or bars for you to hear, and stop.
 - Agents are told Spinus's conventions (bars from 1, sixteenth steps, C5 = 60, ticks, settings in the device's
   units) before their first call.
