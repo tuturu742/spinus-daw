@@ -220,6 +220,48 @@ struct Vst3StatePlugin : XmlStatePlugin
         state.fromBase64Encoding (outer->getChildElementAllSubText ("IComponent", {}));
     }
 };
+/** A VST3 made from a VST2 plugin with JUCE: its own state a VST2 bank chunk ("VstW", then "CcnK" ... "FBCh"),
+    whose opaque data is JUCE's binary XML, with a few bytes after it. */
+struct BankStatePlugin : XmlStatePlugin
+{
+    static juce::MemoryBlock bank (const juce::MemoryBlock& xml)
+    {
+        const auto be = [] (juce::MemoryOutputStream& out, size_t v) { out.writeIntBigEndian ((int)v); };
+        const juce::MemoryBlock tail ("tail", 4);
+        juce::MemoryOutputStream out;
+        out.write ("VstW", 4);
+        be (out, 8);
+        be (out, 1);
+        be (out, 0);
+        out.write ("CcnK", 4);
+        be (out, 4 + 4 + 4 + 4 + 4 + 128 + 4 + xml.getSize() + tail.getSize());
+        out.write ("FBCh", 4);
+        be (out, 2);
+        out.write ("Test", 4);
+        be (out, 1);
+        be (out, 1);
+        out.writeRepeatedByte (0, 128);
+        be (out, xml.getSize() + tail.getSize());
+        out.write (xml.getData(), xml.getSize());
+        out.write (tail.getData(), tail.getSize());
+        return out.getMemoryBlock();
+    }
+    void getStateInformation (juce::MemoryBlock& data) override { data = bank (state); }
+    void setStateInformation (const void* data, int size) override
+    {
+        // Read back as the plugin would: the sizes must hold, the XML right after the data size.
+        const juce::MemoryBlock given (data, (size_t)size);
+        const auto* bytes = static_cast<const char*> (given.getData());
+        constexpr size_t start = 176; // VstW (16), CcnK and its size, FBCh, version, id, its version, programs,
+                                      // 128 bytes for later, the data's size (160)
+        REQUIRE (given.getSize() > start + 4);
+        CHECK (juce::ByteOrder::bigEndianInt (bytes + 20) == given.getSize() - 24);
+        const auto length = juce::ByteOrder::bigEndianInt (bytes + start - 4);
+        CHECK (length == given.getSize() - start);
+        CHECK (std::memcmp (bytes + given.getSize() - 4, "tail", 4) == 0);
+        state = juce::MemoryBlock (bytes + start, length - 4);
+    }
+};
 } // namespace
 
 TEST_CASE ("Instrument presets: files in a preset folder the user chose, given as the plugin's state",
@@ -258,6 +300,10 @@ TEST_CASE ("Instrument presets: files in a preset folder the user chose, given a
     Vst3StatePlugin vst3;
     REQUIRE (InstrumentPresets::load (vst3, found[0]).wasOk());
     CHECK (vst3.soundName() == "Clean Tone");
+    // A VST3 made from a VST2 plugin: the XML inside its bank chunk, the chunk's sizes made right.
+    BankStatePlugin banked;
+    REQUIRE (InstrumentPresets::load (banked, found[1]).wasOk());
+    CHECK (banked.soundName() == "Big Lead");
     // Another plugin: the file as it is (this one's state is its program number).
     test::ProgramsTestPlugin raw;
     const int program = 2;

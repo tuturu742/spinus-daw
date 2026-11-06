@@ -11,6 +11,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   their default sound was measured, and going through them meant Save this sound for each one. Now, in the
   instrument's menu, **Preset files › Add a folder of its preset files...**: Spinus gives each file to the
   instrument as its settings and the sound index measures it like any preset.
+- Preset files also work for instruments that keep their settings in an older VST2 bank inside their VST3 one
+  (Ample Bass P and Ample Guitar M among them): before, each of their preset files stopped answering and none
+  was measured.
 
 ### Coding agents: ready-made requests, your edits kept in view, playback
 
