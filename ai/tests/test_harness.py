@@ -14,9 +14,9 @@ from typing import Any
 import httpx
 import pytest
 from test_service import make_service, no_notify, run_job
-from test_songwriter import summary
+from test_songwriter import SONG_LYRICS, summary
 
-from spinus_ai import compose, harness
+from spinus_ai import compose, harness, lyrics
 from spinus_ai import songwriter as sw
 from spinus_ai.connections import ConnectionStore, MemoryKeyStore
 from spinus_ai.routing import Routing
@@ -1214,3 +1214,72 @@ async def test_new_kinds_and_cues_go_through_the_tools_into_the_song(tmp_path: P
     assert by_id["drop"]["name"] == "Drop" and by_id["build"]["contour"] == "rise"
     assert by_id["drop"]["energy"] > by_id["breakdown"]["energy"]
     assert any("drums fall away." in line for line in sw.describe(song))  # the page shows the cue
+
+
+def test_with_lyrics_the_ai_keeps_their_form_and_sings_a_note_a_syllable() -> None:
+    s = summary()
+    s["lyrics"] = lyrics.read(SONG_LYRICS)
+    parts = [*PARTS, {"id": "vocals", "name": "Vocals", "role": "vocals"}]
+    ws = harness.Workspace.start(harness.setup_of({**BRIEF, "summary": s, "parts": parts}), 5, "sketch")
+    verse = ws.sections["verse"]
+    assert len(verse["words"]) == 4 and verse["bars"] == 4 * verse["lineBars"]
+    assert "sung: 4 lines" in ws.tool_form()
+    sung = ws.plan()["lyrics"]["sung"]
+    assert len(sung) == len(ws.order) and sung[ws.order.index("verse")][0] == "Sunlight on the windowsill"
+
+    def form(order: list[str], **bars: int) -> list[dict[str, Any]]:
+        return [
+            {"id": sid, "kind": ws.sections[sid]["kind"] if sid in ws.sections else "break",
+             "bars": bars.get(sid, ws.sections[sid]["bars"] if sid in ws.sections else 4), "chords": ["I", "V"]}
+            for sid in dict.fromkeys(order)
+        ]  # fmt: skip
+
+    # A sung section keeps its bars; an instrumental one may go between the sung ones.
+    order = list(ws.order)
+    with_break = [*order[:2], "break", *order[2:]]
+    said = ws.tool_set_form(form(with_break, verse=verse["bars"] + 4), with_break)
+    assert "Kept for the lyrics: the verse stays" in said
+    assert ws.sections["verse"]["bars"] == verse["bars"] and ws.order == with_break
+    assert ws.plan()["lyrics"]["sung"][2] == [] and "words" not in ws.sections["break"]
+    # Sections of the sung kinds in the lyrics' order stand for them, by any ids.
+    renamed = [f"{o}-{i}" if ws.sections[o].get("words") else o for i, o in enumerate(order)]
+    ws.tool_set_form(
+        [
+            {"id": r, "kind": ws.sections[o]["kind"], "bars": 8, "chords": ["vi", "IV"]}
+            for r, o in zip(renamed, order, strict=True)
+        ],
+        renamed,
+    )
+    assert ws.order == order and ws.sections["verse"]["chords"] == ["vi", "IV"] and ws.sections["verse"]["words"]
+    # Leaving out or moving a sung section is refused.
+    with pytest.raises(harness.Mistake, match="sung in this order"):
+        ws.tool_set_form(form([o for o in order if o != "bridge"]), [o for o in order if o != "bridge"])
+
+    # The checks count the sung tune's notes against each line's syllables.
+    ws.tool_write("vocals", "verse", "0 67 2 90; 4 69 2 90; 8 71 2 90")
+    assert any("vocals in the verse: one note a syllable; line 1" in i for i in ws.issues())
+    song = ws.song()
+    assert song["plan"]["lyrics"]["sung"] == ws.plan()["lyrics"]["sung"]
+    assert any(line.startswith("Verse (bar ") for line in sw.describe(song))
+
+
+def test_a_one_shot_answer_keeps_the_lyrics_order() -> None:
+    s = summary()
+    s["lyrics"] = lyrics.read(SONG_LYRICS)
+    setup_ = harness.setup_of({**BRIEF, "summary": s})
+    answer = {
+        "tempo": 100,
+        "key": "C major",
+        "sections": [
+            {"id": "verse", "kind": "verse", "bars": 8, "chords": ["I", "IV"]},
+            {"id": "chorus", "kind": "chorus", "bars": 8, "chords": ["IV", "V"]},
+        ],
+        "order": ["verse", "chorus", "chorus"],
+        "parts": {},
+    }
+    plan, kept = compose.keep_lyrics(compose.check_plan(answer, setup_), setup_, strict=False)
+    found = compose.lyric_form(s, setup_.style, plan["tempo"])
+    assert found is not None and plan["order"] == found[1] and "the lyrics' order of sections" in kept
+    by_id = {x["id"]: x for x in plan["sections"]}
+    assert by_id["chorus"]["chords"] == ["IV", "V"] and by_id["bridge"]["chords"] == ["I", "IV"]
+    assert len(plan["lyrics"]["sung"]) == len(plan["order"])

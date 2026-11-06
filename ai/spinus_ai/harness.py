@@ -679,6 +679,8 @@ class Workspace:
                 "cue": str(s.get("cue") or ""),
             }
         ws.order = [e["section"] for e in rules["arrangement"]]
+        plan, _ = compose.keep_lyrics(ws.plan(), ws.setup, strict=False)  # the sung sections' words, for the checks
+        ws.sections, ws.order = {s["id"]: s for s in plan["sections"]}, plan["order"]
         return ws
 
     @staticmethod
@@ -757,13 +759,16 @@ class Workspace:
         return bool(sw.ROLES[self.part(pid)["role"]][4])
 
     def plan(self) -> dict[str, Any]:
-        """The form as compose.check_plan gives it."""
-        return {
+        """The form as compose.check_plan gives it (and what is sung where, with lyrics)."""
+        plan = {
             "tempo": self.tempo,
             "key": self.key,
             "sections": [self.sections[sid] for sid in self.sections if sid in self.order],
             "order": self.order,
         }
+        if sung := compose.sung_of(self.order, self.setup, self.tempo):
+            plan["lyrics"] = sung
+        return plan
 
     def chord_at(self, sid: str, bar: int) -> list[int]:
         s = self.sections[sid]
@@ -884,6 +889,11 @@ class Workspace:
         for sid, s in self.sections.items():
             has = [p for p, by in self.notes.items() if by.get(sid)]
             cue = f" ({s['cue']})" if s.get("cue") else ""
+            if s.get("words"):
+                cue += (
+                    f", sung: {len(s['words'])} lines of {s['lineBars']} bars, syllables "
+                    f"{' '.join(str(w['syllables']) for w in s['words'])}"
+                )
             lines.append(
                 f"{sid}: {s['kind']}{cue}, {s['bars']} bars, energy {s['energy']:g}, chords "
                 f"{' '.join(s['chords'])} ({s['hold']} bar{'s' if s['hold'] > 1 else ''} each); notes: "
@@ -928,7 +938,7 @@ class Workspace:
             "key": key or self.key["name"],
         }
         try:
-            plan = compose.check_plan(answer, self.setup)
+            plan, kept = compose.keep_lyrics(compose.check_plan(answer, self.setup), self.setup, strict=True)
         except compose.Unusable as why:
             raise Mistake(str(why)) from why
         old = self.sections
@@ -945,7 +955,7 @@ class Workspace:
                     by[sid] = [n for n in by[sid] if int(n["start"]) < end]
         return (
             f"Form set: {' '.join(self.order)}, {sum(self.sections[s]['bars'] for s in self.order)} bars, "
-            f"{self.tempo:g} BPM, {self.key['name']}."
+            f"{self.tempo:g} BPM, {self.key['name']}." + (f" Kept for the lyrics: {'; '.join(kept)}." if kept else "")
         )
 
     def tool_set_chords(self, section: str, chords: list[str], barsPerChord: int = 1) -> str:
@@ -1709,6 +1719,14 @@ class Workspace:
             ]
         if self.rules_finding and not only_section:
             out += self.rules_issues(only_part)
+        tune = compose.tune_part(self.setup)
+        if tune and (not only_part or only_part == tune):  # the sung tune, where the AI wrote it
+            worded = {
+                sid: s
+                for sid, s in self.sections.items()
+                if (not only_section or sid == only_section) and (tune, sid) not in self.by_rules
+            }
+            out += compose.syllable_findings(worded, self.notes.get(tune, {}), bar_ticks, tune)
         if not only_part and not only_section and "mix" in self.groups:
             on_master = [e["effect"] for e in self.extra.get("effects", []) if e["part"] == MASTER]
             if "limiter" not in on_master:

@@ -293,12 +293,151 @@ def lyrics_brief(summary: dict[str, Any], style: sw.Style) -> dict[str, Any] | N
         else:
             entry["instrumental"] = True
         form.append(entry)
-    return {
+    out: dict[str, Any] = {
         "note": "The song has lyrics. Spinus does not sing: the vocals part (or the lead) plays the sung tune. "
         "Keep their form: their sections in this order, a sung line a phrase of one note a syllable (stressed "
         "syllables, '1', on the beats), a line every barsPerLine bars; instrumental sections have no tune.",
         "form": form,
     }
+    if found := lyric_form(summary, style, style.tempo):
+        sections, order, _ = found
+        out["sections"] = [
+            {
+                "id": s["id"],
+                "kind": s["kind"],
+                "bars": s["bars"],
+                "lines": len(s["words"]),
+                "barsPerLine": s["lineBars"],
+            }
+            for s in sections
+            if s.get("words")
+        ]
+        out["order"] = order
+        out["fixed"] = (
+            "The sung sections are these ids, as long as their lines need, in this order: Spinus keeps their bars "
+            "(they change with the tempo) and their order. Instrumental sections (an intro, a solo, an outro) may "
+            "go before, between and after them, as long as you like."
+        )
+    return out
+
+
+def lyric_form(
+    summary: dict[str, Any], style: sw.Style, tempo: float
+) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]] | None:
+    """The lyrics' form at this tempo (songwriter.lyric_form: each sung section as long as its lines, with their
+    syllables); None without sung lines."""
+    lyrics = summary.get("lyrics")
+    if not isinstance(lyrics, dict) or not any(s.get("lines") for s in lyrics.get("sections") or []):
+        return None
+    return sw.lyric_form(lyrics, tempo, style, lambda kind: 8, {})
+
+
+def sung_of(order: list[str], setup: Setup, tempo: float) -> dict[str, Any] | None:
+    """What is sung in each entry of the order (as songwriter.make_plan gives it): the lyrics' lines in their order,
+    on the sung sections; nothing on the others."""
+    found = lyric_form(setup.summary, setup.style, tempo)
+    if found is None:
+        return None
+    _, form_order, sung = found
+    queue = [(sid, lines) for sid, lines in zip(form_order, sung["sung"], strict=False) if lines]
+    out: list[list[str]] = []
+    for sid in order:
+        if queue and queue[0][0] == sid:
+            out.append(queue.pop(0)[1])
+        else:
+            out.append([])
+    return {"language": sung["language"], "sung": out}
+
+
+def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[str, Any], list[str]]:
+    """The checked plan with the lyrics' form kept: each sung section as long as its lines need (with their
+    syllables, for the tune), the sung sections in the lyrics' order; instrumental sections where the plan puts
+    them. The plan's sections stand for the sung ones by their ids or, in order, by their kinds ("verse1" and
+    "verse2" for the lyrics' verse sung twice), giving them their chords and energy. An order that leaves out or
+    moves a sung section raises Unusable when `strict` (the harness's model sets the form again); otherwise the
+    lyrics' own order is used. Also what was kept, in words."""
+    found = lyric_form(setup.summary, setup.style, float(plan["tempo"]))
+    if found is None:
+        return plan, []
+    form, form_order, _ = found
+    fixed = {s["id"]: s for s in form if s.get("words")}
+    by_id = {s["id"]: s for s in plan["sections"]}
+    sung_order = [o for o in form_order if o in fixed]
+    kept: list[str] = []
+    order: list[str] = []
+    stands: dict[str, dict[str, Any]] = {}  # a sung section's id -> the plan's section that gives its music
+    at = 0
+    for o in plan["order"]:
+        if at < len(sung_order) and (o == sung_order[at] or by_id[o]["kind"] == fixed[sung_order[at]]["kind"]):
+            stands.setdefault(sung_order[at], by_id[o])
+            order.append(sung_order[at])
+            at += 1
+        elif o in fixed:
+            at = -1  # a sung section out of its place
+            break
+        else:
+            order.append(o)
+    if at != len(sung_order):
+        if strict:
+            wanted = ", ".join(f"{o} ({fixed[o]['kind']})" for o in sung_order)
+            raise Unusable(
+                f"the lyrics are sung in this order: {wanted}. Give the order these sections, by these ids or by "
+                "sections of these kinds in this order (a section sung again is its id again); instrumental "
+                "sections may go before, between and after them"
+            )
+        order, stands = list(form_order), {}
+        kept.append("the lyrics' order of sections")
+    sections: list[dict[str, Any]] = []
+    for sid in dict.fromkeys(order):
+        given = stands.get(sid) or by_id.get(sid)
+        section = {**given, "id": sid} if given is not None else None
+        shape = next((s for s in form if s["id"] == sid), None)
+        if section is None:
+            assert shape is not None  # only the lyrics' own order names sections the plan does not have
+            like = next((s for s in plan["sections"] if s["kind"] == shape["kind"]), plan["sections"][0])
+            section = {"id": sid, "kind": shape["kind"], "bars": shape["bars"], "chords": list(like["chords"]),
+                       "hold": like["hold"], "energy": sw.ENERGY[shape["kind"]],
+                       "cue": str(shape.get("cue") or "")}  # fmt: skip
+        if sid in fixed:
+            want = fixed[sid]
+            if section["bars"] != want["bars"]:
+                kept.append(
+                    f"the {sid} stays {want['bars']} bars ({len(want['words'])} lines, {want['lineBars']} bars each)"
+                )
+            section.update(kind=want["kind"], bars=want["bars"], words=want["words"], lineBars=want["lineBars"])
+        else:
+            section.pop("words", None)
+            section.pop("lineBars", None)
+        sections.append(section)
+    total = sum(next(s["bars"] for s in sections if s["id"] == o) for o in order)
+    if total > sw.MOST_BARS:
+        raise Unusable(f"with the lyrics' sections the song is {total} bars long (at most {sw.MOST_BARS})")
+    out = {**plan, "sections": sections, "order": order}
+    if sung := sung_of(order, setup, float(plan["tempo"])):
+        out["lyrics"] = sung
+    return out, kept
+
+
+def syllable_findings(
+    sections: dict[str, dict[str, Any]], notes: dict[str, list[dict[str, Any]]], bar_ticks: int, name: str
+) -> list[str]:
+    """Where the sung tune (`notes` by section) does not play one note a syllable: a line with notes off its
+    syllables by more than one (or a fifth of them)."""
+    out: list[str] = []
+    for sid, s in sections.items():
+        words, each = s.get("words"), int(s.get("lineBars") or 0)
+        if not words or not each or not notes.get(sid):
+            continue
+        off = []
+        for i, line in enumerate(words):
+            start, end = i * each * bar_ticks, (i + 1) * each * bar_ticks
+            count = sum(1 for n in notes[sid] if start <= int(n["start"]) < end)
+            want = int(line.get("syllables") or 1)
+            if abs(count - want) > max(1, want // 5):
+                off.append(f"line {i + 1} (bars {i * each + 1}-{(i + 1) * each}) {count} notes for {want} syllables")
+        if off:
+            out.append(f"{name} in the {sid}: one note a syllable; " + "; ".join(off[:4]) + ".")
+    return out
 
 
 def first_message(setup: Setup) -> str:
@@ -528,7 +667,7 @@ class Checked:
 def check_answer(answer: Any, setup: Setup) -> Checked:
     if not isinstance(answer, dict):
         raise Unusable("there was no song in the answer")
-    plan = check_plan(answer, setup)
+    plan, _ = keep_lyrics(check_plan(answer, setup), setup, strict=False)
     by_id = {s["id"]: s for s in plan["sections"]}
     given = answer.get("parts") if isinstance(answer.get("parts"), dict) else {}
     assert isinstance(given, dict)
@@ -612,12 +751,14 @@ def build_song(checked: Checked, setup: Setup, seed: int, size: str) -> dict[str
                 "contour": sw.KIND_CONTOUR.get(s["kind"], "arch"),
                 "progression": s["chords"],
                 **({"cue": s["cue"]} if s.get("cue") else {}),
+                **({"words": s["words"], "lineBars": s["lineBars"]} if s.get("words") else {}),
             }
             for s in plan_in["sections"]
         ],
         "order": plan_in["order"],
         "size": size,
         "parts": setup.parts,
+        **({"lyrics": plan_in["lyrics"]} if plan_in.get("lyrics") else {}),
     }
     seeds = sw.new_seeds(seed, plan)
     keep = {
@@ -795,7 +936,19 @@ def review(
                     f"{names[pid]} made no sound with its sound: its notes may be outside the instrument's range, or "
                     "too short for it."
                 )
+    tune = tune_part(setup)
+    if tune in song["layerParts"] and (checked is None or tune in checked.notes):
+        worded = {s["id"]: s for s in (song.get("plan") or {}).get("sections") or [] if s.get("words")}
+        found += syllable_findings(worded, song["layerParts"][tune], bar_ticks, names.get(tune, tune))
     return found
+
+
+def tune_part(setup: Setup) -> str:
+    """The part that plays the sung tune: the first vocals part, else the first lead ('' with neither)."""
+    for role in ("vocals", "lead"):
+        if found := next((p["id"] for p in setup.parts if p["role"] == role), ""):
+            return found
+    return ""
 
 
 def closeness_findings(setup: Setup, tempo: float, scale: str, chords: list[str]) -> list[str]:
