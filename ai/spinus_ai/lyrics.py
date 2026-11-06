@@ -2,17 +2,14 @@
 syllables each line has and where its stresses fall, so the song writer can size the sections to the words and
 write a vocal line (played by an instrument standing in for the voice: Spinus sings nothing).
 
-The lyrics are tagged the way song generators take them: a section tag on a line of its own in square brackets
-("[Verse 1]", "[Chorus]", "[Guitar Solo]", "[Intro - soft piano]", "[Chorus x2]"), then that section's lines. A
-tag with no lines under it is an instrumental section; a tag used again with no lines repeats the lines it had
-before (a chorus written out once). Other ways of marking sections are read by their layout, in any language:
-a short label on a line of its own at the start of a stanza, in parentheses or before a colon ("(Verse 1)",
-"Chorus:", "(Intro: soft piano)", "Куплет 1:"); lines like "Title: ..." or "BPM: 174" and a lone title line
-before the first section are left out; a longer line in parentheses is a note for its section, not a sung line.
-Lyrics with no labels are split at their blank lines, a stanza sung again being the chorus; one stanza is one
-verse. A label's kind comes from the structure words song generators use ("Verse", "Pre-Chorus", "Guitar
-Solo"...); a label in other words is a verse, or a chorus when its lines come back. With the AI reading the
-lyrics, it reads their structure in any language (checked: each line it gives must be one of the lyrics' own).
+One format (owner decision): the section tags song generators take, in English, in square brackets on a line of
+their own ("[Verse 1]", "[Chorus]", "[Guitar Solo]", "[Intro - soft piano]", "[Chorus x2]"), then that section's
+lines, which may be in any language. TAGS lists the tags and the kind of section each one is; the manual's table
+and the AI's instructions come from it. A tag with no lines under it is an instrumental section; a tag used again
+with no lines repeats the lines it had before (a chorus written out once). What comes before the first tag (a
+title, notes) is not sung, nor is a line wholly in parentheses (a direction or a backing vocal: its section's
+note). Lyrics without tags are not guessed at: the reading says to add tags, or to let the AI read them, and the
+AI's reading then proposes the lyrics in this format for the user to apply (nothing changes until they do).
 
 Syllables are counted on this computer by rules, approximately: vowel groups, with English's silent endings
 ("made", "walked") and its usual exceptions; in Cyrillic every vowel letter is a syllable. Stresses are guessed
@@ -48,8 +45,33 @@ MOST_REPEAT = 4  # "[Chorus x4]"
 
 TAG = re.compile(r"^\s*\[([^\]\n]{1,60})\]\s*$")
 PARENTHESES = re.compile(r"^\s*[(\uff08](.{1,300})[)\uff09]\s*$")
-COLON = re.compile(r"^\s*([^:\uff1a\n]{1,30}?)\s*[:\uff1a]\s*(.*)$")
-MOST_LABEL_WORDS = 3  # a label is short: "Verse 1", "Pre-Chorus", "Guitar Solo x2"
+# The tags, in English, with the kind of section each one is (songwriter.KINDS). A tag may carry a number
+# ("Verse 2"), a direction after a dash or a colon ("Intro - soft piano") and a repeat ("Chorus x2"); an
+# instrument's solo is any "... Solo" ("Guitar Solo", "Sax Solo"). Other words are a verse.
+TAGS: tuple[tuple[str, str, str], ...] = (
+    ("Intro", "intro", "the opening, usually instrumental"),
+    ("Verse", "verse", "the verses, numbered or not: Verse 1, Verse 2"),
+    ("Pre-Chorus", "pre-chorus", "the lead-in to the chorus"),
+    ("Chorus", "chorus", "the chorus (also Refrain)"),
+    ("Post-Chorus", "post-chorus", "after the chorus"),
+    ("Hook", "hook", "a short catchy part"),
+    ("Bridge", "bridge", "the contrasting part, usually once"),
+    ("Break", "break", "a short pause in the music"),
+    ("Breakdown", "breakdown", "the music strips down"),
+    ("Build-up", "build", "the music rises toward a drop or a chorus"),
+    ("Drop", "drop", "the big release after a build-up"),
+    ("Interlude", "interlude", "a passage between parts"),
+    ("Instrumental", "instrumental", "a part with no singing"),
+    ("Solo", "solo", "an instrument's solo: Guitar Solo, Piano Solo"),
+    ("Outro", "outro", "the ending"),
+    ("End", "end", "the very end"),
+    ("Fade Out", "fade-out", "the song fades away"),
+)
+NO_TAGS = (
+    "The lyrics have no section tags: put [Verse], [Chorus] and the like on a line of their own before each part "
+    "(the Track creator page of the manual lists them), or tick Let the AI read it and the AI will tag them for "
+    "you to check."
+)
 REPEAT = re.compile(r"\s*(?:x|\u00d7)\s*(\d)\s*$", re.IGNORECASE)
 WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)*", re.UNICODE)
 
@@ -83,11 +105,13 @@ SPLIT_EXCEPT = ("tion", "sion", "cious", "tious", "cial", "tial", "geon", "eous"
 
 
 def known_kind(tag: str) -> str | None:
-    """The kind of section a tag names in the structure words song generators use ("Guitar Solo": solo), or
-    None."""
-    lowered = tag.lower()
+    """The kind of section a tag names (TAGS, "Refrain" a chorus, "... Solo" a solo), or None."""
+    lowered = re.sub(r"\s+\d+$", "", tag.lower().strip())
+    for name, kind, _ in TAGS:
+        if lowered == name.lower() or (kind == "solo" and lowered.endswith(" solo")):
+            return kind
     for name, pattern, _ in NAMED_SECTIONS:
-        if re.search(pattern, lowered) or lowered.strip() == name:
+        if re.search(pattern, lowered) or lowered == name:
             return NAMED_KIND[name]
     for word, kind in (("hook", "hook"), ("instrumental", "instrumental"), ("end", "end"), ("refrain", "chorus"),
                        ("pre", "pre-chorus"), ("spoken", "verse"), ("rap", "verse")):  # fmt: skip
@@ -210,116 +234,54 @@ class LyricsError(ValueError):
     pass
 
 
-def label_of(line: str, stanza_start: bool, brackets: bool) -> tuple[str, str] | None:
-    """(name, cue) when a line is a section's label, by its layout: "[...]" anywhere; in lyrics that use no
-    brackets, at a stanza's start, a short name alone in parentheses or before a colon ("(Verse 1)", "Chorus:",
-    "(Intro: soft piano)")."""
-    if (m := TAG.match(line)) is not None:
-        return m.group(1).strip(), ""
-    if not stanza_start or brackets:
-        return None
-    inner = m.group(1).strip() if (m := PARENTHESES.match(line)) is not None else None
-    found = COLON.match(inner if inner is not None else line)
-    if found is not None:
-        name, cue = found.group(1).strip(), found.group(2).strip()
-        if inner is None and cue and known_kind(name) is None and not re.search(r"\d", name):
-            return None  # "Baby: come home" is sung; "Verse 2: ..." and "Chorus: ..." are labels
-    elif inner is not None:
-        name, cue = inner, ""
-    else:
-        return None
-    if not name or len(name.split()) > MOST_LABEL_WORDS:
-        return None
-    return name, cue
+def has_tags(text: str) -> bool:
+    """Whether the lyrics are in Spinus's format: at least one section tag on a line of its own."""
+    return any(TAG.match(line) for line in text.splitlines())
 
 
 def split(text: str) -> list[dict[str, Any]]:
-    """The sections in order, each {tag, kind, cue, lines (texts), repeat}: from their labels (label_of), or from
-    the blank lines between stanzas when there are none; a header ("Title: ...", "BPM: ...") or a lone title line
-    before the first label is left out, a longer line in parentheses is its section's note."""
+    """The sections in order, each {tag, kind, cue, lines (texts), repeat}, from their tags; [] without tags.
+    Before the first tag nothing is sung; a line wholly in parentheses is its section's note."""
     if len(text) > MOST_CHARACTERS:
         raise LyricsError(f"The lyrics are too long: at most {MOST_CHARACTERS} characters.")
-    # Each line: ("blank",), ("label", name, cue), ("note", text), ("header", text) or ("sung", text).
-    brackets = any(TAG.match(line) for line in text.splitlines())
-    marks: list[tuple[str, ...]] = []
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
-            marks.append(("blank",))
-            continue
-        labelled = any(m[0] == "label" for m in marks)
-        sung = sum(1 for m in marks if m[0] == "sung")
-        # A stanza starts after a blank line, a label or a note; at the top, after a title line too.
-        start = not marks or marks[-1][0] in ("blank", "label", "note", "header") or (not labelled and sung <= 1)
-        parenthesized = PARENTHESES.match(line)
-        heading = COLON.match(line)
-        if (label := label_of(line, start, brackets)) is not None:
-            marks.append(("label", *label))
-        elif parenthesized is not None and (len(line.split()) > MOST_LABEL_WORDS or (brackets and start)):
-            marks.append(("note", parenthesized.group(1).strip()))  # a direction, not sung
-        elif not labelled and heading is not None and heading.group(2) and len(heading.group(1).split()) <= 2:
-            marks.append(("header", line[:MOST_LINE]))  # "Title: ...", "BPM: 174" (sung after all if no labels)
-        else:
-            marks.append(("sung", line[:MOST_LINE]))
-    first_label = next((i for i, m in enumerate(marks) if m[0] == "label"), None)
-    if first_label is None:
-        marks = [("sung", m[1]) if m[0] == "header" else m for m in marks]
-    else:
-        # Before the first label, a lone line is the title.
-        before = [i for i in range(first_label) if marks[i][0] == "sung"]
-        if len(before) == 1:
-            marks[before[0]] = ("header", marks[before[0]][1])
-
     sections: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
-    unlabelled = first_label is None
-    for mark in marks:
-        if mark[0] == "label":
-            name, cue = mark[1], mark[2]
-            times = 1
+    for raw in text.splitlines():
+        line = raw.strip()
+        if (m := TAG.match(line)) is not None:
+            name, times = m.group(1).strip(), 1
             if (r := REPEAT.search(name)) is not None:
                 times = max(1, min(MOST_REPEAT, int(r.group(1))))
                 name = name[: r.start()].strip()
-            if not cue:
-                parts = re.split(r"\s+[-\u2013\u2014]\s+|\s*:\s*|\s*\(", name, maxsplit=1)
-                cue = parts[1].rstrip(")").strip() if len(parts) > 1 else ""
-                name = parts[0].strip() or name
+            parts = re.split(r"\s+[-\u2013\u2014]\s+|\s*:\s*|\s*\(", name, maxsplit=1)
+            cue = parts[1].rstrip(")").strip() if len(parts) > 1 else ""
+            name = parts[0].strip() or name
             current = {"tag": name, "kind": section_kind(name), "known": known_kind(name) is not None, "cue": cue,
                        "lines": [], "times": times}  # fmt: skip
             sections.append(current)
-        elif mark[0] == "note":
-            if current is not None and len(current["cue"]) < 80:
-                current["cue"] = (current["cue"] + "; " if current["cue"] else "") + mark[1]
-        elif mark[0] == "blank" and unlabelled and current is not None and current["lines"]:
-            current = None  # without labels, a blank line ends the stanza
-        elif mark[0] == "sung":
-            if current is None:
-                current = {"tag": "Verse", "kind": "verse", "known": unlabelled, "cue": "", "lines": [], "times": 1}
-                sections.append(current)
-            current["lines"].append(mark[1])
+        elif not line or current is None:
+            continue
+        elif (p := PARENTHESES.match(line)) is not None:
+            if len(current["cue"]) < 80:
+                current["cue"] = (current["cue"] + "; " if current["cue"] else "") + p.group(1).strip()
+        else:
+            current["lines"].append(line[:MOST_LINE])
     if len(sections) > MOST_SECTIONS:
         raise LyricsError(f"Too many sections: at most {MOST_SECTIONS}.")
     if sum(len(s["lines"]) for s in sections) > MOST_LINES:
         raise LyricsError(f"Too many lines: at most {MOST_LINES}.")
 
-    # A stanza or a section of an unknown name sung again is the chorus (each time); unlabelled verses numbered.
+    # A tag of other words sung again is the chorus; one with no lines, first or last, the intro or the outro.
     seen: dict[tuple[str, ...], dict[str, Any]] = {}
     for section in sections:
         key = tuple(section["lines"])
-        if key and key in seen and (unlabelled or not section["known"]):
+        if key and key in seen and not section["known"]:
             for s in (seen[key], section):
                 s["kind"] = "chorus"
-                if unlabelled:
-                    s["tag"] = "Chorus"
         seen.setdefault(key, section)
-    # A label of other words with no lines, first or last, is the intro or the outro.
     for at, kind in ((0, "intro"), (-1, "outro")):
-        if sections and not sections[at]["known"] and not sections[at]["lines"] and not unlabelled:
+        if sections and not sections[at]["known"] and not sections[at]["lines"]:
             sections[at]["kind"] = kind
-    if unlabelled and len(sections) > 1:
-        verses = [s for s in sections if s["kind"] == "verse"]
-        for n, s in enumerate(verses, 1):
-            s["tag"] = f"Verse {n}" if len(verses) > 1 else "Verse"
 
     # A tag used again with no lines sings what it had before.
     out: list[dict[str, Any]] = []
@@ -363,11 +325,24 @@ def summary_of(sections: list[dict[str, Any]], counted: dict[str, Line], languag
 
 
 def read(text: str) -> dict[str, Any]:
-    """The lyrics read by the rules (spinus.lyrics): the sections with their lines counted."""
+    """The lyrics read by the rules (spinus.lyrics): the sections with their lines counted; without tags none,
+    and a note saying to add them (NO_TAGS)."""
     sections = split(text)
     language = language_of(text)
     counted = {t: count_line(t, language) for s in sections for t in s["lines"]}
-    return summary_of(sections, counted, language, "")
+    lyrics = summary_of(sections, counted, language, "")
+    if not sections and text.strip():
+        lyrics["note"] = NO_TAGS
+    return lyrics
+
+
+def tagged(sections: list[dict[str, Any]]) -> str:
+    """Sections as lyrics in Spinus's format: each tag (with its note) on its own line, then its lines."""
+    blocks = []
+    for s in sections:
+        head = f"[{s['tag']}{' - ' + s['cue'] if s.get('cue') else ''}]"
+        blocks.append("\n".join([head, *s["lines"]]))
+    return "\n\n".join(blocks) + "\n"
 
 
 def words(lyrics: dict[str, Any]) -> str:
@@ -383,15 +358,17 @@ def words(lyrics: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------------------------------
 # The AI's count (optional)
 
-SYSTEM = """You help Spinus, a digital audio workstation, set a user's song lyrics to music. Answer only by \
+TAG_LIST = ", ".join(name for name, _, _ in TAGS)
+SYSTEM = f"""You help Spinus, a digital audio workstation, set a user's song lyrics to music. Answer only by \
 calling the read_lyrics tool once. Read the lyrics in whatever language and layout they are written: their \
-sections in order, each with its label as written (or a usual name when it has none), its kind, and its sung \
-lines exactly as written, each with how many syllables it has when sung naturally in its language and which \
-are stressed (a string of 1 for stressed and 0 for unstressed, one mark a syllable, as long as the count). Leave \
-out what is not sung: a title, lines about the song (tempo, style, mood), directions such as "(soft piano)"; a \
-section's direction goes in its note. A section the lyrics name again without its lines (a chorus written out \
-once) gives its lines again; "x2" after a label is that section twice; a section with no sung lines is \
-instrumental (an intro, a solo)."""
+sections in order, each with its tag in English (one of {TAG_LIST}; numbered when there are several, as \
+"Verse 2"; an instrument's solo as "Guitar Solo"), its kind, and its sung lines exactly as written (never \
+translated), each with how many syllables it has when sung naturally in its language and which are stressed (a \
+string of 1 for stressed and 0 for unstressed, one mark a syllable, as long as the count). Leave out what is not \
+sung: a title, lines about the song (tempo, style, mood), directions such as "(soft piano)"; a section's direction \
+goes in its note, in English. A section the lyrics name again without its lines (a chorus written out once) gives \
+its lines again; "x2" after a label is that section twice; a section with no sung lines is instrumental (an \
+intro, a solo)."""
 
 READ_LYRICS = Tool(
     "read_lyrics",
@@ -405,9 +382,9 @@ READ_LYRICS = Tool(
                 "items": {
                     "type": "object",
                     "properties": {
-                        "label": {"type": "string", "description": "As written, e.g. 'Verse 1', 'Refrain'"},
+                        "tag": {"type": "string", "description": f"In English: {TAG_LIST}, e.g. 'Verse 1'"},
                         "kind": {"type": "string", "enum": list(KINDS)},
-                        "note": {"type": "string", "description": "Its direction, if the lyrics give one"},
+                        "note": {"type": "string", "description": "Its direction in English, if the lyrics give one"},
                         "lines": {
                             "type": "array",
                             "items": {
@@ -421,7 +398,7 @@ READ_LYRICS = Tool(
                             },
                         },
                     },
-                    "required": ["label", "kind", "lines"],
+                    "required": ["tag", "kind", "lines"],
                 },
             },
         },
@@ -438,7 +415,8 @@ def plain(text: str) -> str:
 def checked_reading(answer: Any, text: str) -> tuple[list[dict[str, Any]], dict[str, Line]] | None:
     """The AI's reading when it holds: sections of known kinds whose lines are the lyrics' own (each one of the
     written lines, or a part of one), each counted with a stress mark a syllable (a line miscounted keeps the
-    rules' count). None when there is nothing usable, or when a quarter of its lines are not in the lyrics."""
+    rules' count); a tag that is not one of TAGS is named by its kind. None when there is nothing usable, or when
+    a quarter of its lines are not in the lyrics."""
     if not isinstance(answer, dict) or not isinstance(answer.get("sections"), list):
         return None
     written = [plain(line) for line in text.splitlines() if line.strip()]
@@ -449,9 +427,11 @@ def checked_reading(answer: Any, text: str) -> tuple[list[dict[str, Any]], dict[
     for item in answer["sections"][:MOST_SECTIONS]:
         if not isinstance(item, dict):
             continue
-        label = str(item.get("label") or "").strip()[:60] or "Verse"
+        tag = re.sub(r"[\[\]\n]", "", str(item.get("tag") or item.get("label") or "")).strip()[:40]
         kind = str(item.get("kind") or "")
-        kind = kind if kind in KINDS else section_kind(label)
+        kind = kind if kind in KINDS else section_kind(tag)
+        if known_kind(tag) is None:
+            tag = KIND_WORDS.get(kind, "Verse")
         lines: list[str] = []
         for line in item.get("lines") or []:
             if not isinstance(line, dict) or not isinstance(line.get("text"), str) or not line["text"].strip():
@@ -469,9 +449,9 @@ def checked_reading(answer: Any, text: str) -> tuple[list[dict[str, Any]], dict[
                 and isinstance(stress, str) and re.fullmatch(r"[01]+", stress) is not None and len(stress) == count
             )  # fmt: skip
             counted[said] = Line(said, count, stress) if good else count_line(said, language)  # type: ignore[arg-type]
-        note = str(item.get("note") or "").strip()[:80]
+        note = re.sub(r"[\[\]\n]", "", str(item.get("note") or "")).strip()[:80]
         repeat = bool(lines) and any(s["lines"] == lines for s in sections)
-        sections.append({"tag": label, "kind": kind, "cue": note, "lines": lines, "repeat": repeat})
+        sections.append({"tag": tag, "kind": kind, "cue": note, "lines": lines, "repeat": repeat})
     if not sections or given == 0 or foreign * 4 > given:
         return None
     if sum(len(s["lines"]) for s in sections if not s["repeat"]) > MOST_LINES:
@@ -487,11 +467,14 @@ async def read_with_ai(
     text: str,
     say: Say,
 ) -> dict[str, Any]:
-    """The lyrics as the AI reads them (NoConnection without a connection): their structure in any language and
-    each line counted (checked_reading); when its answer does not hold, the rules' reading stands with a note."""
-    sections = split(text)  # the limits, and the reading when the AI's does not hold
+    """The lyrics as the AI reads them (NoConnection without a connection). Tagged lyrics keep their tags'
+    sections, the AI counting their lines (a line it does not count keeps the rules' count). Lyrics without tags
+    are not used yet: the AI's reading (checked_reading) comes back as a "proposal", the lyrics in Spinus's
+    format for the user to apply; when its answer does not hold, the note says to add the tags."""
+    tags = has_tags(text)
+    sections = split(text)  # the limits, and the tagged lyrics' sections
     language = language_of(text)
-    if not any(s["lines"] for s in sections):
+    if tags and not any(s["lines"] for s in sections):
         return summary_of(sections, {}, language, "")
     routes = routing.resolve("patterns")
     if not routes:
@@ -500,15 +483,36 @@ async def read_with_ai(
     async def no_text(_: str) -> None:
         pass
 
-    await say({"kind": "status", "text": "The AI is reading the lyrics..."})
+    await say(
+        {"kind": "status", "text": "The AI is reading the lyrics..." if tags else "The AI is tagging the lyrics..."}
+    )
     request = Request(routes[0].model, SYSTEM, [Message("user", [Text(f"The lyrics:\n{text}")])], [READ_LYRICS], None)
     failed: list[str] = []
     completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say, failed)
     usage_log.add(routes[index].connection.id, "patterns", completion.usage)
-    for use in completion.tool_uses:
-        if use.name == "read_lyrics" and (reading := checked_reading(use.input, text)) is not None:
-            return summary_of(reading[0], reading[1], language, answered_by(completion.model, failed))
-    counted = {t: count_line(t, language) for s in sections for t in s["lines"]}
-    lyrics = summary_of(sections, counted, language, "")
-    lyrics["note"] = "The AI's reading was not usable; Spinus read the lyrics itself."
+    by = answered_by(completion.model, failed)
+    reading = next(
+        (r for use in completion.tool_uses if use.name == "read_lyrics" and (r := checked_reading(use.input, text))),
+        None,
+    )
+    rules = {t: count_line(t, language) for s in sections for t in s["lines"]}
+    if tags:
+        if reading is None:
+            lyrics = summary_of(sections, rules, language, "")
+            lyrics["note"] = "The AI's count was not usable; Spinus counted the syllables itself."
+            return lyrics
+        theirs = {plain(t): line for t, line in reading[1].items()}
+        counted = {t: (theirs.get(plain(t)) or rules[t]) for t in rules}
+        counted = {t: Line(t, line.syllables, line.stress) for t, line in counted.items()}
+        return summary_of(sections, counted, language, by)
+    lyrics = summary_of([], {}, language, "")
+    if reading is None:
+        lyrics["note"] = "The AI could not tag the lyrics. " + NO_TAGS
+        return lyrics
+    lyrics["proposal"] = tagged([s for s in reading[0] if not s["repeat"] or s["lines"]])
+    lyrics["proposedBy"] = by
+    lyrics["note"] = (
+        "Your lyrics have no section tags: the AI tagged them (below). Use these tags puts them in the lyrics box "
+        "and reads them; Keep mine leaves your text as it is."
+    )
     return lyrics

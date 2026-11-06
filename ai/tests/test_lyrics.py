@@ -1,6 +1,7 @@
-"""The song's lyrics (spinus_ai.lyrics): split into tagged sections, a chorus written once repeated, each line's
-syllables counted by rules (roughly, in English and Cyrillic) or by the AI (checked line by line), and passed with
-the description into the summary."""
+"""The song's lyrics (spinus_ai.lyrics): split into tagged sections (Spinus's one format; lyrics without tags are
+not guessed at), a chorus written once repeated, each line's syllables counted by rules (roughly, in English and
+Cyrillic) or by the AI (checked line by line), untagged lyrics tagged by the AI as a proposal, and passed with the
+description into the summary."""
 
 from __future__ import annotations
 
@@ -58,9 +59,20 @@ def test_sections_come_from_the_tags() -> None:
     assert read["syllables"] == sum(line["syllables"] for i in (1, 2, 5) for line in sections[i]["lines"])
 
 
-def test_untagged_lyrics_are_one_verse() -> None:
-    read = lyrics.read("just a few words\nand a second line")
-    assert [s["kind"] for s in read["sections"]] == ["verse"] and read["lines"] == 2
+def test_lyrics_without_tags_are_not_guessed_at() -> None:
+    read = lyrics.read("just a few words\nand a second line\n\n(Chorus)\nla la")
+    assert read["sections"] == [] and read["lines"] == 0 and read["note"] == lyrics.NO_TAGS
+    assert "note" not in lyrics.read("")
+
+
+def test_every_documented_tag_is_its_kind() -> None:
+    # The manual's table and the AI's instructions come from TAGS: each tag is read as its kind.
+    for name, kind, _ in lyrics.TAGS:
+        assert lyrics.known_kind(name) == kind and lyrics.known_kind(f"{name} 2") == kind
+        assert kind in lyrics.KINDS
+    assert lyrics.known_kind("Sax Solo") == "solo" and lyrics.known_kind("Refrain") == "chorus"
+    manual = (Path(__file__).parents[2] / "docs" / "user" / "track-creator.md").read_text(encoding="utf-8")
+    assert all(f"| [{name}]" in manual for name, _, _ in lyrics.TAGS)
 
 
 @pytest.mark.parametrize(
@@ -100,12 +112,12 @@ def test_limits() -> None:
     with pytest.raises(lyrics.LyricsError):
         lyrics.read("la\n" * 5000)
     with pytest.raises(lyrics.LyricsError):
-        lyrics.read("la\n" * (lyrics.MOST_LINES + 1))
+        lyrics.read("[Verse]\n" + "la\n" * (lyrics.MOST_LINES + 1))
 
 
 def test_the_ai_reading_is_checked_against_the_lyrics() -> None:
     text = "Refrain :\nNous dansons sous la pluie\nToute la nuit\n"
-    good = {"sections": [{"label": "Refrain", "kind": "chorus", "note": "", "lines": [
+    good = {"sections": [{"tag": "Chorus", "kind": "chorus", "note": "", "lines": [
         {"text": "Nous dansons sous la pluie", "syllables": 6, "stress": "001001"},
         {"text": "Toute la nuit", "syllables": 4, "stress": "1001"},
     ]}]}  # fmt: skip
@@ -113,67 +125,50 @@ def test_the_ai_reading_is_checked_against_the_lyrics() -> None:
     assert reading is not None
     sections, counted = reading
     assert sections[0]["kind"] == "chorus" and counted["Toute la nuit"].syllables == 4
-    # A miscounted line keeps the rules' count; an unknown kind is read from the label.
+    # A miscounted line keeps the rules' count; an unknown kind is read from the tag, a tag not in English (not
+    # one of TAGS) is named by its kind.
     good["sections"][0]["lines"][1]["stress"] = "1"
     good["sections"][0]["kind"] = "refrain"
+    good["sections"][0]["tag"] = "Refrain :"
     sections, counted = lyrics.checked_reading(good, text) or ([], {})
     assert sections[0]["kind"] == "chorus" and counted["Toute la nuit"].stress == ""
+    good["sections"][0]["tag"] = "Couplet"
+    good["sections"][0]["kind"] = "verse"
+    assert (lyrics.checked_reading(good, text) or ([{}], {}))[0][0]["tag"] == "Verse"
     # Lines that are not the lyrics' own: not used.
-    made_up = {"sections": [{"label": "Verse", "kind": "verse", "lines": [
+    made_up = {"sections": [{"tag": "Verse", "kind": "verse", "lines": [
         {"text": "Words the AI made up", "syllables": 5, "stress": "10101"}]}]}  # fmt: skip
     assert lyrics.checked_reading(made_up, text) is None
     assert lyrics.checked_reading("nonsense", text) is None
 
 
-def test_other_layouts_are_read_by_their_layout_in_any_language() -> None:
-    # Labels in parentheses or before a colon, a title and headers left out, a direction kept as a note.
+def test_before_the_first_tag_nothing_is_sung_and_parentheses_are_notes() -> None:
     text = """Title: The Dust of the Road
 BPM: 96
 
-(Verse 1)
+[Verse 1]
 Old Tom drove a rusted Ford
-With a map he did not need
-
-(Chorus)
-Oh the road goes on
 (slow and soft, the band drops out)
-
-Couplet 2 :
 Le vent souffle sur la ville
-Et la nuit tombe doucement
 
-(Chorus)
+[Pre-Chorus]
+Hold on
+
+[Chorus]
+\u6708\u5149\u7167\u5728\u7a97\u524d
 """
     read = lyrics.read(text)
     assert [(s["name"], s["kind"], len(s["lines"])) for s in read["sections"]] == [
-        ("Verse 1", "verse", 2),
-        ("Chorus", "chorus", 1),
-        ("Couplet 2", "verse", 2),
-        ("Chorus", "chorus", 1),
-    ]
-    assert read["sections"][1]["cue"].startswith("slow and soft") and read["sections"][3]["repeat"]
+        ("Verse 1", "verse", 2), ("Pre-Chorus", "pre-chorus", 1), ("Chorus", "chorus", 1)]  # fmt: skip
+    assert read["sections"][0]["cue"].startswith("slow and soft") and "note" not in read
     assert all("Title" not in line["text"] for s in read["sections"] for line in s["lines"])
-
-    # A title line, labels of other words; full-width marks (Chinese); an instrumental label last is the outro.
-    chinese = "\u591c\u66f2\n\n\u4e3b\u6b4c\uff1a\n\u6708\u5149\u7167\u5728\u7a97\u524d\n\n\uff08\u5c3e\u5974\uff09\n"
-    read = lyrics.read(chinese)
-    assert [(s["kind"], len(s["lines"])) for s in read["sections"]] == [("verse", 1), ("outro", 0)]
-
-    # Lyrics with brackets: a short line in parentheses at a stanza's start is a direction, not a label; a
-    # hyphenated tag is one name.
-    read = lyrics.read("[Intro]\n(Spoken warmly)\nYeah man\n\n[Pre-Chorus]\nHold on\n")
-    assert [(s["name"], s["kind"]) for s in read["sections"]] == [("Intro", "intro"), ("Pre-Chorus", "pre-chorus")]
-    assert read["sections"][0]["cue"] == "Spoken warmly" and read["sections"][0]["lines"][0]["text"] == "Yeah man"
+    # Spinus's format back from sections: a tag with its note, then its lines.
+    again = lyrics.read(lyrics.tagged([{"tag": "Verse 1", "cue": "soft", "lines": ["Old Tom drove a rusted Ford"]}]))
+    assert again["sections"][0]["name"] == "Verse 1" and again["sections"][0]["cue"] == "soft"
 
 
-def test_unlabelled_stanzas_are_sections_and_the_one_sung_again_the_chorus() -> None:
-    chorus = "Wir singen laut\nDie ganze Nacht\n"
-    text = f"Ein Tag am Meer\nDie Sonne scheint\n\n{chorus}\nDer Wind ist kalt\nDer Weg ist weit\n\n{chorus}"
-    read = lyrics.read(text)
-    assert [(s["name"], s["kind"], s["repeat"]) for s in read["sections"]] == [
-        ("Verse 1", "verse", False), ("Chorus", "chorus", False), ("Verse 2", "verse", False),
-        ("Chorus", "chorus", True)]  # fmt: skip
-    assert read["lines"] == 6
+UNTAGGED = "Ein Tag am Meer\nDie Sonne scheint\n\nWir singen laut\nDie ganze Nacht\n"
+UNTAGGED_AS_TAGGED = "[Verse 1]\nEin Tag am Meer\nDie Sonne scheint\n\n[Chorus]\nWir singen laut\nDie ganze Nacht\n"
 
 
 def counting_service(tmp_path: Path, sent: list[dict[str, Any]]) -> Any:
@@ -181,9 +176,10 @@ def counting_service(tmp_path: Path, sent: list[dict[str, Any]]) -> Any:
         body = json.loads(request.content)
         sent.append(body)
         if body["tools"][0]["name"] == "read_lyrics":
-            read = lyrics.read(body["messages"][0]["content"][0]["text"].split("\n", 1)[1])
+            words = body["messages"][0]["content"][0]["text"].split("\n", 1)[1]
+            read = lyrics.read(words if lyrics.has_tags(words) else UNTAGGED_AS_TAGGED)
             answer = {"sections": [
-                {"label": s["name"], "kind": s["kind"],
+                {"tag": s["name"], "kind": s["kind"],
                  "lines": [{"text": line["text"], "syllables": 2, "stress": "01"} for line in s["lines"]]}
                 for s in read["sections"]]}  # fmt: skip
             tool = ("read_lyrics", answer)
@@ -214,6 +210,15 @@ async def test_the_service_reads_lyrics_with_the_description(tmp_path: Path) -> 
     assert read["lyrics"]["countedBy"] == "claude-test" and read["lyrics"]["syllables"] == 8
     reading = [b for b in sent if b["tools"][0]["name"] == "read_lyrics"]
     assert len(reading) == 1 and "Another morning, another day" in reading[0]["messages"][0]["content"][0]["text"]
+
+    # Untagged lyrics: the AI's tagged version comes back as a proposal; nothing is read until it is applied.
+    read = await run_job(service, "ai.v1.song.describe", {"text": "pop", "lyrics": UNTAGGED, "ai": True})
+    assert read["lyrics"]["lines"] == 0 and read["lyrics"]["proposal"].startswith("[Verse 1]\nEin Tag am Meer")
+    assert "[Chorus]\nWir singen laut" in read["lyrics"]["proposal"]
+    assert lyrics.read(read["lyrics"]["proposal"])["lines"] == 4
+    # Offline, untagged lyrics: the note says to add the tags.
+    read = await run_job(service, "ai.v1.song.describe", {"text": "pop", "lyrics": UNTAGGED})
+    assert read["lyrics"]["note"] == lyrics.NO_TAGS and "proposal" not in read["lyrics"]
 
     with pytest.raises(RpcError):
         await service.handle("ai.v1.song.describe", {"text": "pop", "lyrics": "la\n" * 5000}, no_notify)

@@ -200,8 +200,9 @@ nothing else, to your AI provider.
 
 ### Lyrics
 
-Under the description is a box for the song's **lyrics** (optional). Write them the way song generators take
-them: a section tag on a line of its own, in square brackets, then that section's lines.
+Under the description is a box for the song's **lyrics** (optional). Spinus reads one format, the one song
+generators take: a section tag in English, in square brackets, on a line of its own, then that section's lines.
+The lines can be in any language; only the tags are English.
 
 ```
 [Verse 1]
@@ -217,27 +218,48 @@ Singing out our summer song
 [Chorus]
 ```
 
-- A tag names the section: Intro, Verse, Pre-Chorus, Chorus, Hook, Bridge, Solo, Break, Instrumental, Outro
-  and the other usual ones; "[Guitar Solo]" is a solo, "[Verse 2]" a verse. Words after a dash are a note for
-  that section: "[Outro - fade out]".
+The tags:
+
+| Tag | The section |
+|---|---|
+| [Intro] | The opening, usually instrumental |
+| [Verse] | The verses, numbered or not: Verse 1, Verse 2 |
+| [Pre-Chorus] | The lead-in to the chorus |
+| [Chorus] | The chorus (also Refrain) |
+| [Post-Chorus] | After the chorus |
+| [Hook] | A short catchy part |
+| [Bridge] | The contrasting part, usually once |
+| [Break] | A short pause in the music |
+| [Breakdown] | The music strips down |
+| [Build-up] | The music rises toward a drop or a chorus |
+| [Drop] | The big release after a build-up |
+| [Interlude] | A passage between parts |
+| [Instrumental] | A part with no singing |
+| [Solo] | An instrument's solo: Guitar Solo, Piano Solo |
+| [Outro] | The ending |
+| [End] | The very end |
+| [Fade Out] | The song fades away |
+
+- A tag can carry a number ("[Verse 2]") and a note after a dash or a colon: "[Outro - fade out]",
+  "[Intro: soft piano]". "[Refrain]" is a chorus; any instrument's solo works ("[Sax Solo]"). Other words are
+  read as a verse.
 - A tag with no lines under it is an **instrumental** section.
 - A tag used again with no lines **repeats** the words it had: write a chorus out once. "[Chorus x2]" plays it
   twice in a row.
-- Lyrics written another way are read too, in any language, by how they are laid out: a short name on a line
-  of its own at the start of a stanza, in parentheses or before a colon ("(Verse 1)", "Chorus:", "(Intro: soft
-  piano)", "Couplet 2 :"), is a section. A title line and lines like "Title: ..." or "BPM: 174" before the
-  first section are left out. A line in parentheses that is a direction ("(the band drops out)") is a note for
-  its section, not a sung line. Names other than the usual English ones are verses, or the chorus when their
-  lines come back.
-- Lyrics with no section names at all are split at their blank lines; a stanza sung again is the chorus.
+- Anything before the first tag (a title, notes like "BPM: 174") is not sung. A line wholly in parentheses
+  ("(the band drops out)") is a note for its section, not a sung line.
+- **Lyrics written another way** (no tags, "(Verse 1)", "Chorus:", section names in another language): Spinus
+  does not guess. Without the AI, Read says the lyrics have no tags. With **Let the AI read it**, the AI tags
+  them for you: its tagged version appears under the lyrics box with **Use these tags** and **Keep mine**.
+  **Use these tags** puts it in the box (Ctrl+Z in the box takes it back) and reads it; nothing is used until
+  you do. Check it: the AI keeps your lines as you wrote them, and Spinus checks that every line it gives is
+  one of yours.
 
 **Read** reads the lyrics with the description. Spinus counts the syllables in each line and guesses which
 are stressed, on your computer and roughly: well enough in English and in languages written in Cyrillic, more
-roughly in others. With **Let the AI read it**, the AI reads the lyrics instead, in any language and any
-layout: their sections and what kind each is, what is sung and what is a title or a direction, and each line's
-syllables and stresses. Spinus checks its reading: every line it gives must be one of your lines (if too many
-are not, Spinus reads the lyrics itself), and a line it miscounts keeps Spinus's count. The details say what was read: "Lyrics: Verse
-1, Chorus, Whistle Solo (instrumental), Chorus; 4 lines, about 29 syllables (counted by Spinus, roughly)".
+roughly in others. With **Let the AI read it**, the AI counts them instead, in any language (a line it
+miscounts keeps Spinus's count); the sections are always your tags'. The details say what was read: "Lyrics:
+Verse 1, Chorus, Whistle Solo (instrumental), Chorus; 4 lines, about 29 syllables (counted by Spinus, roughly)".
 
 Spinus never sings. With lyrics, the [Parts](#sounds-for-each-part) page adds a **Vocals** part: an instrument
 that plays the sung tune in the voice's place. Spinus suggests a sound for it like for any part (a lead or a

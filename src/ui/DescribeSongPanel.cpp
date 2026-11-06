@@ -49,7 +49,8 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
                                       juce::Colours::grey);
     lyricsBox.setTooltip ("Spinus sizes the song's sections to the words and writes a vocal line for them, played by "
                           "an instrument (it sings nothing). A tag with no lines is an instrumental section; a tag "
-                          "used again with no lines repeats its words");
+                          "used again with no lines repeats its words. Lyrics without tags are not read: add them, or "
+                          "let the AI tag them for you to check");
     noVocalsButton.setTooltip ("An instrumental song: the lyrics stay in the box but are not used");
     noVocalsButton.onClick = [this] { updateButtons(); };
     aiButton.setTooltip ("Ask your AI connection (Options > AI) to read the description; Spinus checks its reading "
@@ -67,10 +68,24 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
         l->setJustificationType (juce::Justification::topLeft);
         l->setMinimumHorizontalScale (1.0f);
     }
-    details.setMultiLine (true, true);
-    details.setReadOnly (true);
-    details.setScrollbarsShown (true);
-    details.setCaretVisible (false);
+    proposalLabel.setText ("The AI's tags for your lyrics (your lines as you wrote them): check them, then",
+                           juce::dontSendNotification);
+    for (auto* box : { &proposalBox, &details })
+    {
+        box->setMultiLine (true, true);
+        box->setReadOnly (true);
+        box->setScrollbarsShown (true);
+        box->setCaretVisible (false);
+    }
+    useTagsButton.setTooltip ("Put the AI's tagged lyrics in the lyrics box (Ctrl+Z there takes them back) and read "
+                              "again");
+    useTagsButton.onClick = [this] { useProposal(); };
+    keepMineButton.setTooltip ("Leave your lyrics as they are; without tags they are not read");
+    keepMineButton.onClick = [this] { keepMine(); };
+    for (auto* c :
+         std::initializer_list<juce::Component*> { &proposalLabel, &proposalBox, &useTagsButton, &keepMineButton })
+        addChildComponent (c);
+
     for (auto* c :
          std::initializer_list<juce::Component*> { &intro, &textBox, &lyricsLabel, &lyricsBox, &noVocalsButton,
                                                    &aiButton, &readButton, &understood, &status, &details })
@@ -104,6 +119,7 @@ bool DescribeSongPanel::read()
                         juce::dontSendNotification);
         return false;
     }
+    setProposal ({});
     busy = true;
     const bool useAi = aiButton.getToggleState();
     status.setText (useAi ? "The AI is reading the description..." : "Reading the description...",
@@ -148,6 +164,7 @@ void DescribeSongPanel::show (const juce::var& read)
                 lines.add (line.toString());
     details.setText (lines.joinIntoString ("\n"), false);
     const auto by = described["readBy"].toString();
+    setProposal (read["lyrics"]["proposal"].toString());
     const auto lyricsNote = read["lyrics"]["note"].toString();
     status.setText ((lyricsNote.isNotEmpty() ? lyricsNote + " " : juce::String()) +
                         (described["note"].toString().isNotEmpty() ? described["note"].toString() + " "
@@ -156,6 +173,32 @@ void DescribeSongPanel::show (const juce::var& read)
                         "Next: 3. Parts, then 4. Write a song.",
                     juce::dontSendNotification);
 }
+
+void DescribeSongPanel::setProposal (const juce::String& text)
+{
+    proposal = text;
+    proposalBox.setText (text, false);
+    for (auto* c :
+         std::initializer_list<juce::Component*> { &proposalLabel, &proposalBox, &useTagsButton, &keepMineButton })
+        c->setVisible (text.isNotEmpty());
+    updateButtons();
+    resized();
+}
+
+void DescribeSongPanel::useProposal()
+{
+    if (proposal.isEmpty() || busy)
+        return;
+    const auto tagged = proposal;
+    setProposal ({});
+    noVocalsButton.setToggleState (false, juce::dontSendNotification);
+    updateButtons();
+    lyricsBox.selectAll(); // replaced as one edit, so Ctrl+Z in the box puts the user's text back
+    lyricsBox.insertTextAtCaret (tagged);
+    read();
+}
+
+void DescribeSongPanel::keepMine() { setProposal ({}); }
 
 void DescribeSongPanel::setReferences (const juce::var& songs, const juce::String& text)
 {
@@ -186,6 +229,8 @@ void DescribeSongPanel::updateButtons()
     aiButton.setEnabled (! busy);
     textBox.setReadOnly (busy);
     noVocalsButton.setEnabled (! busy);
+    useTagsButton.setEnabled (! busy);
+    keepMineButton.setEnabled (! busy);
     lyricsBox.setReadOnly (busy || noVocalsButton.getToggleState());
     lyricsBox.setAlpha (noVocalsButton.getToggleState() ? 0.5f : 1.0f);
 }
@@ -195,6 +240,7 @@ void DescribeSongPanel::paint (juce::Graphics&)
     const auto& theme = themeOf (*this);
     intro.setColour (juce::Label::textColourId, theme.get ("text"));
     lyricsLabel.setColour (juce::Label::textColourId, theme.get ("textDim"));
+    proposalLabel.setColour (juce::Label::textColourId, theme.get ("text"));
     understood.setColour (juce::Label::textColourId, theme.get ("accent"));
     status.setColour (juce::Label::textColourId, theme.get ("textDim"));
 }
@@ -229,6 +275,18 @@ void DescribeSongPanel::resized()
     understood.setBounds (area.removeFromTop (40));
     status.setBounds (area.removeFromTop (40));
     area.removeFromTop (4);
+    if (proposalBox.isVisible())
+    {
+        {
+            auto r = area.removeFromTop (28);
+            keepMineButton.setBounds (r.removeFromRight (100).reduced (0, 1));
+            r.removeFromRight (10);
+            useTagsButton.setBounds (r.removeFromRight (130).reduced (0, 1));
+            proposalLabel.setBounds (r);
+        }
+        proposalBox.setBounds (area.removeFromTop (juce::jmax (60, area.getHeight() / 2)));
+        area.removeFromTop (4);
+    }
     details.setBounds (area);
 }
 

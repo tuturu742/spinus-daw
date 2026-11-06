@@ -17,14 +17,16 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   and now loads as you saved it. Before, adding the chosen sounds said the plugin "no longer has" it, and the drums
   played the plugin's default sound.
 
-### Track creator: lyrics written any way, in any language
+### Track creator: one lyrics format, square-bracket tags
 
-- Lyrics need not use square-bracket tags: sections named in parentheses or before a colon ("(Verse 1)",
-  "Chorus:"), in any language, are read by their layout; a title, "Title:"/"BPM:" lines and directions in
-  parentheses are not sung; lyrics with no section names are split at their blank lines, a stanza sung again
-  being the chorus. With **Let the AI read it**, the AI reads the lyrics' structure and counts their syllables in
-  any language, and Spinus checks that each line it gives is one of yours. "[Pre-Chorus]" and "[Build-up]" keep
-  their whole names.
+- Lyrics take one format, the one song generators take: an English section tag in square brackets on its own
+  line ("[Verse 1]", "[Chorus x2]", "[Guitar Solo]") before each part; the lines can be in any language. The
+  manual's Track creator page lists the tags. Anything before the first tag is not sung, and a line in
+  parentheses is a note. "[Pre-Chorus]" and "[Build-up]" keep their whole names.
+- Lyrics without tags are no longer guessed at. Without the AI, Read says to add the tags. With **Let the AI read
+  it**, the AI tags them (in any language and layout) and shows its version under the lyrics box: **Use these
+  tags** puts it in the box (Ctrl+Z takes it back) and reads it, **Keep mine** leaves your text alone. The AI
+  also counts the syllables, and Spinus checks that each line it gives is one of yours.
 
 ### Track creator: the variety sets how closely the song follows the lyrics' form
 

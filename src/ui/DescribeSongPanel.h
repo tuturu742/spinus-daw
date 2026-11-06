@@ -25,7 +25,9 @@ namespace spinus::ui
     generators take them ("[Verse 1]", "[Chorus]", "[Guitar Solo]"). Read reads them too (spinus_ai/lyrics.py): the
     sections and each line's syllables, counted by rules on this computer, or by the AI when it reads. They go into
     the summary as its `lyrics`, for the vocal part and the song's form. "This song has no vocals" leaves them out
-    (kept in the box, not read).
+    (kept in the box, not read). Lyrics without tags are not guessed at: the page says to add them, or, with the
+    AI, shows the AI's tagged version under the box, to use (Use these tags: it replaces the box's text, one undo
+    step in the box, and is read) or not (Keep mine). Nothing is used until the user says so.
 
     Nothing changes the project. Without the AI service the page says so. Message thread only. */
 class DescribeSongPanel final : public juce::Component
@@ -61,19 +63,26 @@ public:
     juce::String getUnderstoodText() const { return understood.getText(); }
     juce::String getStatusText() const { return status.getText(); }
     juce::String getDetailsText() const { return details.getText(); }
+    /** The AI's tagged version of untagged lyrics, waiting for Use these tags or Keep mine; empty when none. */
+    juce::String getProposal() const { return proposal; }
+    /** Use these tags: the proposal replaces the lyrics (undoable in the box) and the description is read again. */
+    void useProposal();
+    /** Keep mine: the proposal goes, the lyrics stay as they are. */
+    void keepMine();
 
     void resized() override;
     void paint (juce::Graphics&) override;
 
 private:
     void updateButtons();
+    void setProposal (const juce::String& text);
 
     std::function<ai::AiService*()> getService;
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
     bool busy = false;
     juce::String job;
     juce::var summary, references;
-    juce::String generated;
+    juce::String generated, proposal;
 
     juce::Label intro;
     juce::TextEditor textBox, lyricsBox;
@@ -82,6 +91,9 @@ private:
     juce::ToggleButton aiButton { "Let the AI read it (uses your AI connection)" };
     juce::TextButton readButton { "Read" }, againButton { "Your songs again" };
     MessageLabel understood, status;
+    juce::Label proposalLabel;
+    juce::TextEditor proposalBox;
+    juce::TextButton useTagsButton { "Use these tags" }, keepMineButton { "Keep mine" };
     juce::TextEditor details;
 };
 
