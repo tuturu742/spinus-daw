@@ -37,6 +37,27 @@ What the music tools make looks like a song built by hand:
 - **Automation:** a part's automation goes on a track right under the part's own track, in its group, so folding
   the part's track hides its automation too.
 
+## Ready-made requests
+
+Agents that show an MCP server's prompts (in Claude Code, type `/mcp__spinus__` to see them) offer five
+ready-made requests. Each starts the agent on a common job, with steps that work well in Spinus:
+
+| Request | What you give it | What the agent does |
+|---|---|---|
+| **Start a song** | A description: genre, mood, tempo, instruments | Sets tempo and key, marks the sections, adds and writes the parts, checks and renders |
+| **Make a beat** | The groove, and where it plays | Writes a drum loop with a fill at the end of each section |
+| **Add a section** | What to add, and where | Makes room for it, fills it, builds into what follows |
+| **Check and fix the mix** | A goal, if you have one | Measures, fixes one thing at a time, measures again, tells you the numbers before and after |
+| **Shape a sound** | The part, and how it should sound | Changes its settings, a preset or adds an effect |
+
+## Tools that only look
+
+Each tool tells the agent's client what it does: **only looks** (the song's summary, a part's notes, a sound's
+settings, the device and preset lists, check, render), **adds** (a part, an effect, a send, bars) or **may
+replace** what is there (writing notes over a part's, copying bars, automation, a new sound, Spinus's
+commands). Clients that use this can run the ones that only look without asking you each time and ask before
+the rest. Every change is still one undo step.
+
 ## While an agent works
 
 - **Changes apply at once,** with no proposal to accept, because an agent works in many small steps. Each change is one

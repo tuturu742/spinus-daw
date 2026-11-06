@@ -40,9 +40,22 @@ juce::var schema (std::initializer_list<std::pair<const char*, juce::var>> prope
     return object ({ { "type", "object" }, { "properties", object (properties) }, { "required", names } });
 }
 
-juce::var tool (const juce::String& name, const juce::String& description, const juce::var& inputSchema)
+/** What a tool does to the project, for the agent's client (MCP's tool annotations): it may run one that only
+    reads without asking, and ask before one that replaces or removes what is there. */
+enum class Does
 {
-    return object ({ { "name", name }, { "description", description }, { "inputSchema", inputSchema } });
+    reads,
+    adds,
+    replaces
+};
+
+juce::var tool (const juce::String& name, const juce::String& description, const juce::var& inputSchema, Does does)
+{
+    auto hints = object ({ { "readOnlyHint", does == Does::reads }, { "openWorldHint", false } });
+    if (does != Does::reads)
+        hints.getDynamicObject()->setProperty ("destructiveHint", does == Does::replaces);
+    return object (
+        { { "name", name }, { "description", description }, { "inputSchema", inputSchema }, { "annotations", hints } });
 }
 
 juce::var text (const juce::String& s, bool isError = false)
@@ -74,13 +87,133 @@ juce::String newToken()
 
 const juce::String protocolVersion = "2025-06-18";
 
+/** Ready-made requests the agent's client offers (MCP prompts): each starts the agent on a common job in
+    Spinus, with the steps that work well. */
+struct Prompt
+{
+    const char* name;
+    const char* title;
+    const char* description;
+    std::vector<std::pair<const char*, const char*>> arguments; // name, description; the first is required
+    const char* text;                                           // {name} is replaced by the argument's value
+};
+
+const std::vector<Prompt>& prompts()
+{
+    static const std::vector<Prompt> all {
+        { "start_song",
+          "Start a song",
+          "Build a song in the project open in Spinus from a description.",
+          { { "description", "The song: genre, mood, tempo, instruments, length" } },
+          "Make a song in the project open in Spinus: {description}.\n"
+          "1. Call song_overview to see what is there already.\n"
+          "2. Set the tempo and key with run_commands (project.setTempo, project.setKey) if the description "
+          "gives them.\n"
+          "3. Mark the sections (intro, verse, chorus...) with markers (marker.add), in 4- or 8-bar phrases.\n"
+          "4. Add the parts with add_part (drums, bass, chords, a lead...), then write each with write_part, "
+          "using loop_bars for parts that repeat.\n"
+          "5. Call check and fix what matters, then render and look at each section's loudness.\n"
+          "6. Tell me what you made, section by section." },
+        { "make_beat",
+          "Make a beat",
+          "Write a drum part for the song open in Spinus.",
+          { { "style", "The groove: genre, feel, tempo" }, { "bars", "Where it plays: '1-8' or a section's name" } },
+          "Write a drum beat in the song open in Spinus: {style}, in bars {bars}.\n"
+          "1. Call song_overview. Use the drum part if there is one; otherwise add one with add_part (the Drum "
+          "Machine).\n"
+          "2. Write the beat with write_part, using the drums' names for pitch and loop_bars for the loop, with a "
+          "fill in the last bar of each section.\n"
+          "3. Call check, then tell me what you wrote." },
+        { "add_section",
+          "Add a section",
+          "Add a section (a bridge, a break, a solo...) to the song open in Spinus.",
+          { { "section", "What to add, such as 'an 8-bar bridge'" },
+            { "where", "Where, such as 'after the second chorus'" } },
+          "Add {section} to the song open in Spinus, {where}.\n"
+          "1. Call song_overview to find the sections and their bars.\n"
+          "2. Make room with insert_bars (it moves everything after it and adds a marker).\n"
+          "3. Fill it: copy_bars from a section to vary, or write_part for new parts, and automate a build into "
+          "what follows.\n"
+          "4. Call check, render, and tell me what the new section does." },
+        { "check_mix",
+          "Check and fix the mix",
+          "Measure the mix of the song open in Spinus and fix what is wrong, in small steps.",
+          { { "goal", "Optional: a target, such as 'louder', 'clearer bass' or '-10 LUFS'" } },
+          "Check the mix of the song open in Spinus. Goal: {goal}.\n"
+          "1. Render with stems and call check: note the mix's loudness and true peak, each section's loudness and "
+          "each part's.\n"
+          "2. Fix one problem at a time (levels, a muddy low end, masking, ducking the bass under the kick), each "
+          "as its own change so I can undo it.\n"
+          "3. Render again and compare.\n"
+          "4. Tell me each change with the numbers before and after." },
+        { "shape_a_sound",
+          "Shape a sound",
+          "Change how one part of the song open in Spinus sounds.",
+          { { "part", "The part, by its name" }, { "how", "How it should sound, such as 'pluckier and darker'" } },
+          "Make the part \"{part}\" in the song open in Spinus sound {how}.\n"
+          "1. Call sound_settings for the part.\n"
+          "2. Use shape_sound for the words it knows, or set_sound for a preset or settings by name.\n"
+          "3. Add an effect with add_effect if the instrument alone can't do it.\n"
+          "4. Tell me which settings changed." },
+    };
+    return all;
+}
+
+juce::var promptList()
+{
+    juce::Array<juce::var> list;
+    for (auto& p : prompts())
+    {
+        juce::Array<juce::var> arguments;
+        for (size_t i = 0; i < p.arguments.size(); ++i)
+            arguments.add (object ({ { "name", p.arguments[i].first },
+                                     { "description", p.arguments[i].second },
+                                     { "required", i == 0 && juce::String (p.name) != "check_mix" } }));
+        list.add (object ({ { "name", p.name },
+                            { "title", p.title },
+                            { "description", p.description },
+                            { "arguments", arguments } }));
+    }
+    return list;
+}
+
+/** The prompt's message with the arguments filled in (void for an unknown prompt). */
+juce::var promptMessages (const juce::String& name, const juce::var& arguments)
+{
+    for (auto& p : prompts())
+    {
+        if (name != p.name)
+            continue;
+        juce::String said (p.text);
+        for (auto& [argument, _] : p.arguments)
+        {
+            auto value = arguments[argument].toString().trim();
+            if (value.isEmpty())
+                value = juce::String (argument) == "goal" ? "a clean, balanced mix" : "as you think best";
+            said = said.replace ("{" + juce::String (argument) + "}", value);
+        }
+        juce::Array<juce::var> messages;
+        messages.add (
+            object ({ { "role", "user" }, { "content", object ({ { "type", "text" }, { "text", said } }) } }));
+        return messages;
+    }
+    return {};
+}
+
 const juce::String instructions =
     "You are working on the song open in Spinus, a digital audio workstation (FL Studio-like: Channel Rack, Piano "
     "Roll, Playlist of clips, Mixer). Start with song_overview (or song_summary). Edit with the music tools "
     "(write_part, add_part, insert_bars, automate, add_effect, send, duck, set_sound, shape_sound) or with "
     "run_commands (Spinus commands; command_help gives their parameters). Each change applies at once as one undo "
     "step the user can undo. Check your work with check, and render to measure the loudness of the mix, each "
-    "section and each part. The user hears the song in Spinus: tell them what you changed.";
+    "section and each part. The user hears the song in Spinus: tell them what you changed.\n\n"
+    "Conventions. The music tools: bars count from 1 ('9-16', or a section's name from the Playlist's markers); "
+    "notes are 'step pitch length [velocity]' with steps of a sixteenth from the first bar's start (16 a bar in "
+    "4/4); pitches are MIDI numbers or names with C5 = 60 (FL Studio's octaves); velocity is 1-127. Spinus's "
+    "commands: times are in ticks, 960 a quarter note, from the song's start at 0; channels, patterns, inserts "
+    "and devices are named by the ids song_summary shows. Settings and automation take text in the units the "
+    "device shows ('-6 dB', '220 ms', '1.2 kHz', '30% L', a choice by name); a plain number in "
+    "device.setParameters' values is 0 to 1 over the setting's whole range. A part's volume is its fader in dB.";
 
 /** A rendered file's loudness from `from` to `to` seconds (integrated LUFS; -100 when silent). */
 double loudnessOf (juce::AudioFormatReader& reader, double from, double to)
@@ -473,11 +606,12 @@ void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce
         core::Logs::info ("agents", agentName + " connected");
         changed();
         const auto asked = params["protocolVersion"].toString();
-        reply (rpcResult (id,
-                          object ({ { "protocolVersion", asked.isNotEmpty() ? asked : protocolVersion },
-                                    { "capabilities", object ({ { "tools", object ({ { "listChanged", false } }) } }) },
-                                    { "serverInfo", object ({ { "name", "spinus" }, { "version", versionString } }) },
-                                    { "instructions", instructions } })));
+        reply (rpcResult (
+            id, object ({ { "protocolVersion", asked.isNotEmpty() ? asked : protocolVersion },
+                          { "capabilities", object ({ { "tools", object ({ { "listChanged", false } }) },
+                                                      { "prompts", object ({ { "listChanged", false } }) } }) },
+                          { "serverInfo", object ({ { "name", "spinus" }, { "version", versionString } }) },
+                          { "instructions", instructions } })));
         return;
     }
     if (method == "ping")
@@ -503,6 +637,15 @@ void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce
             });
         return;
     }
+    if (method == "prompts/list")
+        return reply (rpcResult (id, object ({ { "prompts", promptList() } })));
+    if (method == "prompts/get")
+    {
+        const auto messages = promptMessages (params["name"].toString(), params["arguments"]);
+        if (messages.isVoid())
+            return reply (rpcError (id, -32602, "unknown prompt " + params["name"].toString()));
+        return reply (rpcResult (id, object ({ { "messages", messages } })));
+    }
     if (method == "tools/call")
     {
         callTool (params["name"].toString(), params["arguments"],
@@ -519,7 +662,7 @@ juce::var AgentInterface::nativeTools() const
                      "The open project as Spinus sees it: tempo, key, length, channels (instruments, kits), mixer "
                      "inserts (effects, sends, sidechains), patterns, Playlist lanes, clips and markers, and what is "
                      "missing on this computer.",
-                     schema ({})));
+                     schema ({}), Does::reads));
     tools.add (tool (
         "run_commands",
         "Change the project with Spinus commands, performed in order as one undo step. Each step "
@@ -527,27 +670,31 @@ juce::var AgentInterface::nativeTools() const
         "(\"$1.channel\"). Automation points may give 'text' (\"-12 dB\") instead of 'value'. Use "
         "command_help for a command's parameters.",
         schema ({ { "summary", object ({ { "type", "string" } }) }, { "steps", object ({ { "type", "array" } }) } },
-                { "steps" })));
+                { "steps" }),
+        Does::replaces));
     tools.add (tool ("command_help", "A Spinus command's parameters (JSON Schema), or the list of commands.",
-                     schema ({ { "command", object ({ { "type", "string" } }) } })));
+                     schema ({ { "command", object ({ { "type", "string" } }) } }), Does::reads));
     tools.add (tool (
         "list_devices",
         "Instruments and effects that can be added (Spinus's own, the free plugins, installed plugins), "
         "by words in their names, each with the device object channel.add and insert.addEffect take.",
-        schema ({ { "query", object ({ { "type", "string" } }) }, { "type", object ({ { "type", "string" } }) } })));
+        schema ({ { "query", object ({ { "type", "string" } }) }, { "type", object ({ { "type", "string" } }) } }),
+        Does::reads));
     tools.add (tool ("render",
                      "Render the song offline and measure it: the mix's loudness (LUFS) and true peak, each "
                      "section's loudness (between the Playlist's markers), and with stems each mixer insert's "
                      "loudness and how long it sounds. Takes as long as the song does to render.",
-                     schema ({ { "stems", object ({ { "type", "boolean" } }) } })));
+                     schema ({ { "stems", object ({ { "type", "boolean" } }) } }), Does::reads));
     tools.add (tool (
         "list_presets",
         "The presets device.loadPreset can load on a device of the song (an instrument or effect): "
         "3x Osc's, a plugin's own (its programs, the presets it lists, Surge XT's patches) and the "
         "sounds the user saved for it. 'find' keeps those whose name or category has all its words.",
         schema ({ { "device", object ({ { "type", "integer" } }) }, { "find", object ({ { "type", "string" } }) } },
-                { "device" })));
-    tools.add (tool ("undo_last", "Undo your last change (only if it is still the newest undo step).", schema ({})));
+                { "device" }),
+        Does::reads));
+    tools.add (tool ("undo_last", "Undo your last change (only if it is still the newest undo step).", schema ({}),
+                     Does::replaces));
     return tools;
 }
 

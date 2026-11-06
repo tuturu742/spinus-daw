@@ -29,6 +29,7 @@ from .gateway import ProviderError, list_models
 from .manual import Manual
 from .project_harness import TOOLS as PROJECT_TOOLS
 from .project_harness import ProjectHarness
+from .project_harness import tool_hints as project_tool_hints
 from .routing import Routing
 from .usage import UsageLog
 
@@ -1378,7 +1379,13 @@ class Service:
         """The project harness's tools, for Spinus's live interface to offer outside agents."""
         return {
             "tools": [
-                {"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in PROJECT_TOOLS
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "inputSchema": t.input_schema,
+                    "annotations": project_tool_hints(t.name),
+                }
+                for t in PROJECT_TOOLS
             ]
         }
 

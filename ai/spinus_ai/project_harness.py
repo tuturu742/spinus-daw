@@ -349,6 +349,18 @@ TOOLS = [
     ),
 ]
 TOOL_NAMES = [t.name for t in TOOLS]
+# What each tool does to the project, for an agent's client (MCP's tool annotations): it can run a tool that only
+# reads without asking, and ask before one that replaces or removes what is there. Every change is one undo step.
+READS = ("song_overview", "read_part", "sound_settings", "motif", "check")
+ADDS = ("add_part", "insert_bars", "add_effect", "send", "duck", "bus", "shape_sound")
+REPLACES = ("write_part", "place_motif", "copy_bars", "automate", "set_sound")
+
+
+def tool_hints(name: str) -> dict[str, Any]:
+    """MCP's hints for a tool: it only reads, or it changes the project and may replace what was there."""
+    if name in READS:
+        return {"readOnlyHint": True, "openWorldHint": False}
+    return {"readOnlyHint": False, "destructiveHint": name not in ADDS, "openWorldHint": False}
 
 
 class ProjectHarness:
