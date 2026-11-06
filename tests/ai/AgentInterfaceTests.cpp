@@ -8,6 +8,7 @@
 #include "session/Session.h"
 #include "ui/AgentInterfacePage.h"
 
+#include <map>
 #include <thread>
 
 using namespace spinus;
@@ -239,6 +240,49 @@ TEST_CASE ("Without AI, the music tools say so and Spinus's own still work", "[a
     CHECK (result["content"][0]["text"].toString().contains ("need AI turned on"));
     const auto summary = f.call (sessionId, "song_summary", juce::var (new juce::DynamicObject()));
     CHECK (juce::JSON::parse (summary["content"][0]["text"].toString()).hasProperty ("channels"));
+}
+
+TEST_CASE ("Each tool says whether it only reads, and ready-made requests start common jobs", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto started =
+        f.request ("POST", Fixture::rpc ("initialize", object ({ { "clientInfo", object ({ { "name", "T" } }) } })));
+    const auto& result = started.json["result"];
+    CHECK (result["capabilities"].hasProperty ("prompts"));
+    // The conventions come before the first call.
+    CHECK (result["instructions"].toString().contains ("960 a quarter note"));
+    CHECK (result["instructions"].toString().contains ("C5 = 60"));
+
+    // Spinus's own tools: an agent's client can run the ones that only read without asking.
+    const auto listed = f.request ("POST", Fixture::rpc ("tools/list"), started.session).json["result"]["tools"];
+    std::map<juce::String, juce::var> hints;
+    for (auto& t : *listed.getArray())
+        hints[t["name"].toString()] = t["annotations"];
+    CHECK ((bool)hints["song_summary"]["readOnlyHint"]);
+    CHECK ((bool)hints["render"]["readOnlyHint"]);
+    CHECK_FALSE ((bool)hints["run_commands"]["readOnlyHint"]);
+    CHECK ((bool)hints["run_commands"]["destructiveHint"]);
+
+    // The ready-made requests, with their arguments filled in.
+    const auto prompts = f.request ("POST", Fixture::rpc ("prompts/list"), started.session).json["result"]["prompts"];
+    REQUIRE (prompts.isArray());
+    juce::StringArray names;
+    for (auto& p : *prompts.getArray())
+        names.add (p["name"].toString());
+    CHECK (names == juce::StringArray ({ "start_song", "make_beat", "add_section", "check_mix", "shape_a_sound" }));
+    const auto got =
+        f.request (
+             "POST",
+             Fixture::rpc ("prompts/get", object ({ { "name", "add_section" },
+                                                    { "arguments", object ({ { "section", "an 8-bar bridge" } }) } })),
+             started.session)
+            .json["result"];
+    const auto said = got["messages"][0]["content"]["text"].toString();
+    CHECK (said.startsWith ("Add an 8-bar bridge to the song open in Spinus, as you think best."));
+    CHECK (got["messages"][0]["role"] == "user");
+    CHECK (f.request ("POST", Fixture::rpc ("prompts/get", object ({ { "name", "nope" } })), started.session)
+               .json.hasProperty ("error"));
 }
 
 TEST_CASE ("The live interface answers MCP over HTTP on 127.0.0.1", "[ai][agents]")

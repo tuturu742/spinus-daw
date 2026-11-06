@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 from test_service import anthropic_reply, collect, make_service
 
+from spinus_ai import project_harness
 from spinus_ai.manual import Manual
 from spinus_ai.project_harness import ProjectHarness, db_to_volume, moved_text, pan_value, pitch_of
 from spinus_ai.project_tools import Snapshot, Tools
@@ -363,6 +364,13 @@ async def test_the_live_interface_gets_the_tools_and_each_calls_steps(tmp_path: 
     listed, _ = await collect(service, "ai.v1.project.tools", {})
     names = [t["name"] for t in listed["tools"]]
     assert "write_part" in names and all("inputSchema" in t for t in listed["tools"])
+    # Each says what it does to the project: only reads, adds, or may replace what was there.
+    hints = {t["name"]: t["annotations"] for t in listed["tools"]}
+    assert hints["song_overview"]["readOnlyHint"] and hints["check"]["readOnlyHint"]
+    assert not hints["add_part"]["readOnlyHint"] and not hints["add_part"]["destructiveHint"]
+    assert hints["write_part"]["destructiveHint"] and not hints["write_part"]["readOnlyHint"]
+    classified = project_harness.READS + project_harness.ADDS + project_harness.REPLACES
+    assert sorted(classified) == sorted(names)
     result, _ = await collect(
         service,
         "ai.v1.project.tool",

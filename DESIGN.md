@@ -659,6 +659,14 @@ can work on the open project while the user watches and listens.
     them; `ai.v1.project.tool` runs one on the context and returns its steps, which the interface performs. The
     AI service needs no AI connection or internet for these, so an agent works offline; with AI off it still has
     Spinus's own tools.
+  - **Each tool's annotations** (MCP's `readOnlyHint`, `destructiveHint`, `openWorldHint: false`): it only reads,
+    adds, or may replace what is there. Spinus's own are set in C++; the harness's come with
+    `ai.v1.project.tools` (`project_harness.READS`/`ADDS`/`REPLACES`, a test keeps every tool in one of them).
+    Clients can then run the read-only ones without asking.
+- **Instructions and prompts:** `initialize`'s instructions name the conventions (bars from 1, sixteenth steps,
+  C5 = 60, commands' ticks at 960 a quarter note, settings as the device's text), so an agent gets them before
+  its first call. Five MCP prompts (`prompts/list`, `prompts/get`) are ready-made requests: start_song,
+  make_beat, add_section, check_mix, shape_a_sound, each with the steps that work well.
 - **Why the C++ app hosts it:** the project and its undo history are there, and the interface must work without the
   AI service (AGENTS rule 4). The harness stays in Python, where the Track creator's harness and the checks are.
 - **Files:** a step may name only files in the project's folder, the user's sample folders and the starter pack.
