@@ -109,6 +109,13 @@ model::Device deviceOf (const juce::var& request)
     return device;
 }
 
+/** The sound index's folder the request names (its preset folders are beside it), or none: the default index's. */
+juce::File indexFolderOf (const juce::var& request)
+{
+    const auto path = request["indexFolder"].toString();
+    return juce::File::isAbsolutePath (path) ? juce::File (path) : juce::File();
+}
+
 /** A sound the user saved (Save this sound): its preset id ("saved:...") and the file with the plugin's state.
     None when the file cannot be read. */
 std::optional<InstrumentPreset> savedPreset (const juce::String& id, const juce::String& stateFile)
@@ -154,8 +161,9 @@ int runInstrument (const juce::var& request, Lines& out)
     OfflineInstrument player (*instance);
     // "defaultOnly": a second try for an instrument that crashed after loading (while its presets were
     // found or right after): only its sound as it opens.
-    auto presets = (bool)request["defaultOnly"] ? std::vector<InstrumentPreset> {}
-                                                : InstrumentPresets::find (*instance, deviceOf (request));
+    auto presets = (bool)request["defaultOnly"]
+                       ? std::vector<InstrumentPreset> {}
+                       : InstrumentPresets::find (*instance, deviceOf (request), indexFolderOf (request));
     if (presets.empty())
     {
         InstrumentPreset asItIs; // its id is "": played as the instrument opens, nothing loaded
@@ -390,7 +398,7 @@ int runRender (const juce::var& request, Lines& out)
                              const auto id = i["preset"].toString();
                              return id.isNotEmpty() && ! SavedSounds::isSaved (id);
                          }))
-            presets = InstrumentPresets::find (*instance, deviceOf (request));
+            presets = InstrumentPresets::find (*instance, deviceOf (request), indexFolderOf (request));
     }
     double wait = 40.0;               // seconds an instrument may take to load its sounds (as runInstrument), then 10
     juce::String loadedPreset = "\n"; // none yet
@@ -518,7 +526,7 @@ int runTune (const juce::var& request, Lines& out)
     }
     else if (presetId.isNotEmpty())
     {
-        const auto presets = InstrumentPresets::find (*instance, device);
+        const auto presets = InstrumentPresets::find (*instance, device, indexFolderOf (request));
         const auto found =
             std::find_if (presets.begin(), presets.end(), [&] (const InstrumentPreset& p) { return p.id == presetId; });
         if (found == presets.end() || player.loadPreset (*found).failed())

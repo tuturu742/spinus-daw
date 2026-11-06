@@ -1,10 +1,14 @@
 #include "InstrumentPresets.h"
 
 #include "plugins/SurgePresets.h"
+#include "session/PresetFolders.h"
 #include "session/ProgramFolder.h"
+#include "session/SoundIndex.h"
 
 #include <cstring>
+#include <map>
 #include <set>
+#include <tuple>
 
 namespace spinus
 {
@@ -120,7 +124,8 @@ juce::String InstrumentPresets::libraryOf (const model::Device& device)
     return "plugin-" + hashOf (device.plugin.format + "|" + device.plugin.fileOrIdentifier + "|" + device.plugin.name);
 }
 
-std::vector<InstrumentPreset> InstrumentPresets::find (juce::AudioPluginInstance& instance, const model::Device& device)
+std::vector<InstrumentPreset> InstrumentPresets::find (juce::AudioPluginInstance& instance, const model::Device& device,
+                                                       const juce::File& indexFolder)
 {
     const auto description = instance.getPluginDescription();
     const juce::File pluginFile (description.fileOrIdentifier);
@@ -142,6 +147,19 @@ std::vector<InstrumentPreset> InstrumentPresets::find (juce::AudioPluginInstance
         if (found.size() < 2)
             found = findPrograms (instance, version);
         break;
+    }
+    // The preset folders the user chose for it (not for VST2 plugins: see stateFromFile).
+    if (description.pluginFormatName != "VST")
+    {
+        PresetFolders chosen (indexFolder != juce::File() ? indexFolder : SoundIndex::getDefaultFolder());
+        chosen.load();
+        if (const auto folders = chosen.get (libraryOf (device)); ! folders.isEmpty())
+        {
+            if (found.size() < 2)
+                found.clear(); // one program alone is no choice; the files are
+            for (auto& p : findStateFiles (folders))
+                found.push_back (std::move (p));
+        }
     }
     if (found.size() < 2)
         return {}; // one preset is no choice
@@ -170,6 +188,17 @@ juce::Result InstrumentPresets::load (juce::AudioPluginInstance& instance, const
         return juce::Result::ok();
     case InstrumentPreset::Kind::discovered:
         return plugins::ClapPluginFormat::loadPreset (instance, preset.discovered);
+    case InstrumentPreset::Kind::stateFile:
+    {
+        juce::MemoryBlock data;
+        if (! preset.file.loadFileAsData (data) || data.isEmpty())
+            return juce::Result::fail ("The preset file " + preset.file.getFileName() + " could not be read.");
+        const auto state = stateFromFile (instance, data);
+        if (state.isEmpty())
+            return juce::Result::fail (instance.getName() + " can't take a preset file as its state.");
+        instance.setStateInformation (state.getData(), (int)state.getSize());
+        return juce::Result::ok();
+    }
     }
     return juce::Result::fail ("Unknown preset.");
 }
@@ -367,6 +396,83 @@ std::vector<InstrumentPreset> InstrumentPresets::findOdinPresets (const juce::Fi
     std::sort (found.begin(), found.end(), [] (const InstrumentPreset& a, const InstrumentPreset& b)
                { return a.name.compareNatural (b.name) < 0; });
     return found;
+}
+
+//==============================================================================
+std::vector<InstrumentPreset> InstrumentPresets::findStateFiles (const juce::Array<juce::File>& folders)
+{
+    std::vector<InstrumentPreset> found;
+    for (const auto& folder : folders)
+    {
+        if (! folder.isDirectory())
+            continue;
+        juce::Array<juce::File> files;
+        for (const auto& entry : juce::RangedDirectoryIterator (folder, true, "*", juce::File::findFiles))
+            if (! entry.isHidden() && entry.getFileSize() > 0 && entry.getFileSize() < 16 * megabyte)
+                files.add (entry.getFile());
+        // The kind of file most of them are: a folder's readme or pictures are no presets.
+        std::map<juce::String, int> kinds;
+        for (const auto& f : files)
+            ++kinds[f.getFileExtension().toLowerCase()];
+        juce::String kind;
+        int most = 0;
+        for (const auto& [extension, count] : kinds)
+            if (count > most)
+                std::tie (kind, most) = std::pair (extension, count);
+        files.sort();
+        const auto where = hashOf (folder.getFullPathName()).substring (0, 8);
+        for (const auto& f : files)
+        {
+            const auto name = f.getFileNameWithoutExtension();
+            if (f.getFileExtension().toLowerCase() != kind || isPlaceholderName (name))
+                continue;
+            InstrumentPreset preset;
+            preset.kind = InstrumentPreset::Kind::stateFile;
+            preset.name = name;
+            preset.file = f;
+            const auto inside = f.getParentDirectory().getRelativePathFrom (folder);
+            preset.category = f.getParentDirectory() == folder ? juce::String() : inside.replaceCharacter ('\\', '/');
+            preset.id = "file:" + where + "/" + f.getRelativePathFrom (folder).replaceCharacter ('\\', '/');
+            preset.version = fileVersion (f);
+            found.push_back (std::move (preset));
+        }
+    }
+    return found;
+}
+
+juce::MemoryBlock InstrumentPresets::stateFromFile (juce::AudioPluginInstance& instance, const juce::MemoryBlock& file)
+{
+    if (instance.getPluginDescription().pluginFormatName == "VST")
+        return {};
+    // An XML file, the way a plugin made with JUCE keeps an XML state ("VC2!", its size, the text).
+    const auto asOwn = [&file] (const juce::MemoryBlock& like)
+    {
+        const bool binaryXml = like.getSize() > 8 && std::memcmp (like.getData(), "VC2!", 4) == 0;
+        if (binaryXml)
+            if (auto xml = juce::parseXML (file.toString()))
+            {
+                juce::MemoryBlock state;
+                juce::AudioProcessor::copyXmlToBinary (*xml, state);
+                return state;
+            }
+        return file;
+    };
+    juce::MemoryBlock now;
+    instance.getStateInformation (now);
+    // VST3: the host keeps the plugin's own state (its component's) inside an XML of its own.
+    if (auto outer = juce::AudioProcessor::getXmlFromBinary (now.getData(), (int)now.getSize());
+        outer != nullptr && outer->hasTagName ("VST3PluginState"))
+        if (auto* component = outer->getChildByName ("IComponent"))
+        {
+            juce::MemoryBlock own;
+            own.fromBase64Encoding (component->getAllSubText());
+            component->deleteAllTextElements();
+            component->addTextElement (asOwn (own).toBase64Encoding());
+            juce::MemoryBlock state;
+            juce::AudioProcessor::copyXmlToBinary (*outer, state);
+            return state;
+        }
+    return asOwn (now);
 }
 
 } // namespace spinus

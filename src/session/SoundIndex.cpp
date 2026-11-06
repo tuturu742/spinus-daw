@@ -1,6 +1,7 @@
 #include "SoundIndex.h"
 
 #include "InstrumentPresets.h"
+#include "PresetFolders.h"
 #include "ProgramFolder.h"
 #include "SoundDescriptors.h"
 #include "core/ChildProcess.h"
@@ -487,6 +488,11 @@ bool SoundIndex::needsVisit (const SoundSource& source) const
             return true;
     if (measured.size() != mine.size())
         return true;
+    // Preset folders the user chose for it: their files are listed again at each update (new ones measured).
+    PresetFolders folders (root);
+    folders.load();
+    if (! folders.get (source.key).isEmpty())
+        return true;
     // Silent or failed with an older helper, which may have measured it too soon or given up too early.
     if (known.measuredWith != helperRevision && known.silentOrFailed())
         return true;
@@ -925,6 +931,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
                                        { "known", juce::var (known) },
                                        { "skip", skip },
                                        { "saved", saved },
+                                       { "indexFolder", index.getFolder().getFullPathName() },
                                        { "defaultOnly", defaultOnly } });
         const auto run = SoundIndexer::runHelper (
             options, request, source.hostLibraries,

@@ -16,16 +16,17 @@ struct InstrumentPreset
 {
     enum class Kind
     {
-        file,      // a file the plugin loads itself through CLAP preset-load (Surge XT's .fxp patches)
-        state,     // a saved state Spinus gives the plugin (OB-Xf's patches and Odin 2's built-in presets: these
-                   // plugins do not load presets for a host)
-        program,   // one of the plugin's programs, as the host sees them (VST2, VST3, LV2 presets)
-        discovered // a preset the plugin lists through CLAP preset discovery
+        file,       // a file the plugin loads itself through CLAP preset-load (Surge XT's .fxp patches)
+        state,      // a saved state Spinus gives the plugin (OB-Xf's patches and Odin 2's built-in presets: these
+                    // plugins do not load presets for a host)
+        program,    // one of the plugin's programs, as the host sees them (VST2, VST3, LV2 presets)
+        discovered, // a preset the plugin lists through CLAP preset discovery
+        stateFile   // a file in a preset folder the user chose (PresetFolders), given to the plugin as its state
     };
 
     juce::String name, category;
     Kind kind = Kind::file;
-    juce::File file;         // file; for state, where it came from (if from a file)
+    juce::File file;         // file and stateFile; for state, where it came from (if from a file)
     juce::MemoryBlock state; // state
     int program = -1;        // program
     plugins::ClapPluginFormat::DiscoveredPreset discovered;
@@ -50,8 +51,11 @@ public:
     static juce::String libraryOf (const model::Device&);
 
     /** Every preset of the instrument in `instance` (made for `device`), in a stable order; empty when it
-        has none Spinus can choose from. Message thread (it may read many small files). */
-    static std::vector<InstrumentPreset> find (juce::AudioPluginInstance&, const model::Device&);
+        has none Spinus can choose from. Then the files in the preset folders the user chose for it (PresetFolders,
+        beside the sound index's `indexFolder`; the default index's when it is empty). Message thread (it may read
+        many small files). */
+    static std::vector<InstrumentPreset> find (juce::AudioPluginInstance&, const model::Device&,
+                                               const juce::File& indexFolder = {});
 
     /** Puts the preset in place (message thread). A file preset may finish loading on the plugin's own
         thread (Surge XT): HiddenInstrument::loadPreset waits for it. */
@@ -76,6 +80,16 @@ public:
     /** Odin 2's factory presets, read from its plugin file (they are built into it); empty if there are
         none. */
     static std::vector<InstrumentPreset> findOdinPresets (const juce::File& pluginFile);
+    /** The preset files in folders the user chose: every file of the kind most of them are (a folder's notes and
+        pictures are left out), in the folders inside too, by name; the folders inside are their categories.
+        Placeholder names ("Default") are no presets. */
+    static std::vector<InstrumentPreset> findStateFiles (const juce::Array<juce::File>& folders);
+    /** A preset file as the plugin's state, the way the plugin keeps it (empty when the plugin can't take one):
+        - inside the host's wrapper for VST3 plugins (the plugin's own part of it replaced, the rest as it is now);
+        - an XML file as JUCE's binary XML when the plugin's own state is that (plugins made with JUCE);
+        - otherwise the file as it is.
+        VST2 plugins keep theirs in a bank format Spinus does not write: none. */
+    static juce::MemoryBlock stateFromFile (juce::AudioPluginInstance&, const juce::MemoryBlock& file);
 };
 
 } // namespace spinus
