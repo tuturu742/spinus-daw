@@ -437,3 +437,38 @@ async def test_a_providers_passing_trouble_in_its_stream_is_asked_again(monkeypa
     assert len(calls) == 2 and any(getattr(b, "text", "") == "Hello" for b in answer.blocks)
     assert gateway.chat_error({"code": 400, "message": "Unknown parameter"}).kind == "bad_request"
     assert gateway.chat_error({"message": "Rate limit exceeded"}).kind == "rate_limit"
+
+
+async def test_a_stream_of_only_keep_alives_is_asked_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A provider queueing the request sends keep-alive comments (DeepSeek, for up to half an hour): the read timeout
+    # never fires, so after KEEPALIVE_LIMIT seconds of them the answer is asked again.
+    from spinus_ai import gateway
+
+    monkeypatch.setattr(gateway, "NETWORK_RETRY_WAITS", (0.0, 0.0))
+    monkeypatch.setattr(gateway, "KEEPALIVE_LIMIT", -1.0)  # past the limit at once
+    calls: list[int] = []
+    good = (
+        b'data: {"choices": [{"index": 0, "delta": {"content": "Hello"}}]}\n\n'
+        b'data: {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}\n\ndata: [DONE]\n\n'
+    )
+
+    def queued(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, content=b": keep-alive\n\n: keep-alive\n\n" if len(calls) < 3 else good)
+
+    connection = Connection("x", "DeepSeek", "openai", "https://api.deepseek.com")
+    request = gateway.Request("deepseek-test", "system", [gateway.Message("user", [gateway.Text("hi")])])
+
+    async def quiet(_: str) -> None:
+        pass
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(queued)) as client:
+        answer = await gateway.complete(client, connection, "sk-test", request, quiet)
+    assert len(calls) == 3 and any(getattr(b, "text", "") == "Hello" for b in answer.blocks)
+
+    def stuck(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b": keep-alive\n\n")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(stuck)) as client:
+        with pytest.raises(gateway.ProviderError, match="nothing but keep-alives"):
+            await gateway.complete(client, connection, "sk-test", request, quiet)
