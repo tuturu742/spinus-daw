@@ -272,13 +272,16 @@ def style_brief(setup: Setup) -> dict[str, Any]:
         out["understood"] = str(described["understood"])
     if summary.get("plain"):
         out["inWords"] = [str(line) for line in summary["plain"]][:12]
-    if form := lyrics_brief(summary, style):
+    if form := lyrics_brief(summary, style, setup.variety.form_changes):
         out["lyrics"] = form
     return out
 
 
-def lyrics_brief(summary: dict[str, Any], style: sw.Style) -> dict[str, Any] | None:
-    """The lyrics' form for the model, without their words (only their structure: tags, lines, syllables)."""
+def lyrics_brief(
+    summary: dict[str, Any], style: sw.Style, changes: int = sw.BALANCED.form_changes
+) -> dict[str, Any] | None:
+    """The lyrics' form for the model, without their words (only their structure: tags, lines, syllables), and
+    how many `changes` the variety allows to it."""
     lyrics = summary.get("lyrics")
     if not isinstance(lyrics, dict) or not any(s.get("lines") for s in lyrics.get("sections") or []):
         return None
@@ -295,8 +298,9 @@ def lyrics_brief(summary: dict[str, Any], style: sw.Style) -> dict[str, Any] | N
         form.append(entry)
     out: dict[str, Any] = {
         "note": "The song has lyrics. Spinus does not sing: the vocals part (or the lead) plays the sung tune. "
-        "Keep their form: their sections in this order, a sung line a phrase of one note a syllable (stressed "
-        "syllables, '1', on the beats), a line every barsPerLine bars; instrumental sections have no tune.",
+        "Keep their form (see fixed): their sung sections in this order, a sung line a phrase of one note a "
+        "syllable (stressed syllables, '1', on the beats), a line every barsPerLine bars; instrumental sections "
+        "have no tune.",
         "form": form,
     }
     if found := lyric_form(summary, style, style.tempo):
@@ -314,9 +318,16 @@ def lyrics_brief(summary: dict[str, Any], style: sw.Style) -> dict[str, Any] | N
         ]
         out["order"] = order
         out["fixed"] = (
-            "The sung sections are these ids, as long as their lines need, in this order: Spinus keeps their bars "
-            "(they change with the tempo) and their order. Instrumental sections (an intro, a solo, an outro) may "
-            "go before, between and after them, as long as you like."
+            "The sung sections are these ids, as long as their lines need: Spinus keeps their bars (they change "
+            "with the tempo), their words and their order, and every one of them is sung. "
+            + (
+                "Keep the lyrics' form exactly, the instrumental sections as they are: the variety is close."
+                if not changes
+                else f"You may make up to {changes} changes to the lyrics' form where it makes a better song: sing "
+                "a section again after it was sung (its id again: doubling the last chorus), add an instrumental "
+                "section (an intro, a bridge, a solo, a break, an outro) or leave out one of the lyrics' "
+                "instrumental ones. Instrumental sections are as long as you like."
+            )
         )
     return out
 
@@ -334,56 +345,113 @@ def lyric_form(
 
 def sung_of(order: list[str], setup: Setup, tempo: float) -> dict[str, Any] | None:
     """What is sung in each entry of the order (as songwriter.make_plan gives it): the lyrics' lines in their order,
-    on the sung sections; nothing on the others."""
+    on the sung sections; a sung section sung again (a change the variety allows) its lines again; nothing on the
+    others."""
     found = lyric_form(setup.summary, setup.style, tempo)
     if found is None:
         return None
     _, form_order, sung = found
     queue = [(sid, lines) for sid, lines in zip(form_order, sung["sung"], strict=False) if lines]
+    last: dict[str, list[str]] = {}
     out: list[list[str]] = []
     for sid in order:
         if queue and queue[0][0] == sid:
-            out.append(queue.pop(0)[1])
+            last[sid] = queue.pop(0)[1]
+            out.append(last[sid])
         else:
-            out.append([])
+            out.append(list(last.get(sid, [])))
     return {"language": sung["language"], "sung": out}
+
+
+def align_form(
+    plan_order: list[str], kinds: dict[str, str], form_order: list[str], form_kinds: dict[str, str], sung: set[str]
+) -> tuple[int, list[tuple[str, str | None]]] | None:
+    """The fewest changes that make the plan's order of the lyrics' (`form_order`; `sung`, its sung sections'
+    ids): each plan entry either stands for the lyrics' next section (the same id, or a section of its kind that
+    is not one of the sung ids) or is a change, a sung section sung again after it was or an added instrumental
+    one; an instrumental section of the lyrics left out is a change too. A sung section is never left out, nor
+    moved. None when no such reading exists; else the changes and, for each plan entry, (its id, the lyrics'
+    section it stands for, or None)."""
+    n, m = len(plan_order), len(form_order)
+    worst = n + m + 1
+    cost = [[worst] * (m + 1) for _ in range(n + 1)]
+    step: list[list[str]] = [[""] * (m + 1) for _ in range(n + 1)]
+    cost[0][0] = 0
+    for i in range(n + 1):
+        for j in range(m + 1):
+            if cost[i][j] >= worst:
+                continue
+            here = cost[i][j]
+            if j < m and form_order[j] not in sung and here + 1 < cost[i][j + 1]:
+                cost[i][j + 1], step[i][j + 1] = here + 1, "skip"
+            if i == n:
+                continue
+            o = plan_order[i]
+            stands = j < m and (o == form_order[j] or (o not in sung and kinds[o] == form_kinds[form_order[j]]))
+            if stands and here < cost[i + 1][j + 1]:
+                cost[i + 1][j + 1], step[i + 1][j + 1] = here, "match"
+            if (o not in sung or o in form_order[:j]) and here + 1 < cost[i + 1][j]:
+                cost[i + 1][j], step[i + 1][j] = here + 1, "add"
+    if cost[n][m] >= worst:
+        return None
+    reading: list[tuple[str, str | None]] = []
+    i, j = n, m
+    while i or j:
+        how = step[i][j]
+        if how == "skip":
+            j -= 1
+        elif how == "match":
+            i, j = i - 1, j - 1
+            reading.append((plan_order[i], form_order[j]))
+        else:
+            i -= 1
+            reading.append((plan_order[i], None))
+    return cost[n][m], reading[::-1]
 
 
 def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[str, Any], list[str]]:
     """The checked plan with the lyrics' form kept: each sung section as long as its lines need (with their
-    syllables, for the tune), the sung sections in the lyrics' order; instrumental sections where the plan puts
-    them. The plan's sections stand for the sung ones by their ids or, in order, by their kinds ("verse1" and
-    "verse2" for the lyrics' verse sung twice), giving them their chords and energy. An order that leaves out or
-    moves a sung section raises Unusable when `strict` (the harness's model sets the form again); otherwise the
-    lyrics' own order is used. Also what was kept, in words."""
+    syllables, for the tune), every sung section in the lyrics' order. The plan's sections stand for the lyrics'
+    by their ids or, in order, by their kinds ("verse1" and "verse2" for the lyrics' verse sung twice), giving
+    them their chords and energy. Within the variety's changes (close: none) the plan may sing a section again,
+    add instrumental sections or leave out the lyrics' (align_form). An order that leaves out or moves a sung
+    section, or changes more, raises Unusable when `strict` (the harness's model sets the form again);
+    otherwise the lyrics' own order is used. Also what was kept, in words."""
     found = lyric_form(setup.summary, setup.style, float(plan["tempo"]))
     if found is None:
         return plan, []
     form, form_order, _ = found
     fixed = {s["id"]: s for s in form if s.get("words")}
     by_id = {s["id"]: s for s in plan["sections"]}
-    sung_order = [o for o in form_order if o in fixed]
+    form_kinds = {s["id"]: s["kind"] for s in form}
+    allowed = setup.variety.form_changes
     kept: list[str] = []
     order: list[str] = []
     stands: dict[str, dict[str, Any]] = {}  # a sung section's id -> the plan's section that gives its music
-    at = 0
-    for o in plan["order"]:
-        if at < len(sung_order) and (o == sung_order[at] or by_id[o]["kind"] == fixed[sung_order[at]]["kind"]):
-            stands.setdefault(sung_order[at], by_id[o])
-            order.append(sung_order[at])
-            at += 1
-        elif o in fixed:
-            at = -1  # a sung section out of its place
-            break
-        else:
-            order.append(o)
-    if at != len(sung_order):
+    aligned = align_form(list(plan["order"]), {k: v["kind"] for k, v in by_id.items()}, form_order, form_kinds,
+                         set(fixed))  # fmt: skip
+    if aligned is not None and aligned[0] <= allowed:
+        for o, mine in aligned[1]:
+            if mine is not None and mine in fixed:
+                stands.setdefault(mine, by_id[o])
+                order.append(mine)
+            else:
+                order.append(o)
+        if aligned[0]:
+            kept.append(f"{aligned[0]} change{'s' if aligned[0] > 1 else ''} to the lyrics' form (at most {allowed})")
+    else:
         if strict:
-            wanted = ", ".join(f"{o} ({fixed[o]['kind']})" for o in sung_order)
+            wanted = ", ".join(f"{o} ({form_kinds[o]}{'' if o in fixed else ', instrumental'})" for o in form_order)
+            freedom = (
+                "exactly this form, no section added or left out (the variety is close)"
+                if not allowed
+                else f"at most {allowed} changes to it: a sung section sung again after it was (its id again), "
+                "an instrumental section added, or one of the lyrics' instrumental ones left out"
+            )
+            made = "" if aligned is None else f" (this order makes {aligned[0]})"
             raise Unusable(
-                f"the lyrics are sung in this order: {wanted}. Give the order these sections, by these ids or by "
-                "sections of these kinds in this order (a section sung again is its id again); instrumental "
-                "sections may go before, between and after them"
+                f"the lyrics' form is: {wanted}. Give the order these sections, by these ids or by sections of "
+                f"these kinds in this order, with {freedom}{made}; every sung section stays, in this order"
             )
         order, stands = list(form_order), {}
         kept.append("the lyrics' order of sections")

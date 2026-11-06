@@ -275,9 +275,18 @@ syllable**, a line at a time with a breath before the next, the stressed syllabl
 many lines share their music, as verses do; the tune follows the first verse's syllables. The plan on the page
 says what is sung where: "Verse (bar 9): 4 lines, “Sunlight on the windowsill / Coffee's warm and the
 morning's still / ...”". With the AI as the writer, it gets the lyrics' form (their tags, lines and
-syllables, not their words) and keeps it: the sung sections stay as long as their lines need and in the lyrics'
-order, while the AI may add instrumental sections (an intro, a break, a solo) around them. Spinus checks that the
-tune it writes plays about one note a syllable, line by line, and asks it to fix the lines that don't.
+syllables, not their words) and keeps their words: the sung sections stay as long as their lines need and in the
+lyrics' order. Spinus checks that the tune it writes plays about one note a syllable, line by line, and asks it
+to fix the lines that don't.
+
+How closely the form follows your tags is the song's [variety](#variety). Every line is always sung, in your
+order:
+
+- **Close to my references**: exactly your tags' form, nothing added or left out.
+- **Balanced**: your form, with now and then a small change: the last chorus sung twice, or an instrumental
+  bridge (a solo, when the song has a bridge) before it. The AI may make up to 2 such changes: sing a section
+  again after it was sung, add an instrumental section, or leave out one of your instrumental tags.
+- **Adventurous**: those changes more often, and up to 5 of them for the AI.
 
 Tick **This song has no vocals** for an instrumental song: the lyrics
 stay in the box but are not read. Spinus remembers the lyrics and the tick with the description. With **Let the
@@ -581,7 +590,8 @@ same way for Spinus's own rules and for your AI connection, and Spinus remembers
 - **Close to my references**: the narrowest choices. The tempo stays within 1 % of your songs' usual tempo,
   the key is one of your songs' keys, the chords are only theirs, and the form and section lengths are the
   ones your songs use most.
-- **Balanced** (the default): what is described above, the same as before this setting existed.
+- **Balanced** (the default): what is described above, the same as before this setting existed (with
+  [lyrics](#lyrics), a small change to their form now and then).
 - **Adventurous**: wider choices. The tempo may move up to 10 % and go a little past your songs' fastest or
   slowest. The key may move to a nearby key (a step, a fourth or a fifth away) or to the relative major or
   minor. A loop may borrow a chord from the other mode (such as bVII or bVI in a major key, IV or V in a minor

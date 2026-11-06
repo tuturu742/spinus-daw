@@ -28,6 +28,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   tags** puts it in the box (Ctrl+Z takes it back) and reads it, **Keep mine** leaves your text alone. The AI
   also counts the syllables, and Spinus checks that each line it gives is one of yours.
 
+### Track creator: the variety sets how closely the song follows the lyrics' form
+
+- With lyrics, **Close to my references** keeps exactly the form of your tags. **Balanced** now and then sings
+  the last chorus twice or adds an instrumental bridge (or a solo) before it; **Adventurous** does so more often.
+  With the AI as the writer, Balanced allows it up to 2 such changes and Adventurous up to 5. Every line is
+  always sung, in your order.
+
 ### Track creator: the song follows the lyrics
 
 - With lyrics, Spinus's writer takes the song's form from their tags, in order (a repeated chorus, "[Chorus
