@@ -449,15 +449,47 @@ juce::MemoryBlock InstrumentPresets::stateFromFile (juce::AudioPluginInstance& i
     // An XML file, the way a plugin made with JUCE keeps an XML state ("VC2!", its size, the text).
     const auto asOwn = [&file] (const juce::MemoryBlock& like)
     {
-        const bool binaryXml = like.getSize() > 8 && std::memcmp (like.getData(), "VC2!", 4) == 0;
-        if (binaryXml)
-            if (auto xml = juce::parseXML (file.toString()))
+        // JUCE's binary XML ("VC2!", its size, the text): the plugin's whole state, or inside the VST2 bank or
+        // program chunk ("CcnK") that a VST3 made from a VST2 plugin keeps. The file's XML takes its place, and
+        // the chunk's sizes (big-endian, of all that follows them) are made right.
+        const auto* bytes = static_cast<const char*> (like.getData());
+        const auto size = like.getSize();
+        const auto find = [bytes, size] (const char* tag, size_t before)
+        {
+            for (size_t i = 0; i + 8 <= juce::jmin (size, before); ++i)
+                if (std::memcmp (bytes + i, tag, 4) == 0)
+                    return i;
+            return size;
+        };
+        const auto chunk = find ("CcnK", size);
+        const auto at = std::memcmp (bytes, "VC2!", 4) == 0 && size > 8 ? size_t {}
+                        : chunk < size                                  ? find ("VC2!", size)
+                                                                        : size;
+        auto xml = at < size ? juce::parseXML (file.toString()) : nullptr;
+        if (xml == nullptr)
+            return file;
+        const auto oldLength = 8 + (size_t)juce::ByteOrder::littleEndianInt (bytes + at + 4);
+        if (at + oldLength > size)
+            return file;
+        juce::MemoryBlock block;
+        juce::AudioProcessor::copyXmlToBinary (*xml, block);
+        juce::MemoryBlock state (bytes, at);
+        state.append (block.getData(), block.getSize());
+        state.append (bytes + at + oldLength, size - at - oldLength);
+        const auto fix = [&] (size_t field, size_t from)
+        {
+            if (field + 4 <= at && juce::ByteOrder::bigEndianInt (bytes + field) == size - from)
             {
-                juce::MemoryBlock state;
-                juce::AudioProcessor::copyXmlToBinary (*xml, state);
-                return state;
+                const auto now = juce::ByteOrder::swapIfLittleEndian ((juce::uint32)(state.getSize() - from));
+                state.copyFrom (&now, (int)field, 4);
             }
-        return file;
+        };
+        if (chunk < at)
+        {
+            fix (chunk + 4, chunk + 8); // the chunk's byte size
+            fix (at - 4, at);           // its opaque data's size, just before it
+        }
+        return state;
     };
     juce::MemoryBlock now;
     instance.getStateInformation (now);
