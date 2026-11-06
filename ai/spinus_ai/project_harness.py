@@ -351,7 +351,7 @@ TOOLS = [
 TOOL_NAMES = [t.name for t in TOOLS]
 # What each tool does to the project, for an agent's client (MCP's tool annotations): it can run a tool that only
 # reads without asking, and ask before one that replaces or removes what is there. Every change is one undo step.
-READS = ("song_overview", "read_part", "sound_settings", "motif", "check")
+READS = ("song_overview", "read_part", "sound_settings", "motif", "check", "search_manual", "reference_style")
 ADDS = ("add_part", "insert_bars", "add_effect", "send", "duck", "bus", "shape_sound")
 REPLACES = ("write_part", "place_motif", "copy_bars", "automate", "set_sound")
 

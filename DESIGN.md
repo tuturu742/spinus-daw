@@ -669,6 +669,9 @@ can work on the open project while the user watches and listens.
   own). `what_changed` lists the user's steps since then and the steps they undid. A tool that changes the
   project (`run_commands`, or a harness tool whose annotations aren't read-only) is refused once when the user
   changed the song since, with that list, which then counts as seen; the call again is done.
+- **Looking things up** (AI service, listed with the harness's tools, read-only): `search_manual` (the
+  assistant's manual search) and `reference_style` (track-creator.json in the service's folder: the references'
+  names, never their paths, the summary's plain lines, the user's description and lyrics).
 - **Playback for the user:** `play` (bars or a section by its marker, looped by default with the song's loop
   region; song mode) and `stop`. Session state only, no undo step.
 - **Instructions and prompts:** `initialize`'s instructions name the conventions (bars from 1, sixteenth steps,
