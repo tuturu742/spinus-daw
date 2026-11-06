@@ -418,6 +418,38 @@ TEST_CASE ("Track creator: the songs and the summary are remembered, without sta
     CHECK (creator.getMethodsRun().isEmpty());
 }
 
+TEST_CASE ("Track creator: the AI's tags for untagged lyrics wait for Use these tags or Keep mine",
+           "[ui][trackcreator]")
+{
+    DescribeSongPanel describer ([]() -> ai::AiService* { return nullptr; });
+    describer.setSize (720, 720);
+    const juce::String mine = "Ein Tag am Meer\nDie Sonne scheint";
+    const juce::String tagged = "[Verse 1]\nEin Tag am Meer\nDie Sonne scheint";
+    describer.setLyrics (mine);
+    juce::DynamicObject::Ptr lyrics = new juce::DynamicObject(), read = new juce::DynamicObject();
+    lyrics->setProperty ("proposal", tagged);
+    lyrics->setProperty ("note", "Your lyrics have no section tags: the AI tagged them (below).");
+    read->setProperty ("lyrics", juce::var (lyrics.get()));
+
+    // Shown, not used: the lyrics stay the user's until they say so.
+    describer.show (juce::var (read.get()));
+    CHECK (describer.getProposal() == tagged);
+    CHECK (describer.getLyrics() == mine);
+    CHECK (describer.getStatusText().startsWith ("Your lyrics have no section tags"));
+    describer.keepMine();
+    CHECK (describer.getProposal().isEmpty());
+    CHECK (describer.getLyrics() == mine);
+
+    // Use these tags: the box takes the tagged text (and it is read again: here, with no AI service, the page
+    // says so).
+    describer.setText ("a pop song");
+    describer.show (juce::var (read.get()));
+    describer.useProposal();
+    CHECK (describer.getProposal().isEmpty());
+    CHECK (describer.getLyrics() == tagged);
+    CHECK (describer.getStatusText().contains ("Options > AI"));
+}
+
 TEST_CASE ("Track creator: a song described in words is read, written from and remembered", "[ui][ai][trackcreator]")
 {
     if (ai::AiService::findInstallation().python == juce::File())
