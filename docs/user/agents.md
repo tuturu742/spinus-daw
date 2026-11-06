@@ -66,6 +66,12 @@ the rest. Every change is still one undo step.
   - **Undo the agent's changes:** the song goes back to how it was when the agent connected (your own changes
     since then too).
   - **Disconnect:** the agent's session ends. It has to connect again to go on.
+- **You can keep working on the song.** The agent is told what you changed (or undid) since it last looked. If
+  you changed something, its next change isn't made: it's told what you did, so it can check its change still
+  fits, and then makes it.
+- **It can play a part of the song for you:** "play the new chorus" plays that section, looped, in Spinus (song
+  mode, with a loop region over it). The agent doesn't hear it; you do. Press Stop as usual, or ask the agent to
+  stop. Playing doesn't change the song.
 - Rendering to listen takes as long as the song does to render. The agent sees the numbers; you hear the song in
   Spinus as usual.
 

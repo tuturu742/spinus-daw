@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "ai/AgentInterface.h"
+#include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
 #include "engine/DeviceFactory.h"
 #include "engine/EngineHost.h"
@@ -283,6 +284,91 @@ TEST_CASE ("Each tool says whether it only reads, and ready-made requests start 
     CHECK (got["messages"][0]["role"] == "user");
     CHECK (f.request ("POST", Fixture::rpc ("prompts/get", object ({ { "name", "nope" } })), started.session)
                .json.hasProperty ("error"));
+}
+
+TEST_CASE ("An agent hears what the user changed, and can't change the song over it unknowingly", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto sessionId = f.connect();
+    const auto none = juce::var (new juce::DynamicObject());
+    CHECK (f.call (sessionId, "what_changed", none)["content"][0]["text"].toString().startsWith ("Nothing"));
+
+    juce::Array<juce::var> steps;
+    steps.add (object ({ { "command", "project.setTempo" }, { "parameters", object ({ { "bpm", 150 } }) } }));
+    const auto faster = object ({ { "summary", "Faster" }, { "steps", steps } });
+    CHECK_FALSE ((bool)f.call (sessionId, "run_commands", faster)["isError"]);
+    // Its own change isn't news to it.
+    CHECK (f.call (sessionId, "what_changed", none)["content"][0]["text"].toString().startsWith ("Nothing"));
+
+    // The user undoes it and changes the key.
+    f.session.getHistory().undo();
+    const auto setKey = [&f] (int tonic)
+    {
+        juce::String error;
+        auto key = commands::CommandRegistry::get().create (
+            "project.setKey", object ({ { "tonic", tonic }, { "scale", "minor" } }), error);
+        REQUIRE (key != nullptr);
+        REQUIRE (f.session.getHistory().perform (std::move (key)).wasOk());
+    };
+    setKey (9);
+    const auto userStep = f.session.getHistory().getUndoDescriptions().strings.getLast();
+
+    // The agent's next change is refused once, with what the user did; called again, it is done.
+    auto result = f.call (sessionId, "run_commands", faster);
+    const auto said = result["content"][0]["text"].toString();
+    INFO (said);
+    CHECK ((bool)result["isError"]);
+    CHECK (said.contains ("The user made 1 change: \"" + userStep + "\""));
+    CHECK (said.contains ("The user undid 1 step: \"yours: Faster\""));
+    CHECK (f.session.getProject().settings.tempoBpm != Catch::Approx (150.0));
+    CHECK_FALSE ((bool)f.call (sessionId, "run_commands", faster)["isError"]);
+    CHECK (f.session.getProject().settings.tempoBpm == Catch::Approx (150.0));
+
+    // The harness's tools that change the song too (by their annotations); looking at the song counts as seeing.
+    f.request ("POST", Fixture::rpc ("tools/list"), sessionId);
+    f.session.getHistory().undo();
+    CHECK (f.call (sessionId, "what_changed", none)["content"][0]["text"].toString().contains ("undid 1 step"));
+    setKey (4);
+    CHECK ((bool)f.call (sessionId, "fake_tempo", none)["isError"]);
+    CHECK_FALSE ((bool)f.call (sessionId, "fake_tempo", none)["isError"]);
+    f.session.getHistory().undo();
+    f.call (sessionId, "song_summary", none);
+    CHECK_FALSE ((bool)f.call (sessionId, "fake_tempo", none)["isError"]);
+}
+
+TEST_CASE ("An agent plays a section for the user to hear, looped, and stops", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto sessionId = f.connect();
+    juce::Array<juce::var> steps;
+    steps.add (
+        object ({ { "command", "marker.add" }, { "parameters", object ({ { "at", 0 }, { "name", "Intro" } }) } }));
+    steps.add (object (
+        { { "command", "marker.add" }, { "parameters", object ({ { "at", 8 * 3840 }, { "name", "Chorus" } }) } }));
+    steps.add (object (
+        { { "command", "marker.add" }, { "parameters", object ({ { "at", 16 * 3840 }, { "name", "Outro" } }) } }));
+    REQUIRE_FALSE ((bool)f.call (sessionId, "run_commands", object ({ { "steps", steps } }))["isError"]);
+    const auto undoSteps = f.session.getHistory().getUndoDescriptions().size();
+
+    auto result = f.call (sessionId, "play", object ({ { "bars", "chorus" } }));
+    INFO (juce::JSON::toString (result));
+    CHECK_FALSE ((bool)result["isError"]);
+    CHECK (f.session.getMode() == Session::Mode::song);
+    const auto loopOf = [&f]
+    {
+        const auto loop = f.session.getLoopRegion (Session::Mode::song);
+        return loop.has_value() ? std::pair (loop->start, loop->end) : std::pair<model::Ticks, model::Ticks> (-1, -1);
+    };
+    CHECK (loopOf() == std::pair<model::Ticks, model::Ticks> (8 * 3840, 16 * 3840));
+    CHECK (f.call (sessionId, "play", object ({ { "bars", "9-12" } }))["isError"] == juce::var (false));
+    CHECK (loopOf() == std::pair<model::Ticks, model::Ticks> (8 * 3840, 12 * 3840));
+    CHECK ((bool)f.call (sessionId, "play", object ({ { "bars", "the bridge" } }))["isError"]);
+    CHECK_FALSE ((bool)f.call (sessionId, "stop", juce::var (new juce::DynamicObject()))["isError"]);
+    CHECK_FALSE (f.session.isPlaying());
+    // Playing isn't a change to the song.
+    CHECK (f.session.getHistory().getUndoDescriptions().size() == undoSteps);
 }
 
 TEST_CASE ("The live interface answers MCP over HTTP on 127.0.0.1", "[ai][agents]")

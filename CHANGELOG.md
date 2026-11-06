@@ -5,12 +5,15 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
-### Coding agents: ready-made requests, and tools that say what they do
+### Coding agents: ready-made requests, your edits kept in view, playback
 
 - **Ready-made requests:** agents connected to Spinus offer five: Start a song, Make a beat, Add a section,
   Check and fix the mix, Shape a sound (in Claude Code, `/mcp__spinus__...`).
 - **Each tool says what it does:** only looks, adds, or may replace what is there, so an agent can run the ones
   that only look without asking you each time.
+- **Your edits are safe while an agent works:** it's told what you changed or undid since it last looked, and
+  its next change waits until it has heard.
+- **Play for you:** an agent can play a section (looped) or bars for you to hear, and stop.
 - Agents are told Spinus's conventions (bars from 1, sixteenth steps, C5 = 60, ticks, settings in the device's
   units) before their first call.
 

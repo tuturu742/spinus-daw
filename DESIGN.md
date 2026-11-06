@@ -654,7 +654,8 @@ can work on the open project while the user watches and listens.
   session ends) and **Undo the agent's changes** (undo steps back to the count when it connected).
 - **Tools:**
   - **Spinus's own, always, in C++:** `song_summary` (`cli::summarize`), `run_commands`, `command_help`,
-    `list_devices`, `render` (an offline export measured: mix, sections, stems), `undo_last`.
+    `list_devices`, `list_presets`, `render` (an offline export measured: mix, sections, stems), `undo_last`,
+    `what_changed`, `play`, `stop`.
   - **The project harness's (§12.11), through the local AI service when AI is on:** `ai.v1.project.tools` lists
     them; `ai.v1.project.tool` runs one on the context and returns its steps, which the interface performs. The
     AI service needs no AI connection or internet for these, so an agent works offline; with AI off it still has
@@ -663,6 +664,13 @@ can work on the open project while the user watches and listens.
     adds, or may replace what is there. Spinus's own are set in C++; the harness's come with
     `ai.v1.project.tools` (`project_harness.READS`/`ADDS`/`REPLACES`, a test keeps every tool in one of them).
     Clients can then run the read-only ones without asking.
+- **The user's edits while an agent works:** the interface keeps the undo steps as the agent last saw them
+  (`markSeen`: when it connects, calls song_summary, song_overview or what_changed, and after each change of its
+  own). `what_changed` lists the user's steps since then and the steps they undid. A tool that changes the
+  project (`run_commands`, or a harness tool whose annotations aren't read-only) is refused once when the user
+  changed the song since, with that list, which then counts as seen; the call again is done.
+- **Playback for the user:** `play` (bars or a section by its marker, looped by default with the song's loop
+  region; song mode) and `stop`. Session state only, no undo step.
 - **Instructions and prompts:** `initialize`'s instructions name the conventions (bars from 1, sixteenth steps,
   C5 = 60, commands' ticks at 960 a quarter note, settings as the device's text), so an agent gets them before
   its first call. Five MCP prompts (`prompts/list`, `prompts/get`) are ready-made requests: start_song,
