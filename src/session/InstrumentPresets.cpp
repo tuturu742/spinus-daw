@@ -407,8 +407,10 @@ std::vector<InstrumentPreset> InstrumentPresets::findStateFiles (const juce::Arr
         if (! folder.isDirectory())
             continue;
         juce::Array<juce::File> files;
+        // Hidden files left out: on Windows a name starting with a dot is not hidden by itself.
         for (const auto& entry : juce::RangedDirectoryIterator (folder, true, "*", juce::File::findFiles))
-            if (! entry.isHidden() && entry.getFileSize() > 0 && entry.getFileSize() < 16 * megabyte)
+            if (! entry.isHidden() && ! entry.getFile().getFileName().startsWithChar ('.') && entry.getFileSize() > 0 &&
+                entry.getFileSize() < 16 * megabyte)
                 files.add (entry.getFile());
         // The kind of file most of them are: a folder's readme or pictures are no presets.
         std::map<juce::String, int> kinds;
