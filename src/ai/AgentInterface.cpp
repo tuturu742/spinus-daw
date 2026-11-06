@@ -46,7 +46,8 @@ enum class Does
 {
     reads,
     adds,
-    replaces
+    replaces,
+    plays // playback for the user: the song stays as it is
 };
 
 juce::var tool (const juce::String& name, const juce::String& description, const juce::var& inputSchema, Does does)
@@ -54,6 +55,8 @@ juce::var tool (const juce::String& name, const juce::String& description, const
     auto hints = object ({ { "readOnlyHint", does == Does::reads }, { "openWorldHint", false } });
     if (does != Does::reads)
         hints.getDynamicObject()->setProperty ("destructiveHint", does == Does::replaces);
+    if (does == Does::plays)
+        hints.getDynamicObject()->setProperty ("idempotentHint", true);
     return object (
         { { "name", name }, { "description", description }, { "inputSchema", inputSchema }, { "annotations", hints } });
 }
@@ -134,7 +137,7 @@ const std::vector<Prompt>& prompts()
           "2. Make room with insert_bars (it moves everything after it and adds a marker).\n"
           "3. Fill it: copy_bars from a section to vary, or write_part for new parts, and automate a build into "
           "what follows.\n"
-          "4. Call check, render, and tell me what the new section does." },
+          "4. Call check and render, play the new section for me, and tell me what it does." },
         { "check_mix",
           "Check and fix the mix",
           "Measure the mix of the song open in Spinus and fix what is wrong, in small steps.",
@@ -205,7 +208,9 @@ const juce::String instructions =
     "Roll, Playlist of clips, Mixer). Start with song_overview (or song_summary). Edit with the music tools "
     "(write_part, add_part, insert_bars, automate, add_effect, send, duck, set_sound, shape_sound) or with "
     "run_commands (Spinus commands; command_help gives their parameters). Each change applies at once as one undo "
-    "step the user can undo. Check your work with check, and render to measure the loudness of the mix, each "
+    "step the user can undo. The user may edit the song while you work: what_changed tells you what they did, and a "
+    "change of yours is refused once when they changed the song since you last looked. play lets the user hear a "
+    "section (you don't hear it). Check your work with check, and render to measure the loudness of the mix, each "
     "section and each part. The user hears the song in Spinus: tell them what you changed.\n\n"
     "Conventions. The music tools: bars count from 1 ('9-16', or a section's name from the Playlist's markers); "
     "notes are 'step pitch length [velocity]' with steps of a sixteenth from the first bar's start (16 a bar in "
@@ -603,6 +608,7 @@ void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce
         changes = 0;
         undoMark = session.getHistory().getUndoDescriptions().size();
         harnessTools = juce::var();
+        markSeen();
         core::Logs::info ("agents", agentName + " connected");
         changed();
         const auto asked = params["protocolVersion"].toString();
@@ -695,14 +701,57 @@ juce::var AgentInterface::nativeTools() const
         Does::reads));
     tools.add (tool ("undo_last", "Undo your last change (only if it is still the newest undo step).", schema ({}),
                      Does::replaces));
+    tools.add (tool ("what_changed",
+                     "What the user changed in Spinus since you last looked (connected, song_summary, song_overview "
+                     "or this): their undo steps, and the steps they undid (yours too). A change of yours is refused "
+                     "once when the user changed the song since your last look, with what they changed.",
+                     schema ({}), Does::reads));
+    tools.add (tool (
+        "play",
+        "Play the song for the user to hear (they listen in Spinus; you don't hear it): 'bars' as '9' or "
+        "'9-16' (from 1) or a section's name from the Playlist's markers, looped unless loop is false. "
+        "Without bars, plays from where the playhead is. It changes nothing in the song.",
+        schema ({ { "bars", object ({ { "type", "string" } }) }, { "loop", object ({ { "type", "boolean" } }) } }),
+        Does::plays));
+    tools.add (tool ("stop", "Stop playback (the playhead goes back to where it started).", schema ({}), Does::plays));
     return tools;
 }
 
 void AgentInterface::callTool (const juce::String& name, const juce::var& arguments, const ToolReply& reply)
 {
     if (name == "song_summary")
+    {
+        markSeen();
         return reply (text (
             juce::JSON::toString (cli::summarize (session, host.projectFolder ? host.projectFolder() : juce::File()))));
+    }
+    if (name == "what_changed")
+    {
+        const auto changes = userChanges();
+        markSeen();
+        return reply (text (changes.isNotEmpty() ? changes : "Nothing: the song is as you last saw it."));
+    }
+    if (name == "play")
+    {
+        const auto error =
+            play (arguments["bars"].toString(), arguments.hasProperty ("loop") ? (bool)arguments["loop"] : true);
+        return reply (error.isEmpty() ? text ("Playing (" + session.getPositionText() + ").") : text (error, true));
+    }
+    if (name == "stop")
+    {
+        session.stop();
+        return reply (text ("Stopped."));
+    }
+    // A change after the user changed the song: refused once, with what they changed (now seen).
+    if (name != "undo_last" && changesProject (name))
+        if (const auto changes = userChanges(); changes.isNotEmpty())
+        {
+            markSeen();
+            return reply (text ("Not done: the user changed the song since you last looked. " + changes +
+                                    " Check that your change still fits (song_summary or song_overview), then "
+                                    "call again.",
+                                true));
+        }
     if (name == "command_help")
     {
         const auto wanted = arguments["command"].toString();
@@ -801,6 +850,8 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
                               auto said = result["text"].toString();
                               if ((bool)result["isError"])
                                   return reply (text (said, true));
+                              if (name == "song_overview")
+                                  markSeen();
                               const auto& proposal = result["proposal"];
                               if (proposal.isObject())
                               {
@@ -895,9 +946,110 @@ juce::String AgentInterface::apply (const juce::var& steps, const juce::String& 
     if (const auto done = proposal.apply (session.getHistory()); done.failed())
         return done.getErrorMessage();
     ++changes;
+    markSeen();               // the agent knows the song as its own change left it
     lastRender = juce::var(); // the song changed: the last render's numbers no longer hold
     core::Logs::info ("agents", agentName + ": " + label);
     changed();
+    return {};
+}
+
+void AgentInterface::markSeen()
+{
+    seenSteps = session.getHistory().getUndoDescriptions();
+    seenState = session.getHistory().getStateId();
+}
+
+juce::String AgentInterface::userChanges() const
+{
+    const auto& history = session.getHistory();
+    if (history.getStateId() == seenState)
+        return {};
+    const auto now = history.getUndoDescriptions();
+    int same = 0;
+    while (same < now.size() && same < seenSteps.size() && now[same] == seenSteps[same])
+        ++same;
+    const auto list = [] (const juce::StringArray& names)
+    {
+        juce::StringArray shown;
+        for (int i = 0; i < juce::jmin (names.size(), 20); ++i)
+            shown.add ("\"" + names[i] + "\"");
+        if (names.size() > 20)
+            shown.add ("and " + juce::String (names.size() - 20) + " more");
+        return shown.joinIntoString ("; ");
+    };
+    juce::StringArray made, undone;
+    for (int i = same; i < now.size(); ++i)
+        if (! now[i].startsWith ("Agent: "))
+            made.add (now[i]);
+    for (int i = seenSteps.size(); --i >= same;)
+        undone.add (seenSteps[i].startsWith ("Agent: ")
+                        ? "yours: " + seenSteps[i].fromFirstOccurrenceOf ("Agent: ", false, false)
+                        : seenSteps[i]);
+    juce::String said;
+    if (! made.isEmpty())
+        said << "The user made " << made.size() << (made.size() == 1 ? " change: " : " changes: ") << list (made)
+             << ".";
+    if (! undone.isEmpty())
+        said << (said.isEmpty() ? "" : " ") << "The user undid " << undone.size()
+             << (undone.size() == 1 ? " step: " : " steps: ") << list (undone) << ".";
+    return said;
+}
+
+bool AgentInterface::changesProject (const juce::String& tool) const
+{
+    if (tool == "run_commands" || tool == "undo_last")
+        return true;
+    if (auto* listed = harnessTools.getArray())
+        for (auto& t : *listed)
+            if (t["name"].toString() == tool)
+                return ! (bool)t["annotations"]["readOnlyHint"];
+    return false; // Spinus's other tools only read; an unknown tool fails on its own
+}
+
+juce::String AgentInterface::play (const juce::String& bars, bool loop)
+{
+    const auto& project = session.getProject();
+    const auto barTicks = (model::Ticks)project.settings.timeSignature.barTicks();
+    model::Ticks end = 0;
+    for (auto& clip : project.playlist.clips)
+        end = std::max (end, clip.start + clip.length);
+
+    std::optional<Session::LoopRegion> range;
+    const auto wanted = bars.trim();
+    if (wanted.isNotEmpty())
+    {
+        auto markers = project.playlist.markers;
+        std::sort (markers.begin(), markers.end(), [] (auto& a, auto& b) { return a.at < b.at; });
+        for (size_t i = 0; i < markers.size() && ! range; ++i)
+            if (markers[i].name.equalsIgnoreCase (wanted))
+                range = Session::LoopRegion { markers[i].at, i + 1 < markers.size() ? markers[i + 1].at : end };
+        if (! range && wanted.containsOnly ("0123456789- "))
+        {
+            const auto from = wanted.upToFirstOccurrenceOf ("-", false, false).trim().getIntValue();
+            const auto to =
+                wanted.contains ("-") ? wanted.fromFirstOccurrenceOf ("-", false, false).trim().getIntValue() : from;
+            if (from >= 1 && to >= from)
+                range = Session::LoopRegion { (from - 1) * barTicks, to * barTicks };
+        }
+        if (! range || range->end <= range->start)
+            return "\"" + wanted +
+                   "\" isn't bars ('9' or '9-16', from 1) or a section's name from the Playlist's markers";
+    }
+
+    session.stop();
+    session.setMode (Session::Mode::song);
+    if (range)
+    {
+        if (loop)
+            session.setLoopRegion (Session::Mode::song, range);
+        else if (auto current = session.getLoopRegion (Session::Mode::song);
+                 current && (range->start < current->start || range->start >= current->end))
+            session.setLoopRegion (Session::Mode::song, std::nullopt); // it would hold the playhead elsewhere
+        const auto seconds = (double)range->start * 60.0 / juce::jmax (1.0, (double)project.settings.tempoBpm) /
+                             model::ticksPerQuarterNote;
+        session.getEdit().getTransport().setPosition (tracktion::TimePosition::fromSeconds (seconds));
+    }
+    session.play();
     return {};
 }
 

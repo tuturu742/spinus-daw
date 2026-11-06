@@ -29,7 +29,11 @@ namespace spinus::ai
     Spinus shows it, with Disconnect and Undo the agent's changes (back to the project as it was when it
     connected).
 
-    Its tools: Spinus's own (the song's summary, commands, devices, a render measured by numbers, undo) always,
+    A change is refused once when the user changed the song since the agent last looked, with what they changed,
+    so an agent doesn't undo the user's work without knowing (what_changed tells it at any time).
+
+    Its tools: Spinus's own (the song's summary, commands, devices, a render measured by numbers, undo, what the
+    user changed, playback for the user to hear) always,
     and the project harness's (song_overview, write_part, insert_bars, shape_sound, check...) through the local AI
     service when AI is on; neither needs an internet connection. Message thread for everything public; the
     server's own thread hands each request to the message thread and waits. */
@@ -117,6 +121,17 @@ private:
     juce::String apply (const juce::var& steps, const juce::String& summary);
     juce::String checkPaths (const juce::var& value) const;
     void render (bool stems, const ToolReply& reply);
+    /** Playback for the user to hear: bars ("9-16", a section's name; empty: from where it is), looped or not. An
+        error text (empty when it plays). */
+    juce::String play (const juce::String& bars, bool loop);
+
+    /** What the agent has seen of the song: the undo steps when it last looked (connected, read the song or
+        asked what changed). */
+    void markSeen();
+    /** The user's changes since then, in words (empty when none): their undo steps, and the steps they undid. */
+    juce::String userChanges() const;
+    /** Whether a tool changes the project (Spinus's own by name; the harness's by its annotations). */
+    bool changesProject (const juce::String& tool) const;
 
     Session& session;
     juce::File settingsFile;
@@ -133,6 +148,8 @@ private:
     int undoMark = 0;     // undo steps there were when the agent connected
     juce::var lastRender; // the last render's numbers, for the harness's check
     juce::var harnessTools;
+    juce::StringArray seenSteps; // the undo steps when the agent last looked
+    uint64_t seenState = 0;      // and the history's state then
 
     std::mutex socketLock;
     std::unique_ptr<juce::StreamingSocket> listener;
