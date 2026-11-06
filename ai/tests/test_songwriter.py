@@ -587,3 +587,42 @@ def test_the_ai_writer_gets_the_lyrics_form_without_their_words() -> None:
     assert "Sunlight" not in json.dumps(brief)
     s.pop("lyrics")
     assert compose.lyrics_brief(s, songwriter.Style.from_summary(s)) is None
+
+
+PLAIN_LYRICS = """[Verse 1]
+Sunlight on the windowsill
+Coffee's warm and the morning's still
+
+[Chorus]
+Oh, we've got all summer long
+Singing out our summer song
+
+[Verse 2]
+Footprints running to the sea
+Waves that whisper back to me
+
+[Chorus]
+"""
+
+
+def test_the_variety_changes_the_lyrics_form_never_their_words() -> None:
+    s = summary()
+    read = lyrics.read(PLAIN_LYRICS)
+    style = songwriter.Style.from_summary(s)
+    own = [lines for lines in songwriter.make_plan(style, 1, lyrics=read, variety=songwriter.VARIETIES["close"])
+           ["lyrics"]["sung"] if lines]  # fmt: skip
+    seen: set[str] = set()
+    for name in ("close", "balanced", "adventurous"):
+        for seed in range(1, 25):
+            plan = songwriter.make_plan(style, seed, lyrics=read, variety=songwriter.VARIETIES[name])
+            order, sung = plan["order"], plan["lyrics"]["sung"]
+            assert len(sung) == len(order)
+            # Every line sung, in order: at most the last chorus twice.
+            lines = [x for x in sung if x]
+            assert lines == own or lines == [*own, own[-1]]
+            if name == "close":
+                assert order == ["verse", "chorus", "verse", "chorus"]
+            seen.update(f"{name}: {o}" for o in order[3:])
+    # Balanced and adventurous now and then sing the last chorus twice and add a bridge before it.
+    assert {"balanced: bridge", "adventurous: bridge"} <= seen
+    assert [o for o in seen if o.startswith("close")] == ["close: chorus"]

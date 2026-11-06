@@ -1238,7 +1238,7 @@ def test_with_lyrics_the_ai_keeps_their_form_and_sings_a_note_a_syllable() -> No
     order = list(ws.order)
     with_break = [*order[:2], "break", *order[2:]]
     said = ws.tool_set_form(form(with_break, verse=verse["bars"] + 4), with_break)
-    assert "Kept for the lyrics: the verse stays" in said
+    assert "Kept for the lyrics: 1 change to the lyrics' form (at most 2); the verse stays" in said
     assert ws.sections["verse"]["bars"] == verse["bars"] and ws.order == with_break
     assert ws.plan()["lyrics"]["sung"][2] == [] and "words" not in ws.sections["break"]
     # Sections of the sung kinds in the lyrics' order stand for them, by any ids.
@@ -1252,7 +1252,7 @@ def test_with_lyrics_the_ai_keeps_their_form_and_sings_a_note_a_syllable() -> No
     )
     assert ws.order == order and ws.sections["verse"]["chords"] == ["vi", "IV"] and ws.sections["verse"]["words"]
     # Leaving out or moving a sung section is refused.
-    with pytest.raises(harness.Mistake, match="sung in this order"):
+    with pytest.raises(harness.Mistake, match="every sung section stays"):
         ws.tool_set_form(form([o for o in order if o != "bridge"]), [o for o in order if o != "bridge"])
 
     # The checks count the sung tune's notes against each line's syllables.
@@ -1283,3 +1283,43 @@ def test_a_one_shot_answer_keeps_the_lyrics_order() -> None:
     by_id = {x["id"]: x for x in plan["sections"]}
     assert by_id["chorus"]["chords"] == ["IV", "V"] and by_id["bridge"]["chords"] == ["I", "IV"]
     assert len(plan["lyrics"]["sung"]) == len(plan["order"])
+
+
+def test_the_ai_may_change_the_lyrics_form_as_far_as_the_variety_allows() -> None:
+    s = summary()
+    s["lyrics"] = lyrics.read(
+        "[Verse 1]\nSunlight on the windowsill\nCoffee's warm and the morning's still\n\n[Chorus]\n"
+        "Oh, we've got all summer long\nSinging out our summer song\n\n[Verse 2]\nFootprints running to the sea\n"
+        "Waves that whisper back to me\n\n[Chorus]\n"
+    )
+
+    def answer(order: list[str]) -> dict[str, Any]:
+        kinds = {"intro": "intro", "verse": "verse", "chorus": "chorus", "bridge": "bridge"}
+        return {"tempo": 100, "key": "C major", "parts": {}, "order": order,
+                "sections": [{"id": k, "kind": k, "bars": 8, "chords": ["I", "IV"]} for k in kinds]}  # fmt: skip
+
+    exact = ["verse", "chorus", "verse", "chorus"]
+    doubled = ["verse", "chorus", "verse", "bridge", "chorus", "chorus"]  # two changes
+    more = ["intro", *doubled]  # three
+    for variety, fine, refused in (("close", [exact], [doubled]), ("balanced", [exact, doubled], [more]),
+                                   ("adventurous", [exact, doubled, more], [])):  # fmt: skip
+        setup_ = harness.setup_of({**BRIEF, "summary": s, "variety": variety})
+        for order in fine:
+            plan, kept = compose.keep_lyrics(compose.check_plan(answer(order), setup_), setup_, strict=True)
+            assert plan["order"] == order, variety
+            sung = [x for x in plan["lyrics"]["sung"] if x]
+            assert sung[0][0] == "Sunlight on the windowsill" and sung[2][0] == "Footprints running to the sea"
+            assert sung[-1] == sung[1]  # the chorus, sung again
+        for order in refused:
+            with pytest.raises(compose.Unusable, match="every sung section stays"):
+                compose.keep_lyrics(compose.check_plan(answer(order), setup_), setup_, strict=True)
+            # A one-shot answer: the lyrics' own form.
+            plan, kept = compose.keep_lyrics(compose.check_plan(answer(order), setup_), setup_, strict=False)
+            assert plan["order"] == exact and "the lyrics' order of sections" in kept
+    # Never: a sung section left out or moved, whatever the variety.
+    setup_ = harness.setup_of({**BRIEF, "summary": s, "variety": "adventurous"})
+    for order in (["verse", "chorus", "chorus"], ["chorus", "verse", "verse", "chorus"]):
+        with pytest.raises(compose.Unusable):
+            compose.keep_lyrics(compose.check_plan(answer(order), setup_), setup_, strict=True)
+    brief = compose.lyrics_brief(s, setup_.style, 0)
+    assert brief is not None and "exactly" in brief["fixed"]
