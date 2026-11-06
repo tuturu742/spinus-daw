@@ -313,6 +313,12 @@ class Variety:
     loop_heat: float  # above 1, the less likely loops are picked more often; below it, less
     borrowed: float  # how often a section's loop takes a chord borrowed from the other mode
     busy: tuple[float, float]  # each part's notes a bar in a section, times a factor from this range
+    # With lyrics (their words always kept, every sung section in their order): how often the rules sing the last
+    # chorus twice and add an instrumental bridge or solo before it, and how many such changes to the lyrics'
+    # form the AI writer may make (a section sung again, an instrumental one added or one of theirs left out).
+    double_chorus: float
+    add_break: float
+    form_changes: int
     # Spinus's checks of the AI's song.
     tempo_room: float  # the tempo taken as said within the songs' range widened by this share (else moved in)
     per_bar_room: tuple[float, float]  # a part's notes a bar against the references' found off outside this range
@@ -351,7 +357,7 @@ VARIETIES: dict[str, Variety] = {
         "close", "Close to my references",
         tempo_spread=0.01, tempo_beyond=0.0, key_move=0.0, key_steps=(), relative=0.0, mode_power=2.0,
         song_length=(0.93, 1.0), form_reach=0, length_power=2.0, wander=0.04, loop_heat=0.6, borrowed=0.0,
-        busy=(1.0, 1.0),
+        busy=(1.0, 1.0), double_chorus=0.0, add_break=0.0, form_changes=0,
         tempo_room=0.05, per_bar_room=(0.6, 1.7), song_bars_room=(0.75, 1.3), groove_alike=0.7, outside_key=0.08,
         own_chords=True,
     ),
@@ -359,7 +365,7 @@ VARIETIES: dict[str, Variety] = {
         "balanced", "Balanced",
         tempo_spread=0.03, tempo_beyond=0.0, key_move=0.35, key_steps=(-2, -1, 1, 2), relative=0.0, mode_power=1.0,
         song_length=(0.85, 1.0), form_reach=0, length_power=1.0, wander=0.12, loop_heat=1.0, borrowed=0.0,
-        busy=(1.0, 1.0),
+        busy=(1.0, 1.0), double_chorus=0.5, add_break=0.25, form_changes=2,
         tempo_room=0.1, per_bar_room=(0.4, 2.5), song_bars_room=(0.6, 1.5), groove_alike=0.6, outside_key=0.12,
         own_chords=False,
     ),
@@ -367,7 +373,7 @@ VARIETIES: dict[str, Variety] = {
         "adventurous", "Adventurous",
         tempo_spread=0.1, tempo_beyond=0.06, key_move=0.5, key_steps=(-2, -1, 1, 2, 5, 7), relative=0.2,
         mode_power=0.5, song_length=(0.7, 1.15), form_reach=1, length_power=0.5, wander=0.25, loop_heat=2.0,
-        borrowed=0.35, busy=(0.7, 1.45),
+        borrowed=0.35, busy=(0.7, 1.45), double_chorus=0.75, add_break=0.6, form_changes=5,
         tempo_room=0.25, per_bar_room=(0.25, 4.0), song_bars_room=(0.4, 2.0), groove_alike=0.4, outside_key=0.25,
         own_chords=False,
     ),
@@ -879,6 +885,7 @@ def make_plan(
             return drawn.setdefault(kind, draw(base_kind(kind)))
 
         sections, order, sung = lyric_form(lyrics, tempo, style, instrumental, contour)
+        free_form(sections, order, sung, variety, rng, instrumental, contour)
     return {
         "tempo": tempo,
         "key": {"tonic": tonic, "scale": mode, "name": key_name(tonic, mode)},
@@ -967,6 +974,46 @@ def lyric_form(
         order.append(sid)
         sung.append([str(line.get("text") or "") for line in lines])
     return sections, order, {"language": str(lyrics.get("language") or ""), "sung": sung}
+
+
+def free_form(
+    sections: list[dict[str, Any]],
+    order: list[str],
+    sung: dict[str, Any],
+    variety: Variety,
+    rng: random.Random,
+    instrumental: Any,
+    contour: dict[str, str],
+) -> None:
+    """The variety's changes to the lyrics' form (in place), the words kept: the last chorus sung twice (unless it
+    already is) and an instrumental bridge (or a solo, when the song has a bridge) before it, each as often as the
+    variety says. Close: none, the lyrics' form exactly."""
+    double, extra = rng.random() < variety.double_chorus, rng.random() < variety.add_break
+    by_id = {s["id"]: s for s in sections}
+    last = next((i for i in range(len(order) - 1, -1, -1)
+                 if by_id[order[i]]["kind"] == "chorus" and by_id[order[i]].get("words")), None)  # fmt: skip
+    if last is None:
+        return
+    total = sum(by_id[o]["bars"] for o in order)
+    chorus = order[last]
+    doubled = (last + 1 < len(order) and order[last + 1] == chorus) or (last > 0 and order[last - 1] == chorus)
+    if double and not doubled and total + by_id[chorus]["bars"] <= MOST_BARS:
+        order.insert(last + 1, chorus)
+        sung["sung"].insert(last + 1, list(sung["sung"][last]))
+        total += by_id[chorus]["bars"]
+    while last > 0 and order[last - 1] == chorus:
+        last -= 1  # before a chorus sung twice, not between
+    if not extra or (last > 0 and not by_id[order[last - 1]].get("words")):
+        return  # an instrumental section is there already
+    kind = "solo" if any(by_id[o]["kind"] == "bridge" for o in order) else "bridge"
+    sid = kind if kind not in by_id else f"{kind}-added"
+    bars = int(instrumental(kind))
+    if sid in by_id or total + bars > MOST_BARS:
+        return
+    sections.append({"id": sid, "kind": kind, "bars": bars,
+                     "contour": KIND_CONTOUR.get(kind) or contour.get(base_kind(kind), "arch")})  # fmt: skip
+    order.insert(last, sid)
+    sung["sung"].insert(last, [])
 
 
 def sung_rhythm(syllables: int, stress: str, slots: int, beat: int) -> list[int]:
