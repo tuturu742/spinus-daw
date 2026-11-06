@@ -5,6 +5,8 @@
 #include "ai/AnalysisJobs.h"
 #include "ai/Proposal.h"
 #include "dsp/sampler/SampleStorage.h"
+#include "session/InstrumentPresets.h"
+#include "session/PresetFolders.h"
 #include "session/PresetPreviews.h"
 #include "session/UserRoles.h"
 #include <array>
@@ -1338,6 +1340,17 @@ void PartSoundsPanel::fillInstrumentMenu (juce::PopupMenu& menu,
                                                     ? " (now " + NoteRanges::describe (*ranges.get (source.key)) + ")"
                                                     : juce::String (" (any)")),
                             noteRangeMenu (source.key, ranges.get (source.key)));
+        // A plugin's own preset files (VST2 plugins keep their state in a bank format Spinus does not write).
+        if (source.stockType.isEmpty() && source.format != "VST")
+        {
+            PresetFolders chosen (context.indexFolder);
+            chosen.load();
+            const auto count = chosen.get (source.key).size();
+            presets.addSubMenu ("Preset files" + (count == 0   ? juce::String()
+                                                  : count == 1 ? juce::String (" (1 folder)")
+                                                               : " (" + juce::String (count) + " folders)"),
+                                presetFolderMenu (source));
+        }
         menu.addSubMenu (source.name + " (" + (source.badge.isNotEmpty() ? source.badge : source.format) + ")" +
                              (measured ? "" : ", not measured") +
                              (mine.isNotEmpty() ? ", yours: " + parts::roleName (mine).toLowerCase() : juce::String()),
@@ -1612,6 +1625,103 @@ juce::PopupMenu PartSoundsPanel::noteRangeMenu (const juce::String& instrument, 
                                   if (safe != nullptr)
                                       safe->setNoteRange (instrument, range);
                               });
+}
+
+bool PartSoundsPanel::usePresetFolder (const SoundSource& instrument, const juce::File& folder, bool use)
+{
+    context = getContext ? getContext() : Context {};
+    PresetFolders chosen (context.indexFolder);
+    chosen.load();
+    if (use && ! chosen.add (instrument.key, folder))
+        return false;
+    if (! use)
+        chosen.remove (instrument.key, folder);
+    if (! chosen.save())
+        return false;
+    const auto files = use ? (int)InstrumentPresets::findStateFiles ({ folder }).size() : 0;
+    if (! use || files == 0 || busy)
+    {
+        status.setText (! use        ? "Spinus no longer uses the preset files in " + folder.getFileName() +
+                                           " (the ones measured stay until Update sound index)."
+                        : files == 0 ? "There are no preset files in " + folder.getFileName() + "."
+                                     : juce::String (files) + " preset files in " + folder.getFileName() +
+                                           ": Update sound index measures them.",
+                        juce::dontSendNotification);
+        return true;
+    }
+    busy = true;
+    *stopping = false;
+    updateButtons();
+    auto heard = std::make_shared<std::pair<int, int>>(); // its files measured, and of them silent
+    runInBackground (
+        juce::String (files) + " preset files in " + folder.getFileName() + ": Spinus is listening to each (a few " +
+            "seconds each, longer for a big instrument)...",
+        [indexFolder = context.indexFolder, helper = context.helper, instrument,
+         heard] (const std::function<bool()>& shouldStop)
+        {
+            SoundIndex soundIndex (indexFolder);
+            soundIndex.load();
+            SoundIndexer::updateInstrument (soundIndex, helper, instrument, shouldStop);
+            if (const auto found = soundIndex.instruments.find (instrument.key); found != soundIndex.instruments.end())
+                for (const auto& s : found->second.sounds)
+                    if (s["id"].toString().startsWith ("file:"))
+                    {
+                        ++heard->first;
+                        if ((bool)s["silent"] || s.hasProperty ("problem"))
+                            ++heard->second;
+                    }
+            return juce::String();
+        },
+        [this, instrument, heard, files] (const juce::String&)
+        {
+            busy = false;
+            const auto [measured, silent] = *heard;
+            status.setText (measured == 0
+                                ? instrument.name + " took none of its preset files: they may not be its settings. " +
+                                      "Save this sound is the way for it."
+                                : juce::String (measured - silent) + " of " + juce::String (files) +
+                                      " preset files of " + instrument.name + " measured" +
+                                      (silent > 0 ? " (" + juce::String (silent) + " made no sound)" : juce::String()) +
+                                      ": Choose sounds can pick them, and Other sound... lists them.",
+                            juce::dontSendNotification);
+            updateButtons();
+        });
+    return true;
+}
+
+juce::PopupMenu PartSoundsPanel::presetFolderMenu (const SoundSource& instrument)
+{
+    juce::PopupMenu menu;
+    menu.addItem ("Add a folder of its preset files...",
+                  [safe = juce::Component::SafePointer<PartSoundsPanel> (this), instrument]
+                  {
+                      if (safe == nullptr)
+                          return;
+                      safe->folderChooser = std::make_unique<core::FileDialog> (
+                          "Choose a folder of " + instrument.name + "'s preset files",
+                          juce::File::getSpecialLocation (juce::File::userDocumentsDirectory));
+                      safe->folderChooser->launchAsync (
+                          (int)((unsigned)juce::FileBrowserComponent::openMode |
+                                (unsigned)juce::FileBrowserComponent::canSelectDirectories),
+                          [safe, instrument] (const core::FileDialog& c)
+                          {
+                              if (safe != nullptr && c.getResult().isDirectory())
+                                  safe->usePresetFolder (instrument, c.getResult(), true);
+                          });
+                  });
+    PresetFolders chosen (context.indexFolder);
+    chosen.load();
+    const auto folders = chosen.get (instrument.key);
+    if (! folders.isEmpty())
+        menu.addSeparator();
+    for (const auto& folder : folders)
+        menu.addItem ("Stop using " + folder.getFullPathName(),
+                      [safe = juce::Component::SafePointer<PartSoundsPanel> (this), instrument, folder]
+                      {
+                          if (safe != nullptr)
+                              safe->usePresetFolder (instrument, folder, false);
+                      });
+    return menu;
 }
 
 void PartSoundsPanel::showOtherMenu (int index)

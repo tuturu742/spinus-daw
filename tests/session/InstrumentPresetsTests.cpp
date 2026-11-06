@@ -10,6 +10,7 @@
 #include "session/InstrumentPresets.h"
 #include "session/AgentCommandLine.h"
 #include "session/PluginPresets.h"
+#include "session/PresetFolders.h"
 #include "session/PresetPreviews.h"
 #include "session/SynthMatch.h"
 
@@ -183,6 +184,120 @@ TEST_CASE ("Instrument presets: OB-Xf's patch files become its state", "[session
     const auto plugin = t.root.getChildFile ("ob-xf/OB-Xf.clap");
     REQUIRE (plugin.getSiblingFile ("Patches").createDirectory());
     CHECK (InstrumentPresets::getObxfFolders (plugin).front() == plugin.getSiblingFile ("Patches"));
+}
+
+namespace
+{
+/** A plugin whose own state is an XML, kept as JUCE's binary XML (as plugins made with JUCE keep it). */
+struct XmlStatePlugin : test::ProgramsTestPlugin
+{
+    XmlStatePlugin() { juce::AudioProcessor::copyXmlToBinary (juce::XmlElement ("SOUND"), state); }
+    void getStateInformation (juce::MemoryBlock& data) override { data = state; }
+    void setStateInformation (const void* data, int size) override { state = juce::MemoryBlock (data, (size_t)size); }
+    juce::String soundName() const
+    {
+        auto xml = getXmlFromBinary (state.getData(), (int)state.getSize());
+        return xml != nullptr ? xml->getStringAttribute ("Name") : "(not XML)";
+    }
+    juce::MemoryBlock state;
+};
+
+/** The same plugin as a VST3 host keeps it: its own state inside the host's XML, beside the controller's. */
+struct Vst3StatePlugin : XmlStatePlugin
+{
+    void getStateInformation (juce::MemoryBlock& data) override
+    {
+        juce::XmlElement outer ("VST3PluginState");
+        outer.createNewChildElement ("IComponent")->addTextElement (state.toBase64Encoding());
+        outer.createNewChildElement ("IEditController")->addTextElement ("controller");
+        copyXmlToBinary (outer, data);
+    }
+    void setStateInformation (const void* data, int size) override
+    {
+        auto outer = getXmlFromBinary (data, size);
+        REQUIRE (outer != nullptr);
+        CHECK (outer->getChildElementAllSubText ("IEditController", {}) == "controller");
+        state.fromBase64Encoding (outer->getChildElementAllSubText ("IComponent", {}));
+    }
+};
+} // namespace
+
+TEST_CASE ("Instrument presets: files in a preset folder the user chose, given as the plugin's state",
+           "[session][presets]")
+{
+    TempFolder folder;
+    const auto presets = folder.root.getChildFile ("Presets");
+    const auto write = [&presets] (const juce::String& path, const juce::String& text)
+    {
+        const auto f = presets.getChildFile (path);
+        f.getParentDirectory().createDirectory();
+        REQUIRE (f.replaceWithText (text));
+    };
+    write ("Clean Tone.state", R"(<?xml version="1.0"?><SOUND Name="Clean Tone" Gain="2"/>)");
+    write ("Lead/Big Lead.state", R"(<SOUND Name="Big Lead"/>)");
+    write ("Default.state", R"(<SOUND Name="Default"/>)"); // a placeholder: no preset
+    write ("readme.txt", "Presets for the guitar.");       // not the kind most files are
+    write (".hidden.state", R"(<SOUND Name="Hidden"/>)");
+
+    const auto found = InstrumentPresets::findStateFiles ({ presets });
+    REQUIRE (found.size() == 2);
+    CHECK (found[0].name == "Clean Tone");
+    CHECK (found[0].category.isEmpty());
+    CHECK (found[1].name == "Big Lead");
+    CHECK (found[1].category == "Lead");
+    CHECK (found[1].kind == InstrumentPreset::Kind::stateFile);
+    CHECK (found[1].id.startsWith ("file:"));
+    CHECK (found[1].id.endsWith ("/Lead/Big Lead.state"));
+    CHECK (found[1].version.isNotEmpty());
+
+    // A plugin made with JUCE: the XML file as its binary XML.
+    XmlStatePlugin plugin;
+    REQUIRE (InstrumentPresets::load (plugin, found[1]).wasOk());
+    CHECK (plugin.soundName() == "Big Lead");
+    // As a VST3 host keeps it: the plugin's own part replaced, the controller's kept.
+    Vst3StatePlugin vst3;
+    REQUIRE (InstrumentPresets::load (vst3, found[0]).wasOk());
+    CHECK (vst3.soundName() == "Clean Tone");
+    // Another plugin: the file as it is (this one's state is its program number).
+    test::ProgramsTestPlugin raw;
+    const int program = 2;
+    const juce::MemoryBlock rawFile (&program, sizeof (program));
+    const auto given = InstrumentPresets::stateFromFile (raw, rawFile);
+    raw.setStateInformation (given.getData(), (int)given.getSize());
+    CHECK (raw.getCurrentProgram() == 2);
+    // VST2 plugins keep theirs in a bank format: none.
+    struct Vst2 : test::ProgramsTestPlugin
+    {
+        void fillInPluginDescription (juce::PluginDescription& d) const override
+        {
+            d = describe();
+            d.pluginFormatName = "VST";
+        }
+    } vst2;
+    CHECK (InstrumentPresets::stateFromFile (vst2, rawFile).isEmpty());
+
+    // Kept beside the sound index, by instrument: find() lists them after the plugin's own.
+    const auto index = folder.root.getChildFile ("ai/sounds");
+    model::Device device;
+    device.kind = model::Device::Kind::plugin;
+    device.plugin.format = "VST3";
+    device.plugin.name = "Programs Test";
+    device.plugin.fileOrIdentifier = "/plugins/Programs Test.vst3";
+    {
+        PresetFolders chosen (index);
+        CHECK_FALSE (chosen.add (InstrumentPresets::libraryOf (device), folder.root.getChildFile ("missing")));
+        REQUIRE (chosen.add (InstrumentPresets::libraryOf (device), presets));
+        REQUIRE (chosen.save());
+    }
+    PresetFolders again (index);
+    again.load();
+    CHECK (again.get (InstrumentPresets::libraryOf (device)) == juce::Array<juce::File> { presets });
+    const auto all = InstrumentPresets::find (plugin, device, index);
+    REQUIRE (all.size() == 6); // its 4 programs, then the 2 files
+    CHECK (all[4].name == "Clean Tone");
+    again.remove (InstrumentPresets::libraryOf (device), presets);
+    REQUIRE (again.save());
+    CHECK (InstrumentPresets::find (plugin, device, index).size() == 4);
 }
 
 TEST_CASE ("Instrument presets: a CLAP plugin's own, through preset discovery", "[session][presets]")

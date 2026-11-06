@@ -401,6 +401,17 @@ and drums": those three), or empty. Then:
   [Save this sound](#save-this-sound), the sounds added to the project and the written song keep to those notes,
   moving a note up or down by octaves (as few as it takes) when it falls outside. **Any note again** takes the
   limit away. It is kept per instrument, beside the sound index, like your roles.
+- **Preset files.** Many instruments keep their presets as files in a folder of their own that Spinus can't
+  list, so only their default sound is measured. If the instrument's preset files are its own saved settings
+  (Ample Sound's guitars and basses are, for example: `Documents/Ample Sound/AMH/Presets` for Metal
+  Hellrazer), Spinus can use them. In the instrument menu, **Preset files › Add a folder of its preset
+  files...** and choose the folder, then click **Update sound index**. Spinus gives each file to the instrument
+  and measures how it sounds, like any preset: **Choose sounds** can pick them, and **Other sound...** lists them
+  under the instrument. One that makes no sound is shown as "(not measured)": that instrument's files may not be
+  its settings, and [Save this sound](#save-this-sound) is the way for it. Files that aren't presets (a readme,
+  pictures) are left out, and the folders inside become categories. **Stop using** a folder takes it away. VST2
+  plugins can't take preset files this way: use the instrument's VST3. It is kept per instrument, beside the
+  sound index, like your roles.
 - **Suggest parts...** fills the list with the parts a song like this usually has: your genre's (rock: drums,
   bass, two rhythm guitars and a lead guitar; gothic rock: drums, bass, a clean guitar, a rhythm guitar, a pad and a
   lead; gothic metal: the rock band plus piano, strings and organ; symphonic metal: the rock band plus strings,
@@ -502,7 +513,8 @@ name, the window stays open and the name is ready for the next one ("Clean" beco
 preset or kit, name it and click **Save and keep open** again (or **Save** for the last one). **Close** then keeps
 every sound you saved (not the one set up after the last save). The part plays the first of them; the others are
 in **Other sound...** under **Your saved sounds**, for any part. This is the quick way to go through an
-instrument's presets when Spinus can't list them itself.
+instrument's presets when Spinus can't list them itself (or, when its preset files are its settings, use them
+directly: see **Preset files** under [Sounds for each part](#sounds-for-each-part)).
 
 **Notes: any** (beside **Play**) sets the notes the instrument may play, the same as **Notes it plays** in the
 instrument menu: Play keeps to them, so a phrase doesn't hit keys that switch what the instrument plays.

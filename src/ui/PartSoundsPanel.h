@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MessageLabel.h"
+#include "core/FileDialog.h"
 #include "ai/AiService.h"
 #include "session/AnalysisLibrary.h"
 #include "session/PartSounds.h"
@@ -99,6 +100,10 @@ public:
         added and the written song keep to them, moving notes by octaves. For instruments whose other keys switch
         what they play. False when it cannot be saved. */
     bool setNoteRange (const juce::String& instrument, std::optional<NoteRanges::Range>);
+    /** Uses a folder of the instrument's own preset files, or stops using it (PresetFolders, beside the sound
+        index). A folder added is measured at once, in the background (its files as the instrument's presets, as
+        Update sound index would). False when it is not a folder or cannot be saved. */
+    bool usePresetFolder (const SoundSource& instrument, const juce::File& folder, bool use);
     /** Every instrument with its presets (or "Default sound"), for picking, and Mark it as; the user's saved
         sounds first, under "Your saved sounds". */
     void fillInstrumentMenu (juce::PopupMenu&, const std::function<void (const parts::Choice&)>& picked);
@@ -187,6 +192,7 @@ private:
     void showSuggestMenu();
     void showOtherMenu (int row);
     juce::PopupMenu noteRangeMenu (const juce::String& instrument, std::optional<NoteRanges::Range> now);
+    juce::PopupMenu presetFolderMenu (const SoundSource& instrument);
     /** A sound of the index as a choice of its instrument (Other sound..., a saved sound just measured). */
     parts::Choice choiceOf (const SoundSource&, const juce::var& sound, bool measured) const;
     /** The role of a sound: the user's mark, else what its name says. */
@@ -205,7 +211,8 @@ private:
     juce::Array<juce::var> master; // mixplan items for the master
     std::vector<model::ChannelId> added;
     juce::File lastPlayed;
-    juce::StringArray notes; // said with the result
+    juce::StringArray notes;                         // said with the result
+    std::unique_ptr<core::FileDialog> folderChooser; // a preset folder
 
     juce::Label intro;
     MessageLabel status;

@@ -254,6 +254,8 @@ add_library (spinus_core STATIC
     session/SongWriter.cpp
     session/NoteRanges.cpp
     session/NoteRanges.h
+    session/PresetFolders.cpp
+    session/PresetFolders.h
     session/UserRoles.cpp
     session/UserRoles.h
     session/SongWriter.h

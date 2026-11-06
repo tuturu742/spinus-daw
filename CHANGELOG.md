@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: an instrument's own preset files
+
+- Many instruments keep their presets as files Spinus couldn't list (Ample Sound's guitars and basses), so only
+  their default sound was measured, and going through them meant Save this sound for each one. Now, in the
+  instrument's menu, **Preset files › Add a folder of its preset files...**: Spinus gives each file to the
+  instrument as its settings and the sound index measures it like any preset.
+
 ### Coding agents: ready-made requests, your edits kept in view, playback
 
 - **Ready-made requests:** agents connected to Spinus offer five: Start a song, Make a beat, Add a section,
