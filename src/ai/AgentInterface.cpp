@@ -729,9 +729,9 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
     }
     if (name == "what_changed")
     {
-        const auto changes = userChanges();
+        const auto news = userChanges();
         markSeen();
-        return reply (text (changes.isNotEmpty() ? changes : "Nothing: the song is as you last saw it."));
+        return reply (text (news.isNotEmpty() ? news : "Nothing: the song is as you last saw it."));
     }
     if (name == "play")
     {
@@ -746,10 +746,10 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
     }
     // A change after the user changed the song: refused once, with what they changed (now seen).
     if (name != "undo_last" && changesProject (name))
-        if (const auto changes = userChanges(); changes.isNotEmpty())
+        if (const auto news = userChanges(); news.isNotEmpty())
         {
             markSeen();
-            return reply (text ("Not done: the user changed the song since you last looked. " + changes +
+            return reply (text ("Not done: the user changed the song since you last looked. " + news +
                                     " Check that your change still fits (song_summary or song_overview), then "
                                     "call again.",
                                 true));
