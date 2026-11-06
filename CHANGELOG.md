@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: saved drum kits load
+
+- A drum kit kept with **Save this sound** (a plugin's kit, set up as you like it) is chosen for a drum part again
+  and now loads as you saved it. Before, adding the chosen sounds said the plugin "no longer has" it, and the drums
+  played the plugin's default sound.
+
 ### Track creator: lyrics written any way, in any language
 
 - Lyrics need not use square-bracket tags: sections named in parentheses or before a colon ("(Verse 1)",
