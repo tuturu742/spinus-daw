@@ -71,7 +71,7 @@ def test_every_documented_tag_is_its_kind() -> None:
         assert lyrics.known_kind(name) == kind and lyrics.known_kind(f"{name} 2") == kind
         assert kind in lyrics.KINDS
     assert lyrics.known_kind("Sax Solo") == "solo" and lyrics.known_kind("Refrain") == "chorus"
-    manual = (Path(__file__).parents[2] / "docs" / "user" / "track-creator.md").read_text()
+    manual = (Path(__file__).parents[2] / "docs" / "user" / "track-creator.md").read_text(encoding="utf-8")
     assert all(f"| [{name}]" in manual for name, _, _ in lyrics.TAGS)
 
 
