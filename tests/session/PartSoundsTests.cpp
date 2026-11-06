@@ -441,6 +441,41 @@ TEST_CASE ("Sounds per part: drums get the closest kick, snare and hat samples",
     CHECK (found[0].deviceJson()["stockType"].toString() == "spinus.drum-machine");
 }
 
+TEST_CASE ("Sounds per part: a drum kit the user saved is chosen with its saved state", "[sounds][parts]")
+{
+    // A saved sound whose measuring found drums on its keys: chosen as a kit, loaded from the user's state (not
+    // looked up among the plugin's own presets, where it is not).
+    const UnusedFolder unused;
+    SoundIndex index (unused.folder);
+    auto& sampler = index.instruments["plugin-drums"];
+    sampler.source = sourceNamed ("plugin-drums", "Drum Sampler");
+    auto* kit = new juce::DynamicObject();
+    kit->setProperty ("id", "saved:3");
+    kit->setProperty ("name", "My kit");
+    kit->setProperty ("category", SavedSounds::category);
+    juce::Array<juce::var> map;
+    for (const auto& [note, cls] : { std::pair (36, "kick"), std::pair (38, "snare"), std::pair (42, "hat") })
+    {
+        auto* entry = new juce::DynamicObject();
+        entry->setProperty ("note", note);
+        entry->setProperty ("class", juce::String (cls));
+        map.add (juce::var (entry));
+    }
+    kit->setProperty ("drumMap", map);
+    sampler.sounds.add (juce::var (kit));
+
+    Target drums;
+    drums.part = "drums";
+    drums.roles = { "drums" };
+    const auto found = choose (drums, {}, index, 5);
+    const auto mine =
+        std::find_if (found.begin(), found.end(), [] (const Choice& c) { return c.instrument == "plugin-drums"; });
+    REQUIRE (mine != found.end());
+    CHECK (mine->kind == Choice::Kind::kit);
+    CHECK (mine->drumNotes.at ("snare") == 38);
+    CHECK (mine->state == SavedSounds::stateFileIn (unused.folder, "saved:3"));
+}
+
 TEST_CASE ("Sounds per part: the role guess learnt from presets that name their role", "[sounds][parts]")
 {
     // Two kinds of preset: dark one-note sounds named basses, bright slow chords named pads; then unnamed

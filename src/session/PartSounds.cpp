@@ -1086,6 +1086,8 @@ std::vector<Choice> chooseDrums (const Target& target, const Reference& referenc
             c.source = instrument.source;
             c.preset = sound["id"].toString();
             c.name = sound["name"].toString();
+            if (SavedSounds::isSaved (c.preset)) // a kit the user saved: its plugin's state, as for a preset
+                c.state = SavedSounds::stateFileIn (index.getFolder(), c.preset);
             c.role = "drums";
             c.drumNotes = notes;
             c.why.add ("a drum kit with a kick, a snare and hats on its keys");

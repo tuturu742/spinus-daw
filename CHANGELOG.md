@@ -11,6 +11,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   does, for up to half an hour). Spinus waited for them without end: writing a song could seem stuck on one
   step. After five minutes of nothing but keep-alives it now asks again, as it does when a connection drops.
 
+### Track creator: saved drum kits load
+
+- A drum kit kept with **Save this sound** (a plugin's kit, set up as you like it) is chosen for a drum part again
+  and now loads as you saved it. Before, adding the chosen sounds said the plugin "no longer has" it, and the drums
+  played the plugin's default sound.
+
 ### Track creator: lyrics written any way, in any language
 
 - Lyrics need not use square-bracket tags: sections named in parentheses or before a colon ("(Verse 1)",
