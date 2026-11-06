@@ -861,6 +861,18 @@ owner tests on Linux and Windows.
 - Track creator's song (§12.10): the songs' other grooves (only the main one is written), meters other than
   the songs' most common, pre-choruses and key changes, the LLM writing or varying notes (it varies the plan
   only), and the vocals' words.
+- **A small Spinus model that runs locally** (idea, 2026-11-06): an open model (Apache-2.0 or MIT, such as
+  Qwen 3) tuned to the Track creator's harness, so songs can be written without a paid service.
+  - Spinus records the harness's calls only when the user ticks a connection's "Answers may be used for
+    training" (off by default; today prompts and answers are never saved): what the model received, each
+    turn, the checks' verdicts, how the song ended, and the user's rating after listening.
+  - Teachers are only models whose terms allow training on their answers: DeepSeek's do; open models run
+    locally are fine; Claude's and OpenAI's terms do not allow it. Copyrighted lyrics stay out of anything
+    published, and the tuned add-on is published without the base model (the author's download is used).
+  - Rough sizes: a few hundred examples each for reading descriptions and lyrics, 1,000 to 3,000 finished
+    songs for the song plan, and 50 held-out requests to compare against.
+  - First, without any change: time `qwen3:30b-a3b` (a mixture of experts, much faster than dense 27B
+    models, which took over 90 minutes a song) on single steps and on whole songs at a low reasoning level.
 - LLM usage: an optional monthly limit per connection that warns at 80 % and asks before exceeding
   (§12.3).
 - The assistant's knowledge: music theory and production guides in `docs/knowledge/`, and Surge XT's
