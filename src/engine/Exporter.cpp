@@ -31,10 +31,13 @@ namespace
     through Wine) play silence at first, and an export makes fresh ones and renders faster than real time. Every
     plugin instrument is prepared first, so they all load at once; then each is played a few notes until it sounds,
     at most perInstrument each and `total` in all, as the sound index's helper does (SoundRender.cpp). Spinus's own
-    instruments are ready at once. The notes are played offline, as the render plays them: a plugin in a separate
-    process then answers each block before the next (it may be slow while it loads), instead of being taken for
-    hung by blocks coming faster than real time. Message thread. */
-void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, std::chrono::milliseconds total)
+    instruments and the bundled ones (Surge XT...) are ready at once and get no notes: Surge XT, played those
+    notes here, sometimes worked out a filter pitch that is not a number and crashed. The notes are played
+    offline, as the render plays them: a plugin in a separate process then answers each block before the next (it
+    may be slow while it loads), instead of being taken for hung by blocks coming faster than real time. Message
+    thread. */
+void waitUntilAudible (te::Edit& edit, const EngineAdapter& adapter, const Project& project,
+                       std::chrono::milliseconds perInstrument, std::chrono::milliseconds total)
 {
     using clock = std::chrono::steady_clock;
     constexpr double rate = 48000.0;
@@ -45,6 +48,10 @@ void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, 
         auto* external = dynamic_cast<te::ExternalPlugin*> (plugin);
         auto* instance = external != nullptr && external->isSynth() ? external->getAudioPluginInstance() : nullptr;
         if (instance == nullptr || instance->getPluginDescription().pluginFormatName == "Spinus")
+            continue;
+        const auto id = adapter.findDevice (*plugin);
+        const auto* device = id ? project.findDevice (*id) : nullptr;
+        if (device != nullptr && device->kind == Device::Kind::stock) // bundled: ready at once
             continue;
         instance->setNonRealtime (true);
         instance->prepareToPlay (rate, block); // starts loading its sounds, alongside the others
@@ -269,7 +276,7 @@ void ExportJob::renderStep()
         return finish ({ false, false, "Missing plugin: " + names.joinIntoString (", "), {} });
     }
 
-    waitUntilAudible (*edit, std::chrono::seconds (45), std::chrono::seconds (90));
+    waitUntilAudible (*edit, *adapter, step.project, std::chrono::seconds (45), std::chrono::seconds (90));
     waitForClipRenders (0);
 }
 
