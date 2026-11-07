@@ -911,3 +911,102 @@ TEST_CASE ("An export waits for an instrument that loads its sounds in the backg
     REQUIRE (! exported.files.empty());
     CHECK (read (exported.files.at (0)).rmsDb > -40.0f); // the note, from its first beat
 }
+
+TEST_CASE ("An export deletes the plugins closed before it first, not while it renders", "[engine][export]")
+{
+    // Tracktion deletes a plugin no longer used later, on timers. A Windows plugin deleted while another one plays
+    // can leave both waiting on Wine for ever: the automixer's recordings hung on the instruments of the render
+    // before, or of the song before. The test synth counts the instances destroyed, and those destroyed while
+    // another one was processing a block.
+    EngineHost host ({ .openAudioDevice = false });
+    plugins::ClapPluginFormat clap;
+    juce::OwnedArray<juce::PluginDescription> found;
+    const auto file = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("test-synth.clap");
+    clap.findAllTypesForFile (found, file.getFullPathName());
+    const juce::PluginDescription* synth = nullptr;
+    for (auto* d : found)
+        if (d->name == "Spinus Test Synth")
+            synth = d;
+    REQUIRE (synth != nullptr);
+    juce::DynamicLibrary library;
+    REQUIRE (library.open (file.getFullPathName())); // the module the plugins run from: the same counters
+    using Count = long (*)();
+    const auto destroyed = (Count)library.getFunction ("spinus_test_synth_destroyed");
+    const auto destroyedWhileProcessing = (Count)library.getFunction ("spinus_test_synth_destroyed_while_processing");
+    const auto setSlow = (void (*) (long))library.getFunction ("spinus_test_synth_set_slow");
+    REQUIRE (destroyed != nullptr);
+    REQUIRE (destroyedWhileProcessing != nullptr);
+    REQUIRE (setSlow != nullptr);
+    setSlow (1); // a millisecond a block: the renders are almost always in one
+    struct Fast
+    {
+        void (*set) (long);
+        ~Fast() { set (0); }
+    } fast { setSlow };
+
+    host.getEngine().getPluginManager().knownPluginList.addType (*synth);
+    Session session (host.getEngine(), std::make_unique<engine::DefaultDeviceFactory>());
+    auto run = [&] (const juce::String& name, const juce::String& params)
+    {
+        juce::String error;
+        auto command = commands::CommandRegistry::get().create (name, juce::JSON::parse (params), error);
+        INFO (name << ": " << error);
+        REQUIRE (command != nullptr);
+        auto* raw = command.get();
+        REQUIRE (session.getHistory().perform (std::move (command)).wasOk());
+        return raw->getResult();
+    };
+    auto addSynth = [&] (const juce::String& name)
+    {
+        return run (
+            "channel.add",
+            R"({"name": )" + juce::JSON::toString (name) +
+                R"(, "instrument": {"kind": "plugin", "plugin": {"format": "CLAP", "name": "Spinus Test Synth", "manufacturer": )" +
+                juce::JSON::toString (synth->manufacturerName) + R"(, "fileOrIdentifier": )" +
+                juce::JSON::toString (file.getFullPathName()) + "}}}");
+    };
+    const auto channel = addSynth ("Synth");
+    const auto spare = addSynth ("Spare"); // silent, taken out before the last export
+    // 4 bars, 750 blocks: a render lasts longer than the 100 ms before a closed plugin is deleted.
+    const auto pattern = run ("pattern.add", R"({"name": "P", "length": 15360})");
+    run ("pattern.setNotes", R"({"pattern": )" + pattern["pattern"].toString() + R"(, "channel": )" +
+                                 channel["channel"].toString() +
+                                 R"(, "notes": [{"start": 0, "length": 15000, "pitch": 60, "velocity": 0.9}]})");
+    const auto lane = run ("lane.add", "{}");
+    run ("clip.addPattern", R"({"lane": )" + lane["lane"].toString() + R"(, "pattern": )" +
+                                pattern["pattern"].toString() + R"(, "start": 0})");
+    session.getEdit().dispatchPendingUpdatesSynchronously();
+
+    juce::TemporaryFile folder;
+    REQUIRE (folder.getFile().createDirectory());
+    ExportSettings settings;
+    settings.format = ExportSettings::Format::wav16;
+    settings.sampleRate = 48000.0;
+    settings.tailSeconds = 0.0;
+    const auto before = destroyedWhileProcessing();
+    auto exportSong = [&] (const char* name, const std::function<void()>& started = {})
+    {
+        std::optional<ExportJob::Result> result;
+        auto job = session.createExportJob (folder.getFile().getChildFile (name), settings,
+                                            [&] (const ExportJob::Result& r) { result = r; });
+        job->start();
+        if (started)
+            started();
+        for (int i = 0; i < 1200 && ! result; ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        job = nullptr;
+        REQUIRE (result.has_value());
+        REQUIRE (result->ok);
+    };
+    exportSong ("first.wav");
+    exportSong ("second.wav"); // the first one's synths are closed as it starts
+    CHECK (destroyedWhileProcessing() == before);
+
+    // The project's own synth taken out: unused, it stays in the edit's plugin cache until its next sweep.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (1500); // the exports' synths deleted
+    run ("channel.remove", R"({"channel": )" + spare["channel"].toString() + "}");
+    session.getEdit().dispatchPendingUpdatesSynchronously();
+    const auto destroyedBefore = destroyed();
+    exportSong ("third.wav", [&] { CHECK (destroyed() == destroyedBefore + 1); }); // deleted before it renders
+    CHECK (destroyedWhileProcessing() == before);
+}

@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Export and the Automixer: Windows instruments no longer freeze them
+
+- An export, and the Automixer's recordings of the mix, could stop for ever with Windows instruments (through
+  Wine) in the song, most often on the second or third song mixed in a row: an instrument no longer used (the
+  export before's, the song before's, or one the Automixer's changes replaced) was deleted while the export
+  played another, and the two waited on each other. Those are deleted before an export plays now.
+
 ### Track creator: an instrument's own preset files
 
 - Many instruments keep their presets as files Spinus couldn't list (Ample Sound's guitars and basses), so only

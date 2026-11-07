@@ -175,6 +175,33 @@ typedef struct
 
 static synth_t* self (const clap_plugin_t* p) { return (synth_t*)p->plugin_data; }
 
+/* For the export's tests (ExporterTests.cpp): how many instances were destroyed, and how many while another one was
+   processing a block (a Windows plugin destroyed while another one plays can leave both waiting on Wine for ever).
+   Slow, each block takes a millisecond more, so a render is almost always in one. */
+#ifdef _MSC_VER
+    #include <intrin.h>
+static volatile long in_process = 0, destroyed = 0, destroyed_while_processing = 0, slow = 0;
+    #define ADD(v, n) _InterlockedExchangeAdd (&(v), (n))
+#else
+static long in_process = 0, destroyed = 0, destroyed_while_processing = 0, slow = 0;
+    #define ADD(v, n) __atomic_fetch_add (&(v), (n), __ATOMIC_SEQ_CST)
+#endif
+#ifdef _WIN32
+    #include <windows.h>
+    #define SLEEP_1MS() Sleep (1)
+#else
+    #include <time.h>
+static void sleep_1ms (void)
+{
+    struct timespec t = { 0, 1000000L };
+    nanosleep (&t, NULL);
+}
+    #define SLEEP_1MS() sleep_1ms()
+#endif
+CLAP_EXPORT long spinus_test_synth_destroyed (void) { return ADD (destroyed, 0); }
+CLAP_EXPORT long spinus_test_synth_destroyed_while_processing (void) { return ADD (destroyed_while_processing, 0); }
+CLAP_EXPORT void spinus_test_synth_set_slow (long on) { ADD (slow, on - ADD (slow, 0)); }
+
 /* Parameters */
 static uint32_t params_count (const clap_plugin_t* p) { return (uint32_t)self (p)->count; }
 static bool params_info (const clap_plugin_t* p, uint32_t index, clap_param_info_t* info)
@@ -366,7 +393,13 @@ static bool init (const clap_plugin_t* p)
     (void)p;
     return true;
 }
-static void destroy (const clap_plugin_t* p) { free (self (p)); }
+static void destroy (const clap_plugin_t* p)
+{
+    if (ADD (in_process, 0) > 0)
+        ADD (destroyed_while_processing, 1);
+    ADD (destroyed, 1);
+    free (self (p));
+}
 static bool activate (const clap_plugin_t* p, double sr, uint32_t min, uint32_t max)
 {
     (void)min;
@@ -459,7 +492,17 @@ static float next_sample (synth_t* s)
     return (float)(0.3 * x * s->level * v[O_VOLUME]);
 }
 
+static clap_process_status process_block (const clap_plugin_t* p, const clap_process_t* process);
 static clap_process_status process (const clap_plugin_t* p, const clap_process_t* process)
+{
+    ADD (in_process, 1);
+    if (ADD (slow, 0))
+        SLEEP_1MS();
+    const clap_process_status status = process_block (p, process);
+    ADD (in_process, -1);
+    return status;
+}
+static clap_process_status process_block (const clap_plugin_t* p, const clap_process_t* process)
 {
     synth_t* s = self (p);
 #if MISBEHAVING
