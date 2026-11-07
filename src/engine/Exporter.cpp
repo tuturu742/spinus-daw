@@ -13,6 +13,12 @@
 #include <set>
 #include <thread>
 
+namespace tracktion::inline engine
+{
+// Deletes now the plugin instances queued to be deleted on a timer (tracktion_ExternalPlugin.cpp).
+void deleteQueuedPlugins();
+} // namespace tracktion::inline engine
+
 namespace spinus::engine
 {
 
@@ -83,6 +89,18 @@ void waitUntilAudible (te::Edit& edit, std::chrono::milliseconds perInstrument, 
         if (! audible)
             core::Logs::warning ("export", instance->getName() + " played nothing to a test note; exporting anyway");
     }
+}
+
+/** Deletes now the plugins Tracktion would delete later, on timers: each edit's plugin cache drops the plugins no
+    longer used once a second (after a project was replaced, or a change took one out), and a dropped plugin's
+    instance is deleted 100 ms after. An export does this before it opens its plugins and again before it renders,
+    so that none is deleted while it renders: a Windows plugin (through Wine) deleted while another one plays can
+    leave both waiting for each other for ever, and the render with them. Message thread. */
+void deleteUnusedPlugins (te::Engine& engine)
+{
+    for (auto* edit : engine.getActiveEdits().getEdits())
+        ((juce::Timer&)edit->getPluginCache()).timerCallback(); // its once-a-second sweep (a private base: the cast)
+    te::deleteQueuedPlugins();
 }
 
 int bitDepthFor (ExportSettings::Format f)
@@ -230,6 +248,8 @@ void ExportJob::renderStep()
 {
     auto& step = steps[current];
 
+    deleteUnusedPlugins (engine); // the step before's, an earlier export's, a replaced project's
+
     edit = te::Edit::createSingleTrackEdit (engine);
     adapter = std::make_unique<EngineAdapter> (*edit, devices);
     adapter->setSavedDeviceStates (states);
@@ -316,6 +336,8 @@ void ExportJob::startRender()
 
     if (const auto error = prepareStems (step, range); error.isNotEmpty())
         return finish ({ false, false, error, {} });
+
+    deleteUnusedPlugins (engine); // any closed while this step waited for its instruments
 
     static juce::WavAudioFormat wav;
     te::Renderer::Parameters params (*edit);
