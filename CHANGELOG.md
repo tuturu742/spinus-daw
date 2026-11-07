@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Export: no more Surge XT crash before it starts
+
+- An export, and the Automixer's recordings of the mix, sometimes crashed in Surge XT before anything was
+  recorded: Surge was played a few test notes, there only to wait for instruments that load their sounds in the
+  background. Spinus's bundled instruments, Surge XT among them, are ready at once and get no test notes now.
+
 ### Export and the Automixer: Windows instruments no longer freeze them
 
 - An export, and the Automixer's recordings of the mix, could stop for ever with Windows instruments (through
