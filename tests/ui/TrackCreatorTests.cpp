@@ -1861,7 +1861,7 @@ TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screens
     juce::String problem;
     SaveSoundWindow::Notes notes;
     notes.playable = PlayableKeys::between (40, 76);
-    notes.learn = [] (std::function<void (std::optional<PlayableKeys>)>) {};
+    notes.learn = [] (const std::function<void (std::optional<PlayableKeys>)>&) {};
     const auto opened =
         SaveSoundWindow::open (session, start, "Bass (3x Osc)", {}, std::move (notes), nullptr, {}, problem);
     REQUIRE (opened);
@@ -1915,13 +1915,13 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     panel.save();
     REQUIRE (called);
     REQUIRE (saved.has_value());
-    REQUIRE (saved->modes.size() == 2);
-    CHECK (saved->modes[1].name == "Strummer");
-    CHECK (saved->modes[1].keys[50].what == "chord keys");
-    CHECK (saved->modes[0].playable()->lowest() == 40);
+    REQUIRE (saved.value().modes.size() == 2);
+    CHECK (saved.value().modes[1].name == "Strummer");
+    CHECK (saved.value().modes[1].keys[50].what == "chord keys");
+    CHECK (saved.value().modes[0].playable().value().lowest() == 40);
     panel.removeMode();
     CHECK (panel.getMode() == 0);
-    CHECK (panel.getProfile()->modes.size() == 1);
+    CHECK (panel.getProfile().value().modes.size() == 1);
 
     // Listen to every key: what was heard is a proposal; Apply takes it, the keys set by hand staying.
     std::array<InstrumentProfiles::Key, 128> heard {};

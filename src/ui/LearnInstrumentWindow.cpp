@@ -92,7 +92,7 @@ public:
     int noteAt (juce::Point<float> p) const
     {
         const auto w = whiteWidth();
-        if (p.y < getHeight() * 0.62f)
+        if (p.y < (float)getHeight() * 0.62f)
             for (int note = 0; note < 128; ++note)
                 if (isBlack (note) && blackBounds (note).contains (p))
                     return note;
@@ -118,7 +118,7 @@ public:
         {
             if (isBlack (note))
                 continue;
-            const juce::Rectangle<float> r (white * w, 0.0f, w, labels);
+            const juce::Rectangle<float> r ((float)white * w, 0.0f, w, labels);
             g.setColour (jobColour (theme, keys[(size_t)note].job, false));
             g.fillRect (r);
             g.setColour (juce::Colours::black.withAlpha (0.6f));
@@ -133,7 +133,7 @@ public:
             {
                 g.setColour (theme.get ("textDim"));
                 g.setFont (11.0f);
-                g.drawText (keyName (note), juce::Rectangle<float> (white * w, labels, w * 3.0f, 14.0f),
+                g.drawText (keyName (note), juce::Rectangle<float> ((float)white * w, labels, w * 3.0f, 14.0f),
                             juce::Justification::centredLeft);
             }
             ++white;
@@ -189,14 +189,14 @@ private:
         for (int n = 0; n < note; ++n)
             whitesBefore += isBlack (n) ? 0 : 1;
         const auto w = whiteWidth();
-        return { whitesBefore * w - w * 0.32f, 0.0f, w * 0.64f, ((float)getHeight() - 14.0f) * 0.62f };
+        return { (float)whitesBefore * w - w * 0.32f, 0.0f, w * 0.64f, ((float)getHeight() - 14.0f) * 0.62f };
     }
 
     LearnInstrumentPanel& panel;
     int anchor = 0;
 };
 
-LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, std::optional<Profile> start)
+LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, const std::optional<Profile>& start)
     : name (instrumentName), profile (start.value_or (Profile { { InstrumentProfiles::Mode {} } }))
 {
     keyboard = std::make_unique<Keyboard> (*this);
