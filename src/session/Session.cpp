@@ -112,8 +112,21 @@ juce::String Session::describeLastMovedControl() const
 {
     if (! lastMoved)
         return {};
-    if (auto* parameter = adapter->findParameter (*lastMoved))
-        return parameter->getParameterName() + " (" + getDeviceTitle (lastMoved->device) + ")";
+    using K = model::ParameterTarget::Kind;
+    const auto& p = getProject();
+    switch (lastMoved->kind)
+    {
+    case K::channelVolume:
+    case K::channelPan:
+        return p.findChannel (lastMoved->channel) != nullptr ? describeTarget (*lastMoved) : juce::String();
+    case K::insertVolume:
+    case K::insertPan:
+        return p.findInsert (lastMoved->insert) != nullptr ? describeTarget (*lastMoved) : juce::String();
+    case K::deviceParameter:
+        if (auto* parameter = adapter->findParameter (*lastMoved))
+            return parameter->getParameterName() + " (" + getDeviceTitle (lastMoved->device) + ")";
+        break;
+    }
     return {};
 }
 

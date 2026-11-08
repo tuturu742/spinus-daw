@@ -240,6 +240,35 @@ TEST_CASE ("The last control moved in a plugin's window can be automated; the me
     CHECK (session.getLastMovedControl().value_or (model::ParameterTarget {}) == moved);
 }
 
+TEST_CASE ("A fader moved in the Mixer or the Channel Rack is the last moved control", "[ui][automation]")
+{
+    Fixture f;
+    auto& session = *f.session;
+    Mixer mixer (session);
+
+    REQUIRE (f.rack->setChannelPan (f.lead().id, 0.3));
+    auto last = session.getLastMovedControl().value_or (model::ParameterTarget {});
+    CHECK (last.kind == Kind::channelPan);
+    CHECK (last.channel == f.lead().id);
+    CHECK (session.describeLastMovedControl() == "Lead pan");
+
+    REQUIRE (mixer.setInsertVolume (f.lead().targetInsert, -6.0));
+    last = session.getLastMovedControl().value_or (model::ParameterTarget {});
+    CHECK (last == f.insertVolume());
+    CHECK (session.describeLastMovedControl().endsWith (" volume"));
+
+    // Its clip, as Edit's Create automation clip for the last moved control makes it.
+    const auto clip = session.createAutomationClip (last);
+    REQUIRE (clip.isValid());
+    CHECK (f.automationOf (clip).target == f.insertVolume());
+
+    // A fader that is gone is not offered.
+    REQUIRE (f.rack->setChannelVolume (f.lead().id, -3.0));
+    CHECK (session.describeLastMovedControl() == "Lead volume");
+    REQUIRE (f.perform ("channel.remove", "{\"channel\": " + juce::String ((int)f.lead().id.value) + "}"));
+    CHECK (session.describeLastMovedControl().isEmpty());
+}
+
 TEST_CASE ("A channel's volume knob moves with its automation while it plays", "[ui][automation][audio]")
 {
     Fixture f;

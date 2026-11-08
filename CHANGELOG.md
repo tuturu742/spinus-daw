@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Automation clips: one shortcut for the control you moved last
+
+- **Ctrl+Shift+L** (Edit › **Create automation clip for the last moved control**) makes an automation clip for
+  the knob or fader you moved last. It now counts the Mixer's and the Channel Rack's volume and pan faders too,
+  not only a plugin's knobs.
+
 ### Export: no more Surge XT crash before it starts
 
 - An export, and the Automixer's recordings of the mix, sometimes crashed in Surge XT before anything was

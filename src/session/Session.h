@@ -168,10 +168,14 @@ public:
         invalid ID if the target cannot be automated. */
     model::ClipId createAutomationClip (const model::ParameterTarget&);
 
-    /** The plugin control the user moved last, in a plugin's own window or Spinus's (FL: "last tweaked"),
-        for "Automate the last moved control". Not set by automation playing back. */
+    /** The control the user moved last (FL: "last tweaked"), for "Create automation clip for the last moved
+        control": a plugin's, in its own window or Spinus's, or a volume or pan fader in the Mixer or the Channel
+        Rack. Not set by automation playing back. */
     std::optional<model::ParameterTarget> getLastMovedControl() const noexcept { return lastMoved; }
-    /** "Cutoff (Surge XT - Bass)". */
+    /** A fader the user moved (the Mixer's and the Channel Rack's volume and pan): it becomes the last moved
+        control. Plugin controls are noted by themselves. */
+    void noteMovedControl (const model::ParameterTarget& target) { lastMoved = target; }
+    /** "Cutoff (Surge XT - Bass)", "Bass volume"; empty when there is none or it is gone. */
     juce::String describeLastMovedControl() const;
 
     /** Devices whose own window was opened since the project was opened: their settings may have been changed
