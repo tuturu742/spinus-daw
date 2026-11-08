@@ -1987,10 +1987,10 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     panel.setHeard (heard);
     CHECK (panel.hasHeard());
     CHECK (panel.getHeardText().startsWith ("Heard: 35 keys play, 1 switch. Apply changes"));
-    CHECK (panel.getProfile()->modes[0].keys[36].job == InstrumentProfiles::Job::unknown); // not yet
+    CHECK (panel.getProfile().value().modes[0].keys[36].job == InstrumentProfiles::Job::unknown); // not yet
     panel.applyHeard();
     CHECK_FALSE (panel.hasHeard());
-    const auto applied = panel.getProfile()->modes[0];
+    const auto applied = panel.getProfile().value().modes[0];
     CHECK (applied.keys[36].job == InstrumentProfiles::Job::plays);
     CHECK (applied.keys[24].job == InstrumentProfiles::Job::switches);
     CHECK (applied.keys[52].job == InstrumentProfiles::Job::special); // set by hand: stays
@@ -2007,8 +2007,8 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     CHECK (panel.getHeardText().startsWith ("The instrument says: 2 keys named, 1 of them switches. Apply changes"));
     panel.applyHeard();
     CHECK (panel.getHeardText() == "Applied what the instrument says. Save keeps it.");
-    CHECK (panel.getProfile()->modes[0].keys[25].what == "Palm mute");
-    CHECK (panel.getProfile()->modes[0].keys[25].source == InstrumentProfiles::Source::plugin);
+    CHECK (panel.getProfile().value().modes[0].keys[25].what == "Palm mute");
+    CHECK (panel.getProfile().value().modes[0].keys[25].source == InstrumentProfiles::Source::plugin);
     panel.setHeard (std::array<InstrumentProfiles::Key, 128> {}, {}, LearnInstrumentPanel::From::plugin);
     CHECK_FALSE (panel.hasHeard());
     CHECK (panel.getHeardText().startsWith ("The instrument names none of its keys"));
@@ -2035,12 +2035,12 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     CHECK (panel.hasReading());
     CHECK (panel.getHeardText().startsWith ("The manual says: 1 mode: Strummer (entered by C#8, MIDI 97). Apply "
                                             "changes 1 thing (1 new mode)"));
-    const auto modesBefore = panel.getProfile()->modes.size();
+    const auto modesBefore = panel.getProfile().value().modes.size();
     panel.applyHeard();
     CHECK_FALSE (panel.hasReading());
     CHECK (panel.getHeardText().startsWith ("Applied what the manual says"));
-    REQUIRE (panel.getProfile()->modes.size() == modesBefore + 1);
-    CHECK (panel.getProfile()->modes.back().keys[65].what == "chord keys");
+    REQUIRE (panel.getProfile().value().modes.size() == modesBefore + 1);
+    CHECK (panel.getProfile().value().modes.back().keys[65].what == "chord keys");
     CHECK (panel.getManuals()[0].version == "1.0.3"); // read for this version
     panel.setInstrumentVersion ("1.1.0");
     CHECK (panel.getManualsText().contains ("read for 1.0.3; the instrument is 1.1.0 now"));
