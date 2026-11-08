@@ -735,6 +735,52 @@ def test_automation_clips_go_into_the_song() -> None:
             ws.call("automate", bad)
 
 
+def test_a_rhythm_clip_moves_in_time_with_the_beat() -> None:
+    ws = transitioned()
+    assert harness.rate_beats("1/8") == 0.5 and harness.rate_beats("1") == 4.0 and harness.rate_beats("2") == 8.0
+    assert abs(harness.rate_beats("1/8T") - 1 / 3) < 1e-9 and harness.rate_beats("1/4.") == 1.5
+    said = ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1-2 1/4; 3 1/8", "low": 200, "high": 4000})
+    assert "1-2 1/4; 3 1/8" in said
+    clip = ws.song()["production"]["automation"][0]
+    bars = [p["bar"] for p in clip["points"]]
+    values = [p["value"] for p in clip["points"]]
+    low, high = round(harness.normalised("filter", 200), 4), round(harness.normalised("filter", 4000), 4)
+    # Two bars of quarter notes (4 beats a bar): 8 moves, low on each beat and high half way; then bar 3's eighths.
+    assert bars[:4] == [0.0, 0.125, 0.25, 0.375] and values[:4] == [low, high, low, high]
+    assert bars[16:20] == [2.0, 2.0, 2.0625, 2.125]  # bar 2 ends at rest, bar 3 starts its eighths
+    assert len(bars) == 8 * 2 + 1 + 8 * 2 + 1 and bars[-1] == 3.0 and values[-1] == low
+    assert bars == sorted(bars)
+    assert "in time with the beat, 1-2 1/4; 3 1/8, triangle 200 to 4000" in ws.call("automation", {})
+
+    # A square gate on the volume: up for the first half of each move, down for the second.
+    ws.call("rhythm", {"part": "lead", "what": "volume", "pattern": "5 1/4", "low": -40, "high": 0, "shape": "square"})
+    gate = ws.song()["production"]["automation"][1]["points"]
+    assert [p["value"] for p in gate[:4]] == [round(harness.normalised("volume", v), 4) for v in (0, 0, -40, -40)]
+
+    for bad, why in [
+        ({"pattern": "1-2 1/5"}, "a rate is"),
+        ({"pattern": "2-1 1/4"}, "first to last"),
+        ({"pattern": "1-999 1/4"}, "the song's last bar"),
+        ({"pattern": "1-4 1/4; 3-5 1/8"}, "overlap"),
+        ({"pattern": "fast"}, "'bars rate'"),
+        ({"high": 200}, "nothing would move"),
+        ({"high": 40000}, "20 to 20000 Hz"),
+        ({"shape": "sine"}, "shape is one of"),
+    ]:
+        with pytest.raises(harness.Mistake, match=why):
+            ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1 1/4", "low": 200, "high": 4000, **bad})
+
+
+def test_a_song_has_at_most_so_many_automation_clips() -> None:
+    ws = transitioned()
+    for i in range(harness.MOST_AUTOMATION):
+        ws.call("automate", {"part": "bass", "what": "volume", "points": f"1 -{i}; 2 0"})
+    with pytest.raises(harness.Mistake, match="the most it can have"):
+        ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1 1/4", "low": 200, "high": 4000})
+    ws.call("remove_automation", {"part": "bass"})
+    ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1 1/4", "low": 200, "high": 4000})
+
+
 def test_transitions_lead_into_and_out_of_sections() -> None:
     ws = transitioned()
     chorus = next(sid for sid, s in ws.sections.items() if s["kind"] == "chorus")
@@ -1261,6 +1307,48 @@ def test_with_lyrics_the_ai_keeps_their_form_and_sings_a_note_a_syllable() -> No
     song = ws.song()
     assert song["plan"]["lyrics"]["sung"] == ws.plan()["lyrics"]["sung"]
     assert any(line.startswith("Verse (bar ") for line in sw.describe(song))
+
+
+def test_the_ai_chooses_how_much_is_sung_inside_the_style_range() -> None:
+    s = summary()
+    s["lyrics"] = lyrics.read(
+        "[Verse]\n" + "Running through the night again\n" * 8 + "[Chorus]\n" + "We are alive\n" * 4
+        + "[Verse]\n" + "Running through the night again\n" * 8 + "[Chorus]\n" + "We are alive\n" * 4
+    )  # fmt: skip
+    s["described"] = {"vocals": {"low": 0.2, "high": 0.5, "phrasing": ["half", "normal"], "fill": "drop"}}
+    parts = [*PARTS, {"id": "vocals", "name": "Vocals", "role": "vocals"}]
+    setup_ = harness.setup_of({**BRIEF, "summary": s, "parts": parts, "variety": "adventurous"})
+    brief = compose.lyrics_brief(s, setup_.style, 5)
+    assert (
+        brief is not None
+        and brief["vocals"]["share"] == [0.2, 0.5]
+        and "must not lean on the vocals" in (brief["vocals"]["note"])
+    )
+    ws = harness.Workspace.start(setup_, 5, "sketch")
+    assert ws.plan()["vocalShare"] == ws.extra["vocals"]["vocalShare"] and "sung (the style: 20% to 50%" in (
+        ws.tool_form()
+    )
+
+    def form(order: list[str]) -> list[dict[str, Any]]:
+        return [{"id": sid, "kind": ws.sections[sid]["kind"] if sid in ws.sections else sid, "bars": 8,
+                 "chords": ["I", "V"]} for sid in dict.fromkeys(order)]  # fmt: skip
+
+    # The model sets the share and the phrasing: Spinus fits the lyrics' form to them.
+    sung = [o for o in ws.order if ws.sections[o].get("words")]
+    lyric_order = list(dict.fromkeys(sung))
+    order = ["intro", "verse", "chorus", "drop", "verse", "chorus", "drop", "outro"]
+    said = ws.tool_set_form(form(order), order, phrasing="normal", vocalShare=0.45)
+    assert ws.extra["vocals"] == {"phrasing": "normal", "vocalShare": 0.45} and "phrased normal" in said
+    share = sw.sung_share(list(ws.sections.values()), ws.order, ws.plan()["lyrics"])
+    assert 0.2 <= share <= 0.5
+    # A share outside the range is moved into it.
+    ws.tool_set_form(form(order), order, vocalShare=0.9)
+    assert ws.extra["vocals"]["vocalShare"] == 0.5
+    # A form that sings nearly all of it gets instrumental room, the words kept.
+    said = ws.tool_set_form(form(["verse", "chorus", "verse", "chorus"]), ["verse", "chorus", "verse", "chorus"])
+    share = sw.sung_share(list(ws.sections.values()), ws.order, ws.plan()["lyrics"])
+    assert "instrumental room" in said and 0.2 <= share <= 0.5, (said, share)
+    assert lyric_order == ["verse", "chorus"]
 
 
 def test_a_one_shot_answer_keeps_the_lyrics_order() -> None:

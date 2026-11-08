@@ -5,6 +5,17 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: songs lean less on the vocals
+
+- Songs with lyrics were nearly all vocals, even in genres that mostly aren't sung (drum and bass, dubstep). Each
+  genre now has a range for how much of a song is sung, and the writer picks a share inside it, adding
+  instrumental intros, outros, drops, breaks and solos around your lines (never cutting or moving them). A new
+  slider under the lyrics, **Sung: 10% to 70%**, shows the genre's range; drag it to set your own.
+- Lines are phrased the way the genre does: normal, stretched over a half-time feel, or in a fast flow.
+- The instrument playing the sung tune starts quieter, under the lead.
+- With **Transitions and automation**, the AI can automate a part in time with the beat ("bars 17 to 24 in
+  eighths, then sixteenths"): dubstep's wobble, a gate. At most 24 automation clips a song.
+
 ### Export: no more Surge XT crash before it starts
 
 - An export, and the Automixer's recordings of the mix, sometimes crashed in Surge XT before anything was

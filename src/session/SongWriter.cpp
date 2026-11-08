@@ -882,7 +882,7 @@ double roleLevelDb (const juce::String& role)
         { "lead-guitar", -2.0 },
         { "clean-guitar", -4.0 },
         { "acoustic-guitar", -4.0 },
-        { "vocals", -1.0 }, // the voice sits on top of the mix
+        { "vocals", -6.0 }, // an instrument standing in for the voice: a guide under the lead, not its loudest part
         { "lead", -2.0 },
         { "counter", -5.0 },
         { "chords", -5.0 },
