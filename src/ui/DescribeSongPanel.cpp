@@ -124,6 +124,26 @@ DescribeSongPanel::~DescribeSongPanel()
         service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
 }
 
+void DescribeSongPanel::clear()
+{
+    if (auto* service = getService(); service != nullptr && job.isNotEmpty())
+        service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
+    *alive = false; // a reading under way answers nobody
+    alive = std::make_shared<bool> (true);
+    busy = false;
+    job.clear();
+    summary = juce::var();
+    textBox.clear();
+    lyricsBox.clear();
+    noVocalsButton.setToggleState (false, juce::dontSendNotification);
+    understood.setText ({}, juce::dontSendNotification);
+    status.setText ({}, juce::dontSendNotification);
+    details.clear();
+    setProposal ({});
+    setVocalShare (juce::var());
+    setReferences (juce::var(), {}); // and the buttons and layout
+}
+
 bool DescribeSongPanel::read()
 {
     if (busy)

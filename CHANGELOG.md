@@ -11,6 +11,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   reload the notes while the mouse was still down, taking away the note being placed.
 - Flatpak: LV2 plugins from Flathub's plugin packs (such as the SWH and TAP plugins) load again. They were listed
   in the Browser but showed as Missing when added, with "Unable to locate plugin" in the log.
+### Track creator: remembered per project
+
+- A new project starts with an empty Track creator, like the Channel Rack and the Mixer. Each saved project keeps
+  its own reference songs, summary, description and parts, and opening it brings them back. Songs analyzed once
+  stay ready in every project.
 
 ### Track creator: songs that sound written, not generated
 
