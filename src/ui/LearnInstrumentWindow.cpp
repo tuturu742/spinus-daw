@@ -1,6 +1,8 @@
 #include "LearnInstrumentWindow.h"
 
 #include "Theme.h"
+#include "session/KeyProbe.h"
+#include "session/PartSounds.h"
 #include "WindowStacking.h"
 
 namespace spinus::ui
@@ -126,6 +128,7 @@ public:
                 g.setColour (theme.get ("text").withAlpha (0.35f));
                 g.fillRect (r.withTrimmedTop (labels * 0.62f));
             }
+            paintHeard (g, theme, note, r.withTrimmedTop (labels * 0.8f).reduced (2.0f, 3.0f));
             if (note % 12 == 0)
             {
                 g.setColour (theme.get ("textDim"));
@@ -148,6 +151,7 @@ public:
                     g.setColour (theme.get ("text").withAlpha (0.45f));
                     g.fillRect (r.withTrimmedTop (r.getHeight() * 0.5f));
                 }
+                paintHeard (g, theme, note, r.withTrimmedTop (r.getHeight() * 0.7f).reduced (1.0f, 2.0f));
             }
     }
 
@@ -160,6 +164,23 @@ public:
     void mouseMove (const juce::MouseEvent& e) override { setTooltip (panel.describeKey (noteAt (e.position))); }
 
 private:
+    /** A key Apply would change: a dot of the colour it would take. */
+    void paintHeard (juce::Graphics& g, const Theme& theme, int note, juce::Rectangle<float> r) const
+    {
+        if (! panel.heard.has_value() || panel.heardMode != panel.mode)
+            return;
+        auto mode = panel.current();
+        keyprobe::merge (mode, *panel.heard);
+        if (mode.keys[(size_t)note] == panel.current().keys[(size_t)note])
+            return;
+        const auto size = juce::jmin (r.getWidth(), r.getHeight());
+        const auto dot = r.withSizeKeepingCentre (size, size);
+        g.setColour (jobColour (theme, mode.keys[(size_t)note].job, false));
+        g.fillEllipse (dot);
+        g.setColour (juce::Colours::black);
+        g.drawEllipse (dot, 1.0f);
+    }
+
     float whiteWidth() const { return (float)getWidth() / (float)whiteKeys; }
     juce::Rectangle<float> blackBounds (int note) const
     {
@@ -234,13 +255,36 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
     };
     saveButton.setTooltip ("Keep this; Listen, Save this sound's Play and the songs keep to the keys that play");
     saveButton.onClick = [this] { save(); };
+    listenButton.setTooltip ("Spinus plays every key of this mode and listens: which play, which switch, which do "
+                             "something else. A few minutes; what it hears is shown for you to Apply");
+    listenButton.onClick = [this]
+    {
+        if (listening)
+        {
+            if (onStopListening)
+                onStopListening();
+        }
+        else if (onListen)
+        {
+            heardMode = mode;
+            onListen (current().enterKey);
+        }
+    };
+    applyButton.setTooltip ("Take what was heard (the keys you set stay yours)");
+    applyButton.onClick = [this] { applyHeard(); };
+    discardButton.setTooltip ("Drop what was heard");
+    discardButton.onClick = [this] { discardHeard(); };
+    heardLabel.setJustificationType (juce::Justification::centredLeft);
     for (auto* c : std::initializer_list<juce::Component*> {
              &intro,         &modeLabel,      &modeBox,     &addModeButton, &removeModeButton, &modeName,
              &enterLabel,    &enterEditor,    &enterKeyBox, &goodForLabel,  &goodForEditor,    &voicesBox,
              keyboard.get(), &selectionLabel, &whatEditor,  &playsButton,   &switchButton,     &specialButton,
-             &unusedButton,  &unknownButton,  &summary,     &forgetButton,  &cancelButton,     &saveButton })
+             &unusedButton,  &unknownButton,  &summary,     &forgetButton,  &cancelButton,     &saveButton,
+             &listenButton,  &heardLabel })
         addAndMakeVisible (c);
-    setSize (980, 430);
+    addChildComponent (applyButton);
+    addChildComponent (discardButton);
+    setSize (980, 470);
     showMode (0);
 }
 
@@ -263,6 +307,71 @@ std::optional<InstrumentProfiles::Profile> LearnInstrumentPanel::getProfile() co
 void LearnInstrumentPanel::showMode (int index)
 {
     mode = juce::jlimit (0, juce::jmax (0, (int)profile.modes.size() - 1), index);
+    updateFields();
+}
+
+void LearnInstrumentPanel::setListening (const juce::String& progress)
+{
+    listening = progress.isNotEmpty();
+    listenButton.setButtonText (listening ? "Stop listening" : "Listen to every key");
+    if (listening)
+        heardLabel.setText (progress, juce::dontSendNotification);
+    for (auto* c : std::initializer_list<juce::Component*> { &modeBox, &addModeButton, &removeModeButton })
+        c->setEnabled (! listening);
+    if (! listening)
+        removeModeButton.setEnabled (profile.modes.size() > 1);
+}
+
+void LearnInstrumentPanel::setHeard (std::optional<std::array<InstrumentProfiles::Key, 128>> keys,
+                                     const juce::String& problem)
+{
+    setListening ({});
+    heard = std::move (keys);
+    if (! heard.has_value())
+        heardLabel.setText ("Nothing heard: " + problem, juce::dontSendNotification);
+    else
+    {
+        int counts[5] = {};
+        for (const auto& key : *heard)
+            ++counts[(int)key.job];
+        auto merged = profile.modes[(size_t)juce::jlimit (0, (int)profile.modes.size() - 1, heardMode)];
+        const auto changes = keyprobe::merge (merged, *heard);
+        juce::StringArray said;
+        said.add (juce::String (counts[(int)Job::plays]) + " keys play");
+        if (counts[(int)Job::switches] > 0)
+            said.add (juce::String (counts[(int)Job::switches]) + " switch");
+        if (counts[(int)Job::special] > 0)
+            said.add (juce::String (counts[(int)Job::special]) + " do something else");
+        if (counts[(int)Job::unused] > 0)
+            said.add (juce::String (counts[(int)Job::unused]) + " are silent");
+        heardLabel.setText ("Heard: " + said.joinIntoString (", ") + ". Apply changes " + juce::String (changes) +
+                                (changes == 1 ? " key" : " keys") + " (marked with a dot).",
+                            juce::dontSendNotification);
+        if (heardMode != mode)
+            showMode (heardMode);
+    }
+    applyButton.setVisible (heard.has_value());
+    discardButton.setVisible (heard.has_value());
+    keyboard->repaint();
+}
+
+void LearnInstrumentPanel::applyHeard()
+{
+    if (! heard.has_value())
+        return;
+    showMode (heardMode);
+    keyprobe::merge (current(), *heard);
+    forgotten = false;
+    discardHeard();
+    heardLabel.setText ("Applied what was heard. Save keeps it.", juce::dontSendNotification);
+}
+
+void LearnInstrumentPanel::discardHeard()
+{
+    heard.reset();
+    applyButton.setVisible (false);
+    discardButton.setVisible (false);
+    heardLabel.setText ({}, juce::dontSendNotification);
     updateFields();
 }
 
@@ -385,6 +494,7 @@ void LearnInstrumentPanel::paint (juce::Graphics& g)
 {
     const auto& theme = themeOf (*this);
     g.fillAll (theme.get ("panel"));
+    heardLabel.setColour (juce::Label::textColourId, theme.get ("textDim"));
     for (auto* l : { &intro, &modeLabel, &enterLabel, &goodForLabel, &selectionLabel })
         l->setColour (juce::Label::textColourId, theme.get ("text"));
     summary.setColour (juce::Label::textColourId, theme.get ("accent"));
@@ -451,6 +561,17 @@ void LearnInstrumentPanel::resized()
     {
         auto r = area.removeFromBottom (26);
         area.removeFromBottom (6);
+        listenButton.setBounds (r.removeFromLeft (160));
+        r.removeFromLeft (8);
+        discardButton.setBounds (r.removeFromRight (90));
+        r.removeFromRight (8);
+        applyButton.setBounds (r.removeFromRight (90));
+        r.removeFromRight (8);
+        heardLabel.setBounds (r);
+    }
+    {
+        auto r = area.removeFromBottom (26);
+        area.removeFromBottom (6);
         selectionLabel.setBounds (r.removeFromLeft (220));
         for (auto* b : { &playsButton, &switchButton, &specialButton, &unusedButton, &unknownButton })
         {
@@ -474,7 +595,8 @@ std::vector<LearnInstrumentWindow*>& openWindows()
 } // namespace
 
 void LearnInstrumentWindow::open (const juce::File& indexFolder, const juce::String& instrument,
-                                  const juce::String& name, juce::Component* near, Saved saved)
+                                  const juce::String& name, juce::Component* near, Saved saved,
+                                  std::optional<Listening> listening)
 {
     for (auto* w : openWindows())
         if (w->instrument == instrument)
@@ -482,16 +604,16 @@ void LearnInstrumentWindow::open (const juce::File& indexFolder, const juce::Str
             w->toFront (true);
             return;
         }
-    auto* window = new LearnInstrumentWindow (indexFolder, instrument, name, std::move (saved));
+    auto* window = new LearnInstrumentWindow (indexFolder, instrument, name, std::move (saved), std::move (listening));
     if (near != nullptr && near->isOnDesktop())
         keepAboveOwner (*window, *near);
     window->setVisible (true);
 }
 
 LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const juce::String& key,
-                                              const juce::String& name, Saved s)
+                                              const juce::String& name, Saved s, std::optional<Listening> l)
     : juce::DocumentWindow ("Learn " + name, juce::Colours::black, juce::DocumentWindow::closeButton, false),
-      indexFolder (folder), instrument (key), saved (std::move (s))
+      indexFolder (folder), instrument (key), saved (std::move (s)), listening (std::move (l))
 {
     InstrumentProfiles profiles (indexFolder);
     profiles.load();
@@ -507,6 +629,8 @@ LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const ju
             saved (all.playable (instrument));
         finish();
     };
+    panel->onListen = [this] (int enterKey) { listen (enterKey); };
+    panel->onStopListening = [this] { stopping->store (true); };
     setUsingNativeTitleBar (true);
     setContentOwned (panel, true);
     setResizable (true, false);
@@ -514,7 +638,63 @@ LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const ju
     openWindows().push_back (this);
 }
 
-LearnInstrumentWindow::~LearnInstrumentWindow() { std::erase (openWindows(), this); }
+LearnInstrumentWindow::~LearnInstrumentWindow()
+{
+    std::erase (openWindows(), this);
+    *alive = false;
+    stopping->store (true);
+    task = nullptr; // stops the helper and waits
+}
+
+void LearnInstrumentWindow::listen (int enterKey)
+{
+    auto* panel = dynamic_cast<LearnInstrumentPanel*> (getContentComponent());
+    if (panel == nullptr || task != nullptr)
+        return;
+    if (! listening.has_value())
+    {
+        panel->setHeard (std::nullopt, "choose this instrument for a part first (Sounds for each part), then open "
+                                       "Learn this instrument from its menu there: Spinus listens to it with that "
+                                       "sound.");
+        return;
+    }
+    stopping->store (false);
+    panel->setListening ("Listening: loading the instrument...");
+    auto found = std::make_shared<std::optional<std::array<InstrumentProfiles::Key, 128>>>();
+    auto problem = std::make_shared<juce::String>();
+    task = std::make_unique<BackgroundTask> (
+        "Spinus listens to every key",
+        [l = *listening, enterKey, found, problem, token = stopping,
+         safe = juce::Component::SafePointer<LearnInstrumentPanel> (panel)] (const std::function<bool()>& shouldStop)
+        {
+            *found = parts::probeInHelper (
+                l.helper, l.source, l.preset, l.state, enterKey, [&] { return shouldStop() || token->load(); },
+                [safe] (int done, int total)
+                {
+                    juce::MessageManager::callAsync (
+                        [safe, done, total]
+                        {
+                            if (safe != nullptr)
+                                safe->setListening ("Listening: " + juce::String (done) + " of " +
+                                                    juce::String (total) + " keys...");
+                        });
+                },
+                *problem);
+            return juce::Result::ok();
+        },
+        [this, a = alive, found, problem] (const juce::Result&)
+        {
+            juce::MessageManager::callAsync (
+                [this, a, found, problem]
+                {
+                    if (! *a)
+                        return;
+                    task = nullptr;
+                    if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
+                        p->setHeard (*found, *problem);
+                });
+        });
+}
 
 void LearnInstrumentWindow::closeButtonPressed() { finish(); }
 

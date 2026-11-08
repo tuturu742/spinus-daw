@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Track creator: Learn this instrument
 
+- **Listen to every key** in Learn this instrument: Spinus plays each key of a mode and listens, then proposes
+  which keys play, which switch, which do something else (a chord, another note) and which are silent. Apply
+  takes it; keys you marked yourself stay yours.
 - **Notes it plays** becomes **Learn this instrument...**, in the instrument menu and as **Keys...** beside Play
   in Save this sound: a keyboard where you mark what each key does (plays, switch, special, unused), with a few
   words for the switches ("palm mute"). Listen, Play and the songs play only on the keys that play, so a switch

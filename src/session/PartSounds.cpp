@@ -1540,6 +1540,44 @@ std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options& optio
     return found;
 }
 
+std::optional<std::array<InstrumentProfiles::Key, 128>>
+probeInHelper (const SoundIndexer::Options& options, const SoundSource& source, const juce::String& preset,
+               const juce::File& presetState, int enterKey, const std::function<bool()>& shouldStop,
+               const std::function<void (int, int)>& progress, juce::String& problem)
+{
+    auto request = instrumentRequest (source);
+    auto* o = request.getDynamicObject();
+    o->setProperty ("mode", "probe");
+    o->setProperty ("preset", preset);
+    if (presetState != juce::File())
+        o->setProperty ("state", presetState.getFullPathName());
+    o->setProperty ("enterKey", enterKey);
+    std::optional<std::array<InstrumentProfiles::Key, 128>> found;
+    const auto run = SoundIndexer::runHelper (
+        options, request, source.hostLibraries,
+        [&] (const juce::var& line)
+        {
+            if (const auto& p = line["probing"]; p.isObject() && progress)
+                progress ((int)p["done"], (int)p["total"]);
+            if (line.hasProperty ("error"))
+                problem = line["error"].toString();
+            if (const auto& r = line["probed"]; r.isObject())
+            {
+                if (r.hasProperty ("problem"))
+                    problem = r["problem"].toString();
+                else if (const auto heard = InstrumentProfiles::fromVar (
+                             object ({ { "modes", juce::Array<juce::var> { object ({ { "keys", r["keys"] } }) } } })))
+                    found = heard->modes.front().keys;
+            }
+        },
+        shouldStop);
+    if (! run.finished && problem.isEmpty())
+        problem = shouldStop && shouldStop() ? juce::String ("Stopped.") : helperProblem (run, "listening to its keys");
+    if (! run.finished)
+        found.reset();
+    return found;
+}
+
 juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<model::ChannelId>& channels)
 {
     juce::StringArray problems;

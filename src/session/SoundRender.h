@@ -19,8 +19,9 @@ namespace spinus
       (up to 40 s for the first, 10 s after; `{"waiting": ...}` lines meanwhile).
     - `{"mode": "samples", "files": [path]}`: reads each audio file and measures it (sounds::describeSample).
 
-    Two more modes play and tune instruments for the Track creator (out of Spinus for the same reason): `{"mode":
-    "render"}` and `{"mode": "tune"}` (SoundRender.cpp says what they take and write).
+    Three more modes play, tune and listen to instruments for the Track creator (out of Spinus for the same reason):
+    `{"mode": "render"}`, `{"mode": "tune"}` and `{"mode": "probe"}` (every key heard, KeyProbe; SoundRender.cpp
+    says what they take and write).
 
     `output` gets one JSON object per line, flushed as it goes: `{"presets": [{id, version}], "presetFiles"}`
     once the instrument is loaded and its presets found; `{"begin": id or path}` before each one is
