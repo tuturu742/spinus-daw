@@ -22,6 +22,10 @@ juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items
         o->setProperty (key, value);
     return juce::var (o);
 }
+
+constexpr int shareGap = 5; // the slider's two ends, in percent, at least this far apart
+
+juce::String percent (double fraction) { return juce::String (juce::roundToInt (fraction * 100.0)) + "%"; }
 } // namespace
 
 DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) : getService (std::move (service))
@@ -53,6 +57,23 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
                           "let the AI tag them for you to check");
     noVocalsButton.setTooltip ("An instrumental song: the lyrics stay in the box but are not used");
     noVocalsButton.onClick = [this] { updateButtons(); };
+    lyricsBox.onTextChange = [this] { updateShare(); };
+    shareSlider.setRange (0.0, 100.0, 1.0);
+    shareSlider.setTooltip ("How much of the song is sung: the song writer picks a share inside this range and gives "
+                            "the rest to instrumental sections (an intro, solos, drops, an outro)");
+    shareSlider.onValueChange = [this] { shareMoved(); };
+    shareSlider.onDragEnd = [this]
+    {
+        if (onShareChanged)
+            onShareChanged();
+    };
+    genreShareButton.setTooltip ("Use the range songs of this genre usually have");
+    genreShareButton.onClick = [this]
+    {
+        setVocalShare ({});
+        if (onShareChanged)
+            onShareChanged();
+    };
     aiButton.setTooltip ("Ask your AI connection (Options > AI) to read the description; Spinus checks its reading "
                          "and writes every note itself. Off: Spinus's own rules, nothing is sent anywhere");
     readButton.setTooltip ("Read the description into a style to write a song in");
@@ -91,6 +112,8 @@ DescribeSongPanel::DescribeSongPanel (std::function<ai::AiService*()> service) :
                                                    &aiButton, &readButton, &understood, &status, &details })
         addAndMakeVisible (c);
     addChildComponent (againButton);
+    for (auto* c : std::initializer_list<juce::Component*> { &shareLabel, &shareSlider, &genreShareButton })
+        addChildComponent (c);
     updateButtons();
 }
 
@@ -155,6 +178,9 @@ bool DescribeSongPanel::read()
 void DescribeSongPanel::show (const juce::var& read)
 {
     summary = read;
+    if (read["vocalShare"].isObject()) // remembered with the summary
+        userShare = read["vocalShare"];
+    setVocalShare (userShare); // and kept when the description is read again
     const auto& described = read["described"];
     understood.setText (described["understood"].toString() + ".", juce::dontSendNotification);
     juce::StringArray lines;
@@ -215,6 +241,58 @@ void DescribeSongPanel::setReferences (const juce::var& songs, const juce::Strin
     resized();
 }
 
+void DescribeSongPanel::setVocalShare (const juce::var& share)
+{
+    userShare = share.isObject() ? object ({ { "low", (double)share["low"] }, { "high", (double)share["high"] } })
+                                 : juce::var();
+    if (auto* o = summary.getDynamicObject())
+    {
+        if (userShare.isObject())
+            o->setProperty ("vocalShare", userShare);
+        else
+            o->removeProperty ("vocalShare");
+    }
+    updateShare();
+}
+
+void DescribeSongPanel::updateShare()
+{
+    const auto& genre = summary["described"]["vocals"];
+    const bool shown = genre.isObject() && ! noVocalsButton.getToggleState() && lyricsBox.getText().trim().isNotEmpty();
+    const bool moved = shown != shareSlider.isVisible();
+    for (auto* c : std::initializer_list<juce::Component*> { &shareLabel, &shareSlider, &genreShareButton })
+        c->setVisible (shown);
+    if (moved)
+        resized();
+    if (! shown)
+        return;
+    const auto& range = userShare.isObject() ? userShare : genre;
+    shareSlider.setMinAndMaxValues ((double)range["low"] * 100.0, (double)range["high"] * 100.0,
+                                    juce::dontSendNotification);
+    genreShareButton.setEnabled (! busy && userShare.isObject());
+    shareSlider.setEnabled (! busy);
+    const auto genreText = percent ((double)genre["low"]) + " to " + percent ((double)genre["high"]);
+    shareLabel.setText ("Sung: " + percent ((double)range["low"]) + " to " + percent ((double)range["high"]) +
+                            (userShare.isObject() ? " (the genre: " + genreText + ")" : " (the genre's range)"),
+                        juce::dontSendNotification);
+}
+
+void DescribeSongPanel::shareMoved()
+{
+    auto low = shareSlider.getMinValue(), high = shareSlider.getMaxValue();
+    if (high - low < shareGap) // the other end moves along
+    {
+        if (shareSlider.getThumbBeingDragged() == 2)
+            low = juce::jmax (0.0, high - shareGap), high = low + shareGap;
+        else
+            high = juce::jmin (100.0, low + shareGap), low = high - shareGap;
+        shareSlider.setMinAndMaxValues (low, high, juce::dontSendNotification);
+    }
+    setVocalShare (object ({ { "low", low / 100.0 }, { "high", high / 100.0 } }));
+    if (shareSlider.getThumbBeingDragged() < 0 && onShareChanged) // not dragged (the keyboard): changed now
+        onShareChanged();
+}
+
 void DescribeSongPanel::setNoVocals (bool on)
 {
     noVocalsButton.setToggleState (on, juce::dontSendNotification);
@@ -233,6 +311,7 @@ void DescribeSongPanel::updateButtons()
     keepMineButton.setEnabled (! busy);
     lyricsBox.setReadOnly (busy || noVocalsButton.getToggleState());
     lyricsBox.setAlpha (noVocalsButton.getToggleState() ? 0.5f : 1.0f);
+    updateShare();
 }
 
 void DescribeSongPanel::paint (juce::Graphics&)
@@ -243,6 +322,7 @@ void DescribeSongPanel::paint (juce::Graphics&)
     proposalLabel.setColour (juce::Label::textColourId, theme.get ("text"));
     understood.setColour (juce::Label::textColourId, theme.get ("accent"));
     status.setColour (juce::Label::textColourId, theme.get ("textDim"));
+    shareLabel.setColour (juce::Label::textColourId, theme.get ("text"));
 }
 
 void DescribeSongPanel::resized()
@@ -260,6 +340,15 @@ void DescribeSongPanel::resized()
     }
     lyricsBox.setBounds (area.removeFromTop (boxHeight));
     area.removeFromTop (4);
+    if (shareSlider.isVisible())
+    {
+        auto r = area.removeFromTop (24);
+        genreShareButton.setBounds (r.removeFromRight (120).reduced (0, 1));
+        r.removeFromRight (10);
+        shareLabel.setBounds (r.removeFromLeft (juce::jmin (330, r.getWidth() / 2)));
+        shareSlider.setBounds (r);
+        area.removeFromTop (4);
+    }
     {
         auto r = area.removeFromTop (28);
         readButton.setBounds (r.removeFromLeft (80).reduced (0, 1));

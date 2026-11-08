@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "AnalysisFakes.h"
@@ -419,6 +420,54 @@ TEST_CASE ("Track creator: the songs and the summary are remembered, without sta
     CHECK (creator.getMethodsRun().isEmpty());
 }
 
+TEST_CASE ("Track creator: a range says how much of a song with lyrics is sung, the genre's until the user moves it",
+           "[ui][trackcreator]")
+{
+    DescribeSongPanel describer ([]() -> ai::AiService* { return nullptr; });
+    describer.setSize (720, 720);
+    juce::DynamicObject::Ptr vocals = new juce::DynamicObject(), described = new juce::DynamicObject(),
+                             read = new juce::DynamicObject();
+    vocals->setProperty ("low", 0.1);
+    vocals->setProperty ("high", 0.7);
+    described->setProperty ("vocals", juce::var (vocals.get()));
+    read->setProperty ("described", juce::var (described.get()));
+
+    // Without lyrics there is nothing sung: no range.
+    describer.show (juce::var (read.get()));
+    CHECK_FALSE (describer.isShareShown());
+    describer.setLyrics ("[Verse]\nRunning through the night");
+    describer.show (juce::var (read.get()));
+    REQUIRE (describer.isShareShown());
+    CHECK (describer.getShareText() == "Sung: 10% to 70% (the genre's range)");
+    CHECK_FALSE (describer.getSummary().hasProperty ("vocalShare"));
+
+    // Moved: the summary carries it, kept when read again; at least 5% apart.
+    int changed = 0;
+    describer.onShareChanged = [&] { ++changed; };
+    juce::DynamicObject::Ptr mine = new juce::DynamicObject();
+    mine->setProperty ("low", 0.4);
+    mine->setProperty ("high", 0.42);
+    describer.setVocalShare (juce::var (mine.get()));
+    CHECK (describer.getShareText() == "Sung: 40% to 42% (the genre: 10% to 70%)");
+    CHECK ((double)describer.getSummary()["vocalShare"]["low"] == Catch::Approx (0.4));
+    juce::DynamicObject::Ptr again = new juce::DynamicObject();
+    again->setProperty ("described", juce::var (described.get()));
+    describer.show (juce::var (again.get()));
+    CHECK ((double)describer.getSummary()["vocalShare"]["high"] == Catch::Approx (0.42));
+
+    // "This song has no vocals" hides it.
+    describer.setNoVocals (true);
+    CHECK_FALSE (describer.isShareShown());
+    describer.setNoVocals (false);
+    CHECK (describer.isShareShown());
+
+    // Genre's range takes it back.
+    describer.setVocalShare ({});
+    CHECK_FALSE (describer.getSummary().hasProperty ("vocalShare"));
+    CHECK (describer.getShareText() == "Sung: 10% to 70% (the genre's range)");
+    CHECK (changed == 0); // only the user's own moves say so
+}
+
 TEST_CASE ("Track creator: the AI's tags for untagged lyrics wait for Use these tags or Keep mine",
            "[ui][trackcreator]")
 {
@@ -511,13 +560,18 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
         CHECK (writer.getText().contains ("Spinus's own instruments for: Drums"));
         CHECK ((int)writer.getSong()["tempo"] == 72);
         CHECK (song::isFull (writer.getSong()));
-        // The lyrics' form: their sections in order, sized to their lines; the Write page says what is sung where,
-        // and an instrument plays the vocals.
+        // The lyrics' form: their sections in order, sized to their lines (with instrumental room around them for
+        // the share of the song sung: an intro, say); the Write page says what is sung where, and an instrument plays
+        // the vocals.
         juce::StringArray order;
         for (const auto& sid : *writer.getSong()["plan"]["order"].getArray())
             order.add (sid.toString());
-        CHECK (order.joinIntoString (" ") == "verse chorus solo");
-        CHECK (writer.getText().contains ("Verse (bar 1): 2 lines"));
+        INFO (order.joinIntoString (" "));
+        CHECK (order.indexOf ("verse") >= 0);
+        CHECK (order.indexOf ("verse") < order.indexOf ("chorus"));
+        CHECK (order.indexOf ("chorus") < order.indexOf ("solo"));
+        CHECK (writer.getText().contains ("Verse (bar "));
+        CHECK (writer.getText().contains (": 2 lines"));
         CHECK (writer.getText().contains ("The city lights are fading out / I walk alone without a doubt"));
         bool vocals = false;
         for (const auto& layer : *writer.getSong()["layers"].getArray())
