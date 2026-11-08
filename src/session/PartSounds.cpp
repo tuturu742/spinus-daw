@@ -1578,6 +1578,40 @@ probeInHelper (const SoundIndexer::Options& options, const SoundSource& source, 
     return found;
 }
 
+std::optional<std::array<InstrumentProfiles::Key, 128>>
+keyNamesInHelper (const SoundIndexer::Options& options, const SoundSource& source, const juce::String& preset,
+                  const juce::File& presetState, const std::function<bool()>& shouldStop, juce::String& problem)
+{
+    auto request = instrumentRequest (source);
+    auto* o = request.getDynamicObject();
+    o->setProperty ("mode", "keynames");
+    o->setProperty ("preset", preset);
+    if (presetState != juce::File())
+        o->setProperty ("state", presetState.getFullPathName());
+    std::optional<std::array<InstrumentProfiles::Key, 128>> found;
+    const auto run = SoundIndexer::runHelper (
+        options, request, source.hostLibraries,
+        [&] (const juce::var& line)
+        {
+            if (line.hasProperty ("error"))
+                problem = line["error"].toString();
+            if (const auto& r = line["keyNames"]; r.isObject())
+            {
+                found.emplace();
+                if (const auto reported = InstrumentProfiles::fromVar (
+                        object ({ { "modes", juce::Array<juce::var> { object ({ { "keys", r["keys"] } }) } } })))
+                    found = reported->modes.front().keys;
+            }
+        },
+        shouldStop);
+    if (! run.finished && problem.isEmpty())
+        problem =
+            shouldStop && shouldStop() ? juce::String ("Stopped.") : helperProblem (run, "being asked for its keys");
+    if (! run.finished)
+        found.reset();
+    return found;
+}
+
 juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<model::ChannelId>& channels)
 {
     juce::StringArray problems;

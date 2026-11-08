@@ -490,4 +490,12 @@ void DrumMachineProcessor::setStateInformation (const void* data, int sizeInByte
     publish();
 }
 
+std::optional<juce::String> DrumMachineProcessor::getNameForMidiNoteNumber (int note, int)
+{
+    for (const auto& pad : pads)
+        if (pad.note == note && pad.audio != nullptr && pad.name.isNotEmpty())
+            return pad.name;
+    return std::nullopt;
+}
+
 } // namespace spinus::dsp

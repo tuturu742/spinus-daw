@@ -3,6 +3,7 @@
 #include "InstrumentPresets.h"
 #include "KeyProbe.h"
 #include "OfflineInstrument.h"
+#include "PluginKeyNames.h"
 #include "SoundDescriptors.h"
 #include "SoundIndex.h"
 #include "SynthMatch.h"
@@ -497,6 +498,36 @@ int runRender (const juce::var& request, Lines& out)
     return 0;
 }
 
+/** Puts the request's sound in place: its "preset" (an id, with "state" for a saved sound); none: as it opens.
+    False (with the error written) when it could not be loaded. */
+bool loadSound (const juce::var& request, juce::AudioPluginInstance& plugin, OfflineInstrument& player, Lines& out)
+{
+    const auto device = deviceOf (request);
+    if (const auto presetId = request["preset"].toString(); SavedSounds::isSaved (presetId))
+    {
+        const auto saved = savedPreset (presetId, request["state"].toString());
+        if (! saved || player.loadPreset (*saved).failed())
+        {
+            out.write ("error", "The saved sound could not be loaded.");
+            out.write ("done", true);
+            return false;
+        }
+    }
+    else if (presetId.isNotEmpty())
+    {
+        const auto presets = InstrumentPresets::find (plugin, device, indexFolderOf (request));
+        const auto found =
+            std::find_if (presets.begin(), presets.end(), [&] (const InstrumentPreset& p) { return p.id == presetId; });
+        if (found == presets.end() || player.loadPreset (*found).failed())
+        {
+            out.write ("error", "The preset could not be loaded.");
+            out.write ("done", true);
+            return false;
+        }
+    }
+    return true;
+}
+
 /** Synth match out of Spinus's process: `{"mode": "tune", <the instrument>, "preset" (its id, optional; with "state",
    the file with a saved sound's state), "profile" (a synth profile's JSON, optional: else its own or an automatic one),
    "target": {file, start, length}, "notes" [{note, start, length, velocity}] (from the target's start), "tries"}`.
@@ -514,34 +545,13 @@ int runTune (const juce::var& request, Lines& out)
         return 0;
     }
     OfflineInstrument player (*instance);
-    const auto device = deviceOf (request);
-    if (const auto presetId = request["preset"].toString(); SavedSounds::isSaved (presetId))
-    {
-        const auto saved = savedPreset (presetId, request["state"].toString());
-        if (! saved || player.loadPreset (*saved).failed())
-        {
-            out.write ("error", "The saved sound could not be loaded.");
-            out.write ("done", true);
-            return 0;
-        }
-    }
-    else if (presetId.isNotEmpty())
-    {
-        const auto presets = InstrumentPresets::find (*instance, device, indexFolderOf (request));
-        const auto found =
-            std::find_if (presets.begin(), presets.end(), [&] (const InstrumentPreset& p) { return p.id == presetId; });
-        if (found == presets.end() || player.loadPreset (*found).failed())
-        {
-            out.write ("error", "The preset could not be loaded.");
-            out.write ("done", true);
-            return 0;
-        }
-    }
+    if (! loadSound (request, *instance, player, out))
+        return 0;
     waitUntilAudible (player, out, 40.0); // an instrument that loads its sounds late is tuned once it sounds
     auto profile =
         request["profile"].isObject() ? SynthProfile::fromJson (request["profile"]) : std::optional<SynthProfile> {};
     if (! profile)
-        profile = SynthSearch::profileFor (*instance, device);
+        profile = SynthSearch::profileFor (*instance, deviceOf (request));
     const auto settings = SynthSearch::findSettings (*instance, *profile);
     {
         auto* o = new juce::DynamicObject();
@@ -604,29 +614,8 @@ int runProbe (const juce::var& request, Lines& out)
         return 0;
     }
     OfflineInstrument player (*instance);
-    const auto device = deviceOf (request);
-    if (const auto presetId = request["preset"].toString(); SavedSounds::isSaved (presetId))
-    {
-        const auto saved = savedPreset (presetId, request["state"].toString());
-        if (! saved || player.loadPreset (*saved).failed())
-        {
-            out.write ("error", "The saved sound could not be loaded.");
-            out.write ("done", true);
-            return 0;
-        }
-    }
-    else if (presetId.isNotEmpty())
-    {
-        const auto presets = InstrumentPresets::find (*instance, device, indexFolderOf (request));
-        const auto found =
-            std::find_if (presets.begin(), presets.end(), [&] (const InstrumentPreset& p) { return p.id == presetId; });
-        if (found == presets.end() || player.loadPreset (*found).failed())
-        {
-            out.write ("error", "The preset could not be loaded.");
-            out.write ("done", true);
-            return 0;
-        }
-    }
+    if (! loadSound (request, *instance, player, out))
+        return 0;
     waitUntilAudible (player, out, 40.0); // an instrument that loads its sounds late is heard once it sounds
     InstrumentPreset before;
     before.kind = InstrumentPreset::Kind::state;
@@ -670,6 +659,36 @@ int runProbe (const juce::var& request, Lines& out)
     out.write ("done", true);
     return 0;
 }
+
+/** The plugin's own key names (pluginkeys): `{"mode": "keynames", <the instrument>, "preset" (optional)}`. Writes
+    `{"keyNames": {keys: [{from, to, job, what, source}], count, switches}}` (the keys as a profile's mode lists
+    them; none when the plugin names none). */
+int runKeyNames (const juce::var& request, Lines& out)
+{
+    juce::String error;
+    auto instance = loadInstrument (request, error);
+    if (instance == nullptr)
+    {
+        out.write ("error", error);
+        out.write ("done", true);
+        return 0;
+    }
+    OfflineInstrument player (*instance);
+    if (! loadSound (request, *instance, player, out))
+        return 0;
+    const auto named = pluginkeys::read (*instance);
+    InstrumentProfiles::Mode reported;
+    reported.keys = pluginkeys::asKeys (named);
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("keys", named.empty() ? juce::var (juce::Array<juce::var>())
+                                          : InstrumentProfiles::toVar ({ { reported } })["modes"][0]["keys"]);
+    o->setProperty ("count", (int)named.size());
+    o->setProperty ("switches", (int)std::count_if (named.begin(), named.end(),
+                                                    [] (const pluginkeys::Named& n) { return n.switches; }));
+    out.write ("keyNames", juce::var (o));
+    out.write ("done", true);
+    return 0;
+}
 } // namespace
 
 int runSoundIndexProcess (const juce::File& request, const juce::File& output)
@@ -689,6 +708,8 @@ int runSoundIndexProcess (const juce::File& request, const juce::File& output)
         return runTune (parsed, out);
     if (mode == "probe")
         return runProbe (parsed, out);
+    if (mode == "keynames")
+        return runKeyNames (parsed, out);
     out.write ("error", "Unknown request.");
     return 2;
 }

@@ -414,6 +414,14 @@ and drums": those three), or empty. Then:
   yourself stay as you set them. It listens to the sound the part has (or the instrument as it opens, from the
   instrument menu); **Stop listening** keeps nothing. Then **Save**.
 
+  **Ask the plugin** reads the names the instrument gives its keys itself, in a few seconds: a drum machine's
+  "Kick" and "Snare", a sampled instrument's key switches ("Palm mute"). A key the instrument calls a key switch
+  (or whose name says so, such as "KS Legato" or "Articulation 2") is proposed as a switch with that name; any
+  other named key as one that plays, with its name. Few instruments name their keys (most commercial sampled
+  instruments don't), so it often says the instrument names none; Listen to every key works on any instrument.
+  What it says is a proposal like a listening's: **Apply** or **Discard**, and keys you marked stay yours.
+  Spinus's own Drum Machine names its pads by their sounds.
+
   An instrument can have several **modes** (a sampled guitar's normal and strummer modes): **Add mode**, name
   it, and say how to enter it (in words, or the key that switches to it), what it is good for ("strummed rhythm,
   country and folk") and whether it plays chords. Each mode has its own keyboard. For now Spinus writes in the

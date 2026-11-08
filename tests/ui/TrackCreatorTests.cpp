@@ -1944,6 +1944,21 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     panel.setHeard (std::nullopt, "it made no sound.");
     CHECK (panel.getHeardText() == "Nothing heard: it made no sound.");
 
+    // Ask the plugin: its key names are a proposal too; a plugin that names none says so.
+    std::array<InstrumentProfiles::Key, 128> named {};
+    named[25] = { InstrumentProfiles::Job::switches, "Palm mute", InstrumentProfiles::Source::plugin };
+    named[60] = { InstrumentProfiles::Job::plays, "Open", InstrumentProfiles::Source::plugin };
+    panel.setHeard (named, {}, LearnInstrumentPanel::From::plugin);
+    CHECK (panel.hasHeard());
+    CHECK (panel.getHeardText().startsWith ("The instrument says: 2 keys named, 1 of them switches. Apply changes"));
+    panel.applyHeard();
+    CHECK (panel.getHeardText() == "Applied what the instrument says. Save keeps it.");
+    CHECK (panel.getProfile()->modes[0].keys[25].what == "Palm mute");
+    CHECK (panel.getProfile()->modes[0].keys[25].source == InstrumentProfiles::Source::plugin);
+    panel.setHeard (std::array<InstrumentProfiles::Key, 128> {}, {}, LearnInstrumentPanel::From::plugin);
+    CHECK_FALSE (panel.hasHeard());
+    CHECK (panel.getHeardText().startsWith ("The instrument names none of its keys"));
+
     // Forgotten: saved as nothing.
     panel.forget();
     CHECK (panel.getSummaryText().startsWith ("Forgotten"));

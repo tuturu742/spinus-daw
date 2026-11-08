@@ -83,6 +83,7 @@ add_executable (spinus_tests
     session/SoundIndexTests.cpp
     session/PartSoundsTests.cpp
     session/KeyProbeTests.cpp
+    session/PluginKeyNamesTests.cpp
     session/OfflineInstrumentTests.cpp
     session/SongWriterTests.cpp
     session/SuggestionsTests.cpp

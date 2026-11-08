@@ -270,9 +270,19 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
             onListen (current().enterKey);
         }
     };
-    applyButton.setTooltip ("Take what was heard (the keys you set stay yours)");
+    askButton.setTooltip ("Read the names the instrument gives its keys (a drum map's \"Kick\", a key switch's \"Palm "
+                          "mute\"). Few instruments name them; what it says is shown for you to Apply");
+    askButton.onClick = [this]
+    {
+        if (! listening && onAsk)
+        {
+            heardMode = mode;
+            onAsk();
+        }
+    };
+    applyButton.setTooltip ("Take what was found (the keys you set stay yours)");
     applyButton.onClick = [this] { applyHeard(); };
-    discardButton.setTooltip ("Drop what was heard");
+    discardButton.setTooltip ("Drop what was found");
     discardButton.onClick = [this] { discardHeard(); };
     heardLabel.setJustificationType (juce::Justification::centredLeft);
     for (auto* c : std::initializer_list<juce::Component*> {
@@ -280,7 +290,7 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
              &enterLabel,    &enterEditor,    &enterKeyBox, &goodForLabel,  &goodForEditor,    &voicesBox,
              keyboard.get(), &selectionLabel, &whatEditor,  &playsButton,   &switchButton,     &specialButton,
              &unusedButton,  &unknownButton,  &summary,     &forgetButton,  &cancelButton,     &saveButton,
-             &listenButton,  &heardLabel })
+             &listenButton,  &askButton,      &heardLabel })
         addAndMakeVisible (c);
     addChildComponent (applyButton);
     addChildComponent (discardButton);
@@ -316,19 +326,29 @@ void LearnInstrumentPanel::setListening (const juce::String& progress)
     listenButton.setButtonText (listening ? "Stop listening" : "Listen to every key");
     if (listening)
         heardLabel.setText (progress, juce::dontSendNotification);
-    for (auto* c : std::initializer_list<juce::Component*> { &modeBox, &addModeButton, &removeModeButton })
+    for (auto* c : std::initializer_list<juce::Component*> { &modeBox, &addModeButton, &removeModeButton, &askButton })
         c->setEnabled (! listening);
     if (! listening)
         removeModeButton.setEnabled (profile.modes.size() > 1);
 }
 
 void LearnInstrumentPanel::setHeard (std::optional<std::array<InstrumentProfiles::Key, 128>> keys,
-                                     const juce::String& problem)
+                                     const juce::String& problem, From from)
 {
     setListening ({});
     heard = std::move (keys);
+    heardFrom = from;
+    const auto plugin = from == From::plugin;
+    if (heard.has_value() && std::all_of (heard->begin(), heard->end(),
+                                          [] (const InstrumentProfiles::Key& k) { return k.job == Job::unknown; }))
+        heard.reset(); // nothing to propose
     if (! heard.has_value())
-        heardLabel.setText ("Nothing heard: " + problem, juce::dontSendNotification);
+        heardLabel.setText (plugin
+                                ? (problem.isNotEmpty() ? "No answer: " + problem
+                                                        : juce::String ("The instrument names none of its keys (most "
+                                                                        "don't). Listen to every key instead."))
+                                : "Nothing heard: " + problem,
+                            juce::dontSendNotification);
     else
     {
         int counts[5] = {};
@@ -337,15 +357,25 @@ void LearnInstrumentPanel::setHeard (std::optional<std::array<InstrumentProfiles
         auto merged = profile.modes[(size_t)juce::jlimit (0, (int)profile.modes.size() - 1, heardMode)];
         const auto changes = keyprobe::merge (merged, *heard);
         juce::StringArray said;
-        said.add (juce::String (counts[(int)Job::plays]) + " keys play");
-        if (counts[(int)Job::switches] > 0)
-            said.add (juce::String (counts[(int)Job::switches]) + " switch");
-        if (counts[(int)Job::special] > 0)
-            said.add (juce::String (counts[(int)Job::special]) + " do something else");
-        if (counts[(int)Job::unused] > 0)
-            said.add (juce::String (counts[(int)Job::unused]) + " are silent");
-        heardLabel.setText ("Heard: " + said.joinIntoString (", ") + ". Apply changes " + juce::String (changes) +
-                                (changes == 1 ? " key" : " keys") + " (marked with a dot).",
+        if (plugin)
+        {
+            said.add (juce::String (counts[(int)Job::plays] + counts[(int)Job::switches]) + " keys named");
+            if (counts[(int)Job::switches] > 0)
+                said.add (juce::String (counts[(int)Job::switches]) + " of them switches");
+        }
+        else
+        {
+            said.add (juce::String (counts[(int)Job::plays]) + " keys play");
+            if (counts[(int)Job::switches] > 0)
+                said.add (juce::String (counts[(int)Job::switches]) + " switch");
+            if (counts[(int)Job::special] > 0)
+                said.add (juce::String (counts[(int)Job::special]) + " do something else");
+            if (counts[(int)Job::unused] > 0)
+                said.add (juce::String (counts[(int)Job::unused]) + " are silent");
+        }
+        heardLabel.setText (juce::String (plugin ? "The instrument says: " : "Heard: ") + said.joinIntoString (", ") +
+                                ". Apply changes " + juce::String (changes) + (changes == 1 ? " key" : " keys") +
+                                " (marked with a dot).",
                             juce::dontSendNotification);
         if (heardMode != mode)
             showMode (heardMode);
@@ -363,7 +393,9 @@ void LearnInstrumentPanel::applyHeard()
     keyprobe::merge (current(), *heard);
     forgotten = false;
     discardHeard();
-    heardLabel.setText ("Applied what was heard. Save keeps it.", juce::dontSendNotification);
+    heardLabel.setText (heardFrom == From::plugin ? "Applied what the instrument says. Save keeps it."
+                                                  : "Applied what was heard. Save keeps it.",
+                        juce::dontSendNotification);
 }
 
 void LearnInstrumentPanel::discardHeard()
@@ -563,6 +595,8 @@ void LearnInstrumentPanel::resized()
         area.removeFromBottom (6);
         listenButton.setBounds (r.removeFromLeft (160));
         r.removeFromLeft (8);
+        askButton.setBounds (r.removeFromLeft (130));
+        r.removeFromLeft (8);
         discardButton.setBounds (r.removeFromRight (90));
         r.removeFromRight (8);
         applyButton.setBounds (r.removeFromRight (90));
@@ -631,6 +665,7 @@ LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const ju
     };
     panel->onListen = [this] (int enterKey) { listen (enterKey); };
     panel->onStopListening = [this] { stopping->store (true); };
+    panel->onAsk = [this] { ask(); };
     setUsingNativeTitleBar (true);
     setContentOwned (panel, true);
     setResizable (true, false);
@@ -692,6 +727,45 @@ void LearnInstrumentWindow::listen (int enterKey)
                     task = nullptr;
                     if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
                         p->setHeard (*found, *problem);
+                });
+        });
+}
+
+void LearnInstrumentWindow::ask()
+{
+    auto* panel = dynamic_cast<LearnInstrumentPanel*> (getContentComponent());
+    if (panel == nullptr || task != nullptr)
+        return;
+    if (! listening.has_value())
+    {
+        panel->setHeard (std::nullopt,
+                         "choose this instrument for a part first (Sounds for each part), then open Learn this "
+                         "instrument from its menu there.",
+                         LearnInstrumentPanel::From::plugin);
+        return;
+    }
+    stopping->store (false);
+    panel->setListening ("Asking the instrument...");
+    auto found = std::make_shared<std::optional<std::array<InstrumentProfiles::Key, 128>>>();
+    auto problem = std::make_shared<juce::String>();
+    task = std::make_unique<BackgroundTask> (
+        "Spinus asks the instrument for its keys' names",
+        [l = *listening, found, problem, token = stopping] (const std::function<bool()>& shouldStop)
+        {
+            *found = parts::keyNamesInHelper (
+                l.helper, l.source, l.preset, l.state, [&] { return shouldStop() || token->load(); }, *problem);
+            return juce::Result::ok();
+        },
+        [this, a = alive, found, problem] (const juce::Result&)
+        {
+            juce::MessageManager::callAsync (
+                [this, a, found, problem]
+                {
+                    if (! *a)
+                        return;
+                    task = nullptr;
+                    if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
+                        p->setHeard (*found, *problem, LearnInstrumentPanel::From::plugin);
                 });
         });
 }

@@ -565,6 +565,22 @@ public:
 
     double getTailLengthSeconds() const override { return 0.0; }
     bool acceptsMidi() const override { return hasNotePorts; }
+
+    /** The plugin's own name for a key (clap.note-name: a drum map's "Kick", a key switch's "Palm mute"); names
+        for every key at once are not a key's name. Message thread. */
+    std::optional<juce::String> getNameForMidiNoteNumber (int note, int midiChannel) override
+    {
+        if (noteNameExt == nullptr)
+            return std::nullopt;
+        for (uint32_t i = 0, count = noteNameExt->count (plugin); i < count; ++i)
+        {
+            clap_note_name_t name {};
+            if (noteNameExt->get (plugin, i, &name) && name.key == note && name.port <= 0 &&
+                (name.channel < 0 || name.channel == midiChannel))
+                return juce::String::fromUTF8 (name.name, (int)strnlen (name.name, sizeof (name.name)));
+        }
+        return std::nullopt;
+    }
     bool producesMidi() const override { return false; }
 
     juce::AudioProcessorEditor* createEditor() override;
@@ -705,6 +721,7 @@ private:
             static_cast<const clap_plugin_timer_support_t*> (plugin->get_extension (plugin, CLAP_EXT_TIMER_SUPPORT));
         fdExt = static_cast<const clap_plugin_posix_fd_support_t*> (
             plugin->get_extension (plugin, CLAP_EXT_POSIX_FD_SUPPORT));
+        noteNameExt = static_cast<const clap_plugin_note_name_t*> (plugin->get_extension (plugin, CLAP_EXT_NOTE_NAME));
 
         // Plugin windows: embedded in Spinus's (X11 or Win32; floating windows are not used).
         if (auto* gui = static_cast<const clap_plugin_gui_t*> (plugin->get_extension (plugin, CLAP_EXT_GUI)))
@@ -1522,6 +1539,7 @@ private:
     const clap_plugin_gui_t* guiExt = nullptr;
     const clap_plugin_timer_support_t* timerExt = nullptr;
     const clap_plugin_posix_fd_support_t* fdExt = nullptr;
+    const clap_plugin_note_name_t* noteNameExt = nullptr;
     std::map<clap_id, std::unique_ptr<PluginTimer>> timers;
     clap_id nextTimerId = 1;
     std::map<int, clap_posix_fd_flags_t> fds;

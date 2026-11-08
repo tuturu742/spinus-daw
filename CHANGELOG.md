@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Track creator: Learn this instrument
 
+- **Ask the plugin** in Learn this instrument: Spinus reads the names an instrument gives its keys (a drum
+  machine's "Kick", a key switch's "Palm mute") and proposes them, switches as switches. Few instruments name
+  their keys; Spinus's Drum Machine names its pads.
 - **Listen to every key** in Learn this instrument: Spinus plays each key of a mode and listens, then proposes
   which keys play, which switch, which do something else (a chord, another note) and which are silent. Apply
   takes it; keys you marked yourself stay yours.

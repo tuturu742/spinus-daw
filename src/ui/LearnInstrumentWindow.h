@@ -17,8 +17,9 @@ namespace spinus::ui
     hovering a key says what it does and where Spinus learned it. Each mode has a name, how to enter it (in words,
     or the key that switches to it), what it suits and whether it plays chords. Add mode / Remove mode for an
     instrument with several (a sampled guitar's normal and strummer modes). Listen to every key hears the mode's
-    keys (KeyProbe, in the sound index's helper) and shows what it heard as a proposal: the keys that would change
-    are marked, and nothing changes until Apply (the keys you set stay yours); Discard drops it. Nothing is kept
+    keys (KeyProbe, in the sound index's helper), and Ask the plugin reads the names the plugin gives its keys
+    (pluginkeys, there too); either shows what it found as a proposal: the keys that would change are marked, and
+    nothing changes until Apply (the keys you set stay yours); Discard drops it. Nothing is kept
     until Save; Forget this instrument removes its profile (Save then keeps that). Message thread. */
 class LearnInstrumentPanel final : public juce::Component
 {
@@ -48,10 +49,19 @@ public:
     /** Listen to every key, for the mode shown (its entry key); none: the button says it can't. */
     std::function<void (int enterKey)> onListen;
     std::function<void()> onStopListening;
-    /** While listening: "Listening: 40 of 128 keys"; empty when done. */
+    /** Ask the plugin: its own names for its keys, for the mode shown. */
+    std::function<void()> onAsk;
+    /** While listening or asking: "Listening: 40 of 128 keys"; empty when done. */
     void setListening (const juce::String& progress);
-    /** What was heard for the mode shown when listening started (none: `problem` says why). */
-    void setHeard (std::optional<std::array<InstrumentProfiles::Key, 128>>, const juce::String& problem = {});
+    /** Where a proposal comes from: Listen to every key, or the plugin's own report. */
+    enum class From
+    {
+        listening,
+        plugin
+    };
+    /** What was heard (or what the plugin reported) for the mode shown when it started (none: `problem` says why). */
+    void setHeard (std::optional<std::array<InstrumentProfiles::Key, 128>>, const juce::String& problem = {},
+                   From = From::listening);
     bool hasHeard() const noexcept { return heard.has_value(); }
     /** Apply: the keys heard into the mode (the ones you set stay yours). Discard: dropped. */
     void applyHeard();
@@ -76,6 +86,7 @@ private:
     Profile profile;
     std::optional<std::array<InstrumentProfiles::Key, 128>> heard;
     int heardMode = 0;
+    From heardFrom = From::listening;
     bool listening = false;
     bool forgotten = false;
     int mode = 0, selectedFrom = -1, selectedTo = -1;
@@ -88,7 +99,8 @@ private:
     juce::TextButton playsButton { "Plays" }, switchButton { "Switch" }, specialButton { "Special" },
         unusedButton { "Unused" }, unknownButton { "Not known" };
     juce::TextButton forgetButton { "Forget this instrument" }, cancelButton { "Cancel" }, saveButton { "Save" };
-    juce::TextButton listenButton { "Listen to every key" }, applyButton { "Apply" }, discardButton { "Discard" };
+    juce::TextButton listenButton { "Listen to every key" }, askButton { "Ask the plugin" }, applyButton { "Apply" },
+        discardButton { "Discard" };
     juce::Label heardLabel;
 };
 
@@ -125,6 +137,7 @@ private:
                            Saved saved, std::optional<Listening> listening);
     void finish();
     void listen (int enterKey);
+    void ask();
 
     juce::File indexFolder;
     juce::String instrument;
