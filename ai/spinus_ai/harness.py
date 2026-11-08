@@ -107,7 +107,9 @@ shape by hand. Riser and impact parts are placed by Spinus. Keep tool calls smal
 Some instruments have playing modes (a sampled guitar's normal playing, a riff player) and articulation switches \
 (palm mute, slide): the brief lists them by part. Pick the mode that suits each such part with set_mode, before \
 writing it, and name articulations for the sections that want one; Spinus writes the switch keys. Never write the \
-switch keys as notes yourself."""
+switch keys as notes yourself. A mode that plays the song's chords itself (a strummer) takes no notes of yours: \
+write any notes in the sections where the part plays, and name one of its patterns per section as its \
+articulation; Spinus plays the section's chords with it."""
 
 
 def schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -235,15 +237,16 @@ TOOLS = [
     Tool(
         "set_mode",
         "Play a part in one of its instrument's modes (the brief and list_sounds list them), and switch it to an "
-        "articulation per section (palm mute, slide), from the mode's switches. Spinus writes the switch keys; the "
-        "part's notes keep to the mode's range.",
+        "articulation per section (palm mute, slide), from the mode's switches, or, in a mode that plays the "
+        "chords itself, to one of its patterns. Spinus writes the switch keys; the part's notes keep to the mode's "
+        "range.",
         schema(
             {
                 "part": PART,
                 "mode": {"type": "string"},
                 "articulations": {
                     "type": "object",
-                    "description": "Section id -> one of the mode's switches",
+                    "description": "Section id -> one of the mode's switches or patterns",
                     "additionalProperties": {"type": "string"},
                 },
             },
@@ -1152,13 +1155,19 @@ class Workspace:
         if chosen is None:
             raise Mistake(f"'{mode}' is not one of its modes ({', '.join(m['name'] for m in modes)})")
         given = articulations if isinstance(articulations, dict) else {}
-        switches = {x["what"].lower() for x in chosen.get("switches", [])}
+        named = chosen.get("switches", []) + chosen.get("patterns", [])
+        switches = {x["what"].lower() for x in named}
         for sid, what in given.items():
             self.section(sid)
             if str(what).strip().lower() not in switches:
-                have = ", ".join(x["what"] for x in chosen.get("switches", [])) or "none"
-                raise Mistake(f"'{what}' is not one of the {chosen['name']} mode's switches ({have})")
+                have = ", ".join(x["what"] for x in named) or "none"
+                raise Mistake(f"'{what}' is not one of the {chosen['name']} mode's switches or patterns ({have})")
         self.modes[p["id"]] = {"mode": chosen["name"], "articulations": {str(k): str(v) for k, v in given.items()}}
+        if chosen.get("chordKeys"):
+            said = f"{p['id']} plays in {chosen['name']}: the instrument plays the song's chords itself"
+            if given:
+                said += " (" + ", ".join(f"{sid}: {what}" for sid, what in given.items()) + ")"
+            return said + ". Write any notes in the sections where it plays; Spinus writes its chord keys."
         low, high = int(chosen["low"]), int(chosen["high"])
         outside = sum(
             1

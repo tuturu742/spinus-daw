@@ -242,7 +242,12 @@ ZONE = {
         "from": {"type": "string", "description": "The zone's lowest key, as the manual names it (e.g. 'E1')"},
         "to": {"type": "string", "description": "Its highest key (the same as from for one key)"},
         "job": {"type": "string", "enum": list(JOBS)},
-        "what": {"type": "string", "description": "What the keys do, in a few words ('palm mute'); empty to play"},
+        "what": {
+            "type": "string",
+            "description": "What the keys do, in a few words ('palm mute'); empty to play. Chord keys start with "
+            "'chord keys' (and say whether they recognise the chord played on them or pick a stored one); keys that "
+            "play a strum or pattern of the chord held say 'pattern' or 'strum'",
+        },
     },
     "required": ["from", "to", "job"],
 }

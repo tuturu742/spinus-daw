@@ -579,17 +579,21 @@ std::map<juce::String, partmodes::Instrument> SongWriterPanel::instrumentsForSon
     // when the song names none: the part's name and role, and the genre.
     std::map<juce::String, partmodes::Instrument> instruments;
     const auto genre = context.summary["described"]["genreName"].toString();
-    auto add = [&] (const juce::String& id, const parts::Choice& choice, const juce::String& words)
+    auto add = [&] (const juce::String& id, const parts::Choice& choice, const juce::String& words, bool chords)
     {
         if (auto profile = parts::profileFor (choice, context.indexFolder))
-            instruments[id] = { std::move (*profile), words + " " + genre };
+            instruments[id] = { std::move (*profile), words + " " + genre, chords };
     };
+    // The parts that play chords, which may play in a chord mode (a strummer).
+    static const juce::StringArray chordRoles { "chords",       "rhythm-guitar", "acoustic-guitar",
+                                                "clean-guitar", "piano",         "organ",
+                                                "pad" };
     for (const auto& layer : song::layersOf (song))
         if (const auto chosen = layer.drums || layer.part == "fx" ? std::nullopt : chosenForLayer (layer))
-            add (layer.id, chosen->choice, layer.name + " " + layer.role);
+            add (layer.id, chosen->choice, layer.name + " " + layer.role, chordRoles.contains (layer.role));
     for (const auto& part : song::partNames())
         if (const auto* chosen = part == "drums" ? nullptr : chosenFor (context.sounds, part))
-            add (part, chosen->choice, part);
+            add (part, chosen->choice, part, part == "chords");
     return instruments;
 }
 

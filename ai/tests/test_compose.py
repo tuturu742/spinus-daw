@@ -365,3 +365,29 @@ def test_a_candidate_sounds_modes_follow_the_pick() -> None:
     assert compose.modes_of(setup, "gtr", "synth:A") == []
     assert compose.bounds_of(setup, "gtr", "rhythm-guitar", "ample:M", "Riff") == (48, 72)
     assert compose.bounds_of(setup, "gtr", "rhythm-guitar", "synth:A") == compose.RANGES["rhythm-guitar"]
+
+
+def test_a_chord_mode_takes_patterns_as_articulations() -> None:
+    strummer = {
+        "name": "Strummer",
+        "goodFor": "strummed rhythm",
+        "low": 36,
+        "high": 59,
+        "chordKeys": True,
+        "patterns": [{"what": "play SEQ 1", "key": 60}, {"what": "play SEQ 2", "key": 61}],
+        "switches": [{"what": "slide-in strum", "key": 25}],
+    }
+    setup = compose.Setup.make(summary(), PARTS, "sketch", None, None, modes={"gtr": [*GUITAR_MODES, strummer]})
+    assert setup.modes["gtr"][2]["chordKeys"] and len(setup.modes["gtr"][2]["patterns"]) == 2
+    words = compose.modes_words(setup.modes["gtr"])
+    assert "Strummer (plays the song's chords itself" in words and "patterns: play SEQ 1, play SEQ 2" in words
+    answer = song_answer()
+    answer["parts"]["gtr"] = {
+        "mode": "Strummer",
+        "articulations": {"verse": "Play SEQ 1", "chorus": "slide-in strum"},
+        "sections": {"verse": {"bars": 1, "notes": "0 90 4 90"}, "chorus": {"bars": 1, "notes": "0 30 4 90"}},
+    }
+    checked = compose.check_answer(answer, setup)
+    assert checked.modes["gtr"]["articulations"] == {"verse": "play SEQ 1", "chorus": "slide-in strum"}
+    # Its notes only say where it plays: not folded into the chord keys' range.
+    assert {n["pitch"] for n in checked.notes["gtr"]["verse"]} == {90}
