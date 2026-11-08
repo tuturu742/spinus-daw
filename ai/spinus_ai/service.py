@@ -1032,14 +1032,17 @@ class Service:
             raise RpcError(-32602, f"The reasoning level is {', '.join(EFFORTS)}, or none for the model's own.")
         try:
             setup = compose.Setup.make(summary, params.get("parts"), size, params.get("candidates"),
-                                       params.get("current"), params.get("effects"), params.get("variety"))  # fmt: skip
+                                       params.get("current"), params.get("effects"), params.get("variety"),
+                                       params.get("modes"))  # fmt: skip
         except ValueError as error:
             raise RpcError(-32602, str(error)) from error
         return setup, effort
 
     async def song_compose(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song written by the AI, opt-in: {summary, seed, parts, arrangement, candidates (part id -> [{id, name}]:
-        sounds from the sound index it may pick), current (part id -> its sound in words), variety ("close",
+        sounds from the sound index it may pick, each with its instrument's modes when Spinus learned them), current
+        (part id -> its sound in words), modes (part id -> the modes of that sound's instrument: [{name, goodFor, low,
+        high, switches, ...}], partmodes::brief), variety ("close",
         "balanced", the default, or "adventurous": the freedom the brief gives and how closely Spinus's checks hold the
         song to the references), effort ("low", "medium",
         "high", "xhigh" or none: the model's own), tools (the harness's groups of tools allowed: a depth, basic,

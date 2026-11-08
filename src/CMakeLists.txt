@@ -259,6 +259,8 @@ add_library (spinus_core STATIC
     session/PluginKeyNames.h
     session/ManualReading.cpp
     session/ManualReading.h
+    session/PartModes.cpp
+    session/PartModes.h
     session/InstrumentProfiles.h
     session/PresetFolders.cpp
     session/PresetFolders.h

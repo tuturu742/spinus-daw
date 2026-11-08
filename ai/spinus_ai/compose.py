@@ -102,7 +102,13 @@ part rests in that section. Keep each part inside its range. Chords are Roman nu
 vii°, bVII, bVI, bIII, i, iv, v, V7, Imaj7, ii7, Vsus4...); prefer the style's chord vocabulary.
 
 Parts with the role riser or impact are placed by Spinus itself: leave them out. For each other part, pick \
-its sound from its candidates by id (or leave sound out to keep the current one)."""
+its sound from its candidates by id (or leave sound out to keep the current one).
+
+Some instruments have playing modes (a sampled guitar's normal playing, a riff player) and \
+articulation switches (palm mute, slide). Where a part's sound lists modes, pick the one that suits the part \
+(each says what it is good for; the first is the one it opens in), write inside that mode's range, and name an \
+articulation for the sections that want one (palm mute in the verse, open in the chorus): Spinus writes the \
+switch keys. Never write the switch keys as notes yourself."""
 
 REVISE = """Spinus wrote your song into the project and checked it. Its findings are below, with the song as it \
 stands. Revise the song by calling write_song again: change only what you want to change and leave out the \
@@ -141,6 +147,12 @@ WRITE_SONG = Tool(
                     "type": "object",
                     "properties": {
                         "sound": {"type": "string", "description": "One of the part's candidate sound ids"},
+                        "mode": {"type": "string", "description": "One of its sound's modes, by name, if it lists any"},
+                        "articulations": {
+                            "type": "object",
+                            "description": "Section id -> one of the mode's switches ('palm mute'), if it has any",
+                            "additionalProperties": {"type": "string"},
+                        },
                         "sections": {
                             "type": "object",
                             "additionalProperties": {
@@ -168,12 +180,14 @@ class Setup:
     summary: dict[str, Any]
     style: sw.Style
     parts: list[dict[str, str]]
-    candidates: dict[str, list[dict[str, str]]] = field(default_factory=dict)  # part id -> [{id, name}]
+    candidates: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # part id -> [{id, name}]
     current: dict[str, str] = field(default_factory=dict)  # part id -> the sound it has now, in words
     # The user's send effects: "reverb" or "delay" -> their names (plugins; Spinus Delay is always there besides).
     effects: dict[str, list[str]] = field(default_factory=dict)
     # How far the song may move from the references: the brief says so, and the checks loosen or tighten to match.
     variety: sw.Variety = sw.BALANCED
+    # Part id -> the modes of the instrument the user chose for it (check_modes); a candidate sound has its own.
+    modes: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     @staticmethod
     def make(
@@ -184,17 +198,22 @@ class Setup:
         current: Any = None,
         effects: Any = None,
         variety: Any = None,
+        modes: Any = None,
     ) -> Setup:
         """The setup, checked; ValueError for what is not usable (an unknown variety among it)."""
         chosen_variety = sw.variety_of(variety)
         style = sw.Style.from_summary(summary)
         chosen = sw.check_parts(parts) if parts is not None else sw.default_parts(style, size)
-        found: dict[str, list[dict[str, str]]] = {}
+        found: dict[str, list[dict[str, Any]]] = {}
         if isinstance(candidates, dict):
             for pid, items in candidates.items():
                 if isinstance(items, list):
                     found[str(pid)] = [
-                        {"id": str(c["id"])[:80], "name": str(c.get("name") or c["id"])[:120]}
+                        {
+                            "id": str(c["id"])[:80],
+                            "name": str(c.get("name") or c["id"])[:120],
+                            **({"modes": check_modes(c["modes"])} if check_modes(c.get("modes")) else {}),
+                        }
                         for c in items[:MOST_CANDIDATES]
                         if isinstance(c, dict) and c.get("id")
                     ]
@@ -205,11 +224,107 @@ class Setup:
                 names = effects.get(kind)
                 if isinstance(names, list):
                     have[kind] = [str(n)[:120] for n in names[:MOST_CANDIDATES] if str(n).strip()]
-        return Setup(summary, style, chosen, found, now, have, chosen_variety)
+        played = {str(k): check_modes(v) for k, v in modes.items()} if isinstance(modes, dict) else {}
+        return Setup(summary, style, chosen, found, now, have, chosen_variety, {k: v for k, v in played.items() if v})
 
     def written(self) -> list[dict[str, str]]:
         """The parts the model writes (the effects are the rules')."""
         return [p for p in self.parts if p["role"] not in FX_ROLES]
+
+
+MOST_MODES = 8
+MOST_SWITCHES = 24
+
+
+def check_modes(value: Any) -> list[dict[str, Any]]:
+    """An instrument's modes as Spinus lists them (partmodes::brief): [{name, goodFor, voices, low, high, notPlaying,
+    switches: [{what, key}], first}], checked; the ones not usable left out."""
+    found: list[dict[str, Any]] = []
+    if not isinstance(value, list):
+        return found
+    for m in value[:MOST_MODES]:
+        if not isinstance(m, dict) or not str(m.get("name") or "").strip():
+            continue
+        low, high = as_int(m.get("low")), as_int(m.get("high"))
+        if low is None or high is None or not 0 <= low <= high <= 127:
+            continue
+        mode: dict[str, Any] = {"name": str(m["name"]).strip()[:60], "low": low, "high": high}
+        for k in ("goodFor", "voices"):
+            if str(m.get(k) or "").strip():
+                mode[k] = str(m[k]).strip()[:160]
+        if (gaps := as_int(m.get("notPlaying"))) is not None and gaps > 0:
+            mode["notPlaying"] = gaps
+        given = m.get("switches")
+        switches = [
+            {"what": str(x["what"]).strip()[:60], "key": as_int(x.get("key"))}
+            for x in (given if isinstance(given, list) else [])[:MOST_SWITCHES]
+            if isinstance(x, dict) and str(x.get("what") or "").strip()
+        ]
+        if switches:
+            mode["switches"] = switches
+        if m.get("first"):
+            mode["first"] = True
+        if not any(f["name"].lower() == mode["name"].lower() for f in found):
+            found.append(mode)
+    return found
+
+
+def modes_of(setup: Setup, pid: str, sound: str | None = None) -> list[dict[str, Any]]:
+    """The modes of a part's instrument: the picked candidate sound's, else those of the sound the user chose."""
+    if sound:
+        picked = next((c for c in setup.candidates.get(pid, []) if c["id"] == sound), None)
+        if picked is not None:
+            return list(picked.get("modes") or [])
+    return setup.modes.get(pid, [])
+
+
+def mode_named(modes: list[dict[str, Any]], name: Any) -> dict[str, Any] | None:
+    said = str(name or "").strip().lower()
+    return next((m for m in modes if m["name"].lower() == said), None) if said else None
+
+
+def bounds_of(setup: Setup, pid: str, role: str, sound: str | None = None, mode: Any = None) -> tuple[int, int]:
+    """The notes a part may play: its instrument's mode's (the one named, else the first), else its role's."""
+    modes = modes_of(setup, pid, sound)
+    chosen = mode_named(modes, mode) or (modes[0] if modes else None)
+    if chosen is not None:
+        return int(chosen["low"]), int(chosen["high"])
+    return RANGES.get(role, (24, 108))
+
+
+def checked_use(entry: dict[str, Any], modes: list[dict[str, Any]], sections: Any) -> dict[str, Any] | None:
+    """A part's mode and articulations as the model gave them ({mode, articulations: {section: switch}}), kept
+    to its instrument's modes and the song's sections; None when it named no mode it has."""
+    mode = mode_named(modes, entry.get("mode"))
+    if mode is None:
+        return None
+    switches = {x["what"].lower(): x["what"] for x in mode.get("switches", [])}
+    given = entry.get("articulations") if isinstance(entry.get("articulations"), dict) else {}
+    assert isinstance(given, dict)
+    articulations = {
+        str(sid): switches[str(what).strip().lower()]
+        for sid, what in given.items()
+        if str(sid) in sections and str(what).strip().lower() in switches
+    }
+    return {"mode": mode["name"], "articulations": articulations}
+
+
+def modes_words(modes: list[dict[str, Any]]) -> str:
+    """'modes: Normal (opens in it; E2-E6; picked lines; switches: palm mute, slide), Riff (C3-C5)'."""
+    out = []
+    for m in modes:
+        said = ["opens in it"] if m.get("first") else []
+        said.append(f"{sw.note_name(m['low'])}-{sw.note_name(m['high'])}")
+        if m.get("notPlaying"):
+            said.append(f"{m['notPlaying']} keys between do not play")
+        if m.get("goodFor"):
+            said.append(m["goodFor"])
+        if m.get("voices"):
+            said.append(m["voices"])
+        if m.get("switches"):
+            said.append("switches: " + ", ".join(x["what"] for x in m["switches"]))
+        out.append(f"{m['name']} ({'; '.join(said)})")
+    return "modes: " + ", ".join(out)
 
 
 def part_brief(setup: Setup) -> list[dict[str, Any]]:
@@ -221,8 +336,10 @@ def part_brief(setup: Setup) -> list[dict[str, Any]]:
         instances[role] = k + 1
         brief: dict[str, Any] = {"id": p["id"], "name": p["name"], "role": role, "drums": sw.ROLES[role][4]}
         if not brief["drums"]:
-            low, high = RANGES.get(role, (24, 108))
+            low, high = bounds_of(setup, p["id"], role)
             brief["range"] = [low, high]
+            if setup.modes.get(p["id"]):
+                brief["modes"] = setup.modes[p["id"]]
             register = sw.layer_register(setup.style, role, k)
             if register:
                 brief["usualNotes"] = register
@@ -540,11 +657,20 @@ class Parsed:
     snapped: int = 0
 
 
-def parse_notes(text: str, drums: bool, role: str, loop_bars: int, section_bars: int, steps: int) -> Parsed:
-    """One part's notes for a section: the loop's notes repeated over the section, each checked."""
+def parse_notes(
+    text: str,
+    drums: bool,
+    role: str,
+    loop_bars: int,
+    section_bars: int,
+    steps: int,
+    bounds: tuple[int, int] | None = None,
+) -> Parsed:
+    """One part's notes for a section: the loop's notes repeated over the section, each checked (kept to `bounds`,
+    else the role's range)."""
     out = Parsed([])
     loop_steps, section_steps = loop_bars * steps, section_bars * steps
-    low, high = RANGES.get(role, (24, 108))
+    low, high = bounds or RANGES.get(role, (24, 108))
     loop: list[tuple[int, Any, int, float]] = []
     for raw in re.split(r"[;\n]+", text or "")[: 64 * max(1, loop_bars) * 2]:
         fields = raw.replace(",", " ").split()
@@ -715,8 +841,11 @@ def merged(previous: dict[str, Any] | None, answer: dict[str, Any]) -> dict[str,
             if not isinstance(part, dict):
                 continue
             entry = mine.setdefault(str(pid), {})
-            if "sound" in part:
-                entry["sound"] = part["sound"]
+            for key in ("sound", "mode"):
+                if key in part:
+                    entry[key] = part[key]
+            if isinstance(part.get("articulations"), dict):
+                entry.setdefault("articulations", {}).update(part["articulations"])
             if isinstance(part.get("sections"), dict):
                 entry.setdefault("sections", {}).update(part["sections"])
     return out
@@ -730,6 +859,7 @@ class Checked:
     sounds: dict[str, str]
     filled: list[str]  # part ids the rules wrote, the model having left them out or botched them
     why_filled: dict[str, str]
+    modes: dict[str, dict[str, Any]] = field(default_factory=dict)  # part id -> {mode, articulations}
 
 
 def check_answer(answer: Any, setup: Setup) -> Checked:
@@ -744,6 +874,7 @@ def check_answer(answer: Any, setup: Setup) -> Checked:
     sounds: dict[str, str] = {}
     filled: list[str] = []
     why: dict[str, str] = {}
+    modes: dict[str, dict[str, Any]] = {}
     for p in setup.written():
         pid, role = p["id"], p["role"]
         entry = given.get(pid)
@@ -754,6 +885,10 @@ def check_answer(answer: Any, setup: Setup) -> Checked:
         sound = entry.get("sound")
         if isinstance(sound, str) and any(c["id"] == sound for c in setup.candidates.get(pid, [])):
             sounds[pid] = sound
+        use = checked_use(entry, modes_of(setup, pid, sounds.get(pid)), by_id)
+        if use is not None:
+            modes[pid] = use
+        bounds = bounds_of(setup, pid, role, sounds.get(pid), use["mode"] if use else None)
         sections = entry["sections"]
         per: dict[str, Parsed] = {}
         for sid, section in by_id.items():
@@ -769,6 +904,7 @@ def check_answer(answer: Any, setup: Setup) -> Checked:
                 loop,
                 int(section["bars"]),
                 setup.style.steps,
+                bounds,
             )
         tokens = sum(x.tokens for x in per.values())
         bad = sum(x.bad for x in per.values())
@@ -784,7 +920,7 @@ def check_answer(answer: Any, setup: Setup) -> Checked:
         parsed[pid] = per
     if not notes and setup.written():
         raise Unusable("none of the parts had usable notes")
-    return Checked(plan, notes, parsed, sounds, filled, why)
+    return Checked(plan, notes, parsed, sounds, filled, why, modes)
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -884,6 +1020,8 @@ def build_song(checked: Checked, setup: Setup, seed: int, size: str) -> dict[str
         )
         if source is not None:
             song["parts"][base] = {s["id"]: list(layer_parts[source].get(s["id"], [])) for s in song["sections"]}
+    # The modes and articulations chosen: Spinus keeps each part to its mode and writes the switch keys.
+    song["modes"] = {pid: use for pid, use in checked.modes.items() if any(lay["id"] == pid for lay in layers)}
     return song
 
 
@@ -953,7 +1091,8 @@ def review(
             folded = sum(x.folded for x in checked.parsed[pid].values())
             snapped = sum(x.snapped for x in checked.parsed[pid].values())
             bad = sum(x.bad for x in checked.parsed[pid].values())
-            low, high = RANGES.get(layer["role"], (24, 108))
+            use = checked.modes.get(pid) or {}
+            low, high = bounds_of(setup, pid, layer["role"], checked.sounds.get(pid), use.get("mode"))
             if folded:
                 found.append(
                     f"{name}: {folded} notes were outside its range ({sw.note_name(low)} to {sw.note_name(high)}) "

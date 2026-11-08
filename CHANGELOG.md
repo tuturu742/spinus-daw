@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Track creator: Learn this instrument
 
+- **Songs use the instrument's modes**: for an instrument you taught Spinus, each part of a written song plays
+  in one of its modes (the one whose "good for" words fit the part and genre, or the one your AI connection
+  picks), and the AI can switch articulations per section (palm mute in the verse, open in the chorus). Spinus
+  writes the switch keys as short notes at the start of each section, and the page lists the modes used.
 - **Read the manual** in Learn this instrument: add an instrument's manuals (PDF files or web pages, as many as
   it has) and the AI proposes its modes, how to enter each, what each suits and what their keys do. Apply takes
   it, keeping what you set; each manual remembers the instrument version it was read for. Needs AI.

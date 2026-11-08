@@ -3,6 +3,7 @@
 #include "MessageLabel.h"
 #include "ai/AiService.h"
 #include "session/AnalysisLibrary.h"
+#include "session/PartModes.h"
 #include "session/PartSounds.h"
 #include "session/Session.h"
 #include "session/SongWriter.h"
@@ -144,8 +145,10 @@ private:
     /** The AI writer's request: the summary, the parts, the candidate sounds, the reasoning level. */
     juce::var composeParams (int seed);
     /** For each part without a sound from the Sounds page, a few sounds of the index it may pick from (id ->
-        choice, kept for when the AI picks one). */
-    juce::var candidatesFor (juce::var& current);
+        choice, kept for when the AI picks one), each with its instrument's modes when it has a profile;
+        `current`: the Sounds page's sound of each other part, and `modes` its instrument's modes
+        (partmodes::brief). */
+    juce::var candidatesFor (juce::var& current, juce::var& modes);
     void composeRound (const juce::var& params, const juce::String& words);
     /** After the song is written and measured: another round with what was heard, or done. */
     void afterMeasured (const std::map<juce::String, double>& levels,
@@ -161,9 +164,11 @@ private:
     const parts::Plan::Part* pagePartFor (const song::Layer&) const;
     /** The chosen sound of a full arrangement's layer: the Sounds page's for its part, or the index's. */
     std::optional<parts::Plan::Part> chosenForLayer (const song::Layer&);
-    /** The song as it goes into the project: each part's notes within the notes its instrument may play
-        (song::keepToRanges, the instruments' profiles). */
+    /** The song as it goes into the project: each part in the mode of its instrument the song chose (or one picked
+        by its words), its notes on that mode's keys and its switch keys written (partmodes::apply). */
     juce::var songForProject();
+    /** The parts' instruments that have a profile (InstrumentProfiles), by layer id or part. */
+    std::map<juce::String, partmodes::Instrument> instrumentsForSong();
     /** After writing: each layer's busiest bars played with its sound in the sound helper, measured, and its
         starting fader set from that and its role (song::startingFaders), for Apply. */
     void

@@ -1227,6 +1227,15 @@ std::optional<PlayableKeys> playableFor (const Choice& choice, const juce::File&
     return profiles.playable (instrumentKey (choice));
 }
 
+std::optional<InstrumentProfiles::Profile> profileFor (const Choice& choice, const juce::File& indexFolder)
+{
+    if (choice.kind == Choice::Kind::kit || choice.kind == Choice::Kind::loop || indexFolder == juce::File())
+        return std::nullopt;
+    InstrumentProfiles profiles (indexFolder);
+    profiles.load();
+    return profiles.get (instrumentKey (choice));
+}
+
 std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const Choice& choice, double tempo,
                                                      const juce::var& summary, std::optional<PlayableKeys> playable)
 {

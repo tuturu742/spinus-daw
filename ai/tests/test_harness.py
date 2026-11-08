@@ -1323,3 +1323,29 @@ def test_the_ai_may_change_the_lyrics_form_as_far_as_the_variety_allows() -> Non
             compose.keep_lyrics(compose.check_plan(answer(order), setup_), setup_, strict=True)
     brief = compose.lyrics_brief(s, setup_.style, 0)
     assert brief is not None and "exactly" in brief["fixed"]
+
+
+def test_set_mode_plays_a_part_in_its_instruments_mode_with_articulations() -> None:
+    modes = [
+        {"name": "Normal", "low": 40, "high": 88, "switches": [{"what": "palm mute", "key": 24}], "first": True},
+        {"name": "Riff", "goodFor": "funk riffs", "low": 48, "high": 72},
+    ]
+    ws = harness.Workspace.start(harness.setup_of({**BRIEF, "modes": {"keys": modes}}), 5, "sketch")
+    assert "modes: Normal (opens in it; E2-E6; switches: palm mute), Riff" in ws.call("brief", {})
+    first, second = list(ws.sections)[:2]
+    ws.call("write", {"part": "keys", "section": first, "notes": "0 84 4 90", "loop_bars": 1})
+    said = ws.call("set_mode", {"part": "keys", "mode": "riff", "articulations": {}})
+    assert "keys plays in Riff (C3-C5)" in said and "of its notes are outside" in said
+    with pytest.raises(harness.Mistake, match="not one of the Riff mode's switches"):
+        ws.call("set_mode", {"part": "keys", "mode": "Riff", "articulations": {first: "palm mute"}})
+    with pytest.raises(harness.Mistake, match="not one of its modes"):
+        ws.call("set_mode", {"part": "keys", "mode": "Strummer"})
+    with pytest.raises(harness.Mistake, match="no modes Spinus knows of"):
+        ws.call("set_mode", {"part": "bass", "mode": "Normal"})
+    # Written in Riff: kept to its range.
+    assert "outside the range C3-C5" in ws.call("write", {"part": "keys", "section": second, "notes": "0 84 4 90"})
+    ws.call("set_mode", {"part": "keys", "mode": "Normal", "articulations": {first: "Palm Mute"}})
+    song = ws.song()
+    assert song["modes"] == {"keys": {"mode": "Normal", "articulations": {first: "palm mute"}}}
+    # The working copy keeps it, as a revision starts from it.
+    assert ws.copy().modes == ws.modes and ws.export()["modes"] == ws.modes
