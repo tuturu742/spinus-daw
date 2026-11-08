@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Fixes
+
+- Flatpak: LV2 plugins from Flathub's plugin packs (such as the SWH and TAP plugins) load again. They were listed
+  in the Browser but showed as Missing when added, with "Unable to locate plugin" in the log.
+
 ### Track creator: songs that sound written, not generated
 
 - Songs with lyrics no longer get filler. Round 2's songs had long copied intros and outros (sometimes two of each)

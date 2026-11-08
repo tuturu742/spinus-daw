@@ -24,6 +24,7 @@
 #include "session/TextLocale.h"
 #include "plugins/SandboxList.h"
 #include "plugins/sandbox/SandboxPluginFormat.h"
+#include "plugins/HostLibraries.h"
 #include "plugins/PluginCatalog.h"
 #include "plugins/PluginDownloads.h"
 #include "plugins/windows/PluginDialogs.h"
@@ -82,6 +83,9 @@ public:
 
     void initialise (const juce::String& commandLine) override
     {
+        // In the Flatpak, LV2 plugins from the plugin extensions and the computer, before any LV2 host reads the
+        // path: the scanner and the plugin host had it, so such plugins were listed but did not load here.
+        plugins::addPluginFoldersToLv2Path();
         session::ensureUtf8ForChildProcesses();
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         const auto unknown = cli::unknownOption (args);
