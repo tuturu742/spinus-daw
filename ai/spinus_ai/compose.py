@@ -140,6 +140,15 @@ WRITE_SONG = Tool(
                 },
             },
             "order": {"type": "array", "items": {"type": "string"}, "description": "Section ids as they play"},
+            "phrasing": {
+                "type": "string",
+                "enum": list(sw.PHRASINGS),
+                "description": "With lyrics: how the lines are phrased (the brief's vocals)",
+            },
+            "vocalShare": {
+                "type": "number",
+                "description": "With lyrics: the share of the bars sung, 0 to 1 (the brief's vocals)",
+            },
             "parts": {
                 "type": "object",
                 "description": "Part id -> {sound, sections: {section id -> {bars, notes}}}",
@@ -409,7 +418,10 @@ def lyrics_brief(
         if lines:
             entry["syllables"] = [int(line.get("syllables") or 1) for line in lines]
             entry["stress"] = [str(line.get("stress") or "") for line in lines]
-            entry["barsPerLine"] = max(sw.line_bars(n, style.tempo, style.beats_per_bar) for n in entry["syllables"])
+            phrasing = vocal_choice({}, style)[0]
+            entry["barsPerLine"] = max(
+                sw.line_bars(n, style.tempo, style.beats_per_bar, phrasing) for n in entry["syllables"]
+            )
         else:
             entry["instrumental"] = True
         form.append(entry)
@@ -420,6 +432,18 @@ def lyrics_brief(
         "have no tune.",
         "form": form,
     }
+    if (vocals := style.vocals) is not None:
+        out["vocals"] = {
+            "share": [vocals.low, vocals.high],
+            "phrasings": list(vocals.phrasings),
+            "note": f"Spinus does not sing, so the song must not lean on the vocals: in this style {vocals.low:.0%} to "
+            f"{vocals.high:.0%} of the bars are sung, the rest instrumental (intros, {vocals.fill}s, breaks, "
+            "outros), where the lead, the bass and the drums carry the song. Choose where in that range this song "
+            "sits (vocalShare, 0 to 1) and how its lines are phrased (phrasing: normal, a line a bar or two at the "
+            "tempo; half, over the half-time feel, twice as long; double, a fast flow, twice as dense), in "
+            "write_song or set_form: Spinus fits the lyrics' form to them, adding or lengthening the instrumental "
+            "sections. The form below is for the middle of the range and the first phrasing.",
+        }
     if found := lyric_form(summary, style, style.tempo):
         sections, order, _ = found
         out["sections"] = [
@@ -450,21 +474,40 @@ def lyrics_brief(
 
 
 def lyric_form(
-    summary: dict[str, Any], style: sw.Style, tempo: float
+    summary: dict[str, Any], style: sw.Style, tempo: float, plan: dict[str, Any] | None = None
 ) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]] | None:
     """The lyrics' form at this tempo (songwriter.lyric_form: each sung section as long as its lines, with their
-    syllables); None without sung lines."""
+    syllables), phrased and with the share sung that `plan` chose (vocal_choice); None without sung lines."""
     lyrics = summary.get("lyrics")
     if not isinstance(lyrics, dict) or not any(s.get("lines") for s in lyrics.get("sections") or []):
         return None
-    return sw.lyric_form(lyrics, tempo, style, lambda kind: 8, {})
+    phrasing, share = vocal_choice(plan or {}, style)
+    return sw.lyric_form(lyrics, tempo, style, lambda kind: 8, {}, phrasing, share)
 
 
-def sung_of(order: list[str], setup: Setup, tempo: float) -> dict[str, Any] | None:
+def vocal_choice(answer: dict[str, Any], style: sw.Style) -> tuple[str, float | None]:
+    """The phrasing and the share sung an answer (or a plan) chose, inside the style's: an unknown phrasing is the
+    commonest, a share outside the range is moved into it, none given is the range's middle. ("normal", None)
+    when the style says nothing of its vocals."""
+    vocals = style.vocals
+    if vocals is None:
+        return "normal", None
+    phrasing = str(answer.get("phrasing") or "")
+    phrasing = phrasing if phrasing in vocals.phrasings else vocals.phrasings[0]
+    given = answer.get("vocalShare")
+    share = float(given) if isinstance(given, int | float) and not isinstance(given, bool) else vocals.middle()
+    if not math.isfinite(share):
+        share = vocals.middle()
+    if share > 1.0:
+        share /= 100.0  # a percentage
+    return phrasing, round(min(max(share, vocals.low), vocals.high), 3)
+
+
+def sung_of(order: list[str], setup: Setup, tempo: float, plan: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """What is sung in each entry of the order (as songwriter.make_plan gives it): the lyrics' lines in their order,
     on the sung sections; a sung section sung again (a change the variety allows) its lines again; nothing on the
     others."""
-    found = lyric_form(setup.summary, setup.style, tempo)
+    found = lyric_form(setup.summary, setup.style, tempo, plan)
     if found is None:
         return None
     _, form_order, sung = found
@@ -534,10 +577,10 @@ def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[
     add instrumental sections or leave out the lyrics' (align_form). An order that leaves out or moves a sung
     section, or changes more, raises Unusable when `strict` (the harness's model sets the form again);
     otherwise the lyrics' own order is used. Also what was kept, in words."""
-    found = lyric_form(setup.summary, setup.style, float(plan["tempo"]))
+    found = lyric_form(setup.summary, setup.style, float(plan["tempo"]), plan)
     if found is None:
         return plan, []
-    form, form_order, _ = found
+    form, form_order, form_sung = found
     fixed = {s["id"]: s for s in form if s.get("words")}
     by_id = {s["id"]: s for s in plan["sections"]}
     form_kinds = {s["id"]: s["kind"] for s in form}
@@ -598,8 +641,38 @@ def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[
     if total > sw.MOST_BARS:
         raise Unusable(f"with the lyrics' sections the song is {total} bars long (at most {sw.MOST_BARS})")
     out = {**plan, "sections": sections, "order": order}
-    if sung := sung_of(order, setup, float(plan["tempo"])):
+    phrasing, share = vocal_choice(plan, setup.style)
+    if share is not None:
+        out["phrasing"], out["vocalShare"] = phrasing, share
+    if sung := sung_of(order, setup, float(plan["tempo"]), out):
+        vocals = setup.style.vocals
+        if share is not None and vocals is not None:
+            # The model's form fitted to the share it chose, as the lyrics' own is: its instrumental sections
+            # lengthened (or more added) until about that much is sung, the words kept.
+            before = sum(next(s["bars"] for s in sections if s["id"] == o) for o in order)
+            sw.fit_share(sections, order, sung, share, vocals.fill, {})
+            for section in sections:  # one it added: the chords of a section of its kind (or the first), its energy
+                if "chords" not in section:
+                    like = next((x for x in sections if x["kind"] == section["kind"] and "chords" in x), sections[0])
+                    section.update(chords=list(like["chords"]), hold=like.get("hold", 1), cue="",
+                                   energy=sw.ENERGY.get(sw.base_kind(section["kind"]), 0.6))  # fmt: skip
+            after = sum(next(s["bars"] for s in sections if s["id"] == o) for o in order)
+            if after != before:
+                kept.append(f"instrumental room for about {share:.0%} sung ({before} bars became {after})")
         out["lyrics"] = sung
+        if strict and vocals is not None:
+            # The share sung inside the style's range, when the lyrics' own form (fitted) could be: the changes the
+            # model made keep it there.
+            have = sw.sung_share(sections, order, sung)
+            could = sw.sung_share(form, form_order, form_sung)
+            if vocals.low - 0.02 <= could <= vocals.high + 0.02 and not vocals.low - 0.02 <= have <= vocals.high + 0.02:
+                raise Unusable(
+                    f"about {have:.0%} of this form is sung; this song's range is {vocals.low:.0%} to "
+                    f"{vocals.high:.0%}: "
+                    + ("add or lengthen instrumental sections (an intro, a " + vocals.fill + ", a break, an outro)"
+                       if have > vocals.high else "shorten or leave out instrumental sections")
+                    + ", or set vocalShare and Spinus fits the lyrics' form to it"
+                )  # fmt: skip
     return out, kept
 
 
@@ -818,12 +891,16 @@ def check_plan(answer: dict[str, Any], setup: Setup) -> dict[str, Any]:
     total = sum(by_id[o]["bars"] for o in order)
     if not 4 <= total <= sw.MOST_BARS:
         raise Unusable(f"the song is {total} bars long (4 to {sw.MOST_BARS})")
-    return {
+    out: dict[str, Any] = {
         "tempo": tempo,
         "key": {"tonic": tonic, "scale": scale, "name": key_name(tonic, scale)},
         "sections": [s for s in checked if s["id"] in order],
         "order": order,
     }
+    phrasing, share = vocal_choice(answer, style)
+    if share is not None:
+        out["phrasing"], out["vocalShare"] = phrasing, share
+    return out
 
 
 def merged(previous: dict[str, Any] | None, answer: dict[str, Any]) -> dict[str, Any]:
@@ -831,7 +908,7 @@ def merged(previous: dict[str, Any] | None, answer: dict[str, Any]) -> dict[str,
     if previous is None:
         return answer
     out: dict[str, Any] = json.loads(json.dumps(previous))
-    for key in ("tempo", "key", "sections", "order", "reason"):
+    for key in ("tempo", "key", "sections", "order", "reason", "phrasing", "vocalShare"):
         if key in answer:
             out[key] = answer[key]
     parts = answer.get("parts")

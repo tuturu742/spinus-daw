@@ -591,6 +591,7 @@ TEST_CASE ("Song writer: each part starts at its role's level, from how loud its
     }
     CHECK (loudest == Catch::Approx (0.0));
     CHECK (song::roleLevelDb ("pad") < song::roleLevelDb ("bass"));
+    CHECK (song::roleLevelDb ("vocals") < song::roleLevelDb ("lead"));      // the stand-in for the voice sits back
     CHECK (song::startingFaders (layers, { { "drums", -100.0 } }).empty()); // silent: not measured
     // A part that measures very quiet (sparse hits) reaches 0 dB at most: the drums and bass stay where they are.
     const auto sparse = song::startingFaders (layers, { { "drums", -20.0 }, { "bass", -22.0 }, { "pad", -50.0 } });
