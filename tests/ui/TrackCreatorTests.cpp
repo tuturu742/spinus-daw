@@ -2035,12 +2035,12 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     CHECK (panel.hasReading());
     CHECK (panel.getHeardText().startsWith ("The manual says: 1 mode: Strummer (entered by C#8, MIDI 97). Apply "
                                             "changes 1 thing (1 new mode)"));
-    const auto modesBefore = panel.getProfile()->modes.size();
+    const auto modesBefore = panel.getProfile().value().modes.size();
     panel.applyHeard();
     CHECK_FALSE (panel.hasReading());
     CHECK (panel.getHeardText().startsWith ("Applied what the manual says"));
-    REQUIRE (panel.getProfile()->modes.size() == modesBefore + 1);
-    CHECK (panel.getProfile()->modes.back().keys[65].what == "chord keys");
+    REQUIRE (panel.getProfile().value().modes.size() == modesBefore + 1);
+    CHECK (panel.getProfile().value().modes.back().keys[65].what == "chord keys");
     CHECK (panel.getManuals()[0].version == "1.0.3"); // read for this version
     panel.setInstrumentVersion ("1.1.0");
     CHECK (panel.getManualsText().contains ("read for 1.0.3; the instrument is 1.1.0 now"));
