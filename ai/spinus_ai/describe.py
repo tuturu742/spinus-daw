@@ -455,6 +455,104 @@ GENRES: tuple[Genre, ...] = (
     G("ambient", "ambient", ("ambient", "drone", "soundscape", "meditation", "new age", "dark ambient"), "ambient", 70,
       (55, 90), 0.5),
 )  # fmt: skip
+
+
+# How much of a song with vocals is sung, by genre (the rest: instrumental intros, drops, breaks, solos, outros), how
+# often the genre's songs are instrumental, the lyric phrasings that suit it (normal: a line a bar or two at the
+# tempo; half: over the half-time feel, twice as long; double: fast flows, twice as dense) and the kind of an
+# instrumental section added to make room. Estimates from arrangement guides and genre overviews (2026-11-08; no
+# source measures it): a range the song writer picks inside, wide where a genre is split (liquid drum and bass is
+# sung throughout, neurofunk hardly at all). The user's own range (the description page's slider) replaces it.
+@dataclass(frozen=True)
+class Vocals:
+    low: float
+    high: float
+    instrumental: str  # "rare", "common" or "usual": how often the genre's songs have no vocals
+    phrasing: tuple[str, ...]  # the commonest first
+    fill: str  # the instrumental section's kind
+
+
+VOCALS: dict[str, Vocals] = {
+    "pop": Vocals(0.70, 0.90, "rare", ("normal", "double"), "break"),
+    "indiepop": Vocals(0.55, 0.85, "rare", ("normal", "half"), "break"),
+    "kpop": Vocals(0.75, 0.92, "rare", ("normal", "double"), "break"),
+    "jpop": Vocals(0.65, 0.88, "rare", ("normal", "double"), "break"),
+    "citypop": Vocals(0.55, 0.80, "rare", ("normal",), "break"),
+    "hyperpop": Vocals(0.65, 0.90, "rare", ("normal", "double"), "break"),
+    "synthpop": Vocals(0.60, 0.85, "rare", ("normal", "half"), "break"),
+    "newwave": Vocals(0.55, 0.85, "rare", ("normal",), "break"),
+    "synthwave": Vocals(0.35, 0.70, "usual", ("normal", "half"), "drop"),
+    "darksynth": Vocals(0.20, 0.55, "usual", ("half", "normal"), "drop"),
+    "darkwave": Vocals(0.45, 0.80, "rare", ("normal", "half"), "break"),
+    "coldwave": Vocals(0.40, 0.75, "rare", ("normal",), "break"),
+    "postpunk": Vocals(0.45, 0.80, "rare", ("normal",), "break"),
+    "dreampop": Vocals(0.45, 0.80, "rare", ("half", "normal"), "break"),
+    "shoegaze": Vocals(0.35, 0.70, "rare", ("half", "normal"), "break"),
+    "chillwave": Vocals(0.30, 0.70, "common", ("half", "normal"), "break"),
+    "vaporwave": Vocals(0.10, 0.50, "usual", ("half",), "break"),
+    "rock": Vocals(0.55, 0.85, "rare", ("normal",), "solo"),
+    "indierock": Vocals(0.50, 0.85, "rare", ("normal",), "solo"),
+    "punk": Vocals(0.65, 0.90, "rare", ("normal", "double"), "solo"),
+    "poppunk": Vocals(0.70, 0.90, "rare", ("normal", "double"), "solo"),
+    "emo": Vocals(0.50, 0.85, "rare", ("normal", "half"), "solo"),
+    "metal": Vocals(0.40, 0.75, "rare", ("normal", "half", "double"), "solo"),
+    "thrash": Vocals(0.35, 0.65, "rare", ("normal", "double"), "solo"),
+    "gothrock": Vocals(0.50, 0.80, "rare", ("normal", "half"), "solo"),
+    "gothmetal": Vocals(0.45, 0.75, "rare", ("normal", "half"), "solo"),
+    "symphmetal": Vocals(0.50, 0.80, "rare", ("normal", "half"), "solo"),
+    "doom": Vocals(0.25, 0.60, "common", ("half", "normal"), "solo"),
+    "powermetal": Vocals(0.55, 0.80, "rare", ("normal", "half", "double"), "solo"),
+    "blackmetal": Vocals(0.30, 0.65, "rare", ("half", "normal"), "solo"),
+    "dsbm": Vocals(0.15, 0.50, "common", ("half", "normal"), "solo"),
+    "edm": Vocals(0.35, 0.65, "common", ("normal", "half"), "drop"),
+    "house": Vocals(0.15, 0.70, "common", ("normal",), "drop"),
+    "disco": Vocals(0.50, 0.80, "rare", ("normal",), "break"),
+    "nudisco": Vocals(0.25, 0.65, "common", ("normal",), "drop"),
+    "techno": Vocals(0.00, 0.35, "usual", ("normal",), "drop"),
+    "trance": Vocals(0.20, 0.55, "common", ("normal", "half"), "drop"),
+    "hardstyle": Vocals(0.20, 0.50, "common", ("normal", "half"), "drop"),
+    "dnb": Vocals(0.10, 0.70, "common", ("half", "normal", "double"), "drop"),
+    "jungle": Vocals(0.15, 0.50, "common", ("double", "half"), "drop"),
+    "breakbeat": Vocals(0.10, 0.50, "common", ("normal", "half"), "drop"),
+    "garage": Vocals(0.40, 0.80, "common", ("normal", "double"), "drop"),
+    "dubstep": Vocals(0.05, 0.40, "usual", ("half", "double"), "drop"),
+    "futurebass": Vocals(0.40, 0.75, "common", ("normal", "half"), "drop"),
+    "hiphop": Vocals(0.80, 0.95, "rare", ("double", "normal"), "break"),
+    "trap": Vocals(0.80, 0.95, "rare", ("double", "normal"), "break"),
+    "phonk": Vocals(0.20, 0.60, "common", ("double", "normal"), "drop"),
+    "lofi": Vocals(0.00, 0.30, "usual", ("normal", "half"), "break"),
+    "triphop": Vocals(0.45, 0.80, "common", ("half", "normal"), "break"),
+    "downtempo": Vocals(0.20, 0.65, "common", ("half", "normal"), "break"),
+    "reggae": Vocals(0.65, 0.85, "rare", ("normal", "half"), "break"),
+    "dub": Vocals(0.05, 0.35, "usual", ("half", "normal"), "break"),
+    "ska": Vocals(0.55, 0.80, "common", ("normal", "double"), "break"),
+    "reggaeton": Vocals(0.80, 0.95, "rare", ("double", "normal"), "break"),
+    "latin": Vocals(0.60, 0.88, "rare", ("normal", "double"), "break"),
+    "bossa": Vocals(0.50, 0.85, "common", ("normal", "half"), "break"),
+    "afrobeats": Vocals(0.70, 0.92, "rare", ("normal", "double"), "break"),
+    "funk": Vocals(0.40, 0.75, "common", ("normal", "double"), "break"),
+    "soul": Vocals(0.70, 0.90, "rare", ("normal",), "break"),
+    "rnb": Vocals(0.75, 0.92, "rare", ("normal", "double", "half"), "break"),
+    "gospel": Vocals(0.75, 0.95, "rare", ("normal", "half"), "break"),
+    "jazz": Vocals(0.35, 0.70, "usual", ("normal", "half"), "solo"),
+    "blues": Vocals(0.50, 0.80, "common", ("normal", "half"), "solo"),
+    "folk": Vocals(0.65, 0.90, "rare", ("normal",), "break"),
+    "country": Vocals(0.70, 0.88, "rare", ("normal",), "solo"),
+    "bluegrass": Vocals(0.40, 0.70, "common", ("normal",), "solo"),
+    "cinematic": Vocals(0.00, 0.40, "usual", ("half",), "break"),
+    "chiptune": Vocals(0.30, 0.70, "usual", ("normal", "double"), "break"),
+    "ambient": Vocals(0.05, 0.50, "usual", ("half",), "break"),
+}  # fmt: skip
+
+
+def vocals_of(genre_id: str) -> dict[str, Any] | None:
+    """The genre's vocals as the summary keeps them (`described.vocals`), or None for a genre without them."""
+    v = VOCALS.get(genre_id)
+    if v is None:
+        return None
+    return {"low": v.low, "high": v.high, "instrumental": v.instrumental, "phrasing": list(v.phrasing), "fill": v.fill}
+
+
 BY_ID = {g.id: g for g in GENRES}
 NEUTRAL_GENRE = Genre(NEUTRAL, "a neutral style", (), "pop", 100, (60, 170), 0.5)
 
@@ -855,6 +953,7 @@ def to_summary(reading: Reading, text: str, read_by: str = "") -> dict[str, Any]
             "sections": asked_sections(text),  # the song sections it names ("a breakdown or bridge": either)
             "genre": genre.id,
             "genreName": genre.name if reading.genre_named else "",
+            "vocals": vocals_of(genre.id),
             "understood": understood(reading, tempo, modes),
             "sounds": sounds,
             "named": dict(reading.sounds),
@@ -1086,6 +1185,7 @@ def with_references(
         "sections": asked_sections(text),
         "genre": genre.id if genre is not None else "",
         "genreName": genre.name if genre is not None else "",
+        "vocals": vocals_of(genre.id) if genre is not None else None,
         "understood": understood,
         "sounds": {**(feel.sounds if genre is not None else {}), **reading.sounds},
         "named": dict(reading.sounds),

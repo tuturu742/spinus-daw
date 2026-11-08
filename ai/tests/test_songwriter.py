@@ -577,6 +577,61 @@ def test_with_lyrics_the_form_is_theirs_and_the_tune_one_note_a_syllable() -> No
     assert "lyrics" not in songwriter.write(s, 4, parts=parts)["plan"]
 
 
+def test_lines_are_phrased_as_the_style_says() -> None:
+    assert songwriter.line_bars(8, 120, 4, "half") == 2 * songwriter.line_bars(8, 120, 4)
+    assert songwriter.line_bars(15, 120, 4, "half") == 8  # never past eight bars
+    assert songwriter.line_bars(6, 174, 4, "double") == 1  # a fast flow: eighths at 174 BPM, a short line a bar
+    assert songwriter.line_bars(8, 120, 4, "double") == 1 and songwriter.line_bars(30, 120, 4, "double") == 4
+
+
+def test_a_genre_says_how_much_of_a_song_is_sung_and_the_user_can_say_otherwise() -> None:
+    s = summary()
+    assert songwriter.vocals_of(s) is None  # references, no genre: the lyrics' form as it comes
+    s["described"] = {"vocals": {"low": 0.1, "high": 0.7, "phrasing": ["half", "normal", "x"], "fill": "drop"}}
+    v = songwriter.vocals_of(s)
+    assert v == songwriter.Vocals(0.1, 0.7, ("half", "normal"), "drop")
+    s["vocalShare"] = {"low": 0.40, "high": 0.42}  # the slider's: at least 5 points apart
+    v = songwriter.vocals_of(s)
+    assert v is not None and (v.low, v.high) == (0.4, 0.45) and v.fill == "drop"
+    s["vocalShare"] = {"low": 0.99, "high": 1.2}
+    v = songwriter.vocals_of(s)
+    assert v is not None and (v.low, v.high) == (0.95, 1.0)
+
+
+def test_the_lyrics_form_makes_instrumental_room_for_the_share_sung() -> None:
+    s = summary()
+    s["lyrics"] = lyrics.read(
+        "[Verse]\n"
+        + "Running through the night again\n" * 8
+        + "[Chorus]\n"
+        + "We are alive\n" * 4
+        + "[Verse]\n"
+        + "Running through the night again\n" * 8
+        + "[Chorus]\n"
+        + "We are alive\n" * 4
+    )
+    s["described"] = {"vocals": {"low": 0.25, "high": 0.35, "phrasing": ["normal"], "fill": "drop"}}
+    st = songwriter.Style.from_summary(s)
+    parts = [{"id": "drums", "name": "Drums", "role": "drums"}, {"id": "vocals", "name": "Vocals", "role": "vocals"}]
+    for variety in ("close", "balanced", "adventurous"):
+        plan = songwriter.write(s, 7, parts=parts, variety=variety)["plan"]
+        share = songwriter.sung_share(plan["sections"], plan["order"], plan["lyrics"])
+        assert 0.24 <= share <= 0.36, (variety, share, plan["order"])
+        assert plan["order"][0] == "intro" and plan["order"][-1] == "outro" and "drop" in plan["order"]
+        assert 0.25 <= plan["vocalShare"] <= 0.35 and plan["phrasing"] == "normal"
+        # The words all kept, in their order.
+        sung = [line for lines in plan["lyrics"]["sung"] for line in lines]
+        assert sung.count("We are alive") >= 8 and sung.count("Running through the night again") == 16
+    # A song sung almost throughout: the lyrics' own form, nothing added.
+    s["described"] = {"vocals": {"low": 0.95, "high": 1.0, "phrasing": ["normal"], "fill": "break"}}
+    plan = songwriter.write(s, 7, parts=parts, variety="close")["plan"]
+    assert plan["order"] == ["verse", "chorus", "verse", "chorus"]
+    # Without a genre's word on it, as before.
+    s.pop("described")
+    assert "vocalShare" not in songwriter.write(s, 7, parts=parts)["plan"]
+    del st
+
+
 def test_the_ai_writer_gets_the_lyrics_form_without_their_words() -> None:
     s = summary()
     s["lyrics"] = lyrics.read(SONG_LYRICS)
