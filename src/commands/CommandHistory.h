@@ -32,6 +32,13 @@ public:
         one by one, undone together). False if there are fewer steps. */
     bool joinLastSteps (int count, const juce::String& description);
 
+    /** Joins every undo step made since the project was in `state` (an earlier getStateId()) into one step,
+        named and described as the newest of them, so later commands of the same gesture still join it
+        (performJoined). For an edit that first had to make what it edits (the pattern a first note goes in,
+        the tracks a clip goes on): one Ctrl+Z takes back both. False if `state` is not on the undo list;
+        true (and nothing changes) if fewer than two steps were made since. */
+    bool joinStepsSince (uint64_t state);
+
     bool canUndo() const noexcept { return ! undoStack.empty(); }
     bool canRedo() const noexcept { return ! redoStack.empty(); }
     bool undo();

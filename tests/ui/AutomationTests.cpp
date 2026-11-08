@@ -316,3 +316,52 @@ TEST_CASE ("A channel's volume knob moves with its automation while it plays", "
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
     CHECK (std::abs (knob->getValue()) < 0.01);
 }
+
+TEST_CASE ("Undo during an automation point drag ends the drag safely", "[ui][automation]")
+{
+    Fixture f;
+    const auto id = f.session->createAutomationClip (f.insertVolume());
+    REQUIRE (id.isValid());
+    REQUIRE (f.playlist->addAutomationPoint (id, 1920, 0.25f));
+    const auto& project = f.session->getProject();
+    const auto* clip = project.findClip (id);
+    REQUIRE (clip != nullptr);
+    int row = -1;
+    for (size_t i = 0; i < project.playlist.lanes.size(); ++i)
+        if (project.playlist.lanes[i].id == clip->lane)
+            row = f.playlist->rowOfLaneIndex ((int)i);
+    REQUIRE (row >= 0);
+
+    // Where the new point is drawn (see the Playlist's pointPosition: 44-pixel rows).
+    auto* lanes = f.playlist->getChildComponent (0);
+    const auto bottom = (float)row * 44.0f + 39.0f;
+    const juce::Point<float> at { f.playlist->tickToX (clip->start + 1920), bottom - 0.25f * 22.0f };
+    const auto event = [lanes, at] (juce::Point<float> p, juce::ModifierKeys mods, bool dragged)
+    {
+        return juce::MouseEvent { juce::Desktop::getInstance().getMainMouseSource(),
+                                  p,
+                                  mods,
+                                  juce::MouseInputSource::defaultPressure,
+                                  juce::MouseInputSource::defaultOrientation,
+                                  juce::MouseInputSource::defaultRotation,
+                                  juce::MouseInputSource::defaultTiltX,
+                                  juce::MouseInputSource::defaultTiltY,
+                                  lanes,
+                                  lanes,
+                                  juce::Time::getCurrentTime(),
+                                  at,
+                                  juce::Time::getCurrentTime(),
+                                  1,
+                                  dragged };
+    };
+    const auto button = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+    lanes->mouseDown (event (at, button, false));
+    lanes->mouseDrag (event (at.translated (0.0f, -5.0f), button, true));
+
+    // Ctrl+Z (twice: the point, then the clip) while the mouse is still down.
+    while (project.findClip (id) != nullptr)
+        REQUIRE (f.session->getHistory().undo());
+    lanes->mouseDrag (event (at.translated (0.0f, -8.0f), button, true));
+    lanes->mouseUp (event (at.translated (0.0f, -8.0f), {}, true));
+    CHECK (project.findClip (id) == nullptr);
+}

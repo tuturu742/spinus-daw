@@ -36,6 +36,7 @@ TEST_CASE ("Placing a pattern creates the tracks it needs", "[ui][playlist]")
     REQUIRE (s.rack.addChannel ({}, "Kick"));
     REQUIRE (s.rack.toggleStep (s.session.getSelectedChannel(), 0)); // creates a one-bar pattern
 
+    const auto steps = s.session.getHistory().getUndoDescriptions().size();
     REQUIRE (s.playlist.placePattern (2, 3840));
     REQUIRE (s.model().lanes.size() == 3);
     REQUIRE (s.model().clips.size() == 1);
@@ -44,8 +45,12 @@ TEST_CASE ("Placing a pattern creates the tracks it needs", "[ui][playlist]")
     CHECK (clip.start == 3840);
     CHECK (clip.length == 3840); // the pattern's length
 
-    CHECK (s.session.getHistory().getUndoDescriptions().joinIntoString (" | ").endsWith (
-        "Add playlist tracks | Add pattern to playlist"));
+    // The tracks and the clip are one undo step: one Ctrl+Z leaves no empty tracks behind.
+    CHECK (s.session.getHistory().getUndoDescriptions().size() == steps + 1);
+    CHECK (s.session.getHistory().getUndoDescriptions().strings.getLast() == "Add pattern to playlist");
+    REQUIRE (s.session.getHistory().undo());
+    CHECK (s.model().lanes.empty());
+    REQUIRE (s.session.getHistory().redo());
 
     // Placing on an existing track adds no tracks.
     REQUIRE (s.playlist.placePattern (0, 0));
@@ -322,7 +327,7 @@ TEST_CASE ("Playlist: dragging a selected clip moves and resizes the selection, 
     CHECK (s.clip (0).length == 1920);
     CHECK (s.clip (2).length == 1920);
     CHECK (s.clip (1).length == 3840);
-    CHECK (s.steps() == before + 3); // new track, move, resize
+    CHECK (s.steps() == before + 2); // move (with the new track it needed), resize
 
     // A clip that is not selected moves on its own.
     mouse.drag (mouse.at (8000, 0), { mouse.at (8000 + 3840, 0) });
@@ -740,4 +745,66 @@ TEST_CASE ("Clicking a pattern clip makes its pattern the current one, with any 
     CHECK (session.getCurrentPattern() == a);
 
     file.deleteFile();
+}
+
+TEST_CASE ("The first Playlist click in a new project makes Pattern 1 and places it, one undo step", "[ui][playlist]")
+{
+    Song s;
+    LaneMouse mouse (s.playlist);
+    REQUIRE (s.session.getProject().patterns.empty());
+    const auto steps = s.session.getHistory().getUndoDescriptions().size();
+
+    mouse.drag (mouse.at (0, 0), {});
+    REQUIRE (s.session.getProject().patterns.size() == 1);
+    REQUIRE (s.model().clips.size() == 1);
+    CHECK (s.model().clips[0].length == 3840); // one bar
+    CHECK (s.session.getCurrentPattern() == s.session.getProject().patterns[0].id);
+    CHECK (s.session.getHistory().getUndoDescriptions().size() == steps + 1);
+
+    REQUIRE (s.session.getHistory().undo());
+    CHECK (s.session.getProject().patterns.empty());
+    CHECK (s.model().clips.empty());
+    CHECK (s.model().lanes.empty());
+}
+
+TEST_CASE ("Playlist selection and moves with a folded group", "[ui][playlist][groups]")
+{
+    Song s;
+    REQUIRE (s.rack.addChannel ({}, "Kick"));
+    REQUIRE (s.rack.toggleStep (s.session.getSelectedChannel(), 0));
+    for (int row = 0; row < 4; ++row) // Drums, Kick, Snare, Bass: a clip each at bar 1
+        REQUIRE (s.playlist.placePattern (row, 0));
+    REQUIRE (s.playlist.groupLaneWithAbove (1));
+    REQUIRE (s.playlist.groupLaneWithAbove (2));
+    REQUIRE (s.playlist.setLaneCollapsed (0, true)); // rows: Drums, Bass
+    const auto lane = [&s] (int i) { return s.model().lanes[(size_t)i].id; };
+    const auto clipOn = [&s] (model::LaneId l)
+    {
+        for (auto& clip : s.model().clips)
+            if (clip.lane == l)
+                return clip;
+        return model::Clip {};
+    };
+    LaneMouse mouse (s.playlist);
+
+    // A box over the second row selects Bass's clip, not the hidden Kick's.
+    mouse.drag (mouse.at (100, 1), { mouse.at (2000, 1) }, juce::ModifierKeys::ctrlModifier);
+    CHECK (s.playlist.getSelection() == std::set<model::ClipId> { clipOn (lane (3)).id });
+
+    // Ctrl+A then Shift+Right: every clip moves a step, those folded away too (on their own tracks).
+    const auto step = s.playlist.getGridStep();
+    CHECK (mouse.lanes->keyPressed (juce::KeyPress ('a', juce::ModifierKeys::ctrlModifier, 0)));
+    CHECK (s.playlist.getSelection().size() == 4);
+    CHECK (mouse.lanes->keyPressed (juce::KeyPress (juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0)));
+    for (int i = 0; i < 4; ++i)
+        CHECK (clipOn (lane (i)).start == step);
+
+    // Shift+Down: the shown clips go a row down; the folded ones stay on their tracks.
+    CHECK (mouse.lanes->keyPressed (juce::KeyPress (juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0)));
+    CHECK (clipOn (lane (1)).id.isValid());
+    CHECK (clipOn (lane (2)).id.isValid());
+    CHECK (clipOn (lane (3)).id.isValid()); // Drums' clip came down onto Bass
+    CHECK (s.model().lanes.size() == 5);    // Bass's went onto a new track
+    CHECK (clipOn (lane (4)).id.isValid());
+    CHECK (! clipOn (lane (0)).id.isValid());
 }

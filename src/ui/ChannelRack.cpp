@@ -541,16 +541,27 @@ bool ChannelRack::hasTripletSteps() const
     return pattern != nullptr && pattern->tripletSteps;
 }
 
+bool ChannelRack::ensurePattern()
+{
+    if (session.getCurrentPattern().isValid())
+        return true;
+    // No pattern yet: make a one-bar pattern first, like FL's "Pattern 1". The caller joins it to its edit.
+    return perform ("pattern.add",
+                    object ({ { "length", (int)session.getProject().settings.timeSignature.barTicks() } }));
+}
+
 bool ChannelRack::setTripletSteps (bool triplets)
 {
-    // No pattern yet: make a one-bar pattern first, as the first step does.
-    if (! session.getCurrentPattern().isValid())
-        if (! perform ("pattern.add",
-                       object ({ { "length", (int)session.getProject().settings.timeSignature.barTicks() } })))
-            return false;
+    auto& history = session.getHistory();
+    const auto state = history.getStateId();
+    if (! ensurePattern())
+        return false;
 
-    return perform ("pattern.setTripletSteps",
-                    object ({ { "pattern", (int)session.getCurrentPattern().value }, { "triplets", triplets } }));
+    const bool ok =
+        perform ("pattern.setTripletSteps",
+                 object ({ { "pattern", (int)session.getCurrentPattern().value }, { "triplets", triplets } }));
+    history.joinStepsSince (state); // the pattern it made and the change: one undo step
+    return ok;
 }
 
 double ChannelRack::getSwing() const
@@ -561,14 +572,17 @@ double ChannelRack::getSwing() const
 
 bool ChannelRack::setSwing (double swing, bool joined)
 {
-    if (! session.getCurrentPattern().isValid())
-        if (! perform ("pattern.add",
-                       object ({ { "length", (int)session.getProject().settings.timeSignature.barTicks() } })))
-            return false;
-    return perform (
+    auto& history = session.getHistory();
+    const auto state = history.getStateId();
+    if (! ensurePattern())
+        return false;
+    const bool ok = perform (
         "pattern.setSwing",
         object ({ { "pattern", (int)session.getCurrentPattern().value }, { "swing", juce::jlimit (0.0, 1.0, swing) } }),
         joined);
+    // The pattern it made and the swing: one undo step, which the rest of the drag still joins.
+    history.joinStepsSince (state);
+    return ok;
 }
 
 bool ChannelRack::openNotes (model::ChannelId channel)
@@ -610,13 +624,10 @@ bool ChannelRack::toggleStep (model::ChannelId channel, int step)
     if (session.getProject().findChannel (channel) == nullptr || step < 0)
         return false;
 
-    // No pattern yet: make a one-bar pattern first, like FL's "Pattern 1".
-    if (! session.getCurrentPattern().isValid())
-    {
-        const auto bar = session.getProject().settings.timeSignature.barTicks();
-        if (! perform ("pattern.add", object ({ { "length", (int)bar } })))
-            return false;
-    }
+    auto& history = session.getHistory();
+    const auto state = history.getStateId();
+    if (! ensurePattern())
+        return false;
 
     std::vector<model::Note> notes;
     if (auto* existing = notesOf (channel))
@@ -630,17 +641,17 @@ bool ChannelRack::toggleStep (model::ChannelId channel, int step)
 
     std::sort (notes.begin(), notes.end(), [] (auto& a, auto& b) { return a.start < b.start; });
 
+    // Every note as it is, release, pan, fine pitch and volume too: a click changes only its own step.
     juce::Array<juce::var> list;
     for (auto& n : notes)
-        list.add (object ({ { "start", (juce::int64)n.start },
-                            { "length", (juce::int64)n.length },
-                            { "pitch", n.pitch },
-                            { "velocity", n.velocity } }));
+        list.add (model::noteToJson (n));
 
-    return perform ("pattern.setNotes", object ({ { "pattern", (int)session.getCurrentPattern().value },
-                                                  { "channel", (int)channel.value },
-                                                  { "notes", list },
-                                                  { "description", wasOn ? "Remove step" : "Add step" } }));
+    const bool ok = perform ("pattern.setNotes", object ({ { "pattern", (int)session.getCurrentPattern().value },
+                                                           { "channel", (int)channel.value },
+                                                           { "notes", list },
+                                                           { "description", wasOn ? "Remove step" : "Add step" } }));
+    history.joinStepsSince (state); // the pattern the first step made and the step: one undo step
+    return ok;
 }
 
 bool ChannelRack::addChannel (const juce::String& stockType, const juce::String& name)

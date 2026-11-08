@@ -141,6 +141,8 @@ private:
 
     void rebuild();
     bool perform (const juce::String& command, const juce::var& parameters, bool joined = false);
+    /** Makes a one-bar pattern if there is none yet (its own undo step, for the caller to join to its edit). */
+    bool ensurePattern();
     const std::vector<model::Note>* notesOf (model::ChannelId) const;
     void showAddMenu();
     bool dropHighlight = false;

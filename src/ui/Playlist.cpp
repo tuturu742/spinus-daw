@@ -511,8 +511,9 @@ public:
 
         // Empty space: the current pattern, placed here (Draw: one, dragged into place; Paint: one after
         // another as far as the mouse goes).
-        const auto* pattern = playlist.session.getProject().findPattern (playlist.session.getCurrentPattern());
-        if (pattern == nullptr)
+        // A new project has no pattern yet: the first click makes Pattern 1 (one bar) and places it, the way
+        // FL Studio starts with one (one undo step with the clip).
+        if (! playlist.ensurePattern())
             return;
         playlist.clearSelection();
         mode = playlist.tool == Tool::paint ? Mode::paint : Mode::add;
@@ -527,16 +528,25 @@ public:
         if (pointDrag.active)
         {
             // Shown at once; written as one undo step on release.
-            auto& automation = std::get<model::AutomationClip> (pointDrag.clip.content);
-            const auto& original =
-                std::get<model::AutomationClip> (playlist.session.getProject().findClip (pointDrag.id)->content);
-            automation.points = original.points;
+            // The clip may have gone (Ctrl+Z during the drag) or lost the point: the drag ends.
+            const auto* current = playlist.session.getProject().findClip (pointDrag.id);
+            const auto* original =
+                current != nullptr ? std::get_if<model::AutomationClip> (&current->content) : nullptr;
+            auto* automation = std::get_if<model::AutomationClip> (&pointDrag.clip.content);
+            if (original == nullptr || automation == nullptr || pointDrag.index < 0 ||
+                pointDrag.index >= (int)original->points.size())
+            {
+                pointDrag = {};
+                repaint();
+                return;
+            }
+            automation->points = original->points;
             const auto [time, value] =
                 pointAt (pointDrag.clip, e.position,
                          clipBounds (rowOfLane (pointDrag.clip.lane), pointDrag.clip.start, pointDrag.clip.length),
                          e.mods.isAltDown());
-            automation.points[(size_t)pointDrag.index] = { time, value,
-                                                           automation.points[(size_t)pointDrag.index].curve };
+            automation->points[(size_t)pointDrag.index] = { time, value,
+                                                            automation->points[(size_t)pointDrag.index].curve };
             pointDrag.moved = true;
             repaint();
             return;
@@ -554,7 +564,8 @@ public:
                 if (dragged.contains (clip.id))
                 {
                     deltaTicks = juce::jmax (deltaTicks, -clip.start);
-                    deltaRows = juce::jmax (deltaRows, -rowOfLane (clip.lane));
+                    if (const auto row = rowOfLane (clip.lane); row >= 0) // folded away: stays on its track
+                        deltaRows = juce::jmax (deltaRows, -row);
                 }
             delta = { deltaTicks, deltaRows };
             break;
@@ -728,7 +739,7 @@ private:
         const auto& project = playlist.session.getProject();
         if (mode == Mode::move || mode == Mode::resize)
             for (auto& clip : project.playlist.clips)
-                if (dragged.contains (clip.id))
+                if (dragged.contains (clip.id) && rowOfLane (clip.lane) >= 0)
                 {
                     auto ghost = clip;
                     if (mode == Mode::move)
@@ -1629,10 +1640,12 @@ void Playlist::selectArea (model::Ticks from, model::Ticks to, int firstRow, int
     const auto& lanesList = session.getProject().playlist.lanes;
     for (auto& clip : session.getProject().playlist.clips)
     {
-        const auto row =
+        // The row it is shown on (folded groups hide rows, so not its track's index); -1 when folded away.
+        const auto index =
             (int)std::distance (lanesList.begin(), std::find_if (lanesList.begin(), lanesList.end(),
                                                                  [&] (auto& lane) { return lane.id == clip.lane; }));
-        if (row >= firstRow && row <= lastRow && clip.start < to && clip.start + clip.length > from)
+        const auto row = index < (int)lanesList.size() ? rowOfLaneIndex (index) : -1;
+        if (row >= 0 && row >= firstRow && row <= lastRow && clip.start < to && clip.start + clip.length > from)
             s.insert (clip.id);
     }
     setSelection (std::move (s));
@@ -1644,9 +1657,8 @@ bool Playlist::performAll (const juce::String& description, const juce::Array<ju
     if (steps.isEmpty())
         return false;
     juce::String error;
-    auto transaction = commands::CommandRegistry::get().createTransaction (
-        object ({ { "description", description }, { "commands", steps } }), error);
-    return transaction != nullptr && session.getHistory().perform (std::move (transaction)).wasOk();
+    return performJoiningMade (commands::CommandRegistry::get().createTransaction (
+        object ({ { "description", description }, { "commands", steps } }), error));
 }
 
 static juce::var step (const juce::String& command, const juce::var& parameters)
@@ -1665,15 +1677,17 @@ bool Playlist::moveClips (const std::set<model::ClipId>& ids, model::Ticks delta
         return -1;
     };
 
-    // Where each clip goes; the tracks below the last one are made first.
+    // Where each clip goes; the tracks below the last one are made first. A clip in a folded group (no row
+    // of its own) moves in time with the others and stays on its track (row -1 here).
     std::vector<std::tuple<model::ClipId, int, model::Ticks>> moves;
     int lowest = 0;
     for (auto& clip : session.getProject().playlist.clips)
         if (ids.contains (clip.id))
         {
-            const auto row = rowOf (clip.lane) + deltaRows;
+            const auto shown = rowOf (clip.lane);
+            const auto row = shown < 0 ? -1 : shown + deltaRows;
             const auto start = clip.start + deltaTicks;
-            if (row < 0 || start < 0)
+            if ((shown >= 0 && row < 0) || start < 0)
                 return false;
             moves.emplace_back (clip.id, row, start);
             lowest = juce::jmax (lowest, row);
@@ -1683,11 +1697,13 @@ bool Playlist::moveClips (const std::set<model::ClipId>& ids, model::Ticks delta
 
     juce::Array<juce::var> steps;
     for (auto& [id, row, start] : moves)
-        steps.add (
-            step ("clip.set",
-                  object ({ { "clip", (int)id.value },
-                            { "lane", (int)session.getProject().playlist.lanes[(size_t)laneIndexOfRow (row)].id.value },
-                            { "start", (juce::int64)start } })));
+    {
+        auto parameters = object ({ { "clip", (int)id.value }, { "start", (juce::int64)start } });
+        if (row >= 0)
+            parameters.getDynamicObject()->setProperty (
+                "lane", (int)session.getProject().playlist.lanes[(size_t)laneIndexOfRow (row)].id.value);
+        steps.add (step ("clip.set", parameters));
+    }
     return performAll (moves.size() == 1 ? "Move clip" : "Move clips", steps);
 }
 
@@ -1915,8 +1931,45 @@ bool Playlist::paintPattern (int row, model::Ticks from, model::Ticks to)
 bool Playlist::perform (const juce::String& command, const juce::var& parameters)
 {
     juce::String error;
-    auto c = commands::CommandRegistry::get().create (command, parameters, error);
-    return c != nullptr && session.getHistory().perform (std::move (c)).wasOk();
+    return performJoiningMade (commands::CommandRegistry::get().create (command, parameters, error));
+}
+
+void Playlist::madeForNext (uint64_t stateBefore)
+{
+    // Steps already waiting right before these stay in (the first pattern, then the tracks for its clip).
+    if (madeForNextEdit && madeForNextEdit->second == stateBefore)
+        stateBefore = madeForNextEdit->first;
+    madeForNextEdit = { stateBefore, session.getHistory().getStateId() };
+}
+
+bool Playlist::performJoiningMade (std::unique_ptr<commands::Command> command)
+{
+    auto& history = session.getHistory();
+    // One click, one undo step: the tracks (and the pattern) made for this edit join it, if nothing else
+    // happened in between.
+    std::optional<uint64_t> joinSince;
+    if (const auto made = std::exchange (madeForNextEdit, std::nullopt); made && made->second == history.getStateId())
+        joinSince = made->first;
+    if (command == nullptr || history.perform (std::move (command)).failed())
+        return false;
+    if (joinSince)
+        history.joinStepsSince (*joinSince);
+    return true;
+}
+
+bool Playlist::ensurePattern()
+{
+    if (session.getProject().findPattern (session.getCurrentPattern()) != nullptr)
+        return true;
+    juce::String error;
+    auto command = commands::CommandRegistry::get().create (
+        "pattern.add", object ({ { "length", (int)session.getProject().settings.timeSignature.barTicks() } }), error);
+    auto& history = session.getHistory();
+    const auto state = history.getStateId();
+    if (command == nullptr || history.perform (std::move (command)).failed())
+        return false;
+    madeForNext (state);
+    return session.getProject().findPattern (session.getCurrentPattern()) != nullptr;
 }
 
 model::LaneId Playlist::ensureLane (int row)
@@ -1934,8 +1987,11 @@ model::LaneId Playlist::ensureLane (int row)
     juce::String error;
     auto transaction = commands::CommandRegistry::get().createTransaction (
         object ({ { "description", "Add playlist tracks" }, { "commands", steps } }), error);
-    if (transaction == nullptr || session.getHistory().perform (std::move (transaction)).failed())
+    auto& history = session.getHistory();
+    const auto state = history.getStateId();
+    if (transaction == nullptr || history.perform (std::move (transaction)).failed())
         return {};
+    madeForNext (state); // the clip that goes there joins this step
 
     return session.getProject().playlist.lanes[(size_t)index].id;
 }

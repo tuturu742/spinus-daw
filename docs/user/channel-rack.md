@@ -47,7 +47,10 @@ mixer insert, volume, pan, colour and group. Its name stays too, unless it was t
 
 ## Good to know
 
-- If there is no pattern yet, your first step creates **Pattern 1** (one bar long).
+- If there is no pattern yet, your first step creates **Pattern 1** (one bar long). So do **Triplet steps**
+  and **Swing**. One **Ctrl+Z** takes back the step (or the change) and the new pattern together.
+- Clicking a step changes only that step: the velocity, release, pan, fine pitch and volume you gave the
+  other notes in the Piano Roll stay as they are.
 - Every change can be undone with **Ctrl+Z**.
 - Press **Space** in pattern mode to hear the pattern loop; the playing step is outlined.
 - A new channel gets its own mixer insert automatically.

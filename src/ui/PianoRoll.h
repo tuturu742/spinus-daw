@@ -98,8 +98,9 @@ public:
     /** Moves every selected note (one undo step). */
     bool moveSelection (model::Ticks deltaTicks, int deltaPitch);
     /** The keys' moves (Shift+Up/Down a semitone, Ctrl+Up/Down an octave, Shift+Left/Right a snap step,
-        a 16th without snap): the selected notes, or all of them when none is. Nothing moves when a note would go
-        past the lowest or highest key or before the pattern's start. */
+        a 16th without snap): the selected notes, or all of them when none is (and then none is selected after,
+        as in FL Studio). Nothing moves when a note would go past the lowest or highest key or before the
+        pattern's start. */
     bool transposeSelection (int semitones);
     bool nudgeSelection (int steps);
     /** Lengthens (or shortens) every selected note by the same amount, each at least `minimum` long. */
@@ -203,6 +204,12 @@ public:
     bool hasAiButtons() const noexcept { return recordIdeaButton.isVisible() || generateButton.isVisible(); }
 
     model::Ticks getSnap() const noexcept { return snap; }
+    /** The step the note tools and Shift+Left/Right use: the snap, or a sixteenth when snap is None (a tick
+        would chop a note into thousands). */
+    model::Ticks getToolStep() const noexcept
+    {
+        return snapChoice == Snap::none ? model::ticksPerQuarterNote / 4 : snap;
+    }
 
     /** What notes snap to: the pattern's step (a sixteenth, or a sixteenth-note triplet for a pattern with
         triplet steps), a bar, a beat, an eighth, a sixteenth, a thirty-second, eighth or sixteenth
@@ -228,7 +235,8 @@ public:
     /** What a click on `root` draws now. */
     std::vector<int> stampPitches (int root) const;
 
-    /** The Tools menu, on the selected notes (or all): one undo step each; the result is selected. */
+    /** The Tools menu, on the selected notes (or all, as in FL Studio): one undo step each. The result stays
+        selected when notes were; with none selected, none is afterwards either. */
     enum class NoteTool
     {
         quantize,
@@ -314,6 +322,13 @@ private:
     std::set<int> selection;
     std::optional<std::vector<model::Note>> selectAfterCommit; // the notes to select once the edit is in
     bool reloadDeferred = false; // the project changed during a mouse gesture (see handleAsyncUpdate)
+    // The pattern ensurePattern() made: the history's state before and after, so that the first edit, made
+    // right after it, joins it as one undo step (commit).
+    std::optional<std::pair<uint64_t, uint64_t>> patternMade;
+    /** Moves the notes at `which` (one undo step); they are selected afterwards if `keepSelected`. */
+    bool moveNotes (const std::set<int>& which, model::Ticks deltaTicks, int deltaPitch, bool keepSelected);
+    /** The selected notes' indexes, or every note's when none is selected. */
+    std::set<int> selectedOrAll() const;
     Tool tool = Tool::draw;
     std::vector<int> previewing;
     bool previewOn = true;

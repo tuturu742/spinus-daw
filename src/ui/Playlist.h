@@ -40,14 +40,15 @@ public:
 
     //==============================================================================
     // Editing (used by the mouse handlers and by tests). Each call is one undo step (adding a clip on a
-    // row that has no lane yet first adds the missing lanes, as one more step).
+    // row that has no lane yet first adds the missing lanes, in the same step).
     bool placePattern (int row, model::Ticks start);
     bool moveClip (model::ClipId, int row, model::Ticks start);
     bool resizeClip (model::ClipId, model::Ticks length);
     bool deleteClip (model::ClipId);
 
     // Several clips at once (each call one undo step; moving onto rows without a track first adds
-    // the tracks, as one more step).
+    // the tracks, in the same step). Clips in a folded group move in time with the others but stay on
+    // their track, which is not shown.
     bool moveClips (const std::set<model::ClipId>&, model::Ticks deltaTicks, int deltaRows);
     /** Lengthens (or shortens) the clips by the same amount. */
     bool resizeClips (const std::set<model::ClipId>&, model::Ticks deltaTicks);
@@ -221,6 +222,14 @@ private:
     bool performAll (const juce::String& description, const juce::Array<juce::var>& steps);
     bool setPoints (model::ClipId, const std::vector<model::AutomationPoint>&);
     model::LaneId ensureLane (int row);
+    /** No pattern yet (a new project): makes Pattern 1, one bar long, for the first click to place. */
+    bool ensurePattern();
+    /** Steps made only so that the next edit can be made (the tracks a clip goes on, the first pattern): the
+        history's state before and after them. The next perform() or performAll() right after joins them into
+        its undo step. */
+    std::optional<std::pair<uint64_t, uint64_t>> madeForNextEdit;
+    void madeForNext (uint64_t stateBefore);
+    bool performJoiningMade (std::unique_ptr<commands::Command>);
     std::vector<model::Clip> getSelectedClips() const;
     bool placeCopies (std::vector<model::Clip>, const juce::String& description);
     /** Brings the file into the project (audio/ folder, FLAC when needed): its path there and its length. */
