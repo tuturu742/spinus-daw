@@ -52,6 +52,7 @@ Keyboard shortcuts...**) only while **Show experimental features** is ticked in 
 | **Ctrl+Q** | Quit |
 | **Ctrl+Z** | Undo |
 | **Ctrl+Shift+Z** | Redo |
+| **Ctrl+Shift+L** | [Create automation clip for the last moved control](playlist.md#automation-clips): the knob or fader you moved last |
 
 ## Tools (Piano Roll and Playlist)
 

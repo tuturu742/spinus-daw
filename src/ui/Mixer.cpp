@@ -1220,12 +1220,24 @@ bool Mixer::setInsertColour (model::InsertId id, juce::uint32 argb)
 
 bool Mixer::setInsertVolume (model::InsertId id, double db, bool joined)
 {
-    return perform ("insert.set", object ({ { "insert", idValue (id) }, { "volumeDb", db } }), joined);
+    if (! perform ("insert.set", object ({ { "insert", idValue (id) }, { "volumeDb", db } }), joined))
+        return false;
+    model::ParameterTarget target;
+    target.kind = model::ParameterTarget::Kind::insertVolume;
+    target.insert = id;
+    session.noteMovedControl (target); // for Create automation clip for the last moved control
+    return true;
 }
 
 bool Mixer::setInsertPan (model::InsertId id, double pan, bool joined)
 {
-    return perform ("insert.set", object ({ { "insert", idValue (id) }, { "pan", pan } }), joined);
+    if (! perform ("insert.set", object ({ { "insert", idValue (id) }, { "pan", pan } }), joined))
+        return false;
+    model::ParameterTarget target;
+    target.kind = model::ParameterTarget::Kind::insertPan;
+    target.insert = id;
+    session.noteMovedControl (target); // for Create automation clip for the last moved control
+    return true;
 }
 
 bool Mixer::setInsertMuted (model::InsertId id, bool muted)
