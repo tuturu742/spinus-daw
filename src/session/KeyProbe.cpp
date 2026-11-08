@@ -88,8 +88,8 @@ InstrumentProfiles::Key heardAs (int key, const std::vector<float>& x, const Opt
     const auto classes = sounds::chroma (x.data(), (int)x.size(), rate, from, to);
     const auto total = std::accumulate (classes.begin(), classes.end(), 0.0);
     const auto strong = std::count_if (classes.begin(), classes.end(), [] (double c) { return c > 0.12; });
-    const InstrumentProfiles::Key plays { Job::plays, {}, InstrumentProfiles::Source::probing };
-    const InstrumentProfiles::Key chord { Job::special, "plays a chord", InstrumentProfiles::Source::probing };
+    InstrumentProfiles::Key plays { Job::plays, {}, InstrumentProfiles::Source::probing };
+    InstrumentProfiles::Key chord { Job::special, "plays a chord", InstrumentProfiles::Source::probing };
     double heardHz = 0.0;
     if (expected <= 2000.0)
     {
