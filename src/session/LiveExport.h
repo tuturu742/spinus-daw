@@ -44,6 +44,7 @@ private:
     Session& session;
     juce::File file, wavFile;
     engine::ExportSettings settings;
+    model::ProjectSettings song; // the title and author for the tags, copied at the start for the thread
     std::function<void (const Result&)> onFinished;
 
     std::shared_ptr<engine::OutputCapture> capture;

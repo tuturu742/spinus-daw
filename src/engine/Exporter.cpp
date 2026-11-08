@@ -319,10 +319,7 @@ void ExportJob::startRender()
     {
         const auto end = getSongEnd (step.project);
         if (end <= 0)
-            return finish ({ false,
-                             false,
-                             "The playlist is empty: place a pattern or an audio clip in it, or export a pattern.",
-                             {} });
+            return finish ({ false, false, findProblem (step.project, settings), {} });
         range = { te::TimePosition(), ticksToTime (*edit, (double)end) };
     }
     range = range.withEnd (range.getEnd() + te::TimeDuration::fromSeconds (settings.tailSeconds));
@@ -668,6 +665,18 @@ std::set<InsertId> ExportJob::getSilentStems (const Project& p)
             }
     }
     return silent;
+}
+
+juce::String ExportJob::findProblem (const Project& project, const ExportSettings& options)
+{
+    if (options.pattern)
+    {
+        const auto* pattern = project.findPattern (*options.pattern);
+        return pattern == nullptr || pattern->length <= 0 ? "That pattern does not exist or is empty." : juce::String();
+    }
+    return getSongEnd (project) <= 0
+               ? "The playlist is empty: place a pattern or an audio clip in it, or export a pattern."
+               : juce::String();
 }
 
 Ticks ExportJob::getSongEnd (const Project& p)

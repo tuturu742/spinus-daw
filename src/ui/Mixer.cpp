@@ -82,6 +82,20 @@ void configureKnob (juce::Slider& s)
     s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
 }
 
+/** A fader or send knob from silence (-inf dB) to +6 dB, 0 dB about two thirds up. */
+void setVolumeRange (juce::Slider& s)
+{
+    s.setRange (Mixer::silentDb, 6.0, 0.1);
+    s.setSkewFactorFromMidPoint (-12.0);
+}
+
+/** Shows the control's value in a small bubble by it while the mouse is over it or drags it. */
+void showValue (juce::Slider& s, juce::Component& parent, std::function<juce::String (double)> text)
+{
+    s.textFromValueFunction = std::move (text);
+    s.setPopupDisplayEnabled (true, true, &parent, 600);
+}
+
 //==============================================================================
 /** A stereo peak meter fed by a Tracktion LevelMeasurer, which may come and go with the audio device. */
 class LevelMeter final : public juce::Component
@@ -150,16 +164,17 @@ public:
     {
         fader.setSliderStyle (juce::Slider::LinearVertical);
         fader.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-        fader.setRange (-60.0, 6.0, 0.1);
-        fader.setSkewFactorFromMidPoint (-12.0);
+        setVolumeRange (fader);
         fader.setDoubleClickReturnValue (true, 0.0);
-        fader.setHelpText ("Insert volume (double-click for 0 dB)");
+        fader.setHelpText ("Insert volume (double-click for 0 dB; all the way down is silence)");
+        showValue (fader, mixer, [] (double db) { return volumeText (db); });
         bindDrag (fader, [this] (double v, bool joined) { mixer.setInsertVolume (id, v, joined); });
 
         configureKnob (pan);
         pan.setRange (-1.0, 1.0, 0.01);
         pan.setDoubleClickReturnValue (true, 0.0);
         pan.setHelpText ("Insert pan (double-click to centre)");
+        showValue (pan, mixer, [] (double p) { return panText (p); });
         bindDrag (pan, [this] (double v, bool joined) { mixer.setInsertPan (id, v, joined); });
 
         mute.setButtonText ("M");
@@ -457,29 +472,46 @@ private:
 
     void showMenu()
     {
+        // The menu's actions run later, when this strip may be gone (strips scrolled out of view are deleted):
+        // they hold the Mixer safely and the insert's ID, never this strip.
+        const auto onMixer = [safe = juce::Component::SafePointer<Mixer> (&mixer)] (auto action)
+        {
+            return [safe, action]
+            {
+                if (safe != nullptr)
+                    action (*safe);
+            };
+        };
+        const auto insertId = id;
+
         juce::PopupMenu menu;
         menu.addSectionHeader (id == model::masterInsertId ? juce::String ("Master") : label + " " + name);
         if (id != model::masterInsertId)
         {
-            menu.addItem ("Rename", [this] { startRename(); });
+            menu.addItem ("Rename",
+                          [safe = juce::Component::SafePointer<Strip> (this)]
+                          {
+                              if (safe != nullptr)
+                                  safe->startRename();
+                          });
             ColourMenu::addTo (menu, colour.getARGB(),
                                [safe = juce::Component::SafePointer<Mixer> (&mixer), id = id] (juce::uint32 c)
                                {
                                    if (safe != nullptr)
                                        safe->setInsertColour (id, c);
                                });
-            menu.addItem ("Remove insert", [this] { mixer.removeInsert (id); });
+            menu.addItem ("Remove insert", onMixer ([insertId] (Mixer& m) { m.removeInsert (insertId); }));
             menu.addSeparator();
 
             // Freeze: why not, when it cannot be (something inside it also plays elsewhere).
             const auto status = mixer.session.getFreezer().getStatus (id);
             if (frozen)
-                menu.addItem ("Unfreeze", [this] { mixer.setInsertFrozen (id, false); });
+                menu.addItem ("Unfreeze", onMixer ([insertId] (Mixer& m) { m.setInsertFrozen (insertId, false); }));
             else
             {
                 const auto why = model::whyCannotFreeze (mixer.session.getProject(), id);
                 menu.addItem ("Freeze (play as audio to save CPU)", why.isEmpty(), false,
-                              [this] { mixer.setInsertFrozen (id, true); });
+                              onMixer ([insertId] (Mixer& m) { m.setInsertFrozen (insertId, true); }));
                 if (why.isNotEmpty())
                     menu.addItem (why, false, false, nullptr);
             }
@@ -492,27 +524,29 @@ private:
         using Kind = model::ParameterTarget::Kind;
         for (auto [kind, text] : { std::pair { Kind::insertVolume, "Create automation clip: volume" },
                                    std::pair { Kind::insertPan, "Create automation clip: pan" } })
-            menu.addItem (text,
-                          [this, kind]
-                          {
-                              model::ParameterTarget target;
-                              target.kind = kind;
-                              target.insert = id;
-                              createAutomationClip (mixer, mixer.session, target);
-                          });
+            menu.addItem (text, onMixer (
+                                    [insertId, kind] (Mixer& m)
+                                    {
+                                        model::ParameterTarget target;
+                                        target.kind = kind;
+                                        target.insert = insertId;
+                                        createAutomationClip (m, m.session, target);
+                                    }));
         // Sidechain: whose sound this insert's ducker or sidechain compressor follows.
         const auto& project = mixer.session.getProject();
         if (const auto* insert = project.findInsert (id))
         {
             const auto current = insert->sidechainSources.empty() ? model::InsertId() : insert->sidechainSources[0];
             juce::PopupMenu sources;
-            sources.addItem ("None", true, ! current.isValid(), [this] { mixer.setSidechain (id, {}); });
+            sources.addItem ("None", true, ! current.isValid(),
+                             onMixer ([insertId] (Mixer& m) { m.setSidechain (insertId, {}); }));
             for (auto* other : allInserts (project))
                 if (other->id != id && other->id != model::masterInsertId)
-                    sources.addItem (displayName (project, other->id),
-                                     ! model::wouldCreateRoutingCycle (project, other->id, id) || other->id == current,
-                                     other->id == current,
-                                     [this, source = other->id] { mixer.setSidechain (id, source); });
+                    sources.addItem (
+                        displayName (project, other->id),
+                        ! model::wouldCreateRoutingCycle (project, other->id, id) || other->id == current,
+                        other->id == current,
+                        onMixer ([insertId, source = other->id] (Mixer& m) { m.setSidechain (insertId, source); }));
             menu.addSeparator();
             menu.addSubMenu ("Sidechain from", sources);
 
@@ -520,17 +554,19 @@ private:
             if (id != model::masterInsertId)
             {
                 juce::PopupMenu notes;
-                notes.addItem ("None", true, ! insert->notesFrom, [this] { mixer.setNotesFrom (id, {}); });
+                notes.addItem ("None", true, ! insert->notesFrom,
+                               onMixer ([insertId] (Mixer& m) { m.setNotesFrom (insertId, {}); }));
                 for (auto& channel : project.channels)
-                    notes.addItem (channel.name, true, channel.id == insert->notesFrom,
-                                   [this, channel = channel.id] { mixer.setNotesFrom (id, channel); });
+                    notes.addItem (
+                        channel.name, true, channel.id == insert->notesFrom,
+                        onMixer ([insertId, channel = channel.id] (Mixer& m) { m.setNotesFrom (insertId, channel); }));
                 menu.addSubMenu ("Notes from channel", notes);
             }
         }
 
         menu.addSeparator();
         menu.addItem ("Remove unused inserts", ! mixer.findUnusedInserts().empty(), false,
-                      [this] { mixer.removeUnusedInserts(); });
+                      onMixer ([] (Mixer& m) { m.removeUnusedInserts(); }));
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
     }
 
@@ -834,10 +870,10 @@ private:
         SendRow (Details& d, model::InsertId to) : details (d), target (to)
         {
             configureKnob (level);
-            level.setRange (-60.0, 6.0, 0.1);
-            level.setSkewFactorFromMidPoint (-12.0);
+            setVolumeRange (level);
             level.setDoubleClickReturnValue (true, 0.0);
-            level.setHelpText ("Send level (double-click for 0 dB)");
+            level.setHelpText ("Send level (double-click for 0 dB; all the way down is silence)");
+            showValue (level, d.mixer, [] (double db) { return volumeText (db); });
             bindDrag (level, [this] (double v, bool joined)
                       { details.mixer.setSend (details.mixer.getSelectedInsert(), target, v, joined); });
             addAndMakeVisible (level);
@@ -939,21 +975,16 @@ private:
 
     void showAddSendMenu()
     {
-        const auto& project = mixer.session.getProject();
-        const auto* insert = project.findInsert (mixer.getSelectedInsert());
-        if (insert == nullptr)
-            return;
-
+        const auto from = mixer.getSelectedInsert();
         juce::PopupMenu menu;
         menu.addSectionHeader ("Send to");
-        for (auto* other : allInserts (project))
-        {
-            const bool exists = std::any_of (insert->sends.begin(), insert->sends.end(),
-                                             [&] (auto& s) { return s.target == other->id; });
-            if (other->id != insert->id && ! exists)
-                menu.addItem (displayName (project, other->id),
-                              [this, to = other->id] { mixer.setSend (mixer.getSelectedInsert(), to, -6.0); });
-        }
+        for (const auto& target : mixer.getSendTargets (from))
+            menu.addItem (target.text, target.allowed, false,
+                          [safe = juce::Component::SafePointer<Mixer> (&mixer), from, to = target.insert]
+                          {
+                              if (safe != nullptr)
+                                  safe->setSend (from, to, -6.0);
+                          });
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&addSend));
     }
 
@@ -1157,6 +1188,50 @@ bool Mixer::addInsert()
 bool Mixer::removeInsert (model::InsertId id)
 {
     return perform ("insert.remove", object ({ { "insert", idValue (id) } }));
+}
+
+juce::String Mixer::volumeText (double db)
+{
+    if (db <= silentDb + 0.05)
+        return "-inf dB"; // silence
+    if (std::abs (db) < 0.05)
+        return "0.0 dB";
+    return (db > 0.0 ? "+" : "") + juce::String (db, 1) + " dB";
+}
+
+juce::String Mixer::panText (double pan)
+{
+    const auto percent = juce::roundToInt (std::abs (pan) * 100.0);
+    if (percent == 0)
+        return "Centre";
+    return juce::String (percent) + (pan < 0.0 ? "% L" : "% R");
+}
+
+std::vector<Mixer::SendTarget> Mixer::getSendTargets (model::InsertId from) const
+{
+    const auto& project = session.getProject();
+    const auto* insert = project.findInsert (from);
+    if (insert == nullptr)
+        return {};
+
+    std::vector<SendTarget> targets;
+    for (auto* other : allInserts (project))
+    {
+        const bool sends =
+            std::any_of (insert->sends.begin(), insert->sends.end(), [&] (auto& s) { return s.target == other->id; });
+        if (other->id == from || sends)
+            continue;
+        // Its output gets its whole sound already: a send there would only make it louder.
+        const bool output = from != model::masterInsertId && insert->output == other->id;
+        const bool loop = ! output && model::wouldCreateRoutingCycle (project, from, other->id);
+        const auto name = displayName (project, other->id);
+        targets.push_back ({ other->id,
+                             output ? name + " (already plays into it)"
+                             : loop ? name + " (would make a loop)"
+                                    : name,
+                             ! output && ! loop });
+    }
+    return targets;
 }
 
 std::vector<model::InsertId> Mixer::findUnusedInserts() const

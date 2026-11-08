@@ -17,12 +17,18 @@ Every channel plays into a **mixer insert**; inserts play into the **Master**, w
 | Meter | Shows the insert's level while sound plays; red means louder than 0 dB. |
 | Gain-reduction bar | An orange bar beside the meter, on inserts with a compressor, limiter, gate or [Ducker](ducker.md): it grows down from the top as they turn the sound down (the bottom is 24 dB). |
 | CPU | The number at the top right (for example **4%**) is how much of the computer's time for each bit of sound the insert's effects take; shown from 1%, red from 25%. Use it to find the effect that makes playback crackle. |
-| Fader | Volume. Drag it; double-click for 0 dB. |
-| Knob | Pan. Double-click to centre. |
+| Fader | Volume. Drag it; double-click for 0 dB. All the way down is silence (**-inf dB**). Point at it or drag it to see its level (for example **-3.5 dB**). |
+| Knob | Pan. Double-click to centre. Point at it or drag it to see its value (**Centre**, **30% L**). |
 | **M** / **S** | Mute or solo the insert. **M** on the Master silences everything you hear, after the Master's effects (and the exported mix: see [Export](export.md)). |
 | Right-click | Rename, **Colour** (the strip's top with its name is in that colour, the rest faintly), Remove insert, **Freeze** / **Unfreeze** (play everything in the insert as audio to save CPU, see [Freeze](freeze.md); a frozen insert shows a blue snowflake), **Sidechain from** (whose sound this insert's [Ducker](ducker.md), [Compressor](compressor.md) or [Gate](gate.md) follows; **None** removes it), **Notes from channel** (a channel whose notes the insert's effects receive, for example the melody [Spinus Tune](spinus-tune.md) pulls a vocal to; **None** stops it), **Remove unused inserts** (removes every insert with nothing playing into it and no effects). |
 
-Removing an insert sends its channels to the Master instead.
+Removing an insert removes its effects too, and:
+
+- its channels, and inserts that played into it, play into the Master instead;
+- other inserts' sends to it, and sidechains that followed it, are removed;
+- automation clips for its volume, its pan or any of its effects are removed from the Playlist.
+
+**Ctrl+Z** brings all of it back in one step.
 
 ## Effects, output and sends
 
@@ -43,7 +49,7 @@ really does.
 | Dragging a slot | Drag an effect onto another slot to change the order. |
 | Right-click an effect | Open window, Bypass, Move up, Move down, Move to another insert, **Copy to insert** (the same effect with the same settings on another insert, also the ones you turned in its window), Remove. |
 | **Out:** | Where the insert's sound goes: the Master or another insert (for example, all drums into a "Drums" insert). |
-| **Sends** | Send some of the sound to another insert as well, typically a reverb insert. **+ Send** adds one; the knob sets how much; **x** removes it. |
+| **Sends** | Send some of the sound to another insert as well, typically a reverb insert. **+ Send** adds one; the knob sets how much (point at it to see the level; all the way down is silence); **x** removes it. In the **+ Send** list, the insert the sound already plays into (usually the Master) is greyed out, since a send there would only make it louder, and so are inserts that would make a feedback loop. |
 
 - Spinus refuses routing that would feed an insert back into itself (a feedback loop) and says so below
   the sends. Sidechains count too: an insert that follows another through **Sidechain from** cannot

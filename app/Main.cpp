@@ -34,6 +34,7 @@
 #include "ai/ProjectContext.h"
 #include "ui/About.h"
 #include "ui/AiSettingsDialog.h"
+#include "ui/ExportDialog.h"
 #include "ui/Manual.h"
 #include "project/ProjectFiles.h"
 #include "session/ProjectDocument.h"
@@ -350,6 +351,7 @@ public:
         ui::AiSettingsDialog::closeWindow();
         ui::ManualWindow::closeWindow();
         ui::AboutSpinus::closeWindow();
+        ui::ExportDialog::closeWindow(); // cancels a running export
         windowIcons = nullptr;
         agentInterface = nullptr; // stops the live interface before what it reads goes
         mainWindow = nullptr;

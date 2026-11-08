@@ -55,6 +55,21 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Manual: Projects do show in the Browser (Known issues); `--no-audio`, `--snapshot`, `--version` and
   `--self-test` are on the command-line page; Backspace deletes like Delete; what clicking the Playlist's ruler
   does in pattern mode.
+- **Export no longer locks Spinus.** The Export audio window stays open beside your work: you can keep editing
+  and playing while it exports, as the manual said. Closing the window cancels the export.
+- **Exports are named after the project** and start in the project's folder; only a project you haven't saved yet
+  is called "Untitled" and starts in Music. MP3, Opus and AAC files get the project's name as their title.
+- **An empty song is caught before you pick a file name**, not after.
+- **The MP3 and AAC hints fit your system:** the Arch install command only on Linux, a plain sentence on
+  Windows and in the Flatpak (which has neither program).
+- **Mixer faders, pan and send knobs show their value** while you point at them or drag them, and the faders and
+  send knobs now go all the way down to silence (-inf dB) instead of stopping at -60 dB.
+- **"+ Send" no longer offers bad targets:** the insert the sound already plays into (usually the Master, where a
+  send only made it louder) and inserts that would make a feedback loop are greyed out, with the reason.
+- A mixer strip's right-click menu can no longer act on a strip that was deleted while the menu was open
+  (scrolled out of view), which could crash Spinus.
+- The manual now says that removing a mixer insert also removes the sends and sidechains to it and its automation
+  clips (all undoable in one step).
 
 ### Track creator: songs that sound written, not generated
 

@@ -5,6 +5,7 @@
 #include "dsp/ParameterText.h"
 #include "engine/ParameterIds.h"
 #include "model/ModelJson.h"
+#include "project/ProjectFiles.h"
 #include "session/PluginPresets.h"
 
 #include "engine/BundledDevices.h"
@@ -536,8 +537,18 @@ Session::createExportJob (const juce::File& destination, engine::ExportSettings 
     // Audio clips of a saved project name files in its audio/ folder.
     settings.audioFolder = projectFolder == juce::File() ? juce::File() : projectFolder.getChildFile ("audio");
     settings.tunedAudio = tuner->getRenderedFiles(); // Spinus Tune's corrections are part of the song
-    return std::make_unique<engine::ExportJob> (edit->engine, *devices, getProject(), adapter->captureDeviceStates(),
+    auto project = getProject();
+    project.settings = getSongInfo(); // the tags: the project's name when it has no title
+    return std::make_unique<engine::ExportJob> (edit->engine, *devices, project, adapter->captureDeviceStates(),
                                                 destination, settings, std::move (onFinished));
+}
+
+model::ProjectSettings Session::getSongInfo() const
+{
+    auto song = getProject().settings;
+    if (song.title.isEmpty() && projectFolder != juce::File())
+        song.title = project::projectName (projectFolder);
+    return song;
 }
 
 bool Session::showDeviceWindow (model::DeviceId id)

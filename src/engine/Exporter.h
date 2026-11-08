@@ -108,6 +108,10 @@ public:
     /** Where the song ends: the end of the last pattern or audio clip (0 when there is none). */
     static model::Ticks getSongEnd (const model::Project&);
 
+    /** Why exporting the project with these settings would fail before it starts (an empty playlist, a missing
+        or empty pattern), or nothing: checked before asking for a file name. */
+    static juce::String findProblem (const model::Project&, const ExportSettings&);
+
     /** Whether MP3 export is possible (the `lame` program is installed). */
     static bool isMp3Available();
 
