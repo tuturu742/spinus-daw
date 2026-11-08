@@ -135,8 +135,8 @@ async def test_the_service_takes_the_variety_and_refuses_an_unknown_one(tmp_path
     service = make_service(tmp_path, lambda request: None)  # no AI connection: nothing is sent
     s = summary()
     song = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "variety": "close"})
-    assert song == sw.write(s, 4, variety="close")
-    assert await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4}) == sw.write(s, 4)
+    assert song == sw.lift_last_chorus(sw.write(s, 4, variety="close"))
+    assert await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4}) == sw.lift_last_chorus(sw.write(s, 4))
     redone = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 5, "song": song,
                                                          "redo": {"part": "lead"}})  # fmt: skip
     assert redone["variety"] == "close"

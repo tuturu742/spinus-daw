@@ -366,7 +366,7 @@ async def test_without_a_connection_the_rules_song_stands(tmp_path: Path) -> Non
     service = ai_service(tmp_path, {}, sent)
     s = summary()
     rules = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4})
-    assert rules == songwriter.write(s, 4)  # offline by default: no AI asked
+    assert rules == songwriter.lift_last_chorus(songwriter.write(s, 4))  # offline by default: no AI asked
     asked = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "refine": True})
     assert "no AI connection" in asked["note"] and asked["parts"] == rules["parts"] and not sent
 
@@ -376,7 +376,7 @@ async def test_without_a_connection_the_rules_song_stands(tmp_path: Path) -> Non
     assert redone["parts"]["drums"] == rules["parts"]["drums"] and redone["parts"]["lead"] != rules["parts"]["lead"]
 
     full = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "arrangement": "full"})
-    assert full == songwriter.write(s, 4, "full") and full["layers"]
+    assert full == songwriter.lift_last_chorus(songwriter.write(s, 4, "full")) and full["layers"]
 
     mine = await run_job(
         service,
@@ -454,7 +454,7 @@ async def test_a_malformed_answer_leaves_the_rules_song(tmp_path: Path, answer: 
     )
     s = summary()
     song = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "refine": True})
-    rules = songwriter.write(s, 4)
+    rules = songwriter.lift_last_chorus(songwriter.write(s, 4))
     assert sent and song["refinedBy"] == ""
     assert song["parts"] == rules["parts"] and song["sections"] == rules["sections"]
     assert "not usable" in song["note"]
@@ -746,3 +746,21 @@ def test_a_build_rolls_into_what_follows() -> None:
     assert roll[0]["velocity"] < roll[-1]["velocity"]  # and gets louder
     assert max(n["start"] for n in roll) < 4 * 16 * 240 - 4 * 240  # the last beat is the breath before the drop
     assert not any(n["drum"] == "hat" for n in songwriter.write_drums(ctx) if n["start"] >= 0)
+
+
+def test_the_last_chorus_is_the_biggest() -> None:
+    song = songwriter.write(summary(), 4, "full")
+    choruses = [a["section"] for a in song["arrangement"] if a["section"].startswith("chorus")]
+    if len(choruses) < 2 or len(set(choruses)) != 1:
+        pytest.skip("this seed plays one chorus")
+    lifted = songwriter.lift_last_chorus(json.loads(json.dumps(song)))
+    sid = choruses[0]
+    after = [a["section"] for a in lifted["arrangement"] if a["section"].startswith("chorus")]
+    assert after[:-1] == choruses[:-1] and after[-1] == f"{sid}-last"
+    lead = next(layer["id"] for layer in lifted["layers"] if layer["role"] == "lead")
+    first, last = lifted["layerParts"][lead][sid], lifted["layerParts"][lead][f"{sid}-last"]
+    assert len(last) > len(first)  # doubled an octave up
+    assert sum(n["velocity"] for n in last[: len(first)]) > 0  # and played harder
+    assert next(s for s in lifted["sections"] if s["id"] == f"{sid}-last")["name"] == "Last chorus"
+    assert songwriter.lift_last_chorus(lifted) == lifted  # once
+    assert songwriter.unlifted(lifted)["arrangement"] == song["arrangement"]

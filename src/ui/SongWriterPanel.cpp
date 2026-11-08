@@ -562,7 +562,16 @@ bool SongWriterPanel::redo (const juce::String& part, const juce::String& sectio
                  if (part.isNotEmpty())
                      redoneParts.addIfNotAlreadyThere (part);
                  else
-                     redoneSections.addIfNotAlreadyThere (section);
+                 {
+                     // The last chorus is its chorus played bigger (spinus_ai's lift_last_chorus): written again
+                     // with it, so both go into the project.
+                     const auto base = section.endsWith ("-last") ? section.dropLastCharacters (5) : section;
+                     redoneSections.addIfNotAlreadyThere (base);
+                     if (const auto* list = song["sections"].getArray())
+                         for (const auto& s : *list)
+                             if (s["id"].toString() == base + "-last")
+                                 redoneSections.addIfNotAlreadyThere (base + "-last");
+                 }
              }
              else
                  whole = true;

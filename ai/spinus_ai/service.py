@@ -998,20 +998,23 @@ class Service:
                 from .compose import redo_kept
 
                 part, section = redo.get("part"), redo.get("section")
-                return redo_kept(dict(params["song"]), summary, seed,
-                                 str(part) if part else None, str(section) if section else None)  # fmt: skip
+                section = str(section).removesuffix("-last") if section else None  # the last chorus is the chorus
+                again = redo_kept(songwriter.unlifted(dict(params["song"])), summary, seed,
+                                  str(part) if part else None, section)  # fmt: skip
+                return songwriter.lift_last_chorus(again)
             song = songwriter.write(summary, seed, size, parts, variety)
             if not params.get("refine"):
-                return song
+                return songwriter.lift_last_chorus(song)
             try:
-                return await songwriter.refine(self.client, self.connections, self.routing, self.usage, summary,
-                                               song, say)  # fmt: skip
+                refined = await songwriter.refine(self.client, self.connections, self.routing, self.usage, summary,
+                                                  song, say)  # fmt: skip
+                return songwriter.lift_last_chorus(refined)
             except NoConnection:
                 song["note"] = "Written by the rules only: no AI connection is set up."
             except ProviderError as error:
                 song["note"] = f"Written by the rules only: the AI failed ({error})."
             song["plain"] = songwriter.describe(song)
-            return song
+            return songwriter.lift_last_chorus(song)
 
         return {"job": self.job(notify, work)}
 

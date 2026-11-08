@@ -2716,6 +2716,64 @@ def build(
     return song
 
 
+def lift_last_chorus(song: dict[str, Any]) -> dict[str, Any]:
+    """The last chorus the biggest, as songs (and the demo songs) end: when one chorus plays twice or more, its last
+    play becomes a section of its own ("<id>-last", the same music) played a little harder, its lead doubled an
+    octave up where that stays in reach, the drums crashing at its middle too. For the song Spinus's rules hand
+    the user (the service's Write and Redo); the plan keeps one chorus, so Redo and the AI writer work on it as
+    before. Returns the song, changed in place (none of it when it has no repeated chorus or was lifted)."""
+    arrangement = song.get("arrangement") or []
+    by_id = {s["id"]: s for s in song.get("sections") or []}
+    plays = [i for i, a in enumerate(arrangement) if base_kind(by_id[a["section"]]["kind"]) == "chorus"]
+    if len(plays) < 2 or arrangement[plays[-1]]["section"] != arrangement[plays[0]]["section"]:
+        return song
+    sid = arrangement[plays[-1]]["section"]
+    new = f"{sid}-last"
+    if new in by_id:
+        return song
+    section = by_id[sid]
+    bar_ticks = int(song["barTicks"])
+    roles = {layer["id"]: layer["role"] for layer in song.get("layers") or []}
+
+    def lifted(notes: list[dict[str, Any]], role: str) -> list[dict[str, Any]]:
+        out = [{**n, "velocity": round(min(1.0, float(n["velocity"]) + 0.06), 3)} for n in notes]
+        if role in ("lead", "lead-guitar"):
+            out += [{**n, "pitch": int(n["pitch"]) + 12, "velocity": round(float(n["velocity"]) * 0.7, 3)}
+                    for n in notes if "pitch" in n and int(n["pitch"]) + 12 <= 96]  # fmt: skip
+        if role == "drums" and int(section["bars"]) >= 8:
+            middle = int(section["bars"]) // 2 * bar_ticks
+            if not any(n.get("drum") == "crash" and int(n["start"]) == middle for n in out):
+                out.append({"start": middle, "length": TICKS_PER_STEP // 2, "drum": "crash", "velocity": 0.85})
+        return sorted(out, key=lambda n: int(n["start"]))
+
+    song["sections"].append({**section, "id": new, "name": "Last " + str(section.get("name") or "chorus").lower()})
+    for part, by in (song.get("parts") or {}).items():
+        if sid in by:
+            by[new] = lifted(by[sid], part)
+    for layer, by in (song.get("layerParts") or {}).items():
+        if sid in by:
+            by[new] = lifted(by[sid], roles.get(layer, ""))
+    arrangement[plays[-1]] = {**arrangement[plays[-1]], "section": new}
+    song["plain"] = describe(song)
+    return song
+
+
+def unlifted(song: dict[str, Any]) -> dict[str, Any]:
+    """The song as the rules wrote it, before lift_last_chorus (for Redo and refining, which work on the plan)."""
+    lifted_ids = {s["id"] for s in song.get("sections") or [] if str(s["id"]).endswith("-last")}
+    if not lifted_ids:
+        return song
+    out: dict[str, Any] = json.loads(json.dumps(song))
+    out["sections"] = [s for s in out["sections"] if s["id"] not in lifted_ids]
+    out["arrangement"] = [{**a, "section": a["section"].removesuffix("-last")} if a["section"] in lifted_ids else a
+                          for a in out["arrangement"]]  # fmt: skip
+    for key in ("parts", "layerParts"):
+        for by in (out.get(key) or {}).values():
+            for sid in lifted_ids:
+                by.pop(sid, None)
+    return out
+
+
 def write(
     summary: dict[str, Any],
     seed: int,

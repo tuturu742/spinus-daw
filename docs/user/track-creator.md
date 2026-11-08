@@ -584,7 +584,9 @@ anywhere and no AI connection is needed.
   sometimes a step higher or lower; minor or major as often as your songs are.
 - **Sections**: an intro, verses, choruses, a bridge and an outro, about as many as your songs have and
   about as long, each 4, 8, 12, 16... bars as your songs' sections are. A chorus is the same each time
-  (one pattern), so you can change it once.
+  (one pattern), so you can change it once, except the last one: **Last chorus** is its own pattern, the
+  chorus played a little harder, its lead doubled an octave up and a crash at its middle, so the song ends on
+  its biggest moment. **The chorus again** writes both.
   When your AI connection writes the song, a section can be any of the kinds songwriters and song
   generators name: **Intro, Verse, Pre-Chorus, Chorus, Post-Chorus, Hook, Bridge, Break, Breakdown, Build,
   Drop, Interlude, Instrumental, Solo, Outro, End** and **Fade Out**. Each has its usual energy (a drop is as

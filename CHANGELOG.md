@@ -14,6 +14,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Taught by Spinus's demo songs: the lead is a hook that comes back and resolves, with its peak note loudest; the
   drums follow the phrases (an open hi-hat closing each 4 bars, a fill closing each 8, a crash opening the next,
   builds rolling into drops, outros fading).
+- The last chorus is the biggest: Spinus's writer plays it a little harder, doubles its lead an octave up and adds
+  a crash at its middle (**Last chorus** on the Playlist).
 - The AI writer is told how the demo songs do it, and **check** now tells it when a song sounds generated: a chorus
   played the same every time, a lead with no figure that comes back, a part with every note at one velocity, or
   drums looping one bar through a long section.
