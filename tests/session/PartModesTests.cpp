@@ -195,3 +195,53 @@ TEST_CASE ("Part modes: notes kept to the mode's keys, switch keys written at ea
                juce::StringArray { "Guitar: Normal mode; palm mute, open" });
     }
 }
+
+TEST_CASE ("Instrument profiles: the ones Spinus ships, and a profile shared as a file", "[instruments][profiles]")
+{
+    // Spinus's own synth and the free ones it gets come with a profile; the user's own wins, and forgetting it
+    // brings the shipped one back.
+    const auto root = juce::File::createTempFile ("shipped");
+    const auto indexFolder = root.getChildFile ("sound-index");
+    InstrumentProfiles profiles (indexFolder);
+    for (const auto* key : { "stock-spinus.3x-osc", "surge-xt", "ob-xf", "odin2" })
+    {
+        const auto shipped = profiles.get (key);
+        REQUIRE (shipped.has_value());
+        REQUIRE (shipped.value().modes.size() == 1);
+        CHECK (shipped.value().modes[0].keys[64].source == InstrumentProfiles::Source::bundled);
+        CHECK (shipped.value().modes[0].goodFor.isNotEmpty());
+        CHECK_FALSE (profiles.hasOwn (key));
+        CHECK (profiles.playable (key) == std::optional<PlayableKeys> (PlayableKeys::between (0, 127)));
+    }
+    CHECK_FALSE (profiles.get ("plugin-1234").has_value());
+    auto own = guitar();
+    profiles.set ("surge-xt", own);
+    CHECK (profiles.hasOwn ("surge-xt"));
+    CHECK (profiles.get ("surge-xt") == std::optional<Profile> (own));
+    profiles.set ("surge-xt", std::nullopt);
+    CHECK (profiles.get ("surge-xt") == InstrumentProfiles::bundled ("surge-xt"));
+
+    // Shared: facts only, the web-page manuals only; read back with every known key imported.
+    own.manuals = { { "/home/me/Guitar.pdf", "1.0" }, { "https://example.org/guitar-manual", "1.0" } };
+    const auto shared = InstrumentProfiles::toShared (own, "Guitar M");
+    CHECK (shared["kind"].toString() == "spinus.instrument-profile");
+    CHECK (shared["instrument"].toString() == "Guitar M");
+    CHECK_FALSE (juce::JSON::toString (shared).contains ("/home/me"));
+    juce::String name, problem;
+    const auto back = InstrumentProfiles::fromShared (juce::JSON::parse (juce::JSON::toString (shared)), name, problem);
+    REQUIRE (back.has_value());
+    CHECK (name == "Guitar M");
+    REQUIRE (back.value().modes.size() == own.modes.size());
+    CHECK (back.value().modes[0].keys[24].what == "palm mute");
+    CHECK (back.value().modes[0].keys[24].source == InstrumentProfiles::Source::imported);
+    CHECK (back.value().modes[0].keys[10].job == InstrumentProfiles::Job::unknown);
+    CHECK (back.value().manuals.size() == 1);
+    CHECK (back.value().modes[1].enterKey == 85);
+
+    CHECK_FALSE (InstrumentProfiles::fromShared (juce::JSON::parse ("{\"kind\": \"spinus.song\"}"), name, problem));
+    CHECK (problem == "it is not an instrument profile Spinus exported.");
+    CHECK_FALSE (InstrumentProfiles::fromShared (
+        juce::JSON::parse ("{\"kind\": \"spinus.instrument-profile\", \"version\": 2}"), name, problem));
+    CHECK (problem == "it was exported by a newer Spinus.");
+    root.deleteRecursively();
+}

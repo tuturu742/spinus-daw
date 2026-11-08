@@ -8,7 +8,7 @@ namespace spinus
 namespace
 {
 const juce::StringArray jobNames { "unknown", "plays", "switch", "special", "unused" };
-const juce::StringArray sourceNames { "user", "probing", "plugin", "manual", "bundled" };
+const juce::StringArray sourceNames { "user", "probing", "plugin", "manual", "bundled", "imported" };
 const juce::StringArray voicesNames { "unknown", "chords", "one" };
 
 template <typename E> E fromName (const juce::StringArray& names, const juce::var& v, E otherwise)
@@ -245,7 +245,67 @@ std::optional<InstrumentProfiles::Profile> InstrumentProfiles::get (const juce::
 {
     if (const auto found = profiles.find (instrument); found != profiles.end())
         return found->second;
-    return std::nullopt;
+    return bundled (instrument);
+}
+
+std::optional<InstrumentProfiles::Profile> InstrumentProfiles::bundled (const juce::String& instrument)
+{
+    // Spinus's own synth and the free ones it gets: every key plays, chords or one note.
+    static const std::map<juce::String, juce::String> synths {
+        { "stock-spinus.3x-osc", "basses, leads, plucks and simple pads" },
+        { "surge-xt", "any synth part: basses, leads, pads, plucks, arps" },
+        { "ob-xf", "analog-style basses, brass, leads and pads" },
+        { "odin2", "basses, leads, pads and arps" },
+    };
+    const auto found = synths.find (instrument);
+    if (found == synths.end())
+        return std::nullopt;
+    Mode mode;
+    mode.goodFor = found->second;
+    mode.voices = Voices::chords;
+    mode.setKeys (0, 127, { Job::plays, {}, Source::bundled });
+    Profile profile;
+    profile.modes.push_back (std::move (mode));
+    return profile;
+}
+
+juce::var InstrumentProfiles::toShared (const Profile& profile, const juce::String& instrumentName)
+{
+    auto shared = profile;
+    std::erase_if (shared.manuals, [] (const Manual& m) { return ! m.isWebPage(); });
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("kind", "spinus.instrument-profile");
+    o->setProperty ("version", 1);
+    o->setProperty ("instrument", instrumentName);
+    o->setProperty ("profile", toVar (shared));
+    return juce::var (o);
+}
+
+std::optional<InstrumentProfiles::Profile>
+InstrumentProfiles::fromShared (const juce::var& v, juce::String& instrumentName, juce::String& problem)
+{
+    if (v["kind"].toString() != "spinus.instrument-profile")
+    {
+        problem = "it is not an instrument profile Spinus exported.";
+        return std::nullopt;
+    }
+    if ((int)v["version"] > 1)
+    {
+        problem = "it was exported by a newer Spinus.";
+        return std::nullopt;
+    }
+    auto profile = fromVar (v["profile"]);
+    if (! profile.has_value())
+    {
+        problem = "it holds no mode.";
+        return std::nullopt;
+    }
+    instrumentName = v["instrument"].toString();
+    for (auto& mode : profile->modes)
+        for (auto& key : mode.keys)
+            if (key.job != Job::unknown)
+                key.source = Source::imported;
+    return profile;
 }
 
 void InstrumentProfiles::set (const juce::String& instrument, std::optional<Profile> profile)

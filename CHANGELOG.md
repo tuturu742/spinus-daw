@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Track creator: Learn this instrument
 
+- **Export... and Import...** in Learn this instrument: share what Spinus learned of an instrument as a file.
+  An imported profile is a proposal you Apply, and the keys you marked stay yours. 3x Osc, Surge XT, OB-Xf and
+  Odin 2 come with a profile.
 - **Songs use the instrument's modes**: for an instrument you taught Spinus, each part of a written song plays
   in one of its modes (the one whose "good for" words fit the part and genre, or the one your AI connection
   picks), and the AI can switch articulations per section (palm mute in the verse, open in the chorus). Spinus
