@@ -102,7 +102,12 @@ tomMid, tomHigh) instead of the pitch. Chords are Roman numerals (i, iv, V7, bVI
 
 Save tokens: write a loop once with loop_bars instead of every bar; reuse phrases with motif and place; copy a \
 section that repeats; fix a few bars with edit, not the whole part; let rules_write fill a part you don't need to \
-shape by hand. Riser and impact parts are placed by Spinus. Keep tool calls small; don't explain between them."""
+shape by hand. Riser and impact parts are placed by Spinus. Keep tool calls small; don't explain between them.
+
+Some instruments have playing modes (a sampled guitar's normal playing, a riff player) and articulation switches \
+(palm mute, slide): the brief lists them by part. Pick the mode that suits each such part with set_mode, before \
+writing it, and name articulations for the sections that want one; Spinus writes the switch keys. Never write the \
+switch keys as notes yourself."""
 
 
 def schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -230,6 +235,24 @@ TOOLS = [
         "Let Spinus's own rules write a part (in a section, or in all) from the form's chords: for routine parts. "
         "Write the parts that carry the song (its hooks, melodies and guitars) yourself.",
         schema({"part": PART, "section": SECTION}, ["part"]),
+    ),
+    Tool(
+        "set_mode",
+        "Play a part in one of its instrument's modes (the brief and list_sounds list them), and switch it to an "
+        "articulation per section (palm mute, slide), from the mode's switches. Spinus writes the switch keys; the "
+        "part's notes keep to the mode's range.",
+        schema(
+            {
+                "part": PART,
+                "mode": {"type": "string"},
+                "articulations": {
+                    "type": "object",
+                    "description": "Section id -> one of the mode's switches",
+                    "additionalProperties": {"type": "string"},
+                },
+            },
+            ["part", "mode"],
+        ),
     ),
     Tool(
         "check",
@@ -681,6 +704,7 @@ class Workspace:
     order: list[str] = field(default_factory=list)
     notes: dict[str, dict[str, list[dict[str, Any]]]] = field(default_factory=dict)  # part -> section -> notes
     sounds: dict[str, str] = field(default_factory=dict)
+    modes: dict[str, dict[str, Any]] = field(default_factory=dict)  # part -> {mode, articulations} (set_mode)
     motifs: dict[str, dict[str, Any]] = field(default_factory=dict)
     by_rules: set[tuple[str, str]] = field(default_factory=set)  # (part, section) the rules wrote
     levels: dict[str, Any] = field(default_factory=dict)  # part -> dB as the app measured it (None: silent)
@@ -737,6 +761,7 @@ class Workspace:
         ws.order = list(kept["order"])
         ws.notes = json.loads(json.dumps(kept["notes"]))
         ws.sounds = dict(kept.get("sounds") or {})
+        ws.modes = json.loads(json.dumps(kept.get("modes") or {}))
         ws.motifs = dict(kept.get("motifs") or {})
         ws.by_rules = {(p, s) for p, s in kept.get("byRules") or []}
         ws.extra = json.loads(json.dumps(kept.get("extra") or {}))
@@ -752,6 +777,7 @@ class Workspace:
             "order": self.order,
             "notes": self.notes,
             "sounds": self.sounds,
+            "modes": self.modes,
             "motifs": self.motifs,
             "byRules": sorted([list(x) for x in self.by_rules]),
             "extra": self.extra,
@@ -772,6 +798,7 @@ class Workspace:
             state["sounds"],
             state["motifs"],
         )
+        other.modes = state["modes"]
         other.by_rules = set(self.by_rules)
         other.extra = state["extra"]
         other.summary, other.finished = self.summary, self.finished
@@ -820,7 +847,7 @@ class Workspace:
     def song(self) -> dict[str, Any]:
         """The song from the working copy, as songwriter.write gives songs (the rules fill parts with no notes)."""
         written = {p: by for p, by in self.notes.items() if any(by.values())}
-        checked = compose.Checked(self.plan(), written, {}, dict(self.sounds), [], {})
+        checked = compose.Checked(self.plan(), written, {}, dict(self.sounds), [], {}, self.uses())
         checked.filled = [p["id"] for p in self.setup.written() if p["id"] not in written]
         song = compose.build_song(checked, self.setup, self.seed, self.size)
         for layer in song["layers"]:
@@ -841,19 +868,41 @@ class Workspace:
             song["production"] = production
         return song
 
+    def modes_of(self, pid: str) -> list[dict[str, Any]]:
+        return compose.modes_of(self.setup, pid, self.sounds.get(pid))
+
+    def bounds(self, pid: str) -> tuple[int, int]:
+        """The notes a part may play: its mode's range, else its role's."""
+        return compose.bounds_of(
+            self.setup, pid, self.part(pid)["role"], self.sounds.get(pid), (self.modes.get(pid) or {}).get("mode")
+        )
+
+    def uses(self) -> dict[str, dict[str, Any]]:
+        """The modes set, checked against the parts' instruments as they are now (a sound picked after set_mode
+        may have other modes) and the song's sections."""
+        found = {}
+        for pid, use in self.modes.items():
+            if any(p["id"] == pid for p in self.setup.written()):
+                checked = compose.checked_use(use, self.modes_of(pid), self.sections)
+                if checked is not None:
+                    found[pid] = checked
+        return found
+
     # --- notation -----------------------------------------------------------------------------------
 
     def parse(self, pid: str, text: str, bars: int, loop_bars: int | None = None) -> tuple[list[dict[str, Any]], str]:
         """Notes for `bars` bars from the notation (a loop repeated), and what was fixed in words."""
         loop = max(1, min(bars, loop_bars or bars))
-        parsed = compose.parse_notes(str(text or ""), self.drums(pid), self.part(pid)["role"], loop, bars, self.steps)
+        parsed = compose.parse_notes(
+            str(text or ""), self.drums(pid), self.part(pid)["role"], loop, bars, self.steps, self.bounds(pid)
+        )
         if parsed.tokens and not parsed.notes:
             raise Mistake("no note could be read: write 'step pitch length velocity; ...'")
         fixed = []
         if parsed.bad:
             fixed.append(f"{parsed.bad} unreadable or past the loop, left out")
         if parsed.folded:
-            low, high = compose.RANGES.get(self.part(pid)["role"], (24, 108))
+            low, high = self.bounds(pid)
             fixed.append(
                 f"{parsed.folded} outside the range {sw.note_name(low)}-{sw.note_name(high)}, moved by octaves"
             )
@@ -913,11 +962,17 @@ class Workspace:
             lines.append(freedom)
         for b in compose.part_brief(self.setup):
             words = f"Part {b['id']} ({b['name']}, role {b['role']}"
-            words += (
-                ", drums)" if b["drums"] else f", range {sw.note_name(b['range'][0])}-{sw.note_name(b['range'][1])})"
-            )
+            if b["drums"]:
+                words += ", drums)"
+            else:
+                low, high = self.bounds(b["id"])
+                words += f", range {sw.note_name(low)}-{sw.note_name(high)})"
             if b.get("currentSound"):
                 words += f"; sound: {b['currentSound']}"
+            if modes := self.modes_of(b["id"]):
+                words += "; " + compose.modes_words(modes)
+                if use := self.modes.get(b["id"]):
+                    words += f"; playing in {use['mode']}"
             if b.get("sounds"):
                 words += f"; {len(b['sounds'])} sounds to choose from (list_sounds)"
             lines.append(words)
@@ -967,7 +1022,12 @@ class Workspace:
             )
         picked = self.sounds.get(p["id"])
         # Short numbers: a sound's id is an internal key (its instrument and preset), long and easy to garble.
-        lines = [f"{n}. {c['name']}" + (" (picked)" if c["id"] == picked else "") for n, c in found]
+        lines = [
+            f"{n}. {c['name']}"
+            + (" (picked)" if c["id"] == picked else "")
+            + (f"; {compose.modes_words(c['modes'])}" if c.get("modes") else "")
+            for n, c in found
+        ]
         return "\n".join(lines) + f"\npick_sound with the part and a number (1 to {len(everything)})."
 
     def tool_set_form(
@@ -1091,7 +1151,7 @@ class Workspace:
         drums = self.drums(p["id"])
         notes, fixed = self.parse(p["id"], m["notes"], length, int(m["bars"]))
         bar_ticks = self.steps * sw.TICKS_PER_STEP
-        low, high = compose.RANGES.get(p["role"], (24, 108))
+        low, high = self.bounds(p["id"])
         scale = sw.scale_of(self.key)
         moved = 0
         for n in notes:
@@ -1147,6 +1207,38 @@ class Workspace:
             raise Mistake(f"'{sound}' is not one of {p['id']}'s sounds: give the number list_sounds shows")
         self.sounds[p["id"]] = chosen["id"]
         return f"{p['id']} plays {chosen['name']}."
+
+    def tool_set_mode(self, part: str, mode: str, articulations: Any = None) -> str:
+        p = self.part(part)
+        modes = self.modes_of(p["id"])
+        if not modes:
+            raise Mistake(f"{p['id']}'s instrument has no modes Spinus knows of: it plays as it is")
+        chosen = compose.mode_named(modes, mode)
+        if chosen is None:
+            raise Mistake(f"'{mode}' is not one of its modes ({', '.join(m['name'] for m in modes)})")
+        given = articulations if isinstance(articulations, dict) else {}
+        switches = {x["what"].lower() for x in chosen.get("switches", [])}
+        for sid, what in given.items():
+            self.section(sid)
+            if str(what).strip().lower() not in switches:
+                have = ", ".join(x["what"] for x in chosen.get("switches", [])) or "none"
+                raise Mistake(f"'{what}' is not one of the {chosen['name']} mode's switches ({have})")
+        self.modes[p["id"]] = {"mode": chosen["name"], "articulations": {str(k): str(v) for k, v in given.items()}}
+        low, high = int(chosen["low"]), int(chosen["high"])
+        outside = sum(
+            1
+            for notes in self.notes.get(p["id"], {}).values()
+            for n in notes
+            if "pitch" in n and not low <= int(n["pitch"]) <= high
+        )
+        said = f"{p['id']} plays in {chosen['name']} ({sw.note_name(low)}-{sw.note_name(high)})"
+        if given:
+            said += "; " + ", ".join(f"{sid}: {what}" for sid, what in given.items())
+        if outside:
+            said += (
+                f". {outside} of its notes are outside that range: Spinus moves them by octaves, or write them again"
+            )
+        return said + "."
 
     def tool_rules_write(self, part: str, section: str = "") -> str:
         p = self.part(part)
@@ -2333,6 +2425,7 @@ def setup_of(brief: dict[str, Any]) -> compose.Setup:
         brief.get("current"),
         brief.get("effects"),
         brief.get("variety"),
+        brief.get("modes"),
     )
 
 

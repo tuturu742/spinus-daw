@@ -285,6 +285,9 @@ juce::String instrumentKey (const Choice&);
 /** The keys a choice's instrument plays as it opens (its profile's first mode, InstrumentProfiles, kept beside the
     index in `indexFolder`), if they are known. Never for the drums' own kit notes (a kit or a loop). */
 std::optional<PlayableKeys> playableFor (const Choice&, const juce::File& indexFolder);
+/** A choice's instrument's whole profile (its modes, InstrumentProfiles), if Spinus learned it. Never for a kit or
+    a loop. */
+std::optional<InstrumentProfiles::Profile> profileFor (const Choice&, const juce::File& indexFolder);
 
 /** What the user adds: a sound per part, its tuning and effects, and the mix. */
 struct Plan

@@ -453,8 +453,8 @@ and drums": those three), or empty. Then:
 
   An instrument can have several **modes** (a sampled guitar's normal and strummer modes): **Add mode**, name
   it, and say how to enter it (in words, or the key that switches to it), what it is good for ("strummed rhythm,
-  country and folk") and whether it plays chords. Each mode has its own keyboard. For now Spinus writes in the
-  first mode; choosing a mode per part comes later. Nothing is kept until **Save**; **Forget this instrument**
+  country and folk") and whether it plays chords. Each mode has its own keyboard. When Spinus writes a song, it
+  picks a mode for each part (see [Write a song](#write-a-song)). Nothing is kept until **Save**; **Forget this instrument**
   removes what Spinus knew of it. It is kept per instrument, beside the sound index, like your roles. Notes it
   plays, set in an earlier version, becomes the first mode's playing keys.
 
@@ -612,6 +612,17 @@ patterns you can edit like any other. Apply it to hear it.
    page lists the levels. With reference songs and **Effects and mix**, the level toward your songs is
    used instead. It is **one undo step**: Ctrl+Z takes it all away. After that,
    **Redo part...** and **Apply** change only that part or section (one more undo step each).
+
+**Instruments with modes and switches.** For an instrument you taught Spinus in
+[Learn this instrument](#sounds-for-each-part), each part plays in one of its modes, with its notes on that
+mode's playing keys. Spinus's own rules pick the mode whose "good for" words best match the part and the genre
+(a funk rhythm guitar gets a mode good for "funk riffs"); the first mode when none matches. Your AI connection
+sees the modes and their switches, picks one per part and may switch articulations per section (palm mute in
+the verse, open in the chorus). Spinus then writes the switch keys itself, as short notes at the start of each
+section the part plays in, so the song plays the same on any computer. A mode entered by a key gets that key
+the same way. The page lists the instruments' modes ("Instruments: Rhythm guitar: Normal mode; palm mute,
+open."). Modes entered only by a button in the plugin, and strummer modes that play chords from chord keys,
+aren't used yet.
 4. **Writing again replaces the song.** When the project has a song the Track creator wrote, Apply asks
    "Replace Song 1? It will be overwritten (Ctrl+Z brings it back)": **Replace** takes the old song out
    (its channels, patterns, Playlist tracks and markers; the Parts step's channels stay) and puts the new
