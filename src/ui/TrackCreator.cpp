@@ -289,6 +289,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
         remember();
         partSounds->resetParts ("The description was read, so the parts start again from what it names.");
     };
+    describer->onShareChanged = [this] { remember(); }; // the read summary carries it (vocalShare)
     partSounds->resetParts();
     partSounds->onChanged = [this] { remember(); }; // the parts list is kept between runs
     addChildComponent (*describer);

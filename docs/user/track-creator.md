@@ -288,6 +288,20 @@ order:
   again after it was sung, add an instrumental section, or leave out one of your instrumental tags.
 - **Adventurous**: those changes more often, and up to 5 of them for the AI.
 
+**How much is sung.** Songs of a genre sing for about so much of their length: most of a reggae or pop song,
+much less of a drum and bass or dubstep track, where drops and instrumental stretches carry it. Once lyrics are
+read, a slider under the lyrics box shows the genre's range, "Sung: 10% to 70% (the genre's range)". The writer
+picks a share inside it (a different one from song to song, unless the variety is Close, which takes the middle)
+and makes room for the rest: an instrumental intro or outro, a break, solo or drop after a chorus, longer
+instrumental sections. Your lines are never cut or reordered for it. Drag either end to set your own range (the two
+ends stay at least 5% apart); **Genre's range** puts the genre's back. Spinus remembers it with the description.
+The writer also phrases the lines the way the genre does: at the normal pace, stretched over the half-time feel
+(drum and bass, dubstep), or in a fast flow (hip hop, drill). With the AI as the writer, it chooses the share and
+the phrasing within the range, and Spinus lengthens its instrumental sections if too much of its form is sung.
+
+The instrument standing in for the voice starts quieter than the lead (6 dB under the song's starting level):
+it guides the tune rather than carrying it.
+
 Tick **This song has no vocals** for an instrumental song: the lyrics
 stay in the box but are not read. Spinus remembers the lyrics and the tick with the description. With **Let the
 AI read it**, the lyrics are sent to your AI provider too.
@@ -708,7 +722,9 @@ tell the AI, so no fix round runs.
   of the song's energy section by section against your songs' sections. Parts it adds can be removed by it;
   yours always stay.
 - **Transitions and automation**: automation clips on the Playlist (a part's volume, pan, or a filter sweep:
-  Spinus adds a Spinus Filter to that part's insert), and transitions into and out of a section wherever it
+  Spinus adds a Spinus Filter to that part's insert), rhythmic automation (a part's volume, pan or filter moving
+  in time with the beat, in eighths, sixteenths or triplets, say "bars 17 to 24 in eighths, then sixteenths": the
+  wobble of dubstep, a trance gate; at most 24 automation clips a song), and transitions into and out of a section wherever it
   plays: a riser before it, a downlifter after it starts, a swell into its first beat (a noise swell, or a reversed
   cymbal: the starter pack's crash played backwards), an impact on it (the
   kit's kick and crash, or the starter pack's crash and 808). They go on tracks of their own, under the song's
