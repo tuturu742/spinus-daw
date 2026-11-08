@@ -700,14 +700,14 @@ TEST_CASE ("Sounds per part: the keys an instrument plays keep its phrases off i
         profiles.load();
         const auto profile = profiles.get ("ample-metal");
         REQUIRE (profile.has_value());
-        REQUIRE (profile->modes.size() == 2);
-        CHECK (profile->modes[0].keys[24].what == "palm mute");
-        CHECK (profile->modes[0].keys[24].job == InstrumentProfiles::Job::switches);
-        CHECK (profile->modes[1].name == "Strummer");
-        CHECK (profile->modes[1].enterKey == 85);
-        CHECK (profile->modes[1].voices == InstrumentProfiles::Voices::chords);
-        CHECK_FALSE (profile->modes[1].playable().has_value());
-        CHECK (InstrumentProfiles::fromVar (InstrumentProfiles::toVar (*profile)) == profile);
+        REQUIRE (profile.value().modes.size() == 2);
+        CHECK (profile.value().modes[0].keys[24].what == "palm mute");
+        CHECK (profile.value().modes[0].keys[24].job == InstrumentProfiles::Job::switches);
+        CHECK (profile.value().modes[1].name == "Strummer");
+        CHECK (profile.value().modes[1].enterKey == 85);
+        CHECK (profile.value().modes[1].voices == InstrumentProfiles::Voices::chords);
+        CHECK_FALSE (profile.value().modes[1].playable().has_value());
+        CHECK (InstrumentProfiles::fromVar (InstrumentProfiles::toVar (profile.value())) == profile);
     }
     Choice choice;
     choice.kind = Choice::Kind::preset;
