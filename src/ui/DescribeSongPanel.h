@@ -63,6 +63,8 @@ public:
     std::function<void()> onShareChanged;
     bool isShareShown() const { return shareSlider.isVisible(); }
     juce::String getShareText() const { return shareLabel.getText(); }
+    /** Empties the page (another project): no text, lyrics, reading or references; a reading under way stops. */
+    void clear();
     /** A summary read before (the Track creator remembers it), shown as if just read. */
     void show (const juce::var& summary);
     /** The reference songs' summary and the description written from it (ai.v1.song.prompt): Read then changes

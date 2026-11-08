@@ -77,6 +77,8 @@ public:
         audio/ folder. */
     void setProjectFolder (const juce::File&);
     juce::File getProjectFolder() const noexcept { return projectFolder; }
+    /** Counts loadProject calls: a panel that keeps something per project sees another project came in. */
+    int getProjectLoadCount() const noexcept { return projectLoads; }
     juce::File resolveAudioFile (const juce::String& path) const { return adapter->resolveAudioFile (path); }
 
     //==============================================================================
@@ -253,6 +255,7 @@ private:
         loading
     } loading = Loading::no;
     juce::File projectFolder;
+    int projectLoads = 0;
     int lastRecorded = 0, lastLauncherRecorded = 0;
     plugins::SandboxList* sandboxList = nullptr;
 

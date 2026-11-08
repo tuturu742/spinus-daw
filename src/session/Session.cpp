@@ -282,6 +282,7 @@ void Session::loadProject (project::ProjectData data)
     selectedChannel = getProject().channels.empty() ? model::ChannelId() : getProject().channels.front().id;
     syncAdapter();
     recorder->updateRouting();
+    ++projectLoads;
     sendChangeMessage();
 }
 
@@ -292,6 +293,7 @@ void Session::setProjectFolder (const juce::File& folder)
     freezer->setProjectFolder (folder);
     tuner->setProjectFolder (folder);
     syncAdapter();
+    sendChangeMessage(); // Save As: what is kept beside the project follows it
 }
 
 //==============================================================================

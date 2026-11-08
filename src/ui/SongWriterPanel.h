@@ -76,6 +76,8 @@ public:
     bool apply();
     /** Opens the automixer with the first reference song as its reference (onMix). */
     bool mix();
+    /** Forgets the song written (another project): writing or measuring under way stops. */
+    void forget();
 
     std::function<void (const juce::File& reference)> onMix;
 

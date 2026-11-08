@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: remembered per project
+
+- A new project starts with an empty Track creator, like the Channel Rack and the Mixer. Each saved project keeps
+  its own reference songs, summary, description and parts, and opening it brings them back. Songs analyzed once
+  stay ready in every project.
+
 ### Track creator: songs that sound written, not generated
 
 - Songs with lyrics no longer get filler. Round 2's songs had long copied intros and outros (sometimes two of each)
