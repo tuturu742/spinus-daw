@@ -23,7 +23,8 @@ namespace spinus::ui
     coloured by job (plays, switch, special, unused, not known). Drag across keys to select them, then mark them;
     hovering a key says what it does and where Spinus learned it. Each mode has a name, how to enter it (in words,
     or the key that switches to it), what it suits and whether it plays chords. Add mode / Remove mode for an
-    instrument with several (a sampled guitar's normal and strummer modes). Listen to every key hears the mode's
+    instrument with several (a sampled guitar's normal and strummer modes). Export... saves the profile as a file to
+    share, and Import... reads one as a proposal. Listen to every key hears the mode's
     keys (KeyProbe, in the sound index's helper), and Ask the plugin reads the names the plugin gives its keys
     (pluginkeys, there too); either shows what it found as a proposal: the keys that would change are marked, and
     nothing changes until Apply (the keys you set stay yours); Discard drops it. Read the manual has the AI read
@@ -89,6 +90,12 @@ public:
     /** What the AI read in the manuals (none: `problem` says why), as a proposal like a listening's. */
     void setReading (std::optional<manualreading::Reading>, const juce::String& problem = {});
     bool hasReading() const noexcept { return reading.has_value(); }
+    /** Export...: the profile as a file to share (InstrumentProfiles::toShared). Import...: a shared profile, as a
+        proposal like a manual's (Apply takes it, the keys you set staying yours); false when it is not one, and
+        the line under the keyboard says why. */
+    juce::var getShared() const;
+    bool importShared (const juce::var&, const juce::String& fileName);
+    std::function<void()> onExport, onImport;
     /** "2 manuals: Guitar_Strummer.pdf, example.org/manual (read for 1.0.2; the instrument is 1.0.3 now)". */
     juce::String getManualsText() const;
     /** What the probing found, or why not ("Heard: 49 keys play, 3 switch keys..."). */
@@ -127,7 +134,8 @@ private:
     std::unique_ptr<Keyboard> keyboard;
     juce::TextButton playsButton { "Plays" }, switchButton { "Switch" }, specialButton { "Special" },
         unusedButton { "Unused" }, unknownButton { "Not known" };
-    juce::TextButton forgetButton { "Forget this instrument" }, cancelButton { "Cancel" }, saveButton { "Save" };
+    juce::TextButton forgetButton { "Forget this instrument" }, cancelButton { "Cancel" }, saveButton { "Save" },
+        exportButton { "Export..." }, importButton { "Import..." };
     juce::TextButton listenButton { "Listen to every key" }, askButton { "Ask the plugin" }, applyButton { "Apply" },
         discardButton { "Discard" };
     juce::Label heardLabel, manualsLabel;
@@ -174,6 +182,8 @@ private:
     void ask();
     void readManuals();
     void chooseManual();
+    void exportProfile();
+    void importProfile();
 
     juce::File indexFolder;
     juce::String instrument;

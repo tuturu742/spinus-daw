@@ -61,7 +61,8 @@ public:
         probing,
         plugin,
         manual,
-        bundled
+        bundled,
+        imported // from a profile file someone exported
     };
     struct Key
     {
@@ -123,7 +124,13 @@ public:
     void load();
     bool save() const;
 
+    /** The instrument's profile: the user's, else the one Spinus ships for it (bundled), else none. */
     std::optional<Profile> get (const juce::String& instrument) const;
+    /** Whether the user has a profile of their own for it (not only the bundled one). */
+    bool hasOwn (const juce::String& instrument) const { return profiles.contains (instrument); }
+    /** The profile Spinus ships for one of its own instruments or the free ones it gets (3x Osc, Surge XT, OB-Xf,
+        Odin 2: one Normal mode, every key plays; Source::bundled), by the sound index's key; none for others. */
+    static std::optional<Profile> bundled (const juce::String& instrument);
     /** Sets the instrument's profile (nullopt, or one with no modes: forgotten). Not saved until save(). */
     void set (const juce::String& instrument, std::optional<Profile>);
     /** The keys the instrument plays as it opens (its first mode's), if they are known. */
@@ -134,6 +141,12 @@ public:
     /** A profile as JSON, and back (a profile file's entry); nullopt when it holds no mode. */
     static juce::var toVar (const Profile&);
     static std::optional<Profile> fromVar (const juce::var&);
+    /** A profile as a file to share ({kind: "spinus.instrument-profile", version, instrument, profile}): facts only,
+        and only the manuals that are web pages (a file on this computer means nothing elsewhere). */
+    static juce::var toShared (const Profile&, const juce::String& instrumentName);
+    /** A shared profile back, every key it knows marked as imported (`instrumentName`: the name it was exported
+        under); nullopt when it is not one (`problem` says why). */
+    static std::optional<Profile> fromShared (const juce::var&, juce::String& instrumentName, juce::String& problem);
 
 private:
     juce::File file, oldNotes;

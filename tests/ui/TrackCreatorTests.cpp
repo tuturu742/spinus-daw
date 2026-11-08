@@ -1754,6 +1754,10 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     REQUIRE (LearnInstrumentWindow::getNumOpen() == 1);
     auto* learn = LearnInstrumentWindow::lastOpened();
     REQUIRE (learn != nullptr);
+    // 3x Osc comes with a profile (every key plays); here it stands in for a sampled instrument.
+    CHECK (learn->describeKey (36).contains ("(comes with Spinus)"));
+    learn->selectKeys (0, 127);
+    learn->markSelected (InstrumentProfiles::Job::unknown);
     learn->selectKeys (60, 84);
     learn->markSelected (InstrumentProfiles::Job::plays);
     learn->selectKeys (36, 36);
@@ -2054,6 +2058,46 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     panel.save();
     CHECK (called);
     CHECK_FALSE (saved.has_value());
+}
+
+TEST_CASE ("Learn this instrument: a profile exported and imported as a proposal", "[ui][trackcreator]")
+{
+    InstrumentProfiles::Profile mine;
+    InstrumentProfiles::Mode normal;
+    normal.setKeys (40, 76, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+    mine.modes.push_back (normal);
+    // Someone else's: a second mode entered by a key.
+    InstrumentProfiles::Profile theirs;
+    InstrumentProfiles::Mode played, riff;
+    played.setKeys (40, 88, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::probing });
+    played.setKeys (24, 24, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+    riff.name = "Riff";
+    riff.enterKey = 85;
+    riff.setKeys (48, 72, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::manual });
+    theirs.modes = { played, riff };
+    LearnInstrumentPanel exporting ("Guitar M", theirs);
+    const auto shared = exporting.getShared();
+    CHECK (juce::JSON::toString (shared) == juce::JSON::toString (InstrumentProfiles::toShared (theirs, "Guitar M")));
+
+    LearnInstrumentPanel panel ("Guitar", mine);
+    CHECK_FALSE (panel.importShared (juce::JSON::parse ("{}"), "notes.json"));
+    CHECK (panel.getHeardText() == "notes.json was not imported: it is not an instrument profile Spinus exported.");
+    REQUIRE (panel.importShared (shared, "Guitar M profile.json"));
+    CHECK (panel.hasReading());
+    INFO (panel.getHeardText());
+    CHECK (panel.getHeardText().startsWith (
+        "Guitar M profile.json (exported for Guitar M) says: 2 modes: Normal, Riff (entered by C#7, MIDI 85). "
+        "Apply changes"));
+    panel.applyHeard();
+    CHECK (panel.getHeardText().startsWith ("Applied what the file says"));
+    const auto profile = panel.getProfile();
+    REQUIRE (profile.has_value());
+    REQUIRE (profile.value().modes.size() == 2);
+    // The keys the user set stay theirs; the others come in as imported.
+    CHECK (profile.value().modes[0].keys[50].source == InstrumentProfiles::Source::user);
+    CHECK (profile.value().modes[0].keys[24].source == InstrumentProfiles::Source::imported);
+    CHECK (profile.value().modes[0].keys[80].job == InstrumentProfiles::Job::plays);
+    CHECK (panel.describeKey (24).contains ("(from an imported profile)"));
 }
 
 TEST_CASE ("Learn this instrument screenshot for the manual", "[.screenshot][manual]")

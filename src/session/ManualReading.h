@@ -18,6 +18,7 @@ struct Reading
     int octavesMoved = 0;       // by fitOctaves
     juce::String notes, by;     // the AI's one-sentence note, and which model read it
     juce::StringArray problems; // the manuals that could not be read, and why
+    juce::String file;          // an imported profile's file name (Import...): what it says, not a manual
 };
 
 /** The service's answer as a reading; nullopt when it holds no mode. */

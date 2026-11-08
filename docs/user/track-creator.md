@@ -455,7 +455,14 @@ and drums": those three), or empty. Then:
   it, and say how to enter it (in words, or the key that switches to it), what it is good for ("strummed rhythm,
   country and folk") and whether it plays chords. Each mode has its own keyboard. When Spinus writes a song, it
   picks a mode for each part (see [Write a song](#write-a-song)). Nothing is kept until **Save**; **Forget this instrument**
-  removes what Spinus knew of it. It is kept per instrument, beside the sound index, like your roles. Notes it
+  removes what Spinus knew of it. It is kept per instrument, beside the sound index, like your roles.
+
+  **Export...** saves what Spinus knows of the instrument as a file you can share (only facts about its keys
+  and modes, and the manuals that are web pages; never the manuals' text). **Import...** reads such a file as
+  a proposal, like a manual's: Apply takes it, and the keys you marked yourself stay yours. Imported keys say
+  "from an imported profile" when you hover them. Spinus's own synth (3x Osc) and the free synths it gets
+  (Surge XT, OB-Xf, Odin 2) come with a profile already: every key plays, with a few words on what they suit.
+  Your own changes to it win, and **Forget this instrument** brings the original back. Notes it
   plays, set in an earlier version, becomes the first mode's playing keys.
 
   ![Learn this instrument](images/learn-instrument.png)

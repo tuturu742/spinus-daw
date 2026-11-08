@@ -60,6 +60,8 @@ juce::String sourceWords (InstrumentProfiles::Source source)
         return "from its manual";
     case InstrumentProfiles::Source::bundled:
         return "comes with Spinus";
+    case InstrumentProfiles::Source::imported:
+        return "from an imported profile";
     }
     return {};
 }
@@ -260,6 +262,18 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
     unknownButton.onClick = [this] { markSelected (Job::unknown); };
     forgetButton.setTooltip ("Remove everything Spinus knows of this instrument (kept when you Save)");
     forgetButton.onClick = [this] { forget(); };
+    exportButton.setTooltip ("Save what Spinus knows of this instrument as a file to share with others");
+    exportButton.onClick = [this]
+    {
+        if (onExport)
+            onExport();
+    };
+    importButton.setTooltip ("Read a profile someone exported, as a proposal to Apply");
+    importButton.onClick = [this]
+    {
+        if (onImport)
+            onImport();
+    };
     cancelButton.onClick = [this]
     {
         if (onCancel)
@@ -323,7 +337,8 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
              &playsButton,   &switchButton,       &specialButton,   &unusedButton,   &unknownButton,
              &summary,       &forgetButton,       &cancelButton,    &saveButton,     &listenButton,
              &askButton,     &heardLabel,         &manualsLabel,    &manualsBox,     &removeManualButton,
-             &manualEditor,  &chooseManualButton, &addManualButton, &readButton })
+             &manualEditor,  &chooseManualButton, &addManualButton, &readButton,     &exportButton,
+             &importButton })
         addAndMakeVisible (c);
     addChildComponent (applyButton);
     addChildComponent (discardButton);
@@ -425,13 +440,15 @@ void LearnInstrumentPanel::applyHeard()
     if (reading.has_value())
     {
         const auto changes = manualreading::apply (profile, *reading);
-        for (auto& manual : profile.manuals)
-            manual.version = instrumentVersion;
+        const auto imported = reading->file.isNotEmpty();
+        if (! imported) // the manuals were read for this version
+            for (auto& manual : profile.manuals)
+                manual.version = instrumentVersion;
         forgotten = false;
         discardHeard();
         updateManuals();
-        heardLabel.setText ("Applied what the manual says (" + juce::String (changes) +
-                                (changes == 1 ? " change" : " changes") + "). Save keeps it.",
+        heardLabel.setText ("Applied what " + juce::String (imported ? "the file" : "the manual") + " says (" +
+                                juce::String (changes) + (changes == 1 ? " change" : " changes") + "). Save keeps it.",
                             juce::dontSendNotification);
         return;
     }
@@ -502,6 +519,25 @@ void LearnInstrumentPanel::setCanRead (const juce::String& whyNot)
     updateManuals();
 }
 
+juce::var LearnInstrumentPanel::getShared() const { return InstrumentProfiles::toShared (profile, name); }
+
+bool LearnInstrumentPanel::importShared (const juce::var& shared, const juce::String& fileName)
+{
+    juce::String exportedAs, problem;
+    const auto imported = InstrumentProfiles::fromShared (shared, exportedAs, problem);
+    if (! imported.has_value())
+    {
+        heardLabel.setText (fileName + " was not imported: " + problem, juce::dontSendNotification);
+        return false;
+    }
+    manualreading::Reading read;
+    read.modes = imported->modes;
+    read.file = fileName +
+                (exportedAs.isNotEmpty() && exportedAs != name ? " (exported for " + exportedAs + ")" : juce::String());
+    setReading (std::move (read));
+    return true;
+}
+
 void LearnInstrumentPanel::setReadingProgress (const juce::String& progress)
 {
     readingNow = progress.isNotEmpty();
@@ -526,11 +562,13 @@ void LearnInstrumentPanel::setReading (std::optional<manualreading::Reading> rea
         const auto modesBefore = applied.modes.size();
         const auto changes = manualreading::apply (applied, *reading);
         const auto added = (int)(applied.modes.size() - modesBefore);
-        juce::String text = "The manual says: " + manualreading::describe (*reading) + ". Apply changes " +
-                            juce::String (changes) + (changes == 1 ? " thing" : " things") +
-                            (added > 0 ? " (" + juce::String (added) + (added == 1 ? " new mode" : " new modes") + ")"
-                                       : juce::String()) +
-                            "; keys marked with a dot.";
+        juce::String text =
+            (reading->file.isNotEmpty() ? reading->file + " says: " : juce::String ("The manual says: ")) +
+            manualreading::describe (*reading) + ". Apply changes " + juce::String (changes) +
+            (changes == 1 ? " thing" : " things") +
+            (added > 0 ? " (" + juce::String (added) + (added == 1 ? " new mode" : " new modes") + ")"
+                       : juce::String()) +
+            "; keys marked with a dot.";
         if (! reading->middleCSaid)
             text << (reading->octavesMoved != 0
                          ? " It doesn't say how it numbers octaves: its keys were moved " +
@@ -785,6 +823,10 @@ void LearnInstrumentPanel::resized()
         r.removeFromRight (8);
         cancelButton.setBounds (r.removeFromRight (90));
         forgetButton.setBounds (r.removeFromLeft (180));
+        r.removeFromLeft (8);
+        exportButton.setBounds (r.removeFromLeft (90));
+        r.removeFromLeft (8);
+        importButton.setBounds (r.removeFromLeft (90));
         area.removeFromBottom (6);
     }
     summary.setBounds (area.removeFromBottom (22));
@@ -870,6 +912,8 @@ LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const ju
     panel->onAsk = [this] { ask(); };
     panel->onRead = [this] { readManuals(); };
     panel->onChooseManual = [this] { chooseManual(); };
+    panel->onExport = [this] { exportProfile(); };
+    panel->onImport = [this] { importProfile(); };
     if (listening.has_value()) // the plugin's version, the first part of its fingerprint
         panel->setInstrumentVersion (listening->source.fingerprint.upToFirstOccurrenceOf ("|", false, false));
     panel->setCanRead (service == nullptr || ! service->isEnabled()
@@ -990,6 +1034,38 @@ void LearnInstrumentWindow::chooseManual()
                                   return;
                               if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
                                   p->addManual (fc.getResult().getFullPathName());
+                          });
+}
+
+void LearnInstrumentWindow::exportProfile()
+{
+    auto* panel = dynamic_cast<LearnInstrumentPanel*> (getContentComponent());
+    if (panel == nullptr)
+        return;
+    const auto shared = panel->getShared();
+    const auto file = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                          .getChildFile (juce::File::createLegalFileName (name + " profile.json"));
+    chooser = std::make_unique<core::FileDialog> ("Export the profile of " + name, file, "*.json", this);
+    chooser->launchAsync ((int)((unsigned)juce::FileBrowserComponent::saveMode |
+                                (unsigned)juce::FileBrowserComponent::canSelectFiles |
+                                (unsigned)juce::FileBrowserComponent::warnAboutOverwriting),
+                          [shared, a = alive] (const core::FileDialog& fc)
+                          {
+                              if (*a && fc.getResult() != juce::File())
+                                  fc.getResult().replaceWithText (juce::JSON::toString (shared));
+                          });
+}
+
+void LearnInstrumentWindow::importProfile()
+{
+    chooser = std::make_unique<core::FileDialog> ("Import a profile for " + name, juce::File(), "*.json", this);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [this, a = alive] (const core::FileDialog& fc)
+                          {
+                              if (! *a || fc.getResult() == juce::File())
+                                  return;
+                              if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
+                                  p->importShared (juce::JSON::parse (fc.getResult()), fc.getResult().getFileName());
                           });
 }
 
