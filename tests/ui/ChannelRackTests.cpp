@@ -549,7 +549,7 @@ TEST_CASE ("Clicking a step keeps the other notes' release, pan, fine pitch and 
     const auto& notes = r.session.getProject().findPattern (r.session.getCurrentPattern())->notes.at (kick);
     REQUIRE (notes.size() == 1);
     CHECK (notes[0] == edited[0]);
-
+}
 
 TEST_CASE ("An empty Channel Rack says how to add the first instrument", "[ui][channelrack]")
 {
