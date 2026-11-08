@@ -299,7 +299,9 @@ private:
     void updateScrollBars();
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override { triggerAsyncUpdate(); }
-    void handleAsyncUpdate() override { reloadNotes(); }
+    void handleAsyncUpdate() override;
+    /** A reload held back while a mouse gesture was editing the notes, done once it is released. */
+    void reloadIfDeferred();
     void timerCallback() override;
     void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override;
 
@@ -311,6 +313,7 @@ private:
     std::set<model::ChannelId> hiddenGhosts;
     std::set<int> selection;
     std::optional<std::vector<model::Note>> selectAfterCommit; // the notes to select once the edit is in
+    bool reloadDeferred = false; // the project changed during a mouse gesture (see handleAsyncUpdate)
     Tool tool = Tool::draw;
     std::vector<int> previewing;
     bool previewOn = true;

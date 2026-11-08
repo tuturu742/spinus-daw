@@ -376,6 +376,9 @@ public:
         repaint();
     }
 
+    /** A mouse gesture is editing the notes: it holds indices into the roll's notes. */
+    bool isEditing() const { return mode != Mode::none; }
+
     void previewHeldNotes()
     {
         std::vector<int> held;
@@ -505,6 +508,7 @@ public:
             break;
         }
         }
+        roll.reloadIfDeferred();
         repaint();
     }
 
@@ -1421,6 +1425,24 @@ model::Ticks PianoRoll::getPatternLength() const
 }
 
 //==============================================================================
+void PianoRoll::handleAsyncUpdate()
+{
+    // A reload in the middle of a drag would pull the notes from under it (the first click on a new instrument
+    // creates its pattern, and that change arrives while the mouse is still down): wait for the release.
+    if (grid->isEditing())
+    {
+        reloadDeferred = true;
+        return;
+    }
+    reloadNotes();
+}
+
+void PianoRoll::reloadIfDeferred()
+{
+    if (std::exchange (reloadDeferred, false))
+        reloadNotes();
+}
+
 void PianoRoll::reloadNotes()
 {
     updateSnap(); // the pattern (and its steps) may have changed

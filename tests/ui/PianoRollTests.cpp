@@ -847,6 +847,32 @@ TEST_CASE ("Double-clicking another channel's ghost note edits that channel", "[
     CHECK (r.session.getHistory().getUndoDescriptions().size() <= steps);
 }
 
+TEST_CASE ("The first note on a new instrument survives the pattern it creates", "[ui][pianoroll]")
+{
+    // The first click makes the pattern; that change reaches the roll while the mouse is still down. Reloading
+    // the notes then pulled the new note from under the drag (a crash in builds with checked containers).
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Drums"));
+    r.roll.scrollToPitch (62);
+    Mouse mouse (r.roll);
+    const auto button = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+    const auto from = mouse.at (0, 60), to = mouse.at (0, 62);
+
+    mouse.grid->mouseDown (mouse.event (from, button, from, false));
+    REQUIRE (r.session.getCurrentPattern().isValid());
+    r.roll.handleUpdateNowIfNeeded(); // the pattern's creation arrives mid-gesture
+    REQUIRE (r.roll.getNotes().size() == 1);
+    mouse.grid->mouseDrag (mouse.event (to, button, from, true));
+    r.roll.handleUpdateNowIfNeeded();
+    mouse.grid->mouseUp (mouse.event (to, {}, from, true));
+    r.roll.handleUpdateNowIfNeeded();
+    REQUIRE (r.roll.getNotes().size() == 1);
+    CHECK (r.roll.getNotes()[0].pitch == 62);
+    const auto* pattern = r.session.getProject().findPattern (r.session.getCurrentPattern());
+    REQUIRE (pattern != nullptr);
+    CHECK (pattern->notes.at (r.session.getSelectedChannel()).size() == 1);
+}
+
 TEST_CASE ("A note placed or dragged sounds while the mouse is down", "[ui][pianoroll]")
 {
     Roll r;

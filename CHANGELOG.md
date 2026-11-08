@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Fixes
+
+- The Piano Roll no longer crashes on the first click on a new instrument: the pattern that click creates used to
+  reload the notes while the mouse was still down, taking away the note being placed.
+
 ### Track creator: songs that sound written, not generated
 
 - Songs with lyrics no longer get filler. Round 2's songs had long copied intros and outros (sometimes two of each)
