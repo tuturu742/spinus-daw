@@ -29,6 +29,12 @@ namespace spinus::ui
     AI, shows the AI's tagged version under the box, to use (Use these tags: it replaces the box's text, one undo
     step in the box, and is read) or not (Keep mine). Nothing is used until the user says so.
 
+    How much of the song is sung: once a song with lyrics is read, a range slider under the lyrics shows the genre's
+    range (the summary's `described.vocals`, e.g. 10% to 70% for drum and bass); the song writer picks a share inside
+    it and gives the rest to instrumental sections. Moving it sets the summary's `vocalShare` ({low, high}, 0 to 1,
+    at least 5% apart), kept when the description is read again; Genre's range takes it back. Hidden for an
+    instrumental (no lyrics, or "This song has no vocals").
+
     Nothing changes the project. Without the AI service the page says so. Message thread only. */
 class DescribeSongPanel final : public juce::Component
 {
@@ -49,6 +55,14 @@ public:
     /** "This song has no vocals": the lyrics are kept but not read. */
     void setNoVocals (bool on);
     bool hasNoVocals() const { return noVocalsButton.getToggleState(); }
+    /** The user's range for how much is sung ({low, high}, 0 to 1); void when the genre's range stands. */
+    juce::var getVocalShare() const { return userShare; }
+    /** Sets the user's range (void: the genre's), as the slider does; the read summary carries it. */
+    void setVocalShare (const juce::var& share);
+    /** Called when the user changes how much is sung. */
+    std::function<void()> onShareChanged;
+    bool isShareShown() const { return shareSlider.isVisible(); }
+    juce::String getShareText() const { return shareLabel.getText(); }
     /** A summary read before (the Track creator remembers it), shown as if just read. */
     void show (const juce::var& summary);
     /** The reference songs' summary and the description written from it (ai.v1.song.prompt): Read then changes
@@ -76,12 +90,14 @@ public:
 private:
     void updateButtons();
     void setProposal (const juce::String& text);
+    void updateShare();
+    void shareMoved();
 
     std::function<ai::AiService*()> getService;
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
     bool busy = false;
     juce::String job;
-    juce::var summary, references;
+    juce::var summary, references, userShare;
     juce::String generated, proposal;
 
     juce::Label intro;
@@ -90,6 +106,9 @@ private:
     juce::ToggleButton noVocalsButton { "This song has no vocals" };
     juce::ToggleButton aiButton { "Let the AI read it (uses your AI connection)" };
     juce::TextButton readButton { "Read" }, againButton { "Your songs again" };
+    juce::Label shareLabel;
+    juce::Slider shareSlider { juce::Slider::TwoValueHorizontal, juce::Slider::NoTextBox };
+    juce::TextButton genreShareButton { "Genre's range" };
     MessageLabel understood, status;
     juce::Label proposalLabel;
     juce::TextEditor proposalBox;
