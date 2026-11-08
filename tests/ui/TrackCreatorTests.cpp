@@ -1987,10 +1987,10 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     panel.setHeard (heard);
     CHECK (panel.hasHeard());
     CHECK (panel.getHeardText().startsWith ("Heard: 35 keys play, 1 switch. Apply changes"));
-    CHECK (panel.getProfile()->modes[0].keys[36].job == InstrumentProfiles::Job::unknown); // not yet
+    CHECK (panel.getProfile().value().modes[0].keys[36].job == InstrumentProfiles::Job::unknown); // not yet
     panel.applyHeard();
     CHECK_FALSE (panel.hasHeard());
-    const auto applied = panel.getProfile()->modes[0];
+    const auto applied = panel.getProfile().value().modes[0];
     CHECK (applied.keys[36].job == InstrumentProfiles::Job::plays);
     CHECK (applied.keys[24].job == InstrumentProfiles::Job::switches);
     CHECK (applied.keys[52].job == InstrumentProfiles::Job::special); // set by hand: stays

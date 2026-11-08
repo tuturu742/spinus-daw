@@ -639,6 +639,7 @@ int runProbe (const juce::var& request, Lines& out)
     const sounds::Player play = [&player] (const std::vector<sounds::Note>& notes, double tail)
     {
         std::vector<OfflineInstrument::Note> converted;
+        converted.reserve (notes.size());
         for (const auto& n : notes)
             converted.push_back ({ n.note, n.start, n.length, n.velocity });
         return player.render (converted, tail);
