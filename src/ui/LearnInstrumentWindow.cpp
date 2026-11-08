@@ -169,8 +169,9 @@ private:
     {
         if (! panel.heard.has_value() || panel.heardMode != panel.mode)
             return;
+        const auto& heard = *panel.heard;
         auto mode = panel.current();
-        keyprobe::merge (mode, *panel.heard);
+        keyprobe::merge (mode, heard);
         if (mode.keys[(size_t)note] == panel.current().keys[(size_t)note])
             return;
         const auto size = juce::jmin (r.getWidth(), r.getHeight());
@@ -359,8 +360,9 @@ void LearnInstrumentPanel::applyHeard()
 {
     if (! heard.has_value())
         return;
+    const auto keys = *heard; // showMode may change what is shown
     showMode (heardMode);
-    keyprobe::merge (current(), *heard);
+    keyprobe::merge (current(), keys);
     forgotten = false;
     discardHeard();
     heardLabel.setText ("Applied what was heard. Save keeps it.", juce::dontSendNotification);
