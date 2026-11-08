@@ -419,6 +419,15 @@ and drums": those three), or empty. Then:
   keys marked Plays, moving a note up or down by octaves (as few as it takes) onto one. An instrument with no
   keys marked Plays plays any note.
 
+  **Listen to every key** lets Spinus find out for you: it plays every key of the mode shown, one at a time (in
+  its separate helper program, a few minutes), and listens. A key that sounds at its own pitch plays; one that
+  sounds at another pitch or plays a chord is special; a silent key after which notes sound different is a switch
+  key; a silent one that changes nothing is unused. For a mode entered by a key, set that key under **How to enter
+  it** first: Spinus plays it before every key. What it heard is shown as a proposal: the keys that would change
+  get a dot of their new colour, and nothing changes until **Apply** (**Discard** drops it). Keys you marked
+  yourself stay as you set them. It listens to the sound the part has (or the instrument as it opens, from the
+  instrument menu); **Stop listening** keeps nothing. Then **Save**.
+
   An instrument can have several **modes** (a sampled guitar's normal and strummer modes): **Add mode**, name
   it, and say how to enter it (in words, or the key that switches to it), what it is good for ("strummed rhythm,
   country and folk") and whether it plays chords. Each mode has its own keyboard. For now Spinus writes in the

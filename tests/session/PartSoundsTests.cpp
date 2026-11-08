@@ -864,6 +864,28 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
         REQUIRE (heard.size() == 1);
         CHECK_FALSE (heard[0].hasProperty ("problem"));
     }
+    // Listen to every key: 3x Osc plays them all (no switch keys).
+    {
+        SoundSource osc;
+        osc.key = "stock-spinus.3x-osc";
+        osc.name = "3x Osc";
+        osc.format = "Spinus";
+        osc.file = "spinus:3x-osc";
+        osc.stockType = "spinus.3x-osc";
+        juce::String why;
+        int progressed = 0;
+        const auto keys =
+            probeInHelper (helper(), osc, {}, {}, -1, {}, [&] (int done, int) { progressed = done; }, why);
+        INFO (why);
+        REQUIRE (keys.has_value());
+        const auto& heard = keys.value();
+        CHECK (progressed == 128);
+        const auto playing = std::count_if (heard.begin(), heard.end(), [] (const InstrumentProfiles::Key& k)
+                                            { return k.job == InstrumentProfiles::Job::plays; });
+        CHECK (playing >= 120);
+        CHECK (std::none_of (heard.begin(), heard.end(), [] (const InstrumentProfiles::Key& k)
+                             { return k.job == InstrumentProfiles::Job::switches; }));
+    }
     CHECK (temp.folder.getChildFile ("cut.wav").existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader (
         juce::WavAudioFormat().createReaderFor (target.createInputStream().release(), true));

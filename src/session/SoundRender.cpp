@@ -1,6 +1,7 @@
 #include "SoundRender.h"
 
 #include "InstrumentPresets.h"
+#include "KeyProbe.h"
 #include "OfflineInstrument.h"
 #include "SoundDescriptors.h"
 #include "SoundIndex.h"
@@ -588,6 +589,88 @@ int runTune (const juce::var& request, Lines& out)
     out.write ("done", true);
     return 0;
 }
+/** Listen to every key (keyprobe): `{"mode": "probe", <the instrument>, "preset" (its id, optional; with "state" for
+    a saved sound), "enterKey" (the mode's entry key, optional), "from", "to"}`. Writes `{"probing": {done, total}}`
+    as it goes and `{"probed": {keys: [{from, to, job, what, source}], reference, problem}}` at the end (the keys as
+    a profile's mode lists them). After a switch key the instrument is put back as it was (its state again). */
+int runProbe (const juce::var& request, Lines& out)
+{
+    juce::String error;
+    auto instance = loadInstrument (request, error);
+    if (instance == nullptr)
+    {
+        out.write ("error", error);
+        out.write ("done", true);
+        return 0;
+    }
+    OfflineInstrument player (*instance);
+    const auto device = deviceOf (request);
+    if (const auto presetId = request["preset"].toString(); SavedSounds::isSaved (presetId))
+    {
+        const auto saved = savedPreset (presetId, request["state"].toString());
+        if (! saved || player.loadPreset (*saved).failed())
+        {
+            out.write ("error", "The saved sound could not be loaded.");
+            out.write ("done", true);
+            return 0;
+        }
+    }
+    else if (presetId.isNotEmpty())
+    {
+        const auto presets = InstrumentPresets::find (*instance, device, indexFolderOf (request));
+        const auto found =
+            std::find_if (presets.begin(), presets.end(), [&] (const InstrumentPreset& p) { return p.id == presetId; });
+        if (found == presets.end() || player.loadPreset (*found).failed())
+        {
+            out.write ("error", "The preset could not be loaded.");
+            out.write ("done", true);
+            return 0;
+        }
+    }
+    waitUntilAudible (player, out, 40.0); // an instrument that loads its sounds late is heard once it sounds
+    InstrumentPreset before;
+    before.kind = InstrumentPreset::Kind::state;
+    before.id = "as it was";
+    instance->getStateInformation (before.state);
+    keyprobe::Options options;
+    options.enterKey = request.hasProperty ("enterKey") ? juce::jlimit (-1, 127, (int)request["enterKey"]) : -1;
+    options.from = request.hasProperty ("from") ? (int)request["from"] : 0;
+    options.to = request.hasProperty ("to") ? (int)request["to"] : 127;
+    const sounds::Player play = [&player] (const std::vector<sounds::Note>& notes, double tail)
+    {
+        std::vector<OfflineInstrument::Note> converted;
+        converted.reserve (notes.size());
+        for (const auto& n : notes)
+            converted.push_back ({ n.note, n.start, n.length, n.velocity });
+        return player.render (converted, tail);
+    };
+    const auto result = keyprobe::probe (
+        play,
+        [&]
+        {
+            if (! before.state.isEmpty())
+                player.loadPreset (before);
+        },
+        options,
+        [&] (int done, int total)
+        {
+            auto* o = new juce::DynamicObject();
+            o->setProperty ("done", done);
+            o->setProperty ("total", total);
+            out.write ("probing", juce::var (o));
+            return true;
+        });
+    InstrumentProfiles::Mode heard;
+    heard.keys = result.keys;
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("keys", InstrumentProfiles::toVar ({ { heard } })["modes"][0]["keys"]);
+    o->setProperty ("reference", result.reference);
+    if (result.problem.isNotEmpty())
+        o->setProperty ("problem", result.problem);
+    out.write ("probed", juce::var (o));
+    out.write ("done", true);
+    return 0;
+}
 } // namespace
 
 int runSoundIndexProcess (const juce::File& request, const juce::File& output)
@@ -605,6 +688,8 @@ int runSoundIndexProcess (const juce::File& request, const juce::File& output)
         return runRender (parsed, out);
     if (mode == "tune")
         return runTune (parsed, out);
+    if (mode == "probe")
+        return runProbe (parsed, out);
     out.write ("error", "Unknown request.");
     return 2;
 }

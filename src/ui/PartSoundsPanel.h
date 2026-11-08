@@ -98,8 +98,10 @@ public:
     bool markInstrument (const juce::String& instrument, const juce::String& role);
     /** Learn this instrument (LearnInstrumentWindow): what each of its keys does, mode by mode. Listen, Play in Save
         this sound, the sounds added and the written song keep to the keys that play, moving notes by octaves.
-        `learned` is called with those keys once the window is saved. */
-    void learnInstrument (const juce::String& instrument, const juce::String& name,
+        `learned` is called with those keys once the window is saved. Listen to every key there plays `source` with
+        `preset` (empty: its sound as it opens; `presetState`: a saved sound's file). */
+    void learnInstrument (const juce::String& instrument, const SoundSource& source, const juce::String& preset = {},
+                          const juce::File& presetState = {},
                           std::function<void (std::optional<PlayableKeys>)> learned = {});
     /** Uses a folder of the instrument's own preset files, or stops using it (PresetFolders, beside the sound
         index). A folder added is measured at once, in the background (its files as the instrument's presets, as

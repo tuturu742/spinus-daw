@@ -1342,7 +1342,7 @@ void PartSoundsPanel::fillInstrumentMenu (juce::PopupMenu& menu,
                                                            ? " (plays " + keyName (learned->lowest()) + " to " +
                                                                  keyName (learned->highest()) + ")"
                                                            : juce::String()),
-                         [this, key = source.key, name = source.name] { learnInstrument (key, name); });
+                         [this, source] { learnInstrument (source.key, source); });
         // A plugin's own preset files (VST2 plugins keep their state in a bank format Spinus does not write).
         if (source.stockType.isEmpty() && source.format != "VST")
         {
@@ -1401,11 +1401,11 @@ bool PartSoundsPanel::saveSound (int index)
     {
         playable.playable = parts::playableFor (start, context.indexFolder);
         playable.learn = [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
-                          key = parts::instrumentKey (start),
-                          name = start.source.name] (std::function<void (std::optional<PlayableKeys>)> learned)
+                          start] (std::function<void (std::optional<PlayableKeys>)> learned)
         {
             if (safe != nullptr)
-                safe->learnInstrument (key, name, std::move (learned));
+                safe->learnInstrument (parts::instrumentKey (start), start.source, start.preset, start.state,
+                                       std::move (learned));
         };
     }
     const auto opened = SaveSoundWindow::open (
@@ -1605,10 +1605,13 @@ bool PartSoundsPanel::markInstrument (const juce::String& instrument, const juce
     return true;
 }
 
-void PartSoundsPanel::learnInstrument (const juce::String& instrument, const juce::String& name,
+void PartSoundsPanel::learnInstrument (const juce::String& instrument, const SoundSource& source,
+                                       const juce::String& preset, const juce::File& presetState,
                                        std::function<void (std::optional<PlayableKeys>)> learned)
 {
     context = getContext ? getContext() : Context {};
+    const auto name = source.name;
+    LearnInstrumentWindow::Listening listening { context.helper, source, preset, presetState };
     LearnInstrumentWindow::open (
         context.indexFolder, instrument, name, getTopLevelComponent(),
         [safe = juce::Component::SafePointer<PartSoundsPanel> (this), name,
@@ -1622,7 +1625,8 @@ void PartSoundsPanel::learnInstrument (const juce::String& instrument, const juc
                                                              "to those keys."
                                                        : name + " plays any note: which keys play is not known.",
                                       juce::dontSendNotification);
-        });
+        },
+        std::move (listening));
 }
 
 bool PartSoundsPanel::usePresetFolder (const SoundSource& instrument, const juce::File& folder, bool use)

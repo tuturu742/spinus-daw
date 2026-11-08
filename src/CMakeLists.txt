@@ -253,6 +253,8 @@ add_library (spinus_core STATIC
     session/PartSounds.h
     session/SongWriter.cpp
     session/InstrumentProfiles.cpp
+    session/KeyProbe.cpp
+    session/KeyProbe.h
     session/InstrumentProfiles.h
     session/PresetFolders.cpp
     session/PresetFolders.h

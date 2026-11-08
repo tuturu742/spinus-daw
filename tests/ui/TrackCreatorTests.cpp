@@ -1749,7 +1749,7 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     CHECK (SaveSoundWindow::mixLastOpened (3.0) > 0.01f);
     // Keys...: Learn this instrument, for one whose low keys switch what it plays. Once saved, Play keeps to the keys
     // that play, and so does the rest of the Track creator (kept beside the index for this instrument).
-    panel.learnInstrument (osc.key, osc.name,
+    panel.learnInstrument (osc.key, osc, {}, {},
                            [] (std::optional<PlayableKeys> keys) { SaveSoundWindow::setNotesLastOpened (keys); });
     REQUIRE (LearnInstrumentWindow::getNumOpen() == 1);
     auto* learn = LearnInstrumentWindow::lastOpened();
@@ -1976,6 +1976,27 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     panel.removeMode();
     CHECK (panel.getMode() == 0);
     CHECK (panel.getProfile().value().modes.size() == 1);
+
+    // Listen to every key: what was heard is a proposal; Apply takes it, the keys set by hand staying.
+    std::array<InstrumentProfiles::Key, 128> heard {};
+    for (int n = 36; n <= 70; ++n)
+        heard[(size_t)n] = { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::probing };
+    heard[24] = { InstrumentProfiles::Job::switches, "changes how it plays", InstrumentProfiles::Source::probing };
+    panel.setListening ("Listening: 3 of 128 keys...");
+    CHECK (panel.getHeardText() == "Listening: 3 of 128 keys...");
+    panel.setHeard (heard);
+    CHECK (panel.hasHeard());
+    CHECK (panel.getHeardText().startsWith ("Heard: 35 keys play, 1 switch. Apply changes"));
+    CHECK (panel.getProfile().value().modes[0].keys[36].job == InstrumentProfiles::Job::unknown); // not yet
+    panel.applyHeard();
+    CHECK_FALSE (panel.hasHeard());
+    const auto applied = panel.getProfile().value().modes[0];
+    CHECK (applied.keys[36].job == InstrumentProfiles::Job::plays);
+    CHECK (applied.keys[24].job == InstrumentProfiles::Job::switches);
+    CHECK (applied.keys[52].job == InstrumentProfiles::Job::special); // set by hand: stays
+    CHECK (applied.keys[52].what == "slide");
+    panel.setHeard (std::nullopt, "it made no sound.");
+    CHECK (panel.getHeardText() == "Nothing heard: it made no sound.");
 
     // Forgotten: saved as nothing.
     panel.forget();
