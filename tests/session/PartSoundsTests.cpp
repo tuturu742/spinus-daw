@@ -878,11 +878,12 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
             probeInHelper (helper(), osc, {}, {}, -1, {}, [&] (int done, int) { progressed = done; }, why);
         INFO (why);
         REQUIRE (keys.has_value());
+        const auto& heard = keys.value();
         CHECK (progressed == 128);
-        const auto playing = std::count_if (keys->begin(), keys->end(), [] (const InstrumentProfiles::Key& k)
+        const auto playing = std::count_if (heard.begin(), heard.end(), [] (const InstrumentProfiles::Key& k)
                                             { return k.job == InstrumentProfiles::Job::plays; });
         CHECK (playing >= 120);
-        CHECK (std::none_of (keys->begin(), keys->end(), [] (const InstrumentProfiles::Key& k)
+        CHECK (std::none_of (heard.begin(), heard.end(), [] (const InstrumentProfiles::Key& k)
                              { return k.job == InstrumentProfiles::Job::switches; }));
     }
     CHECK (temp.folder.getChildFile ("cut.wav").existsAsFile());
