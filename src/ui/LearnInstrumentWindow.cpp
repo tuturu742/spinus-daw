@@ -1046,8 +1046,9 @@ void LearnInstrumentWindow::exportProfile()
     const auto file = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
                           .getChildFile (juce::File::createLegalFileName (name + " profile.json"));
     chooser = std::make_unique<core::FileDialog> ("Export the profile of " + name, file, "*.json", this);
-    chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles |
-                              juce::FileBrowserComponent::warnAboutOverwriting,
+    chooser->launchAsync ((int)((unsigned)juce::FileBrowserComponent::saveMode |
+                                (unsigned)juce::FileBrowserComponent::canSelectFiles |
+                                (unsigned)juce::FileBrowserComponent::warnAboutOverwriting),
                           [shared, a = alive] (const core::FileDialog& fc)
                           {
                               if (*a && fc.getResult() != juce::File())
