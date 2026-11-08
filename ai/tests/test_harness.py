@@ -321,6 +321,36 @@ def test_the_mcp_server_serves_the_same_tools(tmp_path: Path) -> None:
     assert saved["kind"] == "spinus.song" and saved["layerParts"]["drums"][first]
 
 
+def test_the_mcp_server_answers_bad_input_without_stopping(tmp_path: Path) -> None:
+    feed = [
+        "not json\n",
+        "[1, 2]\n",
+        "\n",
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}})
+        + "\n",
+        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}})
+        + "\n",
+        json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "brief", "arguments": [1]}})
+        + "\n",
+        json.dumps({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": "brief"}) + "\n",
+        json.dumps({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "nope", "arguments": {}}})
+        + "\n",
+        json.dumps({"jsonrpc": "2.0", "id": 6, "method": "ping"}) + "\n",
+    ]
+    out: list[dict[str, Any]] = []
+    harness.serve_mcp(
+        BRIEF, tmp_path / "song.json", lambda: feed.pop(0) if feed else "", lambda text: out.append(json.loads(text))
+    )
+    assert [o["id"] for o in out] == [None, None, 1, 2, 3, 4, 5, 6]
+    assert out[0]["error"]["code"] == -32700 and out[1]["error"]["code"] == -32600
+    assert out[2]["result"]["protocolVersion"] == "2025-06-18"
+    assert out[3]["result"]["protocolVersion"] == harness.PROTOCOL_VERSIONS[0]
+    assert out[4]["result"]["isError"] is True and "object" in out[4]["result"]["content"][0]["text"]
+    assert out[5]["error"]["code"] == -32602
+    assert out[6]["result"]["isError"] is True
+    assert out[7]["result"] == {}
+
+
 async def test_the_comparison_reports_both_ways(tmp_path: Path) -> None:
     ws = harness.Workspace.start(setup(), 5, "sketch")
     client = httpx.AsyncClient(transport=httpx.MockTransport(harness.fake_runs(setup(), ws)))

@@ -15,8 +15,15 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include <array>
+#include <cstdio>
+#include <map>
+#include <random>
+
 #if ! JUCE_WINDOWS
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace spinus::ai
@@ -79,16 +86,31 @@ juce::var rpcError (const juce::var& id, int code, const juce::String& message)
         { { "jsonrpc", "2.0" }, { "id", id }, { "error", object ({ { "code", code }, { "message", message } }) } });
 }
 
+/** 128 random bits as 32 hex digits, from the system's secure random source: /dev/urandom, or on Windows
+    std::random_device (MSVC's draws on the system's cryptographic generator, RtlGenRandom). */
 juce::String newToken()
 {
-    juce::Random random;
-    juce::String t;
-    for (int i = 0; i < 32; ++i)
-        t << juce::String::toHexString (random.nextInt (16));
-    return t;
+    std::array<unsigned char, 16> bytes {};
+    bool got = false;
+#if ! JUCE_WINDOWS
+    if (auto* urandom = std::fopen ("/dev/urandom", "rb"))
+    {
+        got = std::fread (bytes.data(), 1, bytes.size(), urandom) == bytes.size();
+        std::fclose (urandom);
+    }
+#endif
+    if (! got)
+    {
+        std::random_device device;
+        for (auto& b : bytes)
+            b = (unsigned char)(device() & 0xffu);
+    }
+    return juce::String::toHexString (bytes.data(), (int)bytes.size(), 0);
 }
 
-const juce::String protocolVersion = "2025-06-18";
+const juce::String newestProtocolVersion = "2025-11-25";
+
+constexpr size_t maxSessions = 8;
 
 /** Ready-made requests the agent's client offers (MCP prompts): each starts the agent on a common job in
     Spinus, with the steps that work well. */
@@ -180,14 +202,22 @@ juce::var promptList()
     return list;
 }
 
+/** Said first in a ready-made request while AI is off: its steps name music tools the agent doesn't have. */
+const char* const withoutMusicTools =
+    "(Spinus's music tools, such as song_overview, write_part, add_part, insert_bars, check and shape_sound, are "
+    "off because AI is off in Spinus. Do this with Spinus's own tools instead: song_summary to read the song, "
+    "run_commands for changes (command_help gives each command's parameters; list_devices and list_presets find "
+    "instruments, effects and presets), render to measure it and play to let me hear it. Or ask me to turn AI on "
+    "in Options > AI: the music tools then join your tool list.)\n\n";
+
 /** The prompt's message with the arguments filled in (void for an unknown prompt). */
-juce::var promptMessages (const juce::String& name, const juce::var& arguments)
+juce::var promptMessages (const juce::String& name, const juce::var& arguments, bool musicTools)
 {
     for (auto& p : prompts())
     {
         if (name != p.name)
             continue;
-        juce::String said (p.text);
+        juce::String said = juce::String (musicTools ? "" : withoutMusicTools) + p.text;
         for (auto& [argument, _] : p.arguments)
         {
             auto value = arguments[argument].toString().trim();
@@ -203,24 +233,90 @@ juce::var promptMessages (const juce::String& name, const juce::var& arguments)
     return {};
 }
 
-const juce::String instructions =
-    "You are working on the song open in Spinus, a digital audio workstation (FL Studio-like: Channel Rack, Piano "
-    "Roll, Playlist of clips, Mixer). Start with song_overview (or song_summary). Edit with the music tools "
-    "(write_part, add_part, insert_bars, automate, add_effect, send, duck, set_sound, shape_sound) or with "
-    "run_commands (Spinus commands; command_help gives their parameters). Each change applies at once as one undo "
-    "step the user can undo. The user may edit the song while you work: what_changed tells you what they did, and a "
-    "change of yours is refused once when they changed the song since you last looked. play lets the user hear a "
-    "section (you don't hear it). search_manual answers how a device, command or feature works; reference_style "
-    "gives the style of the user's reference songs (from the Track creator). Check your work with check, and render to "
-    "measure the loudness of the mix, each "
-    "section and each part. The user hears the song in Spinus: tell them what you changed.\n\n"
+const juce::String conventions =
     "Conventions. The music tools: bars count from 1 ('9-16', or a section's name from the Playlist's markers); "
     "notes are 'step pitch length [velocity]' with steps of a sixteenth from the first bar's start (16 a bar in "
     "4/4); pitches are MIDI numbers or names with C5 = 60 (FL Studio's octaves); velocity is 1-127. Spinus's "
     "commands: times are in ticks, 960 a quarter note, from the song's start at 0; channels, patterns, inserts "
     "and devices are named by the ids song_summary shows. Settings and automation take text in the units the "
     "device shows ('-6 dB', '220 ms', '1.2 kHz', '30% L', a choice by name); a plain number in "
-    "device.setParameters' values is 0 to 1 over the setting's whole range. A part's volume is its fader in dB.";
+    "device.setParameters' values is 0 to 1 over the setting's whole range. A part's volume is its fader in dB. "
+    "run_commands: a step may be labelled with \"as\" (\"bass\") and later steps name its result as "
+    "\"$bass.channel\", or by its number from 1 (\"$1.channel\"). What the live interface can't do: save, open or "
+    "start a project, load a Drum Machine kit or a Sampler's samples (the user does those in Spinus).";
+
+/** What the agent is told when it connects (MCP's instructions), for the tools it has: the music tools only
+    while AI is on. */
+juce::String instructionsFor (bool musicTools)
+{
+    const juce::String common =
+        " Each change applies at once as one undo step the user can undo. The user may edit the song while you "
+        "work, and open another project: what_changed tells you what they did, and a change of yours is refused "
+        "once when they changed the song since you last looked. play lets the user hear a section (you don't hear "
+        "it). ";
+    const juce::String tools =
+        musicTools ? "Start with song_overview (or song_summary). Edit with the music tools (write_part, add_part, "
+                     "insert_bars, automate, add_effect, send, duck, set_sound, shape_sound) or with run_commands "
+                     "(Spinus commands; command_help gives their parameters)." +
+                         common +
+                         "search_manual answers how a device, command or feature works; reference_style gives the "
+                         "style of the user's reference songs (from the Track creator). Check your work with check, "
+                         "and render to measure the loudness of the mix, each section and each part."
+                   : "Start with song_summary. Edit with run_commands (Spinus commands; command_help gives their "
+                     "parameters, list_devices and list_presets find instruments, effects and presets)." +
+                         common +
+                         "Render to measure the loudness of the mix, each section and each part. Spinus's music "
+                         "tools (song_overview, write_part, add_part, insert_bars, check, shape_sound and more) are "
+                         "off because AI is off in Spinus; when the user turns it on (Options > AI) they join your "
+                         "tool list (if your client doesn't show them, it needs to reconnect).";
+    return "You are working on the song open in Spinus, a digital audio workstation (FL Studio-like: Channel Rack, "
+           "Piano Roll, Playlist of clips, Mixer). " +
+           tools + " The user hears the song in Spinus: tell them what you changed.\n\n" + conventions;
+}
+
+/** A tool's input property: its type and what it is. */
+juce::var property (const char* type, const juce::String& description)
+{
+    return object ({ { "type", type }, { "description", description } });
+}
+
+/** The sections between the Playlist's markers, as the project harness has them: a "Start" before the first
+    marker when it isn't at the song's start, and the last one to the song's end in whole bars (at least a bar).
+    Ticks; each name with its number among sections of that name ("Chorus" 2). */
+struct Section
+{
+    juce::String name;
+    int number = 1; // the second "Chorus" is 2
+    model::Ticks start = 0, end = 0;
+};
+
+std::vector<Section> sectionsOf (const model::Project& project)
+{
+    const auto barTicks = juce::jmax ((model::Ticks)1, (model::Ticks)project.settings.timeSignature.barTicks());
+    model::Ticks clipsEnd = 0;
+    for (auto& clip : project.playlist.clips)
+        clipsEnd = std::max (clipsEnd, clip.start + clip.length);
+    const auto songEnd = (clipsEnd + barTicks - 1) / barTicks * barTicks;
+    auto markers = project.playlist.markers;
+    std::stable_sort (markers.begin(), markers.end(), [] (auto& a, auto& b) { return a.at < b.at; });
+    std::vector<std::pair<juce::String, model::Ticks>> starts;
+    if (! markers.empty() && markers.front().at > 0)
+        starts.emplace_back ("Start", 0);
+    for (auto& m : markers)
+        starts.emplace_back (m.name, m.at);
+    std::vector<Section> out;
+    std::map<juce::String, int> seen;
+    for (size_t i = 0; i < starts.size(); ++i)
+    {
+        const auto start = starts[i].second;
+        const auto end = i + 1 < starts.size() ? starts[i + 1].second : std::max (songEnd, start + barTicks);
+        if (end <= start)
+            continue;
+        const auto number = ++seen[starts[i].first.toLowerCase()];
+        out.push_back ({ starts[i].first, number, start, end });
+    }
+    return out;
+}
 
 /** A rendered file's loudness from `from` to `to` seconds (integrated LUFS; -100 when silent). */
 double loudnessOf (juce::AudioFormatReader& reader, double from, double to)
@@ -249,6 +345,13 @@ AgentInterface::AgentInterface (Session& s, const juce::File& settingsFolder, Ho
       settingsFile (settingsFolder.getChildFile ("agent-interface.json")), host (std::move (h))
 {
     load();
+    // Another project opened, or a new one started (the history starts again): only then is everything changed.
+    historyListener = session.getHistory().addListener (
+        [this] (const commands::ChangeSet& c)
+        {
+            if (c.everything)
+                projectReplaced();
+        });
     if (enabled)
         start();
 }
@@ -256,7 +359,89 @@ AgentInterface::AgentInterface (Session& s, const juce::File& settingsFolder, Ho
 AgentInterface::~AgentInterface()
 {
     *alive = false;
+    session.getHistory().removeListener (historyListener);
     stop();
+}
+
+juce::StringArray AgentInterface::supportedProtocolVersions() { return { newestProtocolVersion, "2025-06-18" }; }
+
+bool AgentInterface::isLocalOrigin (const juce::String& origin)
+{
+    if (origin.isEmpty())
+        return true;
+    // scheme://host[:port], the host exactly this computer's own name or address.
+    if (! origin.startsWith ("http://") && ! origin.startsWith ("https://"))
+        return false;
+    const auto rest = origin.fromFirstOccurrenceOf ("://", false, false);
+    if (rest.containsAnyOf ("/?#@"))
+        return false;
+    auto host = rest;
+    auto portText = juce::String();
+    if (rest.startsWithChar ('['))
+    {
+        host = rest.upToFirstOccurrenceOf ("]", true, false);
+        portText = rest.fromFirstOccurrenceOf ("]", false, false);
+    }
+    else if (rest.containsChar (':'))
+    {
+        host = rest.upToFirstOccurrenceOf (":", false, false);
+        portText = rest.fromFirstOccurrenceOf (":", true, false);
+    }
+    if (portText.isNotEmpty() && (! portText.startsWithChar (':') || portText.length() < 2 ||
+                                  ! portText.substring (1).containsOnly ("0123456789")))
+        return false;
+    return host.equalsIgnoreCase ("localhost") || host == "127.0.0.1" || host == "[::1]";
+}
+
+bool AgentInterface::decodeChunked (const juce::MemoryBlock& data, juce::MemoryBlock& body, bool& malformed)
+{
+    malformed = false;
+    body.reset();
+    const auto* bytes = static_cast<const char*> (data.getData());
+    const auto size = data.getSize();
+    size_t at = 0;
+    for (;;)
+    {
+        // A chunk: its size in hex (maybe with ";extensions"), CRLF, the bytes, CRLF. Size 0 ends it.
+        size_t lineEnd = at;
+        while (lineEnd + 1 < size && ! (bytes[lineEnd] == '\r' && bytes[lineEnd + 1] == '\n'))
+            ++lineEnd;
+        if (lineEnd + 1 >= size)
+            return false; // more to come
+        const auto line = juce::String (bytes + at, lineEnd - at).upToFirstOccurrenceOf (";", false, false).trim();
+        if (line.isEmpty() || ! line.containsOnly ("0123456789abcdefABCDEF") || line.length() > 8)
+        {
+            malformed = true;
+            return false;
+        }
+        const auto chunk = (size_t)line.getHexValue64();
+        at = lineEnd + 2;
+        if (chunk == 0)
+        {
+            // Trailers (ignored), then an empty line.
+            for (;;)
+            {
+                size_t end = at;
+                while (end + 1 < size && ! (bytes[end] == '\r' && bytes[end + 1] == '\n'))
+                    ++end;
+                if (end + 1 >= size)
+                    return false;
+                const bool empty = end == at;
+                at = end + 2;
+                if (empty)
+                    return true;
+            }
+        }
+        if (size - at < chunk + 2)
+            return false;
+        if (bytes[at + chunk] != '\r' || bytes[at + chunk + 1] != '\n')
+        {
+            malformed = true;
+            return false;
+        }
+        body.append (bytes + at, chunk);
+        at += chunk + 2;
+    }
 }
 
 void AgentInterface::load()
@@ -270,11 +455,29 @@ void AgentInterface::load()
 void AgentInterface::save() const
 {
     settingsFile.getParentDirectory().createDirectory();
-    settingsFile.replaceWithText (
-        juce::JSON::toString (object ({ { "enabled", enabled }, { "port", port }, { "token", token } })));
-    // Only this user may read the token.
-#if ! JUCE_WINDOWS
-    ::chmod (settingsFile.getFullPathName().toRawUTF8(), 0600);
+    const auto json = juce::JSON::toString (object ({ { "enabled", enabled }, { "port", port }, { "token", token } }));
+#if JUCE_WINDOWS
+    settingsFile.replaceWithText (json); // the user's own settings folder: other users can't read it
+#else
+    const auto text = json.toStdString();
+    // Only this user may read the token: the file is made readable by the user alone before the token is in it.
+    const auto path = settingsFile.getFullPathName().toStdString();
+    const int fd = ::open (path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0)
+    {
+        core::Logs::warning ("agents", "Could not save " + settingsFile.getFullPathName());
+        return;
+    }
+    ::fchmod (fd, 0600); // it may have been there already, readable by others
+    size_t written = 0;
+    while (written < text.size())
+    {
+        const auto n = ::write (fd, text.data() + written, text.size() - written);
+        if (n <= 0)
+            break;
+        written += (size_t)n;
+    }
+    ::close (fd);
 #endif
 }
 
@@ -334,21 +537,67 @@ juce::String AgentInterface::setupFor (const juce::String& agent) const
     if (agent == "cursor")
         return "{\"mcpServers\": {\"spinus\": {\"url\": \"" + url + "\", \"headers\": {\"Authorization\": \"Bearer " +
                token + "\"}}}}";
-    return "claude mcp add --transport http spinus " + url + " --header \"Authorization: Bearer " + token + "\"";
+    // --scope user: for every folder the user runs Claude Code in, not only this one.
+    return "claude mcp add --scope user --transport http spinus " + url + " --header \"Authorization: Bearer " + token +
+           "\"";
+}
+
+juce::String AgentInterface::getAgentName() const
+{
+    juce::StringArray names;
+    for (auto& s : sessions)
+        names.addIfNotAlreadyThere (s.name);
+    if (names.size() <= 1)
+        return names.joinIntoString ("");
+    const auto last = names[names.size() - 1];
+    names.remove (names.size() - 1);
+    return names.joinIntoString (", ") + " and " + last;
+}
+
+int AgentInterface::getAgentCount() const
+{
+    juce::StringArray names;
+    for (auto& s : sessions)
+        names.addIfNotAlreadyThere (s.name);
+    return names.size();
+}
+
+AgentInterface::AgentSession* AgentInterface::findSession (const juce::String& id)
+{
+    for (auto& s : sessions)
+        if (id.isNotEmpty() && s.id == id)
+            return &s;
+    return nullptr;
+}
+
+void AgentInterface::endSession (const juce::String& id, const juce::String& why)
+{
+    std::erase_if (sessions, [&id] (const AgentSession& s) { return s.id == id; });
+    ended.emplace_back (id, why);
+    if (ended.size() > 32)
+        ended.erase (ended.begin());
+    if (sessions.empty())
+        changes = 0;
+}
+
+bool AgentInterface::musicToolsOn() const
+{
+    return host.musicToolsOn ? host.musicToolsOn() : (bool)host.listHarnessTools;
 }
 
 void AgentInterface::disconnect()
 {
-    const bool was = connected;
-    sessionId = {};
-    connected = false;
-    agentName = {};
+    if (sessions.empty())
+        return;
+    std::vector<juce::String> ids;
+    ids.reserve (sessions.size());
+    for (auto& s : sessions)
+        ids.push_back (s.id);
+    for (auto& id : ids)
+        endSession (id, "the user clicked Disconnect in Spinus");
     changes = 0;
-    if (was)
-    {
-        core::Logs::info ("agents", "The agent was disconnected");
-        changed();
-    }
+    core::Logs::info ("agents", "The agents were disconnected");
+    changed();
 }
 
 void AgentInterface::undoAgentChanges()
@@ -360,6 +609,26 @@ void AgentInterface::undoAgentChanges()
     changes = 0;
     core::Logs::info ("agents", "Undid the agent's changes (" + juce::String (undone) + " undo steps)");
     changed();
+}
+
+void AgentInterface::projectReplaced()
+{
+    // Every connected agent is told before its next change; the undo point is the new project's start.
+    undoMark = 0;
+    changes = 0;
+    lastRender = juce::var();
+    for (auto& s : sessions)
+        s.projectSwitched = true;
+    if (sessions.empty())
+        return;
+    core::Logs::info ("agents", "Another project is open: the connected agents will be told");
+    // Not while the project loads (this is called from within it): the top bar shows the count afterwards.
+    juce::MessageManager::callAsync (
+        [this, stillAlive = alive]
+        {
+            if (*stillAlive)
+                changed();
+        });
 }
 
 //==============================================================================
@@ -441,30 +710,62 @@ void AgentInterface::serve (juce::StreamingSocket& client)
     for (int i = 1; i < lines.size(); ++i)
         headers.set (lines[i].upToFirstOccurrenceOf (":", false, false).trim().toLowerCase(),
                      lines[i].fromFirstOccurrenceOf (":", false, false).trim());
+    constexpr int maxBody = 16 * 1024 * 1024;
+    const bool chunked = headers["transfer-encoding"].containsIgnoreCase ("chunked");
+    const bool hasLength = headers.containsKey ("content-length");
     const auto length = headers["content-length"].getIntValue();
-    if (length < 0 || length > 16 * 1024 * 1024)
+    if (length < 0 || length > maxBody)
         return;
     const auto bodyStart = (size_t)headerEnd + 4;
     juce::MemoryBlock body (data.begin() + juce::jmin (bodyStart, data.getSize()),
                             data.getSize() > bodyStart ? data.getSize() - bodyStart : 0);
-    while ((int)body.getSize() < length && ! threadShouldExit())
-    {
-        if (client.waitUntilReady (true, 10000) != 1)
-            return;
-        const auto n =
-            client.read (buffer, (int)juce::jmin ((size_t)sizeof (buffer), (size_t)length - body.getSize()), false);
-        if (n <= 0)
-            return;
-        body.append (buffer, (size_t)n);
-    }
-
     HttpAnswer answer;
-    if (path.upToFirstOccurrenceOf ("?", false, false) != "/mcp")
+    if (chunked)
+    {
+        // Sent in chunks, without a length: read until the last chunk.
+        juce::MemoryBlock raw (body), decoded;
+        bool malformed = false;
+        while (! decodeChunked (raw, decoded, malformed) && ! malformed && ! threadShouldExit())
+        {
+            if ((int)raw.getSize() > maxBody || client.waitUntilReady (true, 10000) != 1)
+                return;
+            const auto n = client.read (buffer, (int)sizeof (buffer), false);
+            if (n <= 0)
+                return;
+            raw.append (buffer, (size_t)n);
+        }
+        if (malformed)
+        {
+            answer.status = 400;
+            answer.body = juce::JSON::toString (rpcError ({}, -32700, "the chunked body is malformed"));
+        }
+        body = decoded;
+    }
+    else
+        while ((int)body.getSize() < length && ! threadShouldExit())
+        {
+            if (client.waitUntilReady (true, 10000) != 1)
+                return;
+            const auto n =
+                client.read (buffer, (int)juce::jmin ((size_t)sizeof (buffer), (size_t)length - body.getSize()), false);
+            if (n <= 0)
+                return;
+            body.append (buffer, (size_t)n);
+        }
+
+    const bool readWell = answer.status == 200;
+    if (readWell && method == "POST" && ! chunked && ! hasLength)
+    {
+        answer.status = 411;
+        answer.body = juce::JSON::toString (
+            rpcError ({}, -32600, "a POST needs a Content-Length header (or Transfer-Encoding: chunked)"));
+    }
+    else if (readWell && path.upToFirstOccurrenceOf ("?", false, false) != "/mcp")
     {
         answer.status = 404;
         answer.body = "Not found: the MCP endpoint is /mcp";
     }
-    else
+    else if (readWell)
     {
         // Answered on the message thread (where the project lives); this thread waits.
         struct Pending
@@ -502,6 +803,7 @@ void AgentInterface::serve (juce::StreamingSocket& client)
                                 : answer.status == 403 ? "Forbidden"
                                 : answer.status == 404 ? "Not Found"
                                 : answer.status == 405 ? "Method Not Allowed"
+                                : answer.status == 411 ? "Length Required"
                                                        : "Error";
     const auto bodyText = answer.body.toStdString();
     juce::String response = "HTTP/1.1 " + juce::String (answer.status) + " " + reason + "\r\n";
@@ -530,8 +832,7 @@ void AgentInterface::handle (const juce::String& method, const juce::StringPairA
     if (! enabled)
         return fail (403, "Spinus's live interface for coding agents is off");
     // A web page can't reach it: only requests from this computer's own programs, never a browser's.
-    if (const auto& origin = headers["origin"];
-        origin.isNotEmpty() && ! origin.startsWith ("http://127.0.0.1") && ! origin.startsWith ("http://localhost"))
+    if (! isLocalOrigin (headers["origin"]))
         return fail (403, "requests from web pages are refused");
     if (headers["authorization"] != "Bearer " + token || token.isEmpty())
         return fail (401, "the token is missing or wrong (Options > AI > Coding agents shows it)");
@@ -539,8 +840,12 @@ void AgentInterface::handle (const juce::String& method, const juce::StringPairA
     const auto& given = headers["mcp-session-id"];
     if (method == "DELETE")
     {
-        if (given.isNotEmpty() && given == sessionId)
-            disconnect();
+        if (findSession (given) != nullptr)
+        {
+            endSession (given, "the agent ended it");
+            core::Logs::info ("agents", "An agent ended its session");
+            changed();
+        }
         answer.body = {};
         return reply (answer);
     }
@@ -556,7 +861,9 @@ void AgentInterface::handle (const juce::String& method, const juce::StringPairA
     if (! request.isObject())
     {
         answer.status = 400;
-        answer.body = juce::JSON::toString (rpcError ({}, -32700, "not JSON"));
+        answer.body =
+            juce::JSON::toString (rpcError ({}, request.isArray() ? -32600 : -32700,
+                                            request.isArray() ? "batches of requests are not supported" : "not JSON"));
         return reply (answer);
     }
     const auto rpcMethod = request["method"].toString();
@@ -564,8 +871,16 @@ void AgentInterface::handle (const juce::String& method, const juce::StringPairA
     {
         if (given.isEmpty())
             return fail (400, "no Mcp-Session-Id: initialize first");
-        if (given != sessionId)
-            return fail (404, "this session ended (disconnected in Spinus): initialize again");
+        if (auto* s = findSession (given))
+            s->lastUsed = ++requests;
+        else
+        {
+            juce::String why = "Spinus doesn't know this session (it may have restarted)";
+            for (auto& [id, reason] : ended)
+                if (id == given)
+                    why = "this session ended: " + reason;
+            return fail (404, why + ". Initialize again to go on.");
+        }
     }
     if (! request.hasProperty ("id")) // a notification: nothing to answer
     {
@@ -578,22 +893,47 @@ void AgentInterface::handle (const juce::String& method, const juce::StringPairA
     if (rpcMethod == "initialize") // answered at once, with the new session's ID
     {
         juce::var result;
-        rpc (request, [&result] (const juce::var& r) { result = r; }, newSession);
+        rpc (request, {}, [&result] (const juce::var& r) { result = r; }, newSession);
         answer.body = juce::JSON::toString (result, true);
-        answer.headers.set ("Mcp-Session-Id", newSession);
+        if (newSession.isNotEmpty())
+            answer.headers.set ("Mcp-Session-Id", newSession);
         return reply (answer);
     }
-    rpc (
-        request,
-        [reply, answer] (const juce::var& result) mutable
+
+    // The music tools came or went (AI turned on or off) since the agent's tool list: its client is told first,
+    // in an event stream that then carries the answer (when the client takes one: MCP clients do).
+    bool toolsChanged = false;
+    if (auto* s = findSession (given); s != nullptr && rpcMethod != "tools/list")
+    {
+        const auto music = musicToolsOn();
+        if (s->toolsWithMusic.has_value() && *s->toolsWithMusic != music &&
+            headers["accept"].containsIgnoreCase ("text/event-stream"))
         {
-            answer.body = juce::JSON::toString (result, true);
+            toolsChanged = true;
+            s->toolsWithMusic = music;
+        }
+    }
+    rpc (
+        request, given,
+        [reply, answer, toolsChanged] (const juce::var& result) mutable
+        {
+            if (toolsChanged)
+            {
+                const auto notice = object ({ { "jsonrpc", "2.0" }, { "method", "notifications/tools/list_changed" } });
+                answer.headers.set ("Content-Type", "text/event-stream");
+                answer.headers.set ("Cache-Control", "no-cache");
+                answer.body = "event: message\ndata: " + juce::JSON::toString (notice, true) +
+                              "\n\nevent: message\ndata: " + juce::JSON::toString (result, true) + "\n\n";
+            }
+            else
+                answer.body = juce::JSON::toString (result, true);
             reply (answer);
         },
         newSession);
 }
 
-void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce::String& newSession)
+void AgentInterface::rpc (const juce::var& request, const juce::String& sessionId, const ToolReply& reply,
+                          juce::String& newSession)
 {
     const auto& id = request["id"];
     const auto method = request["method"].toString();
@@ -601,25 +941,43 @@ void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce
 
     if (method == "initialize")
     {
-        sessionId = juce::Uuid().toString();
-        newSession = sessionId;
-        agentName = params["clientInfo"]["name"].toString();
-        if (agentName.isEmpty())
-            agentName = "An agent";
-        connected = true;
-        changes = 0;
-        undoMark = session.getHistory().getUndoDescriptions().size();
-        harnessTools = juce::var();
-        markSeen();
-        core::Logs::info ("agents", agentName + " connected");
+        // Each initialize is a session of its own (two agents, or one that restarted, don't end each other's);
+        // the undo point is kept from when the first of them connected.
+        if (sessions.empty())
+        {
+            undoMark = session.getHistory().getUndoDescriptions().size();
+            changes = 0;
+            harnessTools = juce::var();
+        }
+        AgentSession s;
+        s.id = juce::Uuid().toString();
+        s.name = params["clientInfo"]["name"].toString().trim();
+        if (s.name.isEmpty())
+            s.name = "An agent";
+        s.lastUsed = ++requests;
+        markSeen (s);
+        sessions.push_back (s);
+        newSession = s.id;
+        // Clients that quit without ending their session leave it behind: the least used goes past a few.
+        if (sessions.size() > maxSessions)
+        {
+            const auto oldest = std::min_element (sessions.begin(), sessions.end(),
+                                                  [] (auto& a, auto& b) { return a.lastUsed < b.lastUsed; });
+            endSession (oldest->id,
+                        "newer sessions replaced it (Spinus keeps " + juce::String ((int)maxSessions) + ")");
+        }
+        core::Logs::info ("agents", s.name + " connected");
         changed();
+        // The version asked for if Spinus speaks it, else Spinus's newest (the client decides whether it can).
         const auto asked = params["protocolVersion"].toString();
+        const auto versions = supportedProtocolVersions();
+        const auto music = musicToolsOn();
         reply (rpcResult (
-            id, object ({ { "protocolVersion", asked.isNotEmpty() ? asked : protocolVersion },
-                          { "capabilities", object ({ { "tools", object ({ { "listChanged", false } }) },
+            id, object ({ { "protocolVersion", versions.contains (asked) ? asked : versions[0] },
+                          { "capabilities", object ({ { "tools", object ({ { "listChanged", true } }) },
                                                       { "prompts", object ({ { "listChanged", false } }) } }) },
                           { "serverInfo", object ({ { "name", "spinus" }, { "version", versionString } }) },
-                          { "instructions", instructions } })));
+                          { "instructions", instructionsFor (music) } })));
         return;
     }
     if (method == "ping")
@@ -627,7 +985,10 @@ void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce
     if (method == "tools/list")
     {
         auto tools = nativeTools();
-        if (! host.listHarnessTools)
+        const auto music = musicToolsOn();
+        if (auto* s = findSession (sessionId))
+            s->toolsWithMusic = music;
+        if (! host.listHarnessTools || ! music)
             return reply (rpcResult (id, object ({ { "tools", tools } })));
         auto stillAlive = alive;
         host.listHarnessTools (
@@ -649,14 +1010,18 @@ void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce
         return reply (rpcResult (id, object ({ { "prompts", promptList() } })));
     if (method == "prompts/get")
     {
-        const auto messages = promptMessages (params["name"].toString(), params["arguments"]);
+        const auto messages = promptMessages (params["name"].toString(), params["arguments"], musicToolsOn());
         if (messages.isVoid())
             return reply (rpcError (id, -32602, "unknown prompt " + params["name"].toString()));
         return reply (rpcResult (id, object ({ { "messages", messages } })));
     }
     if (method == "tools/call")
     {
-        callTool (params["name"].toString(), params["arguments"],
+        const auto& arguments = params["arguments"];
+        if (! arguments.isVoid() && ! arguments.isObject())
+            return reply (rpcResult (id, text ("Not done: the tool's arguments must be an object", true)));
+        callTool (sessionId, params["name"].toString(),
+                  arguments.isObject() ? arguments : juce::var (new juce::DynamicObject()),
                   [reply, id] (const juce::var& result) { reply (rpcResult (id, result)); });
         return;
     }
@@ -665,72 +1030,104 @@ void AgentInterface::rpc (const juce::var& request, const ToolReply& reply, juce
 
 juce::var AgentInterface::nativeTools() const
 {
+    const auto noInput = schema ({});
+    juce::Array<juce::var> deviceTypes { "instrument", "effect" };
     juce::Array<juce::var> tools;
     tools.add (tool ("song_summary",
                      "The open project as Spinus sees it: tempo, key, length, channels (instruments, kits), mixer "
                      "inserts (effects, sends, sidechains), patterns, Playlist lanes, clips and markers, and what is "
                      "missing on this computer.",
-                     schema ({}), Does::reads));
+                     noInput, Does::reads));
+    const auto step =
+        object ({ { "type", "object" },
+                  { "properties",
+                    object ({ { "command", property ("string", "A Spinus command's name, such as \"channel.add\" "
+                                                               "(command_help lists them)") },
+                              { "parameters", property ("object", "The command's parameters (command_help gives them); "
+                                                                  "'params' is taken too") },
+                              { "as", property ("string", "A label for this step's result, which later steps name as "
+                                                          "\"$<label>.<field>\" (\"$bass.channel\")") } }) },
+                  { "required", juce::Array<juce::var> { "command" } } });
     tools.add (tool (
         "run_commands",
         "Change the project with Spinus commands, performed in order as one undo step. Each step "
         "{command, parameters}; a parameter can name an earlier step's result as \"$<step>.<field>\" "
-        "(\"$1.channel\"). Automation points may give 'text' (\"-12 dB\") instead of 'value'. Use "
-        "command_help for a command's parameters.",
-        schema ({ { "summary", object ({ { "type", "string" } }) }, { "steps", object ({ { "type", "array" } }) } },
-                { "steps" }),
+        "(\"$1.channel\", steps from 1) or by the step's \"as\" label (\"$bass.channel\"). Automation points may "
+        "give 'text' (\"-12 dB\") instead of 'value'. Use command_help for a command's parameters.",
+        schema (
+            { { "summary", property ("string", "A few words for the undo step (\"Agent: <summary>\")") },
+              { "steps",
+                object ({ { "type", "array" }, { "description", "The commands, in order" }, { "items", step } }) } },
+            { "steps" }),
         Does::replaces));
     tools.add (tool ("command_help", "A Spinus command's parameters (JSON Schema), or the list of commands.",
-                     schema ({ { "command", object ({ { "type", "string" } }) } }), Does::reads));
+                     schema ({ { "command", property ("string", "The command's name; leave it out for the list") } }),
+                     Does::reads));
     tools.add (tool (
         "list_devices",
         "Instruments and effects that can be added (Spinus's own, the free plugins, installed plugins), "
         "by words in their names, each with the device object channel.add and insert.addEffect take.",
-        schema ({ { "query", object ({ { "type", "string" } }) }, { "type", object ({ { "type", "string" } }) } }),
+        schema ({ { "query", property ("string", "Words in the device's name or maker (all of them); leave it out "
+                                                 "for every device") },
+                  { "type", object ({ { "type", "string" },
+                                      { "enum", deviceTypes },
+                                      { "description", "Only instruments or only effects" } }) } }),
         Does::reads));
-    tools.add (tool ("render",
-                     "Render the song offline and measure it: the mix's loudness (LUFS) and true peak, each "
-                     "section's loudness (between the Playlist's markers), and with stems each mixer insert's "
-                     "loudness and how long it sounds. Takes as long as the song does to render.",
-                     schema ({ { "stems", object ({ { "type", "boolean" } }) } }), Does::reads));
-    tools.add (tool (
-        "list_presets",
-        "The presets device.loadPreset can load on a device of the song (an instrument or effect): "
-        "3x Osc's, a plugin's own (its programs, the presets it lists, Surge XT's patches) and the "
-        "sounds the user saved for it. 'find' keeps those whose name or category has all its words.",
-        schema ({ { "device", object ({ { "type", "integer" } }) }, { "find", object ({ { "type", "string" } }) } },
-                { "device" }),
-        Does::reads));
-    tools.add (tool ("undo_last", "Undo your last change (only if it is still the newest undo step).", schema ({}),
+    tools.add (
+        tool ("render",
+              "Render the song offline and measure it: the mix's loudness (LUFS) and true peak, each "
+              "section's loudness (between the Playlist's markers, and before the first), and with stems "
+              "each mixer insert's loudness and how long it sounds. Takes as long as the song does to "
+              "render.",
+              schema ({ { "stems", property ("boolean", "Also measure each mixer insert on its own (slower)") } }),
+              Does::reads));
+    tools.add (
+        tool ("list_presets",
+              "The presets device.loadPreset can load on a device of the song (an instrument or effect): "
+              "3x Osc's, a plugin's own (its programs, the presets it lists, Surge XT's patches) and the "
+              "sounds the user saved for it. 'find' keeps those whose name or category has all its words. Spinus's "
+              "other devices have no presets: their settings change with device.setParameters.",
+              schema ({ { "device", property ("integer", "The device's id, as song_summary shows it") },
+                        { "find", property ("string", "Words the preset's name or category must have") } },
+                      { "device" }),
+              Does::reads));
+    tools.add (tool ("undo_last", "Undo your last change (only if it is still the newest undo step).", noInput,
                      Does::replaces));
     tools.add (tool ("what_changed",
                      "What the user changed in Spinus since you last looked (connected, song_summary, song_overview "
-                     "or this): their undo steps, and the steps they undid (yours too). A change of yours is refused "
-                     "once when the user changed the song since your last look, with what they changed.",
-                     schema ({}), Does::reads));
-    tools.add (tool (
-        "play",
-        "Play the song for the user to hear (they listen in Spinus; you don't hear it): 'bars' as '9' or "
-        "'9-16' (from 1) or a section's name from the Playlist's markers, looped unless loop is false. "
-        "Without bars, plays from where the playhead is. It changes nothing in the song.",
-        schema ({ { "bars", object ({ { "type", "string" } }) }, { "loop", object ({ { "type", "boolean" } }) } }),
-        Does::plays));
-    tools.add (tool ("stop", "Stop playback (the playhead goes back to where it started).", schema ({}), Does::plays));
+                     "or this): their undo steps, the steps they undid (yours too), another agent's changes, and "
+                     "another project opened. A change of yours is refused once when the song changed since your "
+                     "last look, with what changed.",
+                     noInput, Does::reads));
+    tools.add (
+        tool ("play",
+              "Play the song for the user to hear (they listen in Spinus; you don't hear it), in song mode. With "
+              "bars it sets the song's loop region to them (looped unless loop is false). Without bars, plays from "
+              "where the playhead is. It changes nothing in the song.",
+              schema ({ { "bars", property ("string", "Bars from 1, '9' or '9-16', or a section's name from the "
+                                                      "Playlist's markers ('Chorus'; 'Chorus 2' for the second one)") },
+                        { "loop", property ("boolean", "Loop the bars (true when left out)") } }),
+              Does::plays));
+    tools.add (tool ("stop", "Stop playback (the playhead goes back to where it started).", noInput, Does::plays));
     return tools;
 }
 
-void AgentInterface::callTool (const juce::String& name, const juce::var& arguments, const ToolReply& reply)
+void AgentInterface::callTool (const juce::String& sessionId, const juce::String& name, const juce::var& arguments,
+                               const ToolReply& reply)
 {
+    auto* agent = findSession (sessionId);
+    if (agent == nullptr)
+        return reply (text ("Not done: this session ended. Initialize again to go on.", true));
     if (name == "song_summary")
     {
-        markSeen();
+        markSeen (*agent);
         return reply (text (
             juce::JSON::toString (cli::summarize (session, host.projectFolder ? host.projectFolder() : juce::File()))));
     }
     if (name == "what_changed")
     {
-        const auto news = userChanges();
-        markSeen();
+        const auto news = userChanges (*agent);
+        markSeen (*agent);
         return reply (text (news.isNotEmpty() ? news : "Nothing: the song is as you last saw it."));
     }
     if (name == "play")
@@ -746,10 +1143,10 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
     }
     // A change after the user changed the song: refused once, with what they changed (now seen).
     if (name != "undo_last" && changesProject (name))
-        if (const auto news = userChanges(); news.isNotEmpty())
+        if (const auto news = userChanges (*agent); news.isNotEmpty())
         {
-            markSeen();
-            return reply (text ("Not done: the user changed the song since you last looked. " + news +
+            markSeen (*agent);
+            return reply (text ("Not done: the song changed since you last looked. " + news +
                                     " Check that your change still fits (song_summary or song_overview), then "
                                     "call again.",
                                 true));
@@ -772,6 +1169,9 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
     {
         const auto words = juce::StringArray::fromTokens (arguments["query"].toString().toLowerCase(), true);
         const auto kind = arguments["type"].toString();
+        if (kind.isNotEmpty() && kind != "instrument" && kind != "effect")
+            return reply (
+                text ("type is \"instrument\" or \"effect\" (or left out for both), not \"" + kind + "\"", true));
         juce::Array<juce::var> found;
         for (auto& entry : session.getDeviceList().getEntries())
         {
@@ -800,9 +1200,12 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
     }
     if (name == "list_presets")
     {
-        const auto found = cli::presets (session, (int)arguments["device"], arguments["find"].toString());
+        const auto device = (int)arguments["device"];
+        const auto found = device > 0 ? cli::presets (session, device, arguments["find"].toString()) : juce::var();
         if (found.size() == 0)
-            return reply (text ("There is no device " + arguments["device"].toString() + " in the song.", true));
+            return reply (text ("There is no device " + arguments["device"].toString() +
+                                    " in the song (song_summary shows the devices' ids).",
+                                true));
         const auto& entry = found[0];
         if (auto* list = entry["presets"].getArray(); list != nullptr && list->size() > 300)
         {
@@ -815,16 +1218,24 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
     }
     if (name == "run_commands")
     {
-        const auto error = apply (arguments["steps"], arguments["summary"].toString());
+        auto steps = arguments["steps"];
+        if (steps.isString()) // a list sent as text
+            steps = juce::JSON::parse (steps.toString());
+        const auto error = apply (sessionId, steps, arguments["summary"].toString());
         return reply (error.isEmpty() ? text ("Done, as one undo step.") : text ("Not done: " + error, true));
     }
     if (name == "undo_last")
     {
         auto& history = session.getHistory();
         const auto steps = history.getUndoDescriptions();
-        if (steps.isEmpty() || ! steps[steps.size() - 1].startsWith ("Agent: ") || steps.size() <= undoMark)
+        if (steps.isEmpty() || agent->own.count (history.getStateId()) == 0)
             return reply (text ("The newest undo step is not yours: nothing undone.", true));
+        // Undoing its own change isn't the user's change: the agent knows the song as the undo leaves it, unless
+        // something it hadn't seen came before.
+        const bool upToDate = userChanges (*agent).isEmpty();
         history.undo();
+        if (upToDate)
+            markSeen (*agent);
         changes = juce::jmax (0, changes - 1);
         changed();
         return reply (text ("Undone: " + steps[steps.size() - 1].fromFirstOccurrenceOf ("Agent: ", false, false)));
@@ -833,37 +1244,56 @@ void AgentInterface::callTool (const juce::String& name, const juce::var& argume
         return render ((bool)arguments["stems"], reply);
 
     // The project harness's tools, through the local AI service.
-    if (! host.callHarnessTool)
-        return reply (text ("\"" + name +
-                                "\" isn't available: the music tools need AI turned on in Spinus "
-                                "(Options > AI). Spinus's own tools work without it.",
+    if (! host.callHarnessTool || ! musicToolsOn())
+    {
+        juce::StringArray own;
+        const auto native = nativeTools();
+        for (auto& t : *native.getArray())
+            own.add (t["name"].toString());
+        return reply (text ("There is no tool \"" + name + "\" among Spinus's own (" + own.joinIntoString (", ") +
+                                "). If it is one of the music tools (song_overview, write_part, add_part, "
+                                "insert_bars, check...), they need AI turned on in Spinus (Options > AI); they then "
+                                "join your tool list.",
                             true));
+    }
+    if (auto* listed = harnessTools.getArray())
+    {
+        bool known = false;
+        for (auto& t : *listed)
+            known = known || t["name"].toString() == name;
+        if (! known && ! listed->isEmpty())
+            return reply (text ("There is no tool \"" + name + "\": tools/list shows the tools.", true));
+    }
     auto context = host.context ? host.context() : juce::var();
     if (auto* o = context.getDynamicObject(); o != nullptr && lastRender.isObject())
         o->setProperty ("measured", lastRender);
     auto stillAlive = alive;
-    host.callHarnessTool (name, arguments, context,
-                          [this, reply, name, stillAlive] (const juce::var& result, const juce::String& error)
-                          {
-                              if (! *stillAlive)
-                                  return;
-                              if (error.isNotEmpty())
-                                  return reply (text (error, true));
-                              auto said = result["text"].toString();
-                              if ((bool)result["isError"])
-                                  return reply (text (said, true));
-                              if (name == "song_overview")
-                                  markSeen();
-                              const auto& proposal = result["proposal"];
-                              if (proposal.isObject())
-                              {
-                                  const auto failure = apply (proposal["steps"], proposal["summary"].toString());
-                                  if (failure.isNotEmpty())
-                                      return reply (text (said + "\nBut Spinus could not do it: " + failure, true));
-                                  said << "\n(Done, as one undo step.)";
-                              }
-                              reply (text (said));
-                          });
+    host.callHarnessTool (
+        name, arguments, context,
+        [this, reply, name, sessionId, stillAlive] (const juce::var& result, const juce::String& error)
+        {
+            if (! *stillAlive)
+                return;
+            if (error.isNotEmpty())
+                return reply (text (error, true));
+            auto said = result["text"].toString();
+            if ((bool)result["isError"])
+                return reply (text (said, true));
+            auto* agentNow = findSession (sessionId);
+            if (name == "song_overview" && agentNow != nullptr)
+                markSeen (*agentNow);
+            const auto& proposal = result["proposal"];
+            if (proposal.isObject())
+            {
+                if (agentNow == nullptr)
+                    return reply (text ("Not done: this session ended. Initialize again to go on.", true));
+                const auto failure = apply (sessionId, proposal["steps"], proposal["summary"].toString());
+                if (failure.isNotEmpty())
+                    return reply (text (said + "\nBut Spinus could not do it: " + failure, true));
+                said << "\n(Done, as one undo step.)";
+            }
+            reply (text (said));
+        });
 }
 
 juce::String AgentInterface::checkPaths (const juce::var& value) const
@@ -920,21 +1350,60 @@ juce::String AgentInterface::checkPaths (const juce::var& value) const
     return {};
 }
 
-juce::String AgentInterface::apply (const juce::var& steps, const juce::String& summary)
+juce::String AgentInterface::apply (const juce::String& sessionId, const juce::var& steps, const juce::String& summary)
 {
+    auto* agent = findSession (sessionId);
+    if (agent == nullptr)
+        return "this session ended: initialize again";
     if (! steps.isArray() || steps.getArray()->isEmpty())
-        return "no steps";
+        return "'steps' must be a list of steps, each {\"command\": ..., \"parameters\": {...}}";
     if (auto e = checkPaths (steps); e.isNotEmpty())
         return e;
-    // {command, parameters} or {command, params}; actions (loadKit, loadSamples) are --run's, not here.
+    // {command, parameters} or {command, params}; actions (loadKit, loadSamples) are --run's, not here. A step's
+    // "as" label becomes its number, so "$bass.channel" is "$2.channel" as Proposal reads it.
+    std::map<juce::String, int> labels;
+    std::function<juce::var (const juce::var&)> relabel = [&] (const juce::var& value) -> juce::var
+    {
+        if (value.isString())
+        {
+            const auto t = value.toString();
+            if (! t.startsWithChar ('$'))
+                return value;
+            const auto label = t.substring (1).upToFirstOccurrenceOf (".", false, false);
+            if (auto it = labels.find (label); it != labels.end())
+                return "$" + juce::String (it->second) + t.fromFirstOccurrenceOf (label, false, false);
+            return value;
+        }
+        if (auto* array = value.getArray())
+        {
+            juce::Array<juce::var> copy;
+            for (auto& item : *array)
+                copy.add (relabel (item));
+            return copy;
+        }
+        if (auto* o = value.getDynamicObject())
+        {
+            auto* copy = new juce::DynamicObject();
+            for (auto& p : o->getProperties())
+                copy->setProperty (p.name, relabel (p.value));
+            return juce::var (copy);
+        }
+        return value;
+    };
     juce::Array<juce::var> normalised;
     for (auto& step : *steps.getArray())
     {
+        if (! step.isObject())
+            return "step " + juce::String (normalised.size() + 1) +
+                   " is not a step: each is {\"command\": ..., \"parameters\": {...}}";
         if (step.hasProperty ("action"))
-            return "\"action\" steps are for spinus --run; here use commands (device.loadPreset for presets)";
-        normalised.add (
-            object ({ { "command", step["command"] },
-                      { "parameters", step.hasProperty ("parameters") ? step["parameters"] : step["params"] } }));
+            return "\"action\" steps (loadKit, loadSamples) are for spinus --run; the live interface can't load "
+                   "kits or samples (the user does it in Spinus). Use commands here (device.loadPreset for presets)";
+        normalised.add (object (
+            { { "command", step["command"] },
+              { "parameters", relabel (step.hasProperty ("parameters") ? step["parameters"] : step["params"]) } }));
+        if (const auto label = step["as"].toString().trim(); label.isNotEmpty())
+            labels[label] = normalised.size();
     }
     juce::String textError;
     const auto read = cli::readStepTexts (session, normalised, textError);
@@ -943,32 +1412,49 @@ juce::String AgentInterface::apply (const juce::var& steps, const juce::String& 
     const auto label = summary.isNotEmpty() ? summary : juce::String ("changes");
     auto proposal = Proposal::prepare (object ({ { "summary", label }, { "steps", read } }), session.getHistory());
     if (! proposal.canApply())
-        return proposal.error.isNotEmpty() ? proposal.error : juce::String ("nothing to do");
+    {
+        auto error = proposal.error.isNotEmpty() ? proposal.error : juce::String ("nothing to do");
+        if (error.contains ("reference"))
+            error << " (name an earlier step by its number from 1, \"$1.channel\", or by its \"as\" label)";
+        return error;
+    }
     proposal.undoName = "Agent: " + label;
     if (const auto done = proposal.apply (session.getHistory()); done.failed())
         return done.getErrorMessage();
     ++changes;
-    markSeen();               // the agent knows the song as its own change left it
+    agent->own.insert (session.getHistory().getStateId());
+    markSeen (*agent);        // the agent knows the song as its own change left it
     lastRender = juce::var(); // the song changed: the last render's numbers no longer hold
-    core::Logs::info ("agents", agentName + ": " + label);
+    core::Logs::info ("agents", agent->name + ": " + label);
     changed();
     return {};
 }
 
-void AgentInterface::markSeen()
-{
-    seenSteps = session.getHistory().getUndoDescriptions();
-    seenState = session.getHistory().getStateId();
-}
-
-juce::String AgentInterface::userChanges() const
+void AgentInterface::markSeen (AgentSession& agent)
 {
     const auto& history = session.getHistory();
-    if (history.getStateId() == seenState)
+    agent.seenSteps = history.getUndoDescriptions();
+    agent.seenStates = history.getUndoStateIds();
+    agent.seenState = history.getStateId();
+    agent.projectSwitched = false;
+}
+
+juce::String AgentInterface::userChanges (const AgentSession& agent) const
+{
+    if (agent.projectSwitched)
+        return "The user opened another project in Spinus (or started a new one) since you last looked: what you "
+               "knew of the song no longer holds, and Undo the agent's changes now starts from this project.";
+    const auto& history = session.getHistory();
+    if (history.getStateId() == agent.seenState)
         return {};
     const auto now = history.getUndoDescriptions();
+    const auto& nowStates = history.getUndoStateIds();
+    const auto& seen = agent.seenSteps;
+    const auto& seenStates = agent.seenStates;
+    // The steps both share (by the states they led to), then what was undone and what was made since.
     int same = 0;
-    while (same < now.size() && same < seenSteps.size() && now[same] == seenSteps[same])
+    while (same < now.size() && same < seen.size() && (size_t)same < nowStates.size() &&
+           (size_t)same < seenStates.size() && nowStates[(size_t)same] == seenStates[(size_t)same])
         ++same;
     const auto list = [] (const juce::StringArray& names)
     {
@@ -979,18 +1465,31 @@ juce::String AgentInterface::userChanges() const
             shown.add ("and " + juce::String (names.size() - 20) + " more");
         return shown.joinIntoString ("; ");
     };
-    juce::StringArray made, undone;
+    const auto isOwn = [&agent] (const std::vector<uint64_t>& states, int i)
+    { return (size_t)i < states.size() && agent.own.count (states[(size_t)i]) > 0; };
+    const auto stripped = [] (const juce::String& step)
+    { return step.fromFirstOccurrenceOf ("Agent: ", false, false); };
+    juce::StringArray made, byAgents, undone;
     for (int i = same; i < now.size(); ++i)
-        if (! now[i].startsWith ("Agent: "))
+    {
+        if (isOwn (nowStates, i)) // its own step, redone by the user: as it knew it
+            continue;
+        if (now[i].startsWith ("Agent: "))
+            byAgents.add (stripped (now[i]));
+        else
             made.add (now[i]);
-    for (int i = seenSteps.size(); --i >= same;)
-        undone.add (seenSteps[i].startsWith ("Agent: ")
-                        ? "yours: " + seenSteps[i].fromFirstOccurrenceOf ("Agent: ", false, false)
-                        : seenSteps[i]);
+    }
+    for (int i = seen.size(); --i >= same;)
+        undone.add (isOwn (seenStates, i)            ? "yours: " + stripped (seen[i])
+                    : seen[i].startsWith ("Agent: ") ? "another agent's: " + stripped (seen[i])
+                                                     : seen[i]);
     juce::String said;
     if (! made.isEmpty())
         said << "The user made " << made.size() << (made.size() == 1 ? " change: " : " changes: ") << list (made)
              << ".";
+    if (! byAgents.isEmpty())
+        said << (said.isEmpty() ? "" : " ") << "Another agent made " << byAgents.size()
+             << (byAgents.size() == 1 ? " change: " : " changes: ") << list (byAgents) << ".";
     if (! undone.isEmpty())
         said << (said.isEmpty() ? "" : " ") << "The user undid " << undone.size()
              << (undone.size() == 1 ? " step: " : " steps: ") << list (undone) << ".";
@@ -1012,19 +1511,19 @@ juce::String AgentInterface::play (const juce::String& bars, bool loop)
 {
     const auto& project = session.getProject();
     const auto barTicks = (model::Ticks)project.settings.timeSignature.barTicks();
-    model::Ticks end = 0;
-    for (auto& clip : project.playlist.clips)
-        end = std::max (end, clip.start + clip.length);
 
     std::optional<Session::LoopRegion> range;
     const auto wanted = bars.trim();
     if (wanted.isNotEmpty())
     {
-        auto markers = project.playlist.markers;
-        std::sort (markers.begin(), markers.end(), [] (auto& a, auto& b) { return a.at < b.at; });
-        for (size_t i = 0; i < markers.size() && ! range; ++i)
-            if (markers[i].name.equalsIgnoreCase (wanted))
-                range = Session::LoopRegion { markers[i].at, i + 1 < markers.size() ? markers[i + 1].at : end };
+        // A section by its name (the first of that name), or "Chorus 2" for the second one.
+        const auto sections = sectionsOf (project);
+        for (auto& s : sections)
+            if (! range && s.name.equalsIgnoreCase (wanted))
+                range = Session::LoopRegion { s.start, s.end };
+        for (auto& s : sections)
+            if (! range && (s.name + " " + juce::String (s.number)).equalsIgnoreCase (wanted))
+                range = Session::LoopRegion { s.start, s.end };
         if (! range && wanted.containsOnly ("0123456789- "))
         {
             const auto from = wanted.upToFirstOccurrenceOf ("-", false, false).trim().getIntValue();
@@ -1034,8 +1533,17 @@ juce::String AgentInterface::play (const juce::String& bars, bool loop)
                 range = Session::LoopRegion { (from - 1) * barTicks, to * barTicks };
         }
         if (! range || range->end <= range->start)
-            return "\"" + wanted +
-                   "\" isn't bars ('9' or '9-16', from 1) or a section's name from the Playlist's markers";
+        {
+            juce::StringArray names;
+            std::map<juce::String, int> count;
+            for (auto& s : sections)
+                ++count[s.name.toLowerCase()];
+            for (auto& s : sections)
+                names.add (count[s.name.toLowerCase()] > 1 ? s.name + " " + juce::String (s.number) : s.name);
+            return "\"" + wanted + "\" isn't bars ('9' or '9-16', from 1) or a section's name from the Playlist's " +
+                   "markers" +
+                   (names.isEmpty() ? juce::String (" (there are none)") : " (" + names.joinIntoString (", ") + ")");
+        }
     }
 
     session.stop();
@@ -1067,14 +1575,12 @@ void AgentInterface::render (bool stems, const ToolReply& reply)
     if (host.projectFolder && host.projectFolder() != juce::File())
         settings.audioFolder = host.projectFolder().getChildFile ("audio");
 
-    // Section times, from the markers, in seconds (the tempo is constant).
+    // Section times, from the markers (and "Start" before the first), in seconds (the tempo is constant).
     const auto& project = session.getProject();
     const auto secondsPerTick = 60.0 / juce::jmax (1.0, (double)project.settings.tempoBpm) / 960.0;
     std::vector<std::pair<juce::String, double>> marks;
-    marks.reserve (project.playlist.markers.size());
-    for (auto& m : project.playlist.markers)
-        marks.emplace_back (m.name, (double)m.at * secondsPerTick);
-    std::sort (marks.begin(), marks.end(), [] (auto& a, auto& b) { return a.second < b.second; });
+    for (auto& s : sectionsOf (project))
+        marks.emplace_back (s.name, (double)s.start * secondsPerTick);
 
     auto job = std::make_shared<std::unique_ptr<engine::ExportJob>>();
     auto stillAlive = alive;
@@ -1126,7 +1632,8 @@ void AgentInterface::render (bool stems, const ToolReply& reply)
             auto out = lastRender.clone();
             if (! stemList.isEmpty())
                 out.getDynamicObject()->setProperty ("stems", stemList);
-            reply (text (juce::JSON::toString (out)));
+            // Numbers as measured, to two decimals at most (-16.9, not -16.899999999999999).
+            reply (text (juce::JSON::toString (out, false, 2)));
         });
     if (*job == nullptr)
     {

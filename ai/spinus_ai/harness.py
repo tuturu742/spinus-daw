@@ -61,6 +61,7 @@ from .usage import UsageLog
 
 MOST_TURNS = 150  # generous: a model that never calls finish is stopped here, with the best checked version
 MOST_LINES = 24  # a tool's answer is cut to this many issue lines ("and N more")
+PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18")  # the MCP versions serve_mcp speaks, newest first
 # Anthropic's context editing: once a request's input passes CLEAR_AFTER tokens, the provider clears the oldest tool
 # calls and their results (all but the last KEEP_CALLS), at least CLEAR_AT_LEAST tokens at a time so the cache is
 # rewritten seldom (each clearing starts it again). The calls' arguments go too (clear_tool_inputs): the notes a write
@@ -2575,18 +2576,31 @@ def serve_mcp(
         line = read()
         if not line:
             return
+        if not line.strip():
+            continue
         try:
             message = json.loads(line)
         except ValueError:
+            reply(None, error={"code": -32700, "message": "Parse error: the line is not JSON"})
+            continue
+        if not isinstance(message, dict):
+            reply(None, error={"code": -32600, "message": "Invalid request: a message is a JSON object"})
             continue
         method, id_ = message.get("method"), message.get("id")
         if id_ is None:
             continue  # a notification
+        params = message.get("params")
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            reply(id_, error={"code": -32602, "message": "Invalid params: params must be an object"})
+            continue
         if method == "initialize":
+            asked = params.get("protocolVersion")
             reply(
                 id_,
                 {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "spinus-music-harness", "version": "1"},
                     "instructions": system_for(groups) + "\n\n" + first_message(ws),
@@ -2603,10 +2617,18 @@ def serve_mcp(
                 },
             )
         elif method == "tools/call":
-            params = message.get("params") or {}
+            arguments = params.get("arguments")
+            if arguments is None:
+                arguments = {}
+            if not isinstance(arguments, dict):
+                reply(
+                    id_,
+                    {"content": [{"type": "text", "text": "Not done: arguments must be an object."}], "isError": True},
+                )
+                continue
             try:
-                text, failed = ws.call(str(params.get("name")), dict(params.get("arguments") or {})), False
-            except (Mistake, TypeError) as why:
+                text, failed = ws.call(str(params.get("name")), arguments), False
+            except (Mistake, TypeError, ValueError, KeyError, IndexError, AttributeError) as why:
                 text, failed = f"Not done: {why}.", True
             if params.get("name") == "finish" and not failed:
                 out.write_text(json.dumps(result_song(Run(ws, turns=0), setup, "", 0, []), indent=1), encoding="utf-8")

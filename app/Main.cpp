@@ -772,13 +772,14 @@ private:
         {
             if (aiService == nullptr || ! aiService->isEnabled())
                 return reply ({}, "The music tools need AI turned on in Spinus (Options > AI). Spinus's own tools "
-                                  "(song_summary, run_commands, command_help, list_devices, render) work without it.");
+                                  "(tools/list shows them) work without it.");
             auto* params = new juce::DynamicObject();
             params->setProperty ("tool", tool);
             params->setProperty ("arguments", arguments);
             params->setProperty ("context", context);
             aiService->call ("ai.v1.project.tool", juce::var (params), reply);
         };
+        host.musicToolsOn = [this] { return aiService != nullptr && aiService->isEnabled(); };
         return std::make_unique<ai::AgentInterface> (*session, getSettingsFolder(), std::move (host));
     }
 };

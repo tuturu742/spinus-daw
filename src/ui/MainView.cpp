@@ -1381,7 +1381,9 @@ void MainView::showAgentMenu()
         return;
     juce::PopupMenu menu;
     const auto changes = agentInterface->getAgentChanges();
-    menu.addSectionHeader (agentInterface->getAgentName() + " is working on this project");
+    menu.addSectionHeader (agentInterface->getAgentName() + (agentInterface->getAgentCount() > 1
+                                                                 ? " are working on this project"
+                                                                 : " is working on this project"));
     menu.addItem (1, "Undo the agent's changes" + (changes > 0 ? " (" + juce::String (changes) + ")" : juce::String()));
     menu.addItem (2, "Disconnect");
     menu.addSeparator();

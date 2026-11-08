@@ -58,7 +58,11 @@ SEARCH_MANUAL = Tool(
     "search_manual",
     "Search Spinus's user manual (how a device, a command or a feature works, its settings and their units). Use "
     "it instead of guessing.",
-    {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+    {
+        "type": "object",
+        "properties": {"query": {"type": "string", "description": "What to look up, in a few words"}},
+        "required": ["query"],
+    },
 )
 # The user's reference songs in the Track creator (track-creator.json, which Spinus keeps in this service's folder):
 # what their style shares, in plain words, with the song the user described.
