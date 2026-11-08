@@ -56,6 +56,10 @@ public:
         it with the value at save time to know whether there are unsaved changes. */
     uint64_t getStateId() const noexcept { return undoIds.empty() ? baseStateId : undoIds.back(); }
 
+    /** The state each undo step leads to, oldest first (parallel to getUndoDescriptions()): who made a step can
+        be told by the state it led to (the live interface for agents knows its own steps so). */
+    const std::vector<uint64_t>& getUndoStateIds() const noexcept { return undoIds; }
+
     using Listener = std::function<void (const ChangeSet&)>;
 
     /** Listeners are called in the order they were added. Returns an ID for removeListener(). */

@@ -396,6 +396,34 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   slow to answer while loading was taken for stuck during the wait and switched off, so the export had none
   of its sound (an export right after the Track creator's Apply, for example).
 
+### Fixes
+
+- **Coding agents (the live interface):**
+  - **Two agents no longer knock each other off.** A second agent (another Claude Code window, or Cursor) used to
+    end the first one's session and reset **Undo the agent's changes**. Now each has its own session, the top bar
+    names them all, and the undo point stays at when the first one connected.
+  - **An agent's own undo_last no longer counts as your change**, so its next change isn't refused for it.
+  - **Opening another project or File › New while an agent is connected:** the agent is told before its next
+    change, and **Undo the agent's changes** starts from the new project instead of undoing the wrong steps.
+  - **Playing a section works past the last part** (a section marked before its parts are written, or bars
+    added at the end), and "Chorus 2" plays the second section named Chorus.
+  - **Render measures the part before the first marker too** ("Start"), and its numbers are short (-16.9, not
+    -16.899999999999999).
+  - **list_presets on the Drum Machine, Sampler or another Spinus device** says they have no presets and how to
+    change their sound, instead of "There is no device".
+  - **With AI off, the agent is told only about the tools it has**, and the ready-made requests say how to do
+    their job without the music tools. Turning AI on or off tells the agent's app that its tools changed. A
+    misspelled tool name gets the right message.
+  - **Tools explain their settings** to the agent (what each value means), and steps can use `"as"` labels as
+    scripts do. Tools that overwrite settings or routing (shape sound, send, duck, bus) are marked as such.
+  - **Safer:** the token comes from the system's secure random source, its settings file is private from the
+    start, only this computer's own addresses count as local, and the protocol version is agreed properly.
+  - **The Claude Code setup command adds `--scope user`**, so Spinus is there in every folder, not only the one
+    where you ran it. The manual says where Cursor's file goes, what Disconnect really does (to keep an agent
+    out, untick the option or make a new token), and what an agent can't do.
+- **The music harness's command-line MCP server** (`python -m spinus_ai.harness mcp`) answers bad input with an
+  error instead of stopping.
+
 ## 0.1.0-alpha.4 (2026-10-31)
 
 ### Channel Rack: replace instrument

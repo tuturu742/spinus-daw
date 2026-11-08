@@ -107,8 +107,9 @@ void AgentInterfacePage::refresh()
     else if (! agents.isListening())
         status = agents.getProblem();
     else if (agents.isAgentConnected())
-        status = agents.getAgentName() + " is connected and has made " + juce::String (agents.getAgentChanges()) +
-                 " changes.";
+        status = agents.getAgentName() +
+                 (agents.getAgentCount() > 1 ? " are connected and have made " : " is connected and has made ") +
+                 juce::String (agents.getAgentChanges()) + " changes.";
     else
         status = "On, at http://127.0.0.1:" + juce::String (agents.getPort()) + "/mcp. No agent connected.";
     statusText.setText (status, juce::dontSendNotification);

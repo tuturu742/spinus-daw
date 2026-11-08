@@ -197,8 +197,11 @@ TOOLS = [
                 "part": PART,
                 "bars": BARS,
                 "notes": NOTES,
-                "loop_bars": {"type": "integer"},
-                "replace": {"type": "boolean"},
+                "loop_bars": {
+                    "type": "integer",
+                    "description": "Make the notes a pattern this many bars long (1, 2 or 4), repeated over the bars",
+                },
+                "replace": {"type": "boolean", "description": "Replace what the part played there (true if left out)"},
             },
             ["part", "bars", "notes"],
         ),
@@ -206,7 +209,14 @@ TOOLS = [
     Tool(
         "motif",
         "Remember a riff or phrase (notation as write_part's, bars long) to place again later with place_motif.",
-        schema({"name": {"type": "string"}, "notes": NOTES, "bars": {"type": "integer"}}, ["name", "notes", "bars"]),
+        schema(
+            {
+                "name": {"type": "string", "description": "A name to place it by later"},
+                "notes": NOTES,
+                "bars": {"type": "integer", "description": "How many bars long it is"},
+            },
+            ["name", "notes", "bars"],
+        ),
     ),
     Tool(
         "place_motif",
@@ -215,11 +225,15 @@ TOOLS = [
         schema(
             {
                 "part": PART,
-                "motif": {"type": "string"},
-                "at_bar": {"type": "integer"},
-                "times": {"type": "integer"},
-                "transpose": {"type": "integer"},
-                "vary": {"type": "string", "enum": ["", "rhythm", "invert", "octave-up", "octave-down", "displace"]},
+                "motif": {"type": "string", "description": "The motif's name, as given to motif"},
+                "at_bar": {"type": "integer", "description": "The bar it starts at, from 1"},
+                "times": {"type": "integer", "description": "How many times it plays, one after another (1)"},
+                "transpose": {"type": "integer", "description": "Semitones up (or down, negative)"},
+                "vary": {
+                    "type": "string",
+                    "enum": ["", "rhythm", "invert", "octave-up", "octave-down", "displace"],
+                    "description": "How each repeat varies (none if left out)",
+                },
             },
             ["part", "motif", "at_bar"],
         ),
@@ -232,11 +246,14 @@ TOOLS = [
         "colour), which its patterns and Playlist tracks take too.",
         schema(
             {
-                "name": {"type": "string"},
-                "instrument": {"type": "string"},
-                "preset": {"type": "string"},
-                "family": {"type": "string"},
-                "colour": {"type": "string", "description": "#rrggbb"},
+                "name": {"type": "string", "description": "The part's name ('Bass', 'Lead')"},
+                "instrument": {"type": "string", "description": "Words that find the instrument ('3x Osc')"},
+                "preset": {"type": "string", "description": "A preset of the instrument, by name"},
+                "family": {
+                    "type": "string",
+                    "description": "Drums, Bass, Synths, Leads, Guitars, Keys, Orchestra or FX (guessed if left out)",
+                },
+                "colour": {"type": "string", "description": "#rrggbb (the family's colour if left out)"},
             },
             ["name", "instrument"],
         ),
@@ -247,9 +264,9 @@ TOOLS = [
         "markers), and a marker names the new section. copy_from fills it with a section's (or bars') clips.",
         schema(
             {
-                "after_bar": {"type": "integer"},
-                "bars": {"type": "integer"},
-                "name": {"type": "string"},
+                "after_bar": {"type": "integer", "description": "The new bars come after this bar (0: at the start)"},
+                "bars": {"type": "integer", "description": "How many bars to insert"},
+                "name": {"type": "string", "description": "The new section's name, for its marker"},
                 "copy_from": {"type": "string", "description": "A section's name or bars to copy into it"},
             },
             ["after_bar", "bars", "name"],
@@ -259,7 +276,15 @@ TOOLS = [
         "copy_bars",
         "Copy what plays in some bars (all parts, or only `parts`) to start at another bar.",
         schema(
-            {"bars": BARS, "to_bar": {"type": "integer"}, "parts": {"type": "array", "items": {"type": "string"}}},
+            {
+                "bars": BARS,
+                "to_bar": {"type": "integer", "description": "The bar the copy starts at, from 1"},
+                "parts": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Only these parts, by name (all if left out)",
+                },
+            },
             ["bars", "to_bar"],
         ),
     ),
@@ -271,12 +296,19 @@ TOOLS = [
         schema(
             {
                 "part": {"type": "string", "description": "A part's name, or 'master'"},
-                "what": {"type": "string"},
+                "what": {
+                    "type": "string",
+                    "description": "'volume', 'pan', a setting of the part's instrument, or 'Effect: Setting'",
+                },
                 "points": {
                     "type": "array",
+                    "description": "The automation's points, in order",
                     "items": {
                         "type": "object",
-                        "properties": {"bar": {"type": "number"}, "value": {"type": "string"}},
+                        "properties": {
+                            "bar": {"type": "number", "description": "From 1; 9.5 is halfway through bar 9"},
+                            "value": {"type": "string", "description": "As the setting shows it: '-12 dB', '30% L'"},
+                        },
                         "required": ["bar", "value"],
                     },
                 },
@@ -291,14 +323,25 @@ TOOLS = [
         "'Phaser', 'Flanger', 'Distortion' that an effect has as a mode (the devices' modes)) to a part's insert, a "
         "bus, or 'master', with settings by name as it shows them for that mode ('Rate', 'Mix': the words of a "
         "setting's name are enough).",
-        schema({"to": {"type": "string"}, "effect": {"type": "string"}, "settings": SETTINGS}, ["to", "effect"]),
+        schema(
+            {
+                "to": {"type": "string", "description": "A part's name, a bus's name, or 'master'"},
+                "effect": {"type": "string", "description": "Words that find the effect, or a kind ('Chorus')"},
+                "settings": SETTINGS,
+            },
+            ["to", "effect"],
+        ),
     ),
     Tool(
         "send",
         "Send a part to a bus by name ('Reverb', 'Delay', or any insert); a missing Reverb bus is made with a "
         "reverb you have, a missing Delay bus with Spinus Delay (echoes in time with the song, fully wet).",
         schema(
-            {"part": PART, "to": {"type": "string"}, "level": {"type": "string", "description": "'-12 dB'"}},
+            {
+                "part": PART,
+                "to": {"type": "string", "description": "The bus: 'Reverb', 'Delay', or an insert's name"},
+                "level": {"type": "string", "description": "The send's level, '-12 dB' (it replaces a send there)"},
+            },
             ["part", "to", "level"],
         ),
     ),
@@ -306,7 +349,11 @@ TOOLS = [
         "duck",
         "Sidechain ducking: the part dips when another part (usually the kick) plays.",
         schema(
-            {"part": PART, "source": PART, "amount": {"type": "string", "description": "'50%'"}},
+            {
+                "part": PART,
+                "source": {"type": "string", "description": "The part it dips under (usually the kick), by name"},
+                "amount": {"type": "string", "description": "How far it dips, '50%' (if left out)"},
+            },
             ["part", "source"],
         ),
     ),
@@ -314,7 +361,11 @@ TOOLS = [
         "bus",
         "Route parts' inserts into a new bus (e.g. 'Drums' for all drum parts).",
         schema(
-            {"name": {"type": "string"}, "parts": {"type": "array", "items": {"type": "string"}}}, ["name", "parts"]
+            {
+                "name": {"type": "string", "description": "The bus's name ('Drums')"},
+                "parts": {"type": "array", "items": {"type": "string"}, "description": "The parts it gathers, by name"},
+            },
+            ["name", "parts"],
         ),
     ),
     Tool(
@@ -323,7 +374,12 @@ TOOLS = [
         "automation of the old instrument's settings goes), a preset of its instrument and/or settings by name, as "
         "the device shows them.",
         schema(
-            {"part": PART, "instrument": {"type": "string"}, "preset": {"type": "string"}, "settings": SETTINGS},
+            {
+                "part": PART,
+                "instrument": {"type": "string", "description": "Words that find another instrument"},
+                "preset": {"type": "string", "description": "A preset of its instrument, by name"},
+                "settings": SETTINGS,
+            },
             ["part"],
         ),
     ),
@@ -334,8 +390,16 @@ TOOLS = [
         schema(
             {
                 "part": PART,
-                "words": {"type": "array", "items": {"type": "string", "enum": sorted(SHAPES)}},
-                "amount": {"type": "string", "enum": ["a little", "clearly", "a lot"]},
+                "words": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": sorted(SHAPES)},
+                    "description": "How it should sound",
+                },
+                "amount": {
+                    "type": "string",
+                    "enum": ["a little", "clearly", "a lot"],
+                    "description": "How much ('clearly' if left out)",
+                },
             },
             ["part", "words"],
         ),
@@ -352,8 +416,9 @@ TOOL_NAMES = [t.name for t in TOOLS]
 # What each tool does to the project, for an agent's client (MCP's tool annotations): it can run a tool that only
 # reads without asking, and ask before one that replaces or removes what is there. Every change is one undo step.
 READS = ("song_overview", "read_part", "sound_settings", "motif", "check", "search_manual", "reference_style")
-ADDS = ("add_part", "insert_bars", "add_effect", "send", "duck", "bus", "shape_sound")
-REPLACES = ("write_part", "place_motif", "copy_bars", "automate", "set_sound")
+# shape_sound overwrites settings, send a send's level, duck the sidechain, bus the parts' outputs: they may replace.
+ADDS = ("add_part", "insert_bars", "add_effect")
+REPLACES = ("write_part", "place_motif", "copy_bars", "automate", "set_sound", "shape_sound", "send", "duck", "bus")
 
 
 def tool_hints(name: str) -> dict[str, Any]:
@@ -446,10 +511,20 @@ class ProjectHarness:
                 raise Mistake(f"bars '{said}' is not a range like '9' or '9-16'")
             return (first - 1) * self.bar_ticks, last * self.bar_ticks
         wanted = said.lower()
-        for s in self.sections():
+        sections = self.sections()
+        for s in sections:
             if s["name"].lower() == wanted:
                 return int(s["start"]), int(s["end"])
-        names = ", ".join(s["name"] for s in self.sections())
+        # "Chorus 2": the second section named Chorus (a plain name is the first).
+        counts: dict[str, int] = {}
+        numbered = []
+        for s in sections:
+            counts[s["name"].lower()] = counts.get(s["name"].lower(), 0) + 1
+            numbered.append((f"{s['name']} {counts[s['name'].lower()]}", s))
+        for name, s in numbered:
+            if name.lower() == wanted:
+                return int(s["start"]), int(s["end"])
+        names = ", ".join(name if counts[s["name"].lower()] > 1 else s["name"] for name, s in numbered)
         raise Mistake(f"'{said}' is neither bars ('9-16') nor a section ({names})")
 
     def bar_of(self, tick: int) -> str:

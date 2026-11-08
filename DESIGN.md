@@ -644,16 +644,29 @@ An MCP server in the running Spinus (`src/ai/AgentInterface.h`) so Claude Code, 
 can work on the open project while the user watches and listens.
 
 - **Off until the user turns it on** (Options › AI › Coding agents). It listens on 127.0.0.1 only, on a port the user
-  can change (47219 by default). Every request needs a token (`Authorization: Bearer`), kept in
-  `agent-interface.json` in the settings folder, readable by the user only. Requests carrying a web page's
-  `Origin` are refused.
-- **Transport:** MCP over HTTP: JSON-RPC 2.0 POSTed to `/mcp`, with one JSON answer each (no event stream), and a
-  session from `initialize` (`Mcp-Session-Id`). The server's thread hands each request to the message thread, where
-  the project lives, and waits for the answer.
+  can change (47219 by default). Every request needs a token (`Authorization: Bearer`; 128 bits from the system's
+  secure random source), kept in `agent-interface.json` in the settings folder, created readable by the user
+  only before the token is written. Requests carrying an `Origin` other than this computer's own
+  (`http(s)://localhost`, `127.0.0.1` or `[::1]`, exactly, with any port) are refused. A native and a Flatpak
+  Spinus share the settings folder, so the file and the port too: only one can listen.
+- **Transport:** MCP over HTTP: JSON-RPC 2.0 POSTed to `/mcp` (with a `Content-Length` or chunked; 411
+  without either), with one JSON answer each, and a session from `initialize` (`Mcp-Session-Id`). The version
+  asked for is answered when Spinus speaks it (2025-11-25, 2025-06-18), else Spinus's newest. The server's
+  thread hands each request to the message thread, where the project lives, and waits for the answer.
+- **Sessions:** each `initialize` starts a session of its own, so two agents (or one that restarted without
+  ending its session) don't end each other's; the least used goes past eight. DELETE ends one. The top bar
+  names the connected agents. **Disconnect** ends every session, but per MCP a client starts a new one after a
+  404, with the same token: only turning the interface off or **New token** keeps an agent out. A request in an
+  ended session gets 404 saying why (Disconnect, DELETE, replaced).
 - **Changes apply directly** (owner decision 2026-10-29; AGENTS rule 3's one exception). Each tool call that
   changes the project is one undo step, "Agent: ...", made through `Proposal::prepare`/`apply`, so its steps are
-  checked first and done together. While an agent is connected the top bar shows it, with **Disconnect** (its
-  session ends) and **Undo the agent's changes** (undo steps back to the count when it connected).
+  checked first and done together. While an agent is connected the top bar shows it, with **Disconnect** and
+  **Undo the agent's changes** (undo steps back to the count when the first of the connected agents
+  connected). A session knows its own steps by the history state each led to
+  (`CommandHistory::getUndoStateIds`): `undo_last` undoes only its own newest step.
+- **Another project** (File › New, Open, a recovery: `CommandHistory::reset`, the one change that is
+  `everything`): the sessions stay, each is told before its next change (it is refused once, as below), and
+  the undo point is the new project's start.
 - **Tools:**
   - **Spinus's own, always, in C++:** `song_summary` (`cli::summarize`), `run_commands`, `command_help`,
     `list_devices`, `list_presets`, `render` (an offline export measured: mix, sections, stems), `undo_last`,
@@ -667,15 +680,26 @@ can work on the open project while the user watches and listens.
     `ai.v1.project.tools` (`project_harness.READS`/`ADDS`/`REPLACES`, a test keeps every tool in one of them).
     Clients can then run the read-only ones without asking.
 - **The user's edits while an agent works:** the interface keeps the undo steps as the agent last saw them
-  (`markSeen`: when it connects, calls song_summary, song_overview or what_changed, and after each change of its
-  own). `what_changed` lists the user's steps since then and the steps they undid. A tool that changes the
+  (`markSeen`: when it connects, calls song_summary, song_overview or what_changed, after each change of its
+  own and after its own `undo_last`). `what_changed` lists the user's steps since then, another agent's, the
+  steps they undid, and another project opened. A tool that changes the
   project (`run_commands`, or a harness tool whose annotations aren't read-only) is refused once when the user
   changed the song since, with that list, which then counts as seen; the call again is done.
+- **The tool list follows AI:** the instructions and the prompts name only the tools the agent has (with AI
+  off, Spinus's own, and how to do each prompt's job with them). `listChanged` is true: when AI turned on or
+  off since a session's last `tools/list`, its next answer is a short event stream with
+  `notifications/tools/list_changed` first (if the client accepts `text/event-stream`), once.
+- **run_commands** takes `"as"` labels as `--run` does (turned into step numbers for `Proposal`), and steps
+  sent as text. `action` steps (loadKit, loadSamples) are refused: they change a device's sounds outside the
+  undo history, so kits and samples are loaded in Spinus. There is no saving, opening or starting a project.
 - **Looking things up** (AI service, listed with the harness's tools, read-only): `search_manual` (the
   assistant's manual search) and `reference_style` (track-creator.json in the service's folder: the references'
   names, never their paths, the summary's plain lines, the user's description and lyrics).
 - **Playback for the user:** `play` (bars or a section by its marker, looped by default with the song's loop
-  region; song mode) and `stop`. Session state only, no undo step.
+  region; song mode) and `stop`. Session state only, no undo step; the loop region and mode stay as `play` set
+  them. Sections are the harness's (`ProjectHarness.sections`): "Start" before the first marker when it isn't
+  at bar 1, the last to the song's end in whole bars (at least one), "Chorus 2" for the second of a name;
+  `render` measures the same sections.
 - **Instructions and prompts:** `initialize`'s instructions name the conventions (bars from 1, sixteenth steps,
   C5 = 60, commands' ticks at 960 a quarter note, settings as the device's text), so an agent gets them before
   its first call. Five MCP prompts (`prompts/list`, `prompts/get`) are ready-made requests: start_song,

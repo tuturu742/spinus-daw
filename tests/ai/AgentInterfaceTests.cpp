@@ -12,6 +12,10 @@
 #include <map>
 #include <thread>
 
+#if ! JUCE_WINDOWS
+#include <sys/stat.h>
+#endif
+
 using namespace spinus;
 
 namespace
@@ -45,6 +49,7 @@ struct Fixture
     Session session { host.getEngine(), makeDevices (host.getEngine()) };
     std::unique_ptr<ai::AgentInterface> agents;
     juce::var lastContext;
+    bool music = true; // AI on, for the harness's stand-in
 
     static std::unique_ptr<engine::DeviceFactory> makeDevices (tracktion::Engine& engine)
     {
@@ -79,6 +84,7 @@ struct Fixture
                                  { "proposal", object ({ { "summary", "Tempo 140" }, { "steps", steps } }) } }),
                        {});
             };
+            h.musicToolsOn = [this] { return music; };
         }
         agents = std::make_unique<ai::AgentInterface> (session, folder.root, std::move (h));
         agents->setPort (40000 + juce::Random::getSystemRandom().nextInt (20000));
@@ -89,14 +95,17 @@ struct Fixture
         int status = 0;
         juce::String session;
         juce::var json;
+        juce::String body, contentType;
     };
 
     /** One request through handle(), as the server makes it, with the message loop run until it is answered. */
     Answer request (const juce::String& method, const juce::var& body, const juce::String& sessionId = {},
-                    const juce::String& auth = "", const juce::String& origin = "")
+                    const juce::String& auth = "", const juce::String& origin = "",
+                    const juce::String& accept = "application/json, text/event-stream")
     {
         juce::StringPairArray headers;
         headers.set ("authorization", auth.isNotEmpty() ? auth : "Bearer " + agents->getToken());
+        headers.set ("accept", accept);
         if (sessionId.isNotEmpty())
             headers.set ("mcp-session-id", sessionId);
         if (origin.isNotEmpty())
@@ -104,11 +113,12 @@ struct Fixture
         std::optional<ai::AgentInterface::HttpAnswer> got;
         agents->handle (method, headers, juce::JSON::toString (body),
                         [&] (const ai::AgentInterface::HttpAnswer& a) { got = a; });
-        for (int i = 0; i < 2000 && ! got; ++i)
+        for (int i = 0; i < 4000 && ! got; ++i)
             juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
         REQUIRE (got.has_value());
         const auto answer = got.value_or (ai::AgentInterface::HttpAnswer {});
-        return { answer.status, answer.headers["Mcp-Session-Id"], juce::JSON::parse (answer.body) };
+        return { answer.status, answer.headers["Mcp-Session-Id"], juce::JSON::parse (answer.body), answer.body,
+                 answer.headers["Content-Type"] };
     }
 
     static juce::var rpc (const juce::String& method, const juce::var& params = juce::var (new juce::DynamicObject()))
@@ -116,10 +126,10 @@ struct Fixture
         return object ({ { "jsonrpc", "2.0" }, { "id", 1 }, { "method", method }, { "params", params } });
     }
 
-    juce::String connect()
+    juce::String connect (const juce::String& name = "Test Agent")
     {
         const auto answer =
-            request ("POST", rpc ("initialize", object ({ { "clientInfo", object ({ { "name", "Test Agent" } }) } })));
+            request ("POST", rpc ("initialize", object ({ { "clientInfo", object ({ { "name", name } }) } })));
         REQUIRE (answer.status == 200);
         REQUIRE (answer.session.isNotEmpty());
         return answer.session;
@@ -434,4 +444,395 @@ TEST_CASE ("Options > AI > Coding agents shows how to set an agent up, and who i
     CHECK (page.getStatusText().startsWith ("Test Agent is connected"));
     page.getOnOff().setToggleState (false, juce::sendNotificationSync);
     CHECK_FALSE (f.agents->isAgentConnected());
+}
+
+namespace
+{
+juce::var none() { return juce::var (new juce::DynamicObject()); }
+
+juce::var stepsOf (std::initializer_list<juce::var> steps)
+{
+    juce::Array<juce::var> list;
+    for (auto& s : steps)
+        list.add (s);
+    return object ({ { "steps", list } });
+}
+
+juce::var command (const juce::String& name, const juce::var& parameters, const juce::String& as = {})
+{
+    auto step = object ({ { "command", name }, { "parameters", parameters } });
+    if (as.isNotEmpty())
+        step.getDynamicObject()->setProperty ("as", as);
+    return step;
+}
+
+juce::var tempo (int bpm) { return stepsOf ({ command ("project.setTempo", object ({ { "bpm", bpm } })) }); }
+
+juce::String said (const juce::var& result) { return result["content"][0]["text"].toString(); }
+} // namespace
+
+TEST_CASE ("Agents each keep their own session, and the undo point stays with the first", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto before = f.session.getProject().settings.tempoBpm;
+    const auto first = f.connect ("claude-code");
+    REQUIRE_FALSE ((bool)f.call (first, "run_commands", tempo (150))["isError"]);
+
+    // A second agent (or the first one starting again) doesn't end the first one's session.
+    const auto second = f.connect ("cursor");
+    CHECK (second != first);
+    CHECK (f.agents->getAgentName() == "claude-code and cursor");
+    CHECK (f.agents->getAgentCount() == 2);
+    CHECK (f.request ("POST", Fixture::rpc ("tools/list"), first).status == 200);
+
+    // Each hears of the other's changes, as another agent's.
+    REQUIRE_FALSE ((bool)f.call (second, "run_commands", tempo (160))["isError"]);
+    const auto refused = f.call (first, "run_commands", tempo (170));
+    CHECK ((bool)refused["isError"]);
+    CHECK (said (refused).contains ("Another agent made 1 change"));
+    CHECK_FALSE ((bool)f.call (first, "run_commands", tempo (170))["isError"]);
+    CHECK (f.agents->getAgentChanges() == 3);
+    // undo_last undoes only the agent's own last step.
+    CHECK ((bool)f.call (second, "undo_last", none())["isError"]);
+
+    // DELETE ends one session; the other goes on.
+    CHECK (f.request ("DELETE", juce::var(), second).status == 200);
+    const auto gone = f.request ("POST", Fixture::rpc ("tools/list"), second);
+    CHECK (gone.status == 404);
+    CHECK (gone.json["error"]["message"].toString().contains ("ended"));
+    CHECK (f.agents->getAgentName() == "claude-code");
+
+    // A new session while one is open keeps the undo point: Undo the agent's changes goes back to the start.
+    const auto again = f.connect ("claude-code");
+    REQUIRE_FALSE ((bool)f.call (again, "run_commands", tempo (180))["isError"]);
+    f.agents->undoAgentChanges();
+    CHECK (f.session.getProject().settings.tempoBpm == Catch::Approx (before));
+
+    // Disconnect ends them all, and says so.
+    f.agents->disconnect();
+    const auto after = f.request ("POST", Fixture::rpc ("tools/list"), again);
+    CHECK (after.status == 404);
+    CHECK (after.json["error"]["message"].toString().contains ("Disconnect"));
+}
+
+TEST_CASE ("An agent's undo_last isn't news to it", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    REQUIRE_FALSE ((bool)f.call (id, "run_commands", tempo (150))["isError"]);
+    REQUIRE_FALSE ((bool)f.call (id, "run_commands", tempo (160))["isError"]);
+    REQUIRE_FALSE ((bool)f.call (id, "undo_last", none())["isError"]);
+    CHECK (f.session.getProject().settings.tempoBpm == Catch::Approx (150.0));
+    CHECK (said (f.call (id, "what_changed", none())).startsWith ("Nothing"));
+    const auto next = f.call (id, "run_commands", tempo (170));
+    INFO (said (next));
+    CHECK_FALSE ((bool)next["isError"]);
+}
+
+TEST_CASE ("Another project opened while an agent works: it is told, and the undo point starts again", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    REQUIRE_FALSE ((bool)f.call (id, "run_commands", tempo (150))["isError"]);
+
+    f.session.loadProject ({}); // File > New, or another project opened
+    for (int i = 0; i < 10; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+    CHECK (f.agents->isAgentConnected());
+    CHECK (f.agents->getAgentChanges() == 0);
+    CHECK (said (f.call (id, "what_changed", none())).contains ("opened another project"));
+    CHECK (said (f.call (id, "what_changed", none())).startsWith ("Nothing"));
+
+    // A change before it looked is refused once with that news.
+    f.session.loadProject ({});
+    const auto refused = f.call (id, "run_commands", tempo (130));
+    CHECK ((bool)refused["isError"]);
+    CHECK (said (refused).contains ("opened another project"));
+    REQUIRE_FALSE ((bool)f.call (id, "run_commands", tempo (130))["isError"]);
+    CHECK (f.agents->getAgentChanges() == 1);
+    // Undo the agent's changes stops at the new project's start.
+    f.agents->undoAgentChanges();
+    CHECK (f.session.getHistory().getUndoDescriptions().isEmpty());
+    CHECK ((bool)f.call (id, "undo_last", none())["isError"]);
+}
+
+TEST_CASE ("play finds sections past the last clip, before the first marker, and of the same name", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    constexpr int bar = 3840;
+    // Marked before any part is written, as the start_song request does.
+    REQUIRE_FALSE ((bool)f.call (
+        id, "run_commands",
+        stepsOf ({ command ("marker.add", object ({ { "at", 4 * bar }, { "name", "Chorus" } })),
+                   command ("marker.add", object ({ { "at", 8 * bar }, { "name", "Verse" } })),
+                   command ("marker.add", object ({ { "at", 12 * bar }, { "name", "Chorus" } })) }))["isError"]);
+    const auto loopOf = [&f]
+    {
+        const auto loop = f.session.getLoopRegion (Session::Mode::song);
+        return loop.has_value() ? std::pair (loop->start, loop->end) : std::pair<model::Ticks, model::Ticks> (-1, -1);
+    };
+    CHECK_FALSE ((bool)f.call (id, "play", object ({ { "bars", "Start" } }))["isError"]);
+    CHECK (loopOf() == std::pair<model::Ticks, model::Ticks> (0, 4 * bar));
+    CHECK_FALSE ((bool)f.call (id, "play", object ({ { "bars", "chorus" } }))["isError"]);
+    CHECK (loopOf() == std::pair<model::Ticks, model::Ticks> (4 * bar, 8 * bar));
+    // The last section, with nothing in it yet: a bar.
+    const auto second = f.call (id, "play", object ({ { "bars", "Chorus 2" } }));
+    INFO (said (second));
+    CHECK_FALSE ((bool)second["isError"]);
+    CHECK (loopOf() == std::pair<model::Ticks, model::Ticks> (12 * bar, 13 * bar));
+    const auto wrong = f.call (id, "play", object ({ { "bars", "Bridge" } }));
+    CHECK ((bool)wrong["isError"]);
+    CHECK (said (wrong).contains ("Chorus 2"));
+    f.call (id, "stop", none());
+}
+
+TEST_CASE ("render measures each section, the part before the first marker too, in short numbers",
+           "[ai][agents][audio]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto made = f.call (
+        id, "run_commands",
+        stepsOf (
+            { command (
+                  "channel.add",
+                  object ({ { "name", "Bass" },
+                            { "instrument", object ({ { "kind", "stock" }, { "stockType", "spinus.3x-osc" } }) } }),
+                  "bass"),
+              command ("pattern.add", object ({ { "name", "Loop" }, { "length", 3840 } }), "loop"),
+              command (
+                  "pattern.setNotes",
+                  object ({ { "pattern", "$loop.pattern" },
+                            { "channel", "$bass.channel" },
+                            { "notes",
+                              juce::Array<juce::var> { object (
+                                  { { "start", 0 }, { "length", 3600 }, { "pitch", 45 }, { "velocity", 0.8 } }) } } })),
+              command ("lane.add", object ({ { "name", "Music" } }), "lane"),
+              command ("clip.addPattern",
+                       object ({ { "lane", "$lane.lane" }, { "pattern", "$loop.pattern" }, { "start", 0 } })),
+              command ("clip.addPattern",
+                       object ({ { "lane", "$lane.lane" }, { "pattern", "$loop.pattern" }, { "start", 3840 } })),
+              command ("marker.add", object ({ { "at", 3840 }, { "name", "Verse" } })) }));
+    INFO (said (made));
+    REQUIRE_FALSE ((bool)made["isError"]);
+    const auto rendered = f.call (id, "render", none());
+    INFO (said (rendered));
+    REQUIRE_FALSE ((bool)rendered["isError"]);
+    const auto numbers = juce::JSON::parse (said (rendered));
+    REQUIRE (numbers["sections"].size() == 2);
+    CHECK (numbers["sections"][0]["name"] == "Start");
+    CHECK (numbers["sections"][1]["name"] == "Verse");
+    CHECK_FALSE (said (rendered).contains ("9999"));
+    CHECK_FALSE (said (rendered).contains ("0000"));
+}
+
+TEST_CASE ("list_presets on Spinus's own devices says why there are none", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    REQUIRE_FALSE ((bool)f.call (
+        id, "run_commands",
+        stepsOf ({ command (
+            "channel.add",
+            object ({ { "name", "Drums" },
+                      { "instrument",
+                        object ({ { "kind", "stock" }, { "stockType", "spinus.drum-machine" } }) } })) }))["isError"]);
+    const auto& instrument = f.session.getProject().channels.back().instrument;
+    REQUIRE (instrument.has_value());
+    const auto device = (int)instrument.value().id.value;
+    const auto listed = f.call (id, "list_presets", object ({ { "device", device } }));
+    INFO (said (listed));
+    CHECK_FALSE ((bool)listed["isError"]);
+    CHECK (said (listed).contains ("device.setParameters"));
+    CHECK ((bool)f.call (id, "list_presets", object ({ { "device", 999 } }))["isError"]);
+}
+
+TEST_CASE ("run_commands takes \"as\" labels, and says how to name earlier steps", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto labelled = f.call (
+        id, "run_commands",
+        stepsOf (
+            { command (
+                  "channel.add",
+                  object ({ { "name", "Bass" },
+                            { "instrument", object ({ { "kind", "stock" }, { "stockType", "spinus.3x-osc" } }) } }),
+                  "bass"),
+              command ("device.loadPreset", object ({ { "device", "$bass.device" }, { "preset", "Reese Bass" } })) }));
+    INFO (said (labelled));
+    CHECK_FALSE ((bool)labelled["isError"]);
+    const auto unknown =
+        f.call (id, "run_commands",
+                stepsOf ({ command ("device.loadPreset",
+                                    object ({ { "device", "$nope.device" }, { "preset", "Reese Bass" } })) }));
+    CHECK ((bool)unknown["isError"]);
+    CHECK (said (unknown).contains ("\"as\" label"));
+    // Steps sent as text are read; text that isn't steps says what steps are.
+    CHECK_FALSE ((bool)f.call (
+        id, "run_commands",
+        object ({ { "steps", R"([{"command": "project.setTempo", "parameters": {"bpm": 99}}])" } }))["isError"]);
+    const auto text = f.call (id, "run_commands", object ({ { "steps", "make it faster" } }));
+    CHECK (said (text).contains ("list of steps"));
+    // Arguments that aren't an object.
+    const auto bad = f.request (
+        "POST", Fixture::rpc ("tools/call", object ({ { "name", "song_summary" }, { "arguments", 3 } })), id);
+    CHECK ((bool)bad.json["result"]["isError"]);
+}
+
+TEST_CASE ("The live interface checks origins exactly, negotiates the version, and reads chunked bodies",
+           "[ai][agents]")
+{
+    using ai::AgentInterface;
+    CHECK (AgentInterface::isLocalOrigin (""));
+    CHECK (AgentInterface::isLocalOrigin ("http://localhost"));
+    CHECK (AgentInterface::isLocalOrigin ("http://127.0.0.1:6274"));
+    CHECK (AgentInterface::isLocalOrigin ("http://[::1]:3000"));
+    CHECK_FALSE (AgentInterface::isLocalOrigin ("http://localhost.evil.example"));
+    CHECK_FALSE (AgentInterface::isLocalOrigin ("http://127.0.0.1.evil.example"));
+    CHECK_FALSE (AgentInterface::isLocalOrigin ("http://localhost:80@evil.example"));
+    CHECK_FALSE (AgentInterface::isLocalOrigin ("http://localhost:x"));
+    CHECK_FALSE (AgentInterface::isLocalOrigin ("null"));
+
+    Fixture f;
+    f.agents->setEnabled (true);
+    CHECK (f.request ("POST", Fixture::rpc ("initialize"), {}, {}, "http://localhost.evil.example").status == 403);
+    CHECK (f.request ("POST", Fixture::rpc ("initialize"), {}, {}, "http://localhost:6274").status == 200);
+
+    const auto versionFor = [&f] (const juce::String& asked)
+    {
+        return f.request ("POST", Fixture::rpc ("initialize", object ({ { "protocolVersion", asked } })))
+            .json["result"]["protocolVersion"]
+            .toString();
+    };
+    CHECK (versionFor ("2025-06-18") == "2025-06-18");
+    CHECK (versionFor ("1999-01-01") == AgentInterface::supportedProtocolVersions()[0]);
+    CHECK (versionFor ("") == AgentInterface::supportedProtocolVersions()[0]);
+
+    // A body in chunks, put together only when the last chunk has come.
+    const juce::String chunked = "4\r\n{\"a\"\r\n5;x=1\r\n: 12}\r\n0\r\n\r\n";
+    juce::MemoryBlock body;
+    bool malformed = false;
+    CHECK (AgentInterface::decodeChunked (juce::MemoryBlock (chunked.toRawUTF8(), chunked.getNumBytesAsUTF8()), body,
+                                          malformed));
+    CHECK (body.toString() == "{\"a\": 12}");
+    const auto part = chunked.substring (0, 12);
+    CHECK_FALSE (AgentInterface::decodeChunked (juce::MemoryBlock (part.toRawUTF8(), part.getNumBytesAsUTF8()), body,
+                                                malformed));
+    CHECK_FALSE (malformed);
+    const juce::String bad = "zz\r\nabc\r\n";
+    CHECK_FALSE (
+        AgentInterface::decodeChunked (juce::MemoryBlock (bad.toRawUTF8(), bad.getNumBytesAsUTF8()), body, malformed));
+    CHECK (malformed);
+
+    // The token: 32 hex digits, a new one each time, in a file only this user can read.
+    const auto token = f.agents->getToken();
+    CHECK (token.containsOnly ("0123456789abcdef"));
+    f.agents->newToken();
+    CHECK (f.agents->getToken() != token);
+#if ! JUCE_WINDOWS
+    struct stat info {};
+    REQUIRE (::stat (f.folder.root.getChildFile ("agent-interface.json").getFullPathName().toRawUTF8(), &info) == 0);
+    CHECK (((unsigned)info.st_mode & 0777u) == 0600u);
+#endif
+}
+
+TEST_CASE ("With AI off the agent is told only of the tools it has, and told when the music tools come", "[ai][agents]")
+{
+    Fixture f;
+    f.music = false;
+    f.agents->setEnabled (true);
+    const auto started =
+        f.request ("POST", Fixture::rpc ("initialize", object ({ { "clientInfo", object ({ { "name", "T" } }) } })));
+    const auto instructions = started.json["result"]["instructions"].toString();
+    CHECK (instructions.contains ("off because AI is off"));
+    CHECK (started.json["result"]["capabilities"]["tools"]["listChanged"] == juce::var (true));
+    const auto id = started.session;
+
+    const auto toolNames = [&f, &id]
+    {
+        juce::StringArray names;
+        const auto listed = f.request ("POST", Fixture::rpc ("tools/list"), id).json["result"]["tools"];
+        if (auto* tools = listed.getArray())
+            for (auto& t : *tools)
+                names.add (t["name"].toString());
+        return names;
+    };
+    CHECK_FALSE (toolNames().contains ("fake_tempo"));
+    const auto prompt =
+        f.request ("POST",
+                   Fixture::rpc ("prompts/get", object ({ { "name", "start_song" },
+                                                          { "arguments", object ({ { "description", "reggae" } }) } })),
+                   id)
+            .json["result"]["messages"][0]["content"]["text"]
+            .toString();
+    CHECK (prompt.contains ("AI is off"));
+    const auto misspelled = f.call (id, "song_sumary", none());
+    CHECK ((bool)misspelled["isError"]);
+    CHECK (said (misspelled).contains ("what_changed"));
+
+    // AI turned on: the next answer tells the client its tool list changed, then answers.
+    f.music = true;
+    const auto told = f.request ("POST", Fixture::rpc ("ping"), id);
+    CHECK (told.contentType == "text/event-stream");
+    CHECK (told.body.contains ("notifications/tools/list_changed"));
+    CHECK (told.body.contains ("\"result\""));
+    CHECK (f.request ("POST", Fixture::rpc ("ping"), id).contentType != "text/event-stream"); // told once
+    CHECK (toolNames().contains ("fake_tempo"));
+}
+
+TEST_CASE ("The live interface answers a POST without a length with 411, and reads a chunked one", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    REQUIRE (f.agents->isListening());
+    const auto port = f.agents->getPort();
+    const auto token = f.agents->getToken();
+    const auto send = [&] (const juce::String& extraHeaders, const juce::String& body)
+    {
+        juce::String reply;
+        std::atomic<bool> done { false };
+        std::thread client (
+            [&]
+            {
+                juce::StreamingSocket socket;
+                if (socket.connect ("127.0.0.1", port, 5000))
+                {
+                    const auto request = "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer " + token +
+                                         "\r\nContent-Type: application/json\r\n" + extraHeaders + "\r\n" + body;
+                    socket.write (request.toRawUTF8(), (int)request.getNumBytesAsUTF8());
+                    char buffer[4096];
+                    while (socket.waitUntilReady (true, 5000) == 1)
+                    {
+                        const auto n = socket.read (buffer, (int)sizeof (buffer), false);
+                        if (n <= 0)
+                            break;
+                        reply += juce::String::fromUTF8 (buffer, n);
+                    }
+                }
+                done = true;
+            });
+        for (int i = 0; i < 2000 && ! done; ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+        client.join();
+        return reply;
+    };
+    const juce::String body = R"({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})";
+    const auto noLength = send ("Connection: close\r\n", "");
+    INFO (noLength);
+    CHECK (noLength.startsWith ("HTTP/1.1 411"));
+    const auto inChunks =
+        send ("Transfer-Encoding: chunked\r\n",
+              juce::String::toHexString ((int)body.getNumBytesAsUTF8()) + "\r\n" + body + "\r\n0\r\n\r\n");
+    INFO (inChunks);
+    CHECK (inChunks.startsWith ("HTTP/1.1 200 OK"));
+    CHECK (inChunks.contains ("\"serverInfo\""));
 }

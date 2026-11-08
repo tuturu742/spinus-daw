@@ -21,16 +21,32 @@ It uses the same music tools as Spinus's [assistant](assistant.md), plus Spinus'
    (`http://127.0.0.1:47219/mcp`) and a **token**, which works like a password.
 3. Set your agent up with the text shown for it, using **Copy**:
    - **Claude Code:** run the command in a terminal:
-     `claude mcp add --transport http spinus http://127.0.0.1:47219/mcp --header "Authorization: Bearer <token>"`
+     `claude mcp add --scope user --transport http spinus http://127.0.0.1:47219/mcp --header "Authorization: Bearer <token>"`.
+     `--scope user` makes Spinus available in every folder you start Claude Code in. Without it, Claude Code
+     only has Spinus in the folder where you ran the command.
    - **Codex:** add the lines to `~/.codex/config.toml`.
-   - **Cursor:** put the lines in `.cursor/mcp.json`, or merge them into yours.
+   - **Cursor:** put the lines in `~/.cursor/mcp.json` (the `.cursor` folder in your home folder) to have Spinus
+     in every project, or in `.cursor/mcp.json` inside one project's folder to have it there only. If the file
+     is already there, merge the `spinus` entry into its `mcpServers`.
+   - On **Windows** the same text works: run the Claude Code command in PowerShell. Codex's file is
+     `%USERPROFILE%\.codex\config.toml` and Cursor's is `%USERPROFILE%\.cursor\mcp.json`.
 4. Ask your agent for something: "Look at my song in Spinus and add a bridge after the second chorus", "make the
    bass pluckier and duck it under the kick", "check the mix and fix what's muddy".
 
 The music tools (write_part, insert_bars, shape_sound, check...) need AI turned on in Spinus (**Options › AI**).
 They run in Spinus's own AI service on this computer, without any AI connection or internet. With AI off, the
 agent still has Spinus's own tools: the song's summary, Spinus's commands, the devices that can be added, a
-device's presets (plugins too: an agent can load them, and Ctrl+Z undoes it), and render.
+device's presets (plugins too: an agent can load them, and Ctrl+Z undoes it), and render. It's told so when it
+connects, and the ready-made requests tell it how to do their job with those tools.
+
+If you turn AI on or off while an agent is connected, Spinus tells the agent's app that its tools changed, the
+next time the agent asks Spinus anything. Agents that listen for this pick the music tools up then. If your agent
+doesn't show them, reconnect it: in Claude Code, type
+`/mcp`, choose **spinus** and **Reconnect**; in other agents, restart them.
+
+**A Flatpak Spinus and a native Spinus** on the same computer share these settings, including the port and the
+token. Only one of them can have the interface on at a time: the other one says the port is in use. Close one,
+or give one another port.
 
 What the music tools make looks like a song built by hand:
 - **Short patterns:** a part that repeats is one short pattern (1, 2 or 4 bars) placed again and again on the
@@ -68,15 +84,34 @@ the rest. Every change is still one undo step.
 - **The top bar shows "Agent: <name>"** while an agent is connected. Click it for:
   - **Undo the agent's changes:** the song goes back to how it was when the agent connected (your own changes
     since then too).
-  - **Disconnect:** the agent's session ends. It has to connect again to go on.
+  - **Disconnect:** the agent's session ends, and a new starting point for **Undo the agent's changes** begins.
+    This doesn't lock the agent out: most agents connect again by themselves the next time they do something.
+    To stop an agent from working on the song, untick **Let coding agents work on the open project**, or click
+    **New token** (agents set up with the old token can't connect any more).
+- **More than one agent** can be connected at once (two Claude Code windows, or Claude Code and Cursor). The top
+  bar names them all. Each is told about the others' changes as it is told about yours. **Undo the agent's
+  changes** goes back to when the first of them connected.
 - **You can keep working on the song.** The agent is told what you changed (or undid) since it last looked. If
   you changed something, its next change isn't made: it's told what you did, so it can check its change still
   fits, and then makes it.
-- **It can play a part of the song for you:** "play the new chorus" plays that section, looped, in Spinus (song
-  mode, with a loop region over it). The agent doesn't hear it; you do. Press Stop as usual, or ask the agent to
-  stop. Playing doesn't change the song.
+- **Opening another project or starting a new one** (File › Open, File › New) while an agent is connected: the
+  agent stays connected and is told that the song changed, before its next change. **Undo the agent's changes**
+  then only goes back to how the new project was when you opened it.
+- **It can play a part of the song for you:** "play the new chorus" plays that section, looped, in Spinus. Use
+  "Chorus 2" for the second section named Chorus. The agent doesn't hear it; you do. Press Stop as usual, or ask
+  the agent to stop. Playing doesn't change the song, but it switches Spinus to song mode and sets the loop
+  region to the section, and it doesn't put them back afterwards.
 - Rendering to listen takes as long as the song does to render. The agent sees the numbers; you hear the song in
   Spinus as usual.
+
+## What an agent can't do
+
+- **Save, open or start a project.** You do those in Spinus. Save when you like what the agent made.
+- **Load a Drum Machine kit or a Sampler's samples.** Load them in the device's window, then let the agent work
+  with them. A preset that is a kit (such as "Magpie") can't be loaded by an agent either.
+- **Load presets on Spinus's own devices other than 3x Osc.** They have none: the agent changes their settings
+  one by one instead.
+- **Change Spinus's settings** or use files outside the places listed under Safety.
 
 ## Safety
 
@@ -87,7 +122,8 @@ the rest. Every change is still one undo step.
 - **No web pages:** a web page in your browser can't use it.
 - **Files:** an agent can only use files in the project's folder, your sample folders (Browser › Samples) and
   Spinus's starter pack. It can't change Spinus's settings.
-- **Turning it off** (untick it) disconnects the agent at once.
+- **Turning it off** (untick it) disconnects every agent at once, and none can connect until you turn it on
+  again.
 
 If you'd rather agents never touch the open project, leave it off: they can still make songs of their own with
 [Spinus from the command line](command-line.md).

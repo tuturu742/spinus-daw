@@ -684,7 +684,25 @@ juce::var presets (Session& session, int device, const juce::String& find)
         // Spinus's own devices have none, but 3x Osc (its built-in presets); the others are plugins.
         const bool threeOsc = d.kind == model::Device::Kind::stock && d.stockType == "spinus.3x-osc";
         if (d.kind == model::Device::Kind::stock && d.stockType.startsWith ("spinus.") && ! threeOsc)
+        {
+            // Asked for by its id: say why there are none, rather than nothing (which reads as no such device).
+            if (device > 0)
+            {
+                auto note = model::getDeviceDisplayName (d) +
+                            " is one of Spinus's own devices: it has no presets device.loadPreset loads. Change its "
+                            "settings with device.setParameters (spinus --describe " +
+                            d.stockType + " lists them).";
+                if (d.stockType == "spinus.drum-machine")
+                    note << " Its kits load in its window or with spinus --run's loadKit action.";
+                if (d.stockType == "spinus.sampler")
+                    note << " Its samples load in its window or with spinus --run's loadSamples action.";
+                out.add (object ({ { "device", (int)d.id.value },
+                                   { "name", model::getDeviceDisplayName (d) },
+                                   { "presets", juce::Array<juce::var>() },
+                                   { "note", note } }));
+            }
             continue;
+        }
         juce::Array<juce::var> list;
         juce::String problem;
         if (threeOsc)

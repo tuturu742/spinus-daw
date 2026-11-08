@@ -51,26 +51,45 @@ The user turns it on in **Options › AI › Coding agents...** and gives you th
 `http://127.0.0.1:47219/mcp` and a token, sent as `Authorization: Bearer <token>`. For Claude Code:
 
 ```sh
-claude mcp add --transport http spinus http://127.0.0.1:47219/mcp --header "Authorization: Bearer <token>"
+claude mcp add --scope user --transport http spinus http://127.0.0.1:47219/mcp --header "Authorization: Bearer <token>"
 ```
 
+`--scope user` makes it work in every folder, not only the one the command ran in. For Cursor, the lines go in
+`~/.cursor/mcp.json` (every project) or a project's `.cursor/mcp.json`.
+
 It works only on this computer, and the user can **Disconnect** you or **Undo the agent's changes** at any time.
+After Disconnect your client may start a new session; the user keeps an agent out by turning the interface
+off or making a new token. Several agents can be connected at once, each in its own session.
 
 **Spinus's own tools** (always there):
 
 - `song_summary`: tempo, key, length, channels, inserts, patterns, lanes, clips, markers, and what's missing.
 - `run_commands`: `{summary, steps: [{command, params}]}`, run in order as **one** undo step.
-  - `"$1.channel"` uses step 1's result.
+  - `"$1.channel"` uses step 1's result; a step with `"as": "bass"` can be named as `"$bass.channel"`.
   - Automation points may take `text` ("-12 dB").
+  - No `action` steps (`loadKit`, `loadSamples`): kits and samples are loaded by the user in Spinus.
 - `command_help`: one command's parameters, or the list of commands.
 - `list_devices`: instruments and effects that can be added, found by words. Each comes with the device object
   that `channel.add` and `insert.addEffect` take.
 - `render`: an offline render that measures the mix's LUFS and true peak, each section's LUFS (between
   markers), and with `stems: true` each insert's LUFS and how long it sounds. It takes as long as the song.
-- `list_presets`: the presets `device.loadPreset` can load on a device of the song, plugins too.
+- `list_presets`: the presets `device.loadPreset` can load on a device of the song, plugins too. Spinus's own
+  devices other than 3x Osc have none: change their settings with `device.setParameters`.
 - `undo_last`: undoes your last change, if nothing newer came after it.
+- `what_changed`: what the user (or another agent) changed or undid since you last looked, and whether they
+  opened another project.
+- `play`: plays bars (`"9-16"`) or a section by its marker name (`"Chorus"`, `"Chorus 2"` for the second) for
+  the user to hear, looped. It sets the song's loop region and song mode. `stop` stops it.
+
+**The user's edits come first.** If the user changed the song (or opened another project) since you last looked
+(connected, `song_summary`, `song_overview` or `what_changed`), your next change is refused once, with what they
+did. Check that your change still fits, then call again.
+
+You can't save, open or start a project, or change Spinus's settings: ask the user.
 
 **The music tools** need AI turned on in Spinus (**Options › AI**). They run on this computer, with no internet.
+If they're missing from your tools, ask the user to turn AI on; reconnect (`/mcp` in Claude Code) if they still
+don't appear.
 
 | Purpose | Tools |
 |---|---|
