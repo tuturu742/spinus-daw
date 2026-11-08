@@ -162,7 +162,7 @@ private:
     /** The chosen sound of a full arrangement's layer: the Sounds page's for its part, or the index's. */
     std::optional<parts::Plan::Part> chosenForLayer (const song::Layer&);
     /** The song as it goes into the project: each part's notes within the notes its instrument may play
-        (song::keepToRanges, the user's NoteRanges). */
+        (song::keepToRanges, the instruments' profiles). */
     juce::var songForProject();
     /** After writing: each layer's busiest bars played with its sound in the sound helper, measured, and its
         starting fader set from that and its role (song::startingFaders), for Apply. */

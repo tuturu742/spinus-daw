@@ -575,14 +575,14 @@ bool SongWriterPanel::redo (const juce::String& part, const juce::String& sectio
 
 juce::var SongWriterPanel::songForProject()
 {
-    std::map<juce::String, NoteRanges::Range> ranges;
+    std::map<juce::String, PlayableKeys> ranges;
     for (const auto& layer : song::layersOf (song))
         if (const auto chosen = layer.drums || layer.part == "fx" ? std::nullopt : chosenForLayer (layer))
-            if (const auto range = parts::noteRangeFor (chosen->choice, context.indexFolder))
+            if (const auto range = parts::playableFor (chosen->choice, context.indexFolder))
                 ranges[layer.id] = *range;
     for (const auto& part : song::partNames())
         if (const auto* chosen = part == "drums" ? nullptr : chosenFor (context.sounds, part))
-            if (const auto range = parts::noteRangeFor (chosen->choice, context.indexFolder))
+            if (const auto range = parts::playableFor (chosen->choice, context.indexFolder))
                 ranges[part] = *range;
     return song::keepToRanges (song, ranges);
 }

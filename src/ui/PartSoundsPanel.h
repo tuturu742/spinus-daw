@@ -96,10 +96,11 @@ public:
     bool pickSound (int row, const parts::Choice&);
     /** Gives an instrument the user's own role (empty: forgets it), kept beside the sound index. */
     bool markInstrument (const juce::String& instrument, const juce::String& role);
-    /** The notes an instrument may play (NoteRanges; nullopt: any): Listen, Play in Save this sound, the sounds
-        added and the written song keep to them, moving notes by octaves. For instruments whose other keys switch
-        what they play. False when it cannot be saved. */
-    bool setNoteRange (const juce::String& instrument, std::optional<NoteRanges::Range>);
+    /** Learn this instrument (LearnInstrumentWindow): what each of its keys does, mode by mode. Listen, Play in Save
+        this sound, the sounds added and the written song keep to the keys that play, moving notes by octaves.
+        `learned` is called with those keys once the window is saved. */
+    void learnInstrument (const juce::String& instrument, const juce::String& name,
+                          std::function<void (std::optional<PlayableKeys>)> learned = {});
     /** Uses a folder of the instrument's own preset files, or stops using it (PresetFolders, beside the sound
         index). A folder added is measured at once, in the background (its files as the instrument's presets, as
         Update sound index would). False when it is not a folder or cannot be saved. */
@@ -191,7 +192,6 @@ private:
     void showAddMenu();
     void showSuggestMenu();
     void showOtherMenu (int row);
-    juce::PopupMenu noteRangeMenu (const juce::String& instrument, std::optional<NoteRanges::Range> now);
     juce::PopupMenu presetFolderMenu (const SoundSource& instrument);
     /** A sound of the index as a choice of its instrument (Other sound..., a saved sound just measured). */
     parts::Choice choiceOf (const SoundSource&, const juce::var& sound, bool measured) const;

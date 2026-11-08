@@ -1,5 +1,5 @@
 #include "PartSoundsPanel.h"
-#include "NoteRangeMenu.h"
+#include "LearnInstrumentWindow.h"
 #include "SaveSoundWindow.h"
 
 #include "ai/AnalysisJobs.h"
@@ -252,7 +252,8 @@ PartSoundsPanel::PartSoundsPanel (Session& s, std::function<Context()> c) : sess
 
 PartSoundsPanel::~PartSoundsPanel()
 {
-    SaveSoundWindow::closeAll(); // their instruments live in the session's engine
+    SaveSoundWindow::closeAll();       // their instruments live in the session's engine
+    LearnInstrumentWindow::closeAll(); // their saves report back to this panel
     *alive = false;
     *stopping = true;
     task = nullptr; // waits for it (the helper is killed by the stop)
@@ -953,7 +954,7 @@ bool PartSoundsPanel::listen (int index)
     const auto output = work ("listen/" + row.target.id + "-" + juce::String (row.selected) + ".wav");
     output.deleteFile();
     const auto phrase = parts::auditionPhrase (row.target, c, context.summary["tempo"]["median"], context.summary,
-                                               parts::noteRangeFor (c, context.indexFolder));
+                                               parts::playableFor (c, context.indexFolder));
     const auto item = renderItem (row, c, phrase, true, output);
     const auto source =
         c.kind == parts::Choice::Kind::preset || c.kind == parts::Choice::Kind::kit ? c.source : SoundSource {};
@@ -1334,12 +1335,14 @@ void PartSoundsPanel::fillInstrumentMenu (juce::PopupMenu& menu,
         presets.addSubMenu (
             "Mark it as" + (mine.isNotEmpty() ? " (now " + parts::roleName (mine).toLowerCase() + ")" : juce::String()),
             markAs);
-        NoteRanges ranges (context.indexFolder);
-        ranges.load();
-        presets.addSubMenu ("Notes it plays" + (ranges.get (source.key).has_value()
-                                                    ? " (now " + NoteRanges::describe (*ranges.get (source.key)) + ")"
-                                                    : juce::String (" (any)")),
-                            noteRangeMenu (source.key, ranges.get (source.key)));
+        InstrumentProfiles profiles (context.indexFolder);
+        profiles.load();
+        const auto learned = profiles.playable (source.key);
+        presets.addItem ("Learn this instrument..." + (learned.has_value()
+                                                           ? " (plays " + keyName (learned->lowest()) + " to " +
+                                                                 keyName (learned->highest()) + ")"
+                                                           : juce::String()),
+                         [this, key = source.key, name = source.name] { learnInstrument (key, name); });
         // A plugin's own preset files (VST2 plugins keep their state in a bank format Spinus does not write).
         if (source.stockType.isEmpty() && source.format != "VST")
         {
@@ -1396,12 +1399,13 @@ bool PartSoundsPanel::saveSound (int index)
     SaveSoundWindow::Notes playable;
     if (row.target.part != "drums" && start.kind != parts::Choice::Kind::kit)
     {
-        playable.range = parts::noteRangeFor (start, context.indexFolder);
-        playable.onChange = [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
-                             key = parts::instrumentKey (start)] (std::optional<NoteRanges::Range> range)
+        playable.playable = parts::playableFor (start, context.indexFolder);
+        playable.learn = [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
+                          key = parts::instrumentKey (start),
+                          name = start.source.name] (std::function<void (std::optional<PlayableKeys>)> learned)
         {
             if (safe != nullptr)
-                safe->setNoteRange (key, range);
+                safe->learnInstrument (key, name, std::move (learned));
         };
     }
     const auto opened = SaveSoundWindow::open (
@@ -1601,30 +1605,24 @@ bool PartSoundsPanel::markInstrument (const juce::String& instrument, const juce
     return true;
 }
 
-bool PartSoundsPanel::setNoteRange (const juce::String& instrument, std::optional<NoteRanges::Range> range)
+void PartSoundsPanel::learnInstrument (const juce::String& instrument, const juce::String& name,
+                                       std::function<void (std::optional<PlayableKeys>)> learned)
 {
     context = getContext ? getContext() : Context {};
-    NoteRanges ranges (context.indexFolder);
-    ranges.load();
-    ranges.set (instrument, range);
-    if (! ranges.save())
-        return false;
-    status.setText (range.has_value() ? "It plays only " + NoteRanges::describe (*range) +
-                                            " now: Listen, Save this sound's Play and the song keep to them."
-                                      : juce::String ("It plays any note again."),
-                    juce::dontSendNotification);
-    return true;
-}
-
-juce::PopupMenu PartSoundsPanel::noteRangeMenu (const juce::String& instrument, std::optional<NoteRanges::Range> now)
-{
-    return makeNoteRangeMenu (now,
-                              [safe = juce::Component::SafePointer<PartSoundsPanel> (this),
-                               instrument] (std::optional<NoteRanges::Range> range)
-                              {
-                                  if (safe != nullptr)
-                                      safe->setNoteRange (instrument, range);
-                              });
+    LearnInstrumentWindow::open (
+        context.indexFolder, instrument, name, getTopLevelComponent(),
+        [safe = juce::Component::SafePointer<PartSoundsPanel> (this), name,
+         learned = std::move (learned)] (std::optional<PlayableKeys> keys)
+        {
+            if (learned)
+                learned (keys);
+            if (safe != nullptr)
+                safe->status.setText (keys.has_value() ? name + " plays " + keys->describe() +
+                                                             " now: Listen, Save this sound's Play and the song keep "
+                                                             "to those keys."
+                                                       : name + " plays any note: which keys play is not known.",
+                                      juce::dontSendNotification);
+        });
 }
 
 bool PartSoundsPanel::usePresetFolder (const SoundSource& instrument, const juce::File& folder, bool use)
@@ -1788,7 +1786,7 @@ parts::Plan PartSoundsPanel::makePlan() const
         part.tuned = row.tuned;
         part.effects = row.effects;
         part.volumeDb = row.volumeDb;
-        part.notes = parts::noteRangeFor (part.choice, context.indexFolder);
+        part.notes = parts::playableFor (part.choice, context.indexFolder);
         plan.parts.push_back (std::move (part));
     }
     plan.master = master;

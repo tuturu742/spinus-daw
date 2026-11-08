@@ -660,35 +660,78 @@ TEST_CASE ("Sounds per part: an audition phrase in the part's key and register",
     CHECK (std::count_if (gm.begin(), gm.end(), [] (const auto& n) { return n.note == 42; }) == 16);
 }
 
-TEST_CASE ("Sounds per part: the notes an instrument may play keep its phrases off its switching keys",
-           "[sounds][parts]")
+TEST_CASE ("Sounds per part: the keys an instrument plays keep its phrases off its switching keys", "[sounds][parts]")
 {
     // Folding by octaves: inside stays, outside moves to its nearest octave inside; a range under an octave clamps.
-    const NoteRanges::Range guitar { 40, 76 };
-    CHECK (NoteRanges::fit (52, guitar) == 52);
-    CHECK (NoteRanges::fit (28, guitar) == 40);
-    CHECK (NoteRanges::fit (24, guitar) == 48);
-    CHECK (NoteRanges::fit (90, guitar) == 66);
-    CHECK (NoteRanges::fit (30, { 40, 45 }) == 42);
-    CHECK (NoteRanges::fit (37, { 40, 45 }) == 40);
-    CHECK (NoteRanges::describe (guitar) == "E3 to E6");
+    const auto guitar = PlayableKeys::between (40, 76);
+    CHECK (guitar.fit (52) == 52);
+    CHECK (guitar.fit (28) == 40);
+    CHECK (guitar.fit (24) == 48);
+    CHECK (guitar.fit (90) == 66);
+    CHECK (PlayableKeys::between (40, 45).fit (30) == 42);
+    CHECK (PlayableKeys::between (40, 45).fit (37) == 40);
+    CHECK (guitar.describe() == "E3 to E6");
+    // A switch key inside the range: a note on it moves by an octave onto one that plays.
+    auto holed = guitar;
+    holed.keys.reset (52);
+    CHECK (holed.fit (52) == 64);
+    CHECK (holed.fit (64) == 64);
+    CHECK (holed.describe() == "E3 to E6, 1 key between does not play");
 
-    // Kept beside the index, by instrument, and forgotten when set to any note.
-    const auto root = juce::File::createTempFile ("noteranges");
+    // Kept beside the index, by instrument, and forgotten when set to nothing.
+    const auto root = juce::File::createTempFile ("profiles");
     const auto indexFolder = root.getChildFile ("sound-index");
     {
-        NoteRanges ranges (indexFolder);
-        ranges.set ("ample-metal", guitar);
-        REQUIRE (ranges.save());
+        InstrumentProfiles profiles (indexFolder);
+        InstrumentProfiles::Mode normal;
+        normal.setKeys (40, 76, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+        normal.setKeys (24, 24, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+        InstrumentProfiles::Mode strummer;
+        strummer.name = "Strummer";
+        strummer.enterKey = 85;
+        strummer.goodFor = "strummed rhythm";
+        strummer.voices = InstrumentProfiles::Voices::chords;
+        profiles.set ("ample-metal", InstrumentProfiles::Profile { { normal, strummer } });
+        REQUIRE (profiles.save());
     }
-    CHECK (NoteRanges::fileIn (indexFolder).existsAsFile());
+    CHECK (InstrumentProfiles::fileIn (indexFolder).existsAsFile());
+    {
+        InstrumentProfiles profiles (indexFolder);
+        profiles.load();
+        const auto profile = profiles.get ("ample-metal");
+        REQUIRE (profile.has_value());
+        REQUIRE (profile.value().modes.size() == 2);
+        CHECK (profile.value().modes[0].keys[24].what == "palm mute");
+        CHECK (profile.value().modes[0].keys[24].job == InstrumentProfiles::Job::switches);
+        CHECK (profile.value().modes[1].name == "Strummer");
+        CHECK (profile.value().modes[1].enterKey == 85);
+        CHECK (profile.value().modes[1].voices == InstrumentProfiles::Voices::chords);
+        CHECK_FALSE (profile.value().modes[1].playable().has_value());
+        CHECK (InstrumentProfiles::fromVar (InstrumentProfiles::toVar (profile.value())) == profile);
+    }
     Choice choice;
     choice.kind = Choice::Kind::preset;
     choice.instrument = "ample-metal";
-    const auto found = noteRangeFor (choice, indexFolder);
-    CHECK (found == std::optional<NoteRanges::Range> (guitar));
+    const auto found = playableFor (choice, indexFolder);
+    CHECK (found == std::optional<PlayableKeys> (guitar));
     choice.kind = Choice::Kind::kit;
-    CHECK_FALSE (noteRangeFor (choice, indexFolder).has_value()); // a kit's notes are its drums
+    CHECK_FALSE (playableFor (choice, indexFolder).has_value()); // a kit's notes are its drums
+
+    // Notes it plays, set before profiles: read in as the first mode's playing keys, the old file gone once saved.
+    {
+        const auto older = root.getChildFile ("older").getChildFile ("sound-index");
+        InstrumentProfiles::oldNotesFileIn (older).create();
+        InstrumentProfiles::oldNotesFileIn (older).replaceWithText (
+            R"({"version": 1, "ranges": {"ample-bass": {"low": 28, "high": 55}}})");
+        InstrumentProfiles profiles (older);
+        profiles.load();
+        CHECK (profiles.playable ("ample-bass") == std::optional<PlayableKeys> (PlayableKeys::between (28, 55)));
+        REQUIRE (profiles.save());
+        CHECK_FALSE (InstrumentProfiles::oldNotesFileIn (older).exists());
+        InstrumentProfiles again (older);
+        again.load();
+        CHECK (again.playable ("ample-bass").has_value());
+    }
 
     // The bass phrase, low in E minor, played on it: every note inside, the tune's shape kept by octaves.
     const auto summary =
