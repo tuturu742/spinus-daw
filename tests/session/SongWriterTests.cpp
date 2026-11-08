@@ -591,13 +591,25 @@ TEST_CASE ("Song writer: each part starts at its role's level, from how loud its
     }
     CHECK (loudest == Catch::Approx (0.0));
     CHECK (song::roleLevelDb ("pad") < song::roleLevelDb ("bass"));
-    CHECK (song::roleLevelDb ("vocals") < song::roleLevelDb ("lead"));      // the stand-in for the voice sits back
+    CHECK (song::roleLevelDb ("vocals") > song::roleLevelDb ("lead"));      // the sung tune leads
     CHECK (song::startingFaders (layers, { { "drums", -100.0 } }).empty()); // silent: not measured
     // A part that measures very quiet (sparse hits) reaches 0 dB at most: the drums and bass stay where they are.
     const auto sparse = song::startingFaders (layers, { { "drums", -20.0 }, { "bass", -22.0 }, { "pad", -50.0 } });
     CHECK (sparse.at ("pad") == Catch::Approx (0.0));
     CHECK (sparse.at ("bass") == Catch::Approx (0.0));
     CHECK (sparse.at ("drums") == Catch::Approx (faders.at ("drums")));
+    // A second bass the meter hears as very quiet (a sub-heavy sound) reaches 0 dB at most too: it does not pull
+    // the drums and the other basses down with it.
+    auto basses = layers;
+    song::Layer second;
+    second.id = "bass-2";
+    second.role = "bass";
+    basses.push_back (second);
+    const auto quietBass =
+        song::startingFaders (basses, { { "drums", -20.0 }, { "bass", -22.0 }, { "bass-2", -45.0 }, { "pad", -8.0 } });
+    CHECK (quietBass.at ("bass-2") == Catch::Approx (0.0));
+    CHECK (quietBass.at ("drums") == Catch::Approx (faders.at ("drums")));
+    CHECK (quietBass.at ("bass") == Catch::Approx (faders.at ("bass")));
 
     // Apply sets them on the layers' inserts, in the same one undo step.
     commands::CommandHistory history { model::Project {} };

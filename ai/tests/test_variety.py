@@ -26,12 +26,12 @@ SEEDS = range(30)
 # `variety` and the vocabulary's order among chords heard as often, which is Python's set order): balanced must
 # write exactly these.
 BEFORE = {
-    ("sketch", 0): "a4215dda3746967f", ("sketch", 1): "68bd5a635587781e", ("sketch", 2): "2bb21c7e165a5ecc",
-    ("sketch", 3): "e8f94267d4259578", ("sketch", 4): "53e676cf16dfd910", ("sketch", 5): "54db441a2871080f",
-    ("sketch", 6): "62ee3b611a9e6570", ("sketch", 7): "bd2b0534aa3b0fae",
-    ("full", 0): "f1db8468d7dfb43b", ("full", 1): "d473cfd5f0258edb", ("full", 2): "46641a8c9429cc45",
-    ("full", 3): "89da7e5a3ae2ffd4", ("full", 4): "f335614b99edda52", ("full", 5): "4a4881197eaa309c",
-    ("full", 6): "0e4497f9dbd5e015", ("full", 7): "3355851378369970",
+    ("sketch", 0): "c438badc268246e9", ("sketch", 1): "62fb2662a3ba683e", ("sketch", 2): "7fbb8bbec91120fd",
+    ("sketch", 3): "044eee6be3f4716f", ("sketch", 4): "202f76f3266c8891", ("sketch", 5): "715905125a062292",
+    ("sketch", 6): "cb199aa8a639a411", ("sketch", 7): "7d4894388ffcf5c2",
+    ("full", 0): "3b6876c848a48940", ("full", 1): "0d975f1b379e59c0", ("full", 2): "e4f5e425e8a06bd4",
+    ("full", 3): "8482122bfa366c6e", ("full", 4): "9864e5de673bff5e", ("full", 5): "271d0531243ecafc",
+    ("full", 6): "4a406d58bcf98b11", ("full", 7): "d607fc68a3d55359",
 }  # fmt: skip
 
 
@@ -135,8 +135,8 @@ async def test_the_service_takes_the_variety_and_refuses_an_unknown_one(tmp_path
     service = make_service(tmp_path, lambda request: None)  # no AI connection: nothing is sent
     s = summary()
     song = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "variety": "close"})
-    assert song == sw.write(s, 4, variety="close")
-    assert await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4}) == sw.write(s, 4)
+    assert song == sw.lift_last_chorus(sw.write(s, 4, variety="close"))
+    assert await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4}) == sw.lift_last_chorus(sw.write(s, 4))
     redone = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 5, "song": song,
                                                          "redo": {"part": "lead"}})  # fmt: skip
     assert redone["variety"] == "close"

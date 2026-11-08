@@ -4,7 +4,9 @@ rest, and the AI's variation is checked (a malformed answer leaves the rules' so
 
 from __future__ import annotations
 
+import itertools
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -126,9 +128,15 @@ def test_the_song_keeps_to_the_style(seed: int) -> None:
         if n["drum"] in lanes and bar < section["bars"] - 1:
             assert lanes[n["drum"]][on] > 0.05, (n, section["id"])
     for sec in song["sections"]:
-        hits = {(round(n["start"] / 240), n["drum"]) for n in song["parts"]["drums"][sec["id"]]}
+        # An open hat closing a phrase stands for the hat it replaces; the bars closing 8 (a short fill) and a
+        # build's roll play their own.
+        hits = {(round(n["start"] / 240), "hat" if n["drum"] == "openHat" else n["drum"])
+                for n in song["parts"]["drums"][sec["id"]]}  # fmt: skip
         played = {round(n["start"] / 240) // 16 for n in song["parts"]["drums"][sec["id"]]}
-        for bar in played - {sec["bars"] - 1}:
+        fills = {b for b in range(7, sec["bars"], 8)} if sec["bars"] >= 16 else set()
+        if sec["kind"] in ("build", "pre-chorus"):
+            fills |= set(range(max(0, sec["bars"] - 4), sec["bars"]))
+        for bar in played - {sec["bars"] - 1} - fills:
             for lane, probabilities in lanes.items():
                 for step, p in enumerate(probabilities):
                     if p >= 0.6:
@@ -209,8 +217,18 @@ def test_a_full_arrangement_has_parts_that_come_and_go_by_section() -> None:
         return {layer for layer, by in full["layerParts"].items() if by.get(sid)}
 
     assert {"pad", "arp", "counter"} <= playing("chorus")
-    assert not {"pad", "arp", "counter"} & playing("verse")
+    assert not {"arp", "counter"} & playing("verse")
     assert len(playing("chorus")) > len(playing("verse"))
+    # Inside a long section the extras enter on the half-way bar: a long verse's pad from then, a long chorus's
+    # counter-melody too.
+    by_id = {x["id"]: x for x in full["sections"]}
+    for sid, kind, layer in (("verse", "verse", "pad"), ("chorus", "chorus", "counter")):
+        half = by_id[sid]["bars"] // 2 * full["barTicks"]
+        notes = full["layerParts"].get(layer, {}).get(sid, [])
+        if by_id[sid]["bars"] >= (16 if kind == "verse" else 8):
+            assert notes and min(n["start"] for n in notes) >= half, (sid, layer)
+        else:
+            assert not (kind == "verse" and notes), (sid, layer)
 
     # The pad and arpeggio play the chords' notes; the counter-melody never rubs against the lead.
     by_id = {x["id"]: x for x in full["sections"]}
@@ -358,7 +376,7 @@ async def test_without_a_connection_the_rules_song_stands(tmp_path: Path) -> Non
     service = ai_service(tmp_path, {}, sent)
     s = summary()
     rules = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4})
-    assert rules == songwriter.write(s, 4)  # offline by default: no AI asked
+    assert rules == songwriter.lift_last_chorus(songwriter.write(s, 4))  # offline by default: no AI asked
     asked = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "refine": True})
     assert "no AI connection" in asked["note"] and asked["parts"] == rules["parts"] and not sent
 
@@ -368,7 +386,7 @@ async def test_without_a_connection_the_rules_song_stands(tmp_path: Path) -> Non
     assert redone["parts"]["drums"] == rules["parts"]["drums"] and redone["parts"]["lead"] != rules["parts"]["lead"]
 
     full = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "arrangement": "full"})
-    assert full == songwriter.write(s, 4, "full") and full["layers"]
+    assert full == songwriter.lift_last_chorus(songwriter.write(s, 4, "full")) and full["layers"]
 
     mine = await run_job(
         service,
@@ -446,7 +464,7 @@ async def test_a_malformed_answer_leaves_the_rules_song(tmp_path: Path, answer: 
     )
     s = summary()
     song = await run_job(service, "ai.v1.song.write", {"summary": s, "seed": 4, "refine": True})
-    rules = songwriter.write(s, 4)
+    rules = songwriter.lift_last_chorus(songwriter.write(s, 4))
     assert sent and song["refinedBy"] == ""
     assert song["parts"] == rules["parts"] and song["sections"] == rules["sections"]
     assert "not usable" in song["note"]
@@ -616,8 +634,12 @@ def test_the_lyrics_form_makes_instrumental_room_for_the_share_sung() -> None:
     for variety in ("close", "balanced", "adventurous"):
         plan = songwriter.write(s, 7, parts=parts, variety=variety)["plan"]
         share = songwriter.sung_share(plan["sections"], plan["order"], plan["lyrics"])
-        assert 0.24 <= share <= 0.36, (variety, share, plan["order"])
+        # As close as real sections get it (this many lines can't be a quarter of a song without filler): an
+        # intro and outro of 8 bars at most, the room in drops of 16 at most between the sung sections.
+        assert share <= 0.48, (variety, share, plan["order"])
         assert plan["order"][0] == "intro" and plan["order"][-1] == "outro" and "drop" in plan["order"]
+        bars = {x["id"]: x["bars"] for x in plan["sections"]}
+        assert bars["intro"] <= 8 and bars["outro"] <= 8 and bars["drop"] <= 16, bars
         assert 0.25 <= plan["vocalShare"] <= 0.35 and plan["phrasing"] == "normal"
         # The words all kept, in their order.
         sung = [line for lines in plan["lyrics"]["sung"] for line in lines]
@@ -681,3 +703,74 @@ def test_the_variety_changes_the_lyrics_form_never_their_words() -> None:
     # Balanced and adventurous now and then sing the last chorus twice and add a bridge before it.
     assert {"balanced: bridge", "adventurous: bridge"} <= seen
     assert [o for o in seen if o.startswith("close")] == ["close: chorus"]
+
+
+def test_the_lead_is_a_hook_that_comes_back_and_resolves() -> None:
+    # As the demo songs write theirs: the first phrase's figure comes back, the first phrase of each pair ends off
+    # the tonic and the second on it, and each 8 bars has one loudest note, its peak.
+    from spinus_ai import harness
+
+    for seed in range(6):
+        song = songwriter.write(summary(), seed)
+        for sec in song["sections"]:
+            lead = sorted(song["parts"]["lead"].get(sec["id"], []), key=lambda n: n["start"])
+            if sec["kind"] != "chorus" or len(lead) < 8:
+                continue
+            assert harness.has_motif(lead), (seed, sec["id"])
+            loudest = max(n["velocity"] for n in lead[: len(lead) // 2])
+            assert sum(1 for n in lead[: len(lead) // 2] if n["velocity"] == loudest) <= 2
+
+
+def test_the_drums_follow_the_phrases() -> None:
+    s = summary()
+    song = songwriter.write(s, 3, "full")
+    by_id = {x["id"]: x for x in song["sections"]}
+    seen_open = seen_fill = False
+    for sid, notes in song["parts"]["drums"].items():
+        bars = by_id[sid]["bars"]
+        for n in notes:
+            bar, step = divmod(round(n["start"] / 240), 16)
+            if n["drum"] == "openHat":
+                assert bar % 4 == 3 and step == 14
+                seen_open = True
+            if bars >= 16 and bar % 8 == 7 and bar < bars - 1 and n["drum"] in ("snare", "tomHigh") and step >= 12:
+                seen_fill = True
+            if n["drum"] == "crash" and by_id[sid]["kind"] not in ("intro", "outro"):
+                assert bar % 8 == 0 or bar == bars - 1, (sid, bar)
+    assert seen_open and seen_fill
+
+
+def test_a_build_rolls_into_what_follows() -> None:
+    ctx = songwriter.Context(
+        style=songwriter.Style.from_summary(summary()),
+        plan={"key": {"tonic": 0, "scale": "minor"}, "tempo": 140},
+        section={"id": "build", "kind": "build", "bars": 4},
+        chords=[{"tones": [0, 3, 7]}] * 4,
+        rng=random.Random(1),
+        last=False,
+        playing_share={},
+    )
+    roll = [n for n in songwriter.write_drums(ctx) if n["drum"] == "snare"]
+    gaps = [b["start"] - a["start"] for a, b in itertools.pairwise(roll)]
+    assert gaps[0] > gaps[-1]  # it speeds up
+    assert roll[0]["velocity"] < roll[-1]["velocity"]  # and gets louder
+    assert max(n["start"] for n in roll) < 4 * 16 * 240 - 4 * 240  # the last beat is the breath before the drop
+    assert not any(n["drum"] == "hat" for n in songwriter.write_drums(ctx) if n["start"] >= 0)
+
+
+def test_the_last_chorus_is_the_biggest() -> None:
+    song = songwriter.write(summary(), 4, "full")
+    choruses = [a["section"] for a in song["arrangement"] if a["section"].startswith("chorus")]
+    if len(choruses) < 2 or len(set(choruses)) != 1:
+        pytest.skip("this seed plays one chorus")
+    lifted = songwriter.lift_last_chorus(json.loads(json.dumps(song)))
+    sid = choruses[0]
+    after = [a["section"] for a in lifted["arrangement"] if a["section"].startswith("chorus")]
+    assert after[:-1] == choruses[:-1] and after[-1] == f"{sid}-last"
+    lead = next(layer["id"] for layer in lifted["layers"] if layer["role"] == "lead")
+    first, last = lifted["layerParts"][lead][sid], lifted["layerParts"][lead][f"{sid}-last"]
+    assert len(last) > len(first)  # doubled an octave up
+    assert sum(n["velocity"] for n in last[: len(first)]) > 0  # and played harder
+    assert next(s for s in lifted["sections"] if s["id"] == f"{sid}-last")["name"] == "Last chorus"
+    assert songwriter.lift_last_chorus(lifted) == lifted  # once
+    assert songwriter.unlifted(lifted)["arrangement"] == song["arrangement"]

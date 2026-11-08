@@ -882,7 +882,7 @@ double roleLevelDb (const juce::String& role)
         { "lead-guitar", -2.0 },
         { "clean-guitar", -4.0 },
         { "acoustic-guitar", -4.0 },
-        { "vocals", -6.0 }, // an instrument standing in for the voice: a guide under the lead, not its loudest part
+        { "vocals", -1.0 }, // the sung tune (an instrument standing in for the voice) sits on top of the mix
         { "lead", -2.0 },
         { "counter", -5.0 },
         { "chords", -5.0 },
@@ -911,9 +911,9 @@ std::map<juce::String, double> startingFaders (const std::vector<Layer>& layers,
             faders[layer.id] = roleLevelDb (layer.role) - m->second;
     if (faders.empty())
         return faders;
-    // Anchored on the song's core, the drums and bass (else the middle part): they sit at 0 dB. A part that would
-    // need more than they do (a sparse percussion part measures quiet) only reaches 0 dB too, rather than pulling
-    // every other fader down with it.
+    // Anchored on the song's core, the drums and basses (else every part): the middle of what they need sits at
+    // 0 dB. A part that would need more (a sparse percussion part, or a sub-heavy bass the meter hears as quiet)
+    // only reaches 0 dB too, rather than pulling every other fader down with it.
     std::vector<double> core, all;
     for (const auto& layer : layers)
         if (const auto f = faders.find (layer.id); f != faders.end())
@@ -922,8 +922,9 @@ std::map<juce::String, double> startingFaders (const std::vector<Layer>& layers,
             if (layer.drums || layer.role == "drums" || layer.role == "bass" || layer.role == "sub")
                 core.push_back (f->second);
         }
-    std::sort (all.begin(), all.end());
-    const auto anchor = core.empty() ? all[all.size() / 2] : *std::max_element (core.begin(), core.end());
+    auto& from = core.empty() ? all : core;
+    std::sort (from.begin(), from.end());
+    const auto anchor = from[from.size() / 2];
     for (auto& [id, db] : faders)
         db = juce::jlimit (-30.0, 0.0, std::round ((db - anchor) * 10.0) / 10.0);
     return faders;

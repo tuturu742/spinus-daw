@@ -5,6 +5,26 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: songs that sound written, not generated
+
+- Songs with lyrics no longer get filler. Round 2's songs had long copied intros and outros (sometimes two of each)
+  to leave room for instruments. Now the AI writes that room as real sections with their own music, and Spinus's
+  own writer keeps intros and outros to 8 bars and puts breaks and drops between the sung parts.
+- The instrument standing in for the voice is back on top of the mix.
+- Taught by Spinus's demo songs: the lead is a hook that comes back and resolves, with its peak note loudest; the
+  drums follow the phrases (an open hi-hat closing each 4 bars, a fill closing each 8, a crash opening the next,
+  builds rolling into drops, outros fading).
+- Parts come in as the song builds: in long choruses and verses some parts join halfway through instead of all at
+  the first bar.
+- The last chorus is the biggest: Spinus's writer plays it a little harder, doubles its lead an octave up and adds
+  a crash at its middle (**Last chorus** on the Playlist).
+- The AI writer is told how the demo songs do it, and **check** now tells it when a song sounds generated: a chorus
+  played the same every time, a lead with no figure that comes back, a part with every note at one velocity, or
+  drums looping one bar through a long section.
+- No more automation fighting itself: an automation clip can't move what another moves on the same part over the
+  same bars, and a transition placed twice adds no second clip.
+- Starting levels: one part that measures oddly quiet (a sub-heavy bass) no longer pulls every other fader down.
+
 ### Track creator: Learn this instrument
 
 - **Strummer modes**: an instrument that plays chords from its chord keys (a guitar strummer) can now be used

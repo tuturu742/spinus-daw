@@ -292,15 +292,16 @@ order:
 much less of a drum and bass or dubstep track, where drops and instrumental stretches carry it. Once lyrics are
 read, a slider under the lyrics box shows the genre's range, "Sung: 10% to 70% (the genre's range)". The writer
 picks a share inside it (a different one from song to song, unless the variety is Close, which takes the middle)
-and makes room for the rest: an instrumental intro or outro, a break, solo or drop after a chorus, longer
-instrumental sections. Your lines are never cut or reordered for it. Drag either end to set your own range (the two
+and makes room for the rest with real sections: an instrumental intro or outro of up to 8 bars, a break, solo or
+drop after a chorus and between sung sections, each up to 16 bars. It stops there rather than stretch a song with
+filler, so lyrics with many lines may stay above the range. Your lines are never cut or reordered for it. Drag either end to set your own range (the two
 ends stay at least 5% apart); **Genre's range** puts the genre's back. Spinus remembers it with the description.
 The writer also phrases the lines the way the genre does: at the normal pace, stretched over the half-time feel
 (drum and bass, dubstep), or in a fast flow (hip hop, drill). With the AI as the writer, it chooses the share and
-the phrasing within the range, and Spinus lengthens its instrumental sections if too much of its form is sung.
+the phrasing within the range; if too much of its form is sung, Spinus asks it to add instrumental sections and
+write their music (Spinus adds no bars of its own).
 
-The instrument standing in for the voice starts quieter than the lead (6 dB under the song's starting level):
-it guides the tune rather than carrying it.
+The instrument standing in for the voice starts on top of the mix, like a singer: it carries the tune.
 
 Tick **This song has no vocals** for an instrumental song: the lyrics
 stay in the box but are not read. Spinus remembers the lyrics and the tick with the description. With **Let the
@@ -655,7 +656,9 @@ anywhere and no AI connection is needed.
   sometimes a step higher or lower; minor or major as often as your songs are.
 - **Sections**: an intro, verses, choruses, a bridge and an outro, about as many as your songs have and
   about as long, each 4, 8, 12, 16... bars as your songs' sections are. A chorus is the same each time
-  (one pattern), so you can change it once.
+  (one pattern), so you can change it once, except the last one: **Last chorus** is its own pattern, the
+  chorus played a little harder, its lead doubled an octave up and a crash at its middle, so the song ends on
+  its biggest moment. **The chorus again** writes both.
   When your AI connection writes the song, a section can be any of the kinds songwriters and song
   generators name: **Intro, Verse, Pre-Chorus, Chorus, Post-Chorus, Hook, Bridge, Break, Breakdown, Build,
   Drop, Interlude, Instrumental, Solo, Outro, End** and **Fade Out**. Each has its usual energy (a drop is as
@@ -666,15 +669,24 @@ anywhere and no AI connection is needed.
   chord to the next: new combinations, not a copy of one of your songs (a loop that one song plays as its
   own is used at most once).
 - **Drums**: the kick, snare and hi-hats on the steps your songs play them, on one drums channel, a few
-  extra hits by chance (fewer in quiet sections), a fill at the end of each section and a crash at the
-  start of the next.
+  extra hits by chance (fewer in quiet sections). They follow the phrases as a drummer does: a variation on
+  the 4th bar of each 4, an open hi-hat closing each 4 bars, a short fill closing each 8 and a crash opening
+  the next, a fill at the end of each section. The hi-hats are louder on the beat than between beats. A
+  build or pre-chorus ends in a snare roll that speeds up and gets louder, with a beat of silence before
+  what follows; an outro fades bar by bar.
 - **Bass**: the chords' roots, sometimes the fifth or the octave and a step leading into the next chord,
   where the kick plays most, as low and as busy as your songs' bass.
 - **Chords part**: the chords played as high and as busy as your songs' other instruments, each chord
   close to the one before.
-- **Lead**: short phrases that answer each other, in your songs' vocal range and about as many notes a bar,
-  with the chord's own notes on the strong beats and in the key in between. Only the style is used: your
+- **Lead**: a hook rather than a string of notes. Its first phrase is a figure that comes back (the same
+  notes, fitted to the chords), then the figure a step higher, then the figure again. The first phrase of
+  each pair ends open and the second comes home to the key's note. The highest note of every 8 bars is
+  played loudest. It stays in your songs' vocal range at about as many notes a bar, with the chord's own
+  notes on the strong beats. Only the style is used: your
   songs' melodies are never read (the summary has none).
+- **Parts come in as the song builds**: in a long chorus the counter-melody, brass and woodwinds (and the
+  arpeggio, from 16 bars) join halfway through; in a long verse a pad and the percussion join halfway, leading
+  into the chorus.
 - **The other roles** play as their instruments do (see the table on
   [Sounds for each part](#sounds-for-each-part)): power-chord chugs for a metal rhythm guitar, strummed
   open chords for an acoustic one, two hands for the piano, held chords for strings and organ, stabs for
