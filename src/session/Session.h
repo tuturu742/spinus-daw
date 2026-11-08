@@ -210,6 +210,10 @@ public:
     /** A device's window title: its name and where it is, e.g. "Hall Reverb - 4 Reverb". */
     juce::String getDeviceTitle (model::DeviceId) const;
 
+    /** The song's title and author for exported files' tags: a saved project without a title of its own gets
+        its name (the folder's) as the title. */
+    model::ProjectSettings getSongInfo() const;
+
     /** An export of the current project (with the devices' current settings), ready to start(). */
     std::unique_ptr<engine::ExportJob>
     createExportJob (const juce::File& destination, engine::ExportSettings,

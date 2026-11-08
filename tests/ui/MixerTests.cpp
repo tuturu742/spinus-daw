@@ -173,6 +173,91 @@ TEST_CASE ("Routing: output, sends, and refused feedback loops", "[ui][mixer]")
     CHECK (f.insert (drums).sends.empty());
 }
 
+TEST_CASE ("+ Send greys out the insert it already plays into and loops", "[ui][mixer]")
+{
+    MixerFixture f;
+    REQUIRE (f.mixer.addInsert());
+    REQUIRE (f.mixer.addInsert());
+    REQUIRE (f.mixer.addInsert());
+    const auto drums = f.project().mixer.inserts[0].id;
+    const auto bus = f.project().mixer.inserts[1].id;
+    const auto reverb = f.project().mixer.inserts[2].id;
+
+    auto find = [&] (model::InsertId from, model::InsertId to) -> std::optional<Mixer::SendTarget>
+    {
+        for (const auto& target : f.mixer.getSendTargets (from))
+            if (target.insert == to)
+                return target;
+        return std::nullopt;
+    };
+
+    // Drums plays into the Master: a send there would only make it louder.
+    const auto master = find (drums, model::masterInsertId);
+    REQUIRE (master.has_value());
+    CHECK (! master.value().allowed);
+    CHECK (master.value().text.contains ("already plays into it"));
+    CHECK (find (drums, bus).value().allowed);
+    CHECK (! find (drums, drums).has_value()); // never itself
+
+    // Into the bus instead: the bus is greyed out, the Master is fine; the bus can't send back (a loop).
+    REQUIRE (f.mixer.setOutput (drums, bus));
+    CHECK (! find (drums, bus).value().allowed);
+    CHECK (find (drums, model::masterInsertId).value().allowed);
+    const auto back = find (bus, drums);
+    REQUIRE (back.has_value());
+    CHECK (! back.value().allowed);
+    CHECK (back.value().text.contains ("loop"));
+
+    // An existing send is not offered again.
+    REQUIRE (f.mixer.setSend (drums, reverb, -6.0));
+    CHECK (! find (drums, reverb).has_value());
+
+    // The Master sends nowhere: everything plays into it.
+    for (const auto& target : f.mixer.getSendTargets (model::masterInsertId))
+        CHECK (! target.allowed);
+}
+
+TEST_CASE ("Faders and knobs show their value; a fader all the way down is silence", "[ui][mixer]")
+{
+    CHECK (Mixer::volumeText (Mixer::silentDb) == "-inf dB");
+    CHECK (Mixer::volumeText (-3.46) == "-3.5 dB");
+    CHECK (Mixer::volumeText (-0.01) == "0.0 dB");
+    CHECK (Mixer::volumeText (2.0) == "+2.0 dB");
+    CHECK (Mixer::panText (0.0) == "Centre");
+    CHECK (Mixer::panText (-0.3) == "30% L");
+    CHECK (Mixer::panText (1.0) == "100% R");
+
+    MixerFixture f;
+    REQUIRE (f.mixer.addInsert());
+    f.mixer.updateNow();
+    const auto id = f.project().mixer.inserts[0].id;
+
+    // The strips' faders and knobs: from silence, with their value as text.
+    std::vector<juce::Slider*> faders, knobs;
+    std::function<void (juce::Component&)> collect = [&] (juce::Component& c)
+    {
+        if (auto* slider = dynamic_cast<juce::Slider*> (&c))
+            (slider->getSliderStyle() == juce::Slider::LinearVertical ? faders : knobs).push_back (slider);
+        for (auto* child : c.getChildren())
+            collect (*child);
+    };
+    collect (f.mixer);
+    REQUIRE (faders.size() == 2); // the Master's and the insert's
+    for (auto* fader : faders)
+    {
+        CHECK (juce::approximatelyEqual (fader->getMinimum(), Mixer::silentDb));
+        CHECK (fader->getTextFromValue (Mixer::silentDb) == "-inf dB");
+        CHECK (fader->getTextFromValue (-6.0) == "-6.0 dB");
+    }
+    REQUIRE (! knobs.empty());
+    CHECK (knobs.front()->getTextFromValue (-0.5) == "50% L");
+
+    // All the way down is silence in the engine too.
+    REQUIRE (f.mixer.setInsertVolume (id, Mixer::silentDb));
+    auto* volume = f.session.getAdapter().getInsertTrack (id)->getVolumePlugin();
+    CHECK (volume->getSliderPos() <= 0.0f);
+}
+
 TEST_CASE ("A strip says where a sidechain comes from and where its sound goes", "[ui][mixer]")
 {
     MixerFixture f;
