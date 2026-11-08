@@ -1218,22 +1218,22 @@ juce::String instrumentKey (const Choice& choice)
     return choice.instrument.isNotEmpty() ? choice.instrument : choice.source.key;
 }
 
-std::optional<NoteRanges::Range> noteRangeFor (const Choice& choice, const juce::File& indexFolder)
+std::optional<PlayableKeys> playableFor (const Choice& choice, const juce::File& indexFolder)
 {
     if (choice.kind == Choice::Kind::kit || choice.kind == Choice::Kind::loop || indexFolder == juce::File())
         return std::nullopt;
-    NoteRanges ranges (indexFolder);
-    ranges.load();
-    return ranges.get (instrumentKey (choice));
+    InstrumentProfiles profiles (indexFolder);
+    profiles.load();
+    return profiles.playable (instrumentKey (choice));
 }
 
 std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const Choice& choice, double tempo,
-                                                     const juce::var& summary, std::optional<NoteRanges::Range> range)
+                                                     const juce::var& summary, std::optional<PlayableKeys> playable)
 {
     auto notes = auditionPhraseInRegister (target, choice, tempo, summary);
-    if (range.has_value() && target.part != "drums")
+    if (playable.has_value() && target.part != "drums")
         for (auto& n : notes)
-            n.note = NoteRanges::fit (n.note, *range);
+            n.note = playable->fit (n.note);
     return notes;
 }
 

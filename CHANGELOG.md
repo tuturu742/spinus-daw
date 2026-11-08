@@ -5,6 +5,15 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Track creator: Learn this instrument
+
+- **Notes it plays** becomes **Learn this instrument...**, in the instrument menu and as **Keys...** beside Play
+  in Save this sound: a keyboard where you mark what each key does (plays, switch, special, unused), with a few
+  words for the switches ("palm mute"). Listen, Play and the songs play only on the keys that play, so a switch
+  key in the middle of an instrument's range is skipped too. An instrument can have several modes (normal,
+  strummer), each with its own keys, how to enter it and what it suits. What you set with Notes it plays carries
+  over.
+
 ### Export: no more Surge XT crash before it starts
 
 - An export, and the Automixer's recordings of the mix, sometimes crashed in Surge XT before anything was

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "model/Model.h"
-#include "NoteRanges.h"
+#include "InstrumentProfiles.h"
 #include "OfflineInstrument.h"
 
 #include <juce_core/juce_core.h>
@@ -122,9 +122,10 @@ juce::String sendEffectKind (const juce::String& name);
 /** A name for the next song in the project: "Song 1", or "Song 2" when patterns of Song 1 are there, ... */
 juce::String nextSongName (const model::Project&);
 
-/** The song with its parts' notes moved by octaves into the notes their instruments may play (NoteRanges), by
-    layer id (a full arrangement) or part ("bass"); drums untouched. The same song when `ranges` is empty. */
-juce::var keepToRanges (const juce::var& song, const std::map<juce::String, NoteRanges::Range>& ranges);
+/** The song with its parts' notes moved by octaves onto the keys their instruments play (InstrumentProfiles), by
+    layer id (a full arrangement) or part ("bass"), so none lands on a switch key; drums untouched. The same song
+    when `ranges` is empty. */
+juce::var keepToRanges (const juce::var& song, const std::map<juce::String, PlayableKeys>& ranges);
 
 /** The proposal ({summary, steps}) that puts the whole song into the project (see above). ai::Proposal checks
     it; applying it is one undo step. An empty var when the song is not one (`error` says why). */

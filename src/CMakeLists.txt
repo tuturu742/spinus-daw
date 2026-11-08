@@ -252,8 +252,8 @@ add_library (spinus_core STATIC
     session/PartSounds.cpp
     session/PartSounds.h
     session/SongWriter.cpp
-    session/NoteRanges.cpp
-    session/NoteRanges.h
+    session/InstrumentProfiles.cpp
+    session/InstrumentProfiles.h
     session/PresetFolders.cpp
     session/PresetFolders.h
     session/UserRoles.cpp
@@ -284,6 +284,8 @@ add_library (spinus_core STATIC
     ui/DescribeSongPanel.cpp
     ui/DescribeSongPanel.h
     ui/PartSoundsPanel.cpp
+    ui/LearnInstrumentWindow.cpp
+    ui/LearnInstrumentWindow.h
     ui/SaveSoundWindow.cpp
     ui/SaveSoundWindow.h
     ui/PartSoundsPanel.h

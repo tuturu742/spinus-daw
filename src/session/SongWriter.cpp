@@ -156,19 +156,19 @@ std::map<juce::String, int> drumNotesFor (const model::Channel& channel)
              { "tomLow", 45 }, { "tomMid", 47 }, { "tomHigh", 50 }, { "crash", 49 } };
 }
 
-juce::var keepToRanges (const juce::var& song, const std::map<juce::String, NoteRanges::Range>& ranges)
+juce::var keepToRanges (const juce::var& song, const std::map<juce::String, PlayableKeys>& ranges)
 {
     if (ranges.empty() || ! song.isObject())
         return song;
     auto copy = song.clone(); // deep: the notes are changed in place below
-    auto fold = [] (const juce::var& sections, NoteRanges::Range range)
+    auto fold = [] (const juce::var& sections, const PlayableKeys& range)
     {
         if (auto* bySection = sections.getDynamicObject())
             for (const auto& [section, notes] : bySection->getProperties())
                 if (auto* list = notes.getArray())
                     for (auto& n : *list)
                         if (auto* o = n.getDynamicObject(); o != nullptr && ! o->hasProperty ("drum"))
-                            o->setProperty ("pitch", NoteRanges::fit ((int)o->getProperty ("pitch"), range));
+                            o->setProperty ("pitch", range.fit ((int)o->getProperty ("pitch")));
     };
     for (const auto& [id, range] : ranges)
     {
