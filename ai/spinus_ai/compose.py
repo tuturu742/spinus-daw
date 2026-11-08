@@ -108,7 +108,9 @@ Some instruments have playing modes (a sampled guitar's normal playing, a riff p
 articulation switches (palm mute, slide). Where a part's sound lists modes, pick the one that suits the part \
 (each says what it is good for; the first is the one it opens in), write inside that mode's range, and name an \
 articulation for the sections that want one (palm mute in the verse, open in the chorus): Spinus writes the \
-switch keys. Never write the switch keys as notes yourself."""
+switch keys. Never write the switch keys as notes yourself. A mode that plays the song's chords itself (a \
+strummer) takes no notes of yours: write any notes in the sections where the part plays, and name one of its \
+patterns per section as its articulation (a busier one in the chorus); Spinus plays the section's chords with it."""
 
 REVISE = """Spinus wrote your song into the project and checked it. Its findings are below, with the song as it \
 stands. Revise the song by calling write_song again: change only what you want to change and leave out the \
@@ -247,7 +249,8 @@ MOST_SWITCHES = 24
 
 def check_modes(value: Any) -> list[dict[str, Any]]:
     """An instrument's modes as Spinus lists them (partmodes::brief): [{name, goodFor, voices, low, high, notPlaying,
-    switches: [{what, key}], first}], checked; the ones not usable left out."""
+    switches: [{what, key}], first}] (a chord mode: chordKeys, and patterns: [{what, key}]), checked; the ones not
+    usable left out."""
     found: list[dict[str, Any]] = []
     if not isinstance(value, list):
         return found
@@ -263,14 +266,17 @@ def check_modes(value: Any) -> list[dict[str, Any]]:
                 mode[k] = str(m[k]).strip()[:160]
         if (gaps := as_int(m.get("notPlaying"))) is not None and gaps > 0:
             mode["notPlaying"] = gaps
-        given = m.get("switches")
-        switches = [
-            {"what": str(x["what"]).strip()[:60], "key": as_int(x.get("key"))}
-            for x in (given if isinstance(given, list) else [])[:MOST_SWITCHES]
-            if isinstance(x, dict) and str(x.get("what") or "").strip()
-        ]
-        if switches:
-            mode["switches"] = switches
+        for kind in ("switches", "patterns"):
+            given = m.get(kind)
+            named = [
+                {"what": str(x["what"]).strip()[:60], "key": as_int(x.get("key"))}
+                for x in (given if isinstance(given, list) else [])[:MOST_SWITCHES]
+                if isinstance(x, dict) and str(x.get("what") or "").strip()
+            ]
+            if named:
+                mode[kind] = named
+        if m.get("chordKeys"):
+            mode["chordKeys"] = True
         if m.get("first"):
             mode["first"] = True
         if not any(f["name"].lower() == mode["name"].lower() for f in found):
@@ -296,18 +302,21 @@ def bounds_of(setup: Setup, pid: str, role: str, sound: str | None = None, mode:
     """The notes a part may play: its instrument's mode's (the one named, else the first), else its role's."""
     modes = modes_of(setup, pid, sound)
     chosen = mode_named(modes, mode) or (modes[0] if modes else None)
+    if chosen is not None and chosen.get("chordKeys"):
+        return 0, 127  # a chord mode: Spinus writes its keys from the chords; the notes only say where it plays
     if chosen is not None:
         return int(chosen["low"]), int(chosen["high"])
     return RANGES.get(role, (24, 108))
 
 
 def checked_use(entry: dict[str, Any], modes: list[dict[str, Any]], sections: Any) -> dict[str, Any] | None:
-    """A part's mode and articulations as the model gave them ({mode, articulations: {section: switch}}), kept
-    to its instrument's modes and the song's sections; None when it named no mode it has."""
+    """A part's mode and articulations as the model gave them ({mode, articulations: {section: switch}}; a chord
+    mode's patterns are named the same way), kept to its instrument's modes and the song's sections; None when it
+    named no mode it has."""
     mode = mode_named(modes, entry.get("mode"))
     if mode is None:
         return None
-    switches = {x["what"].lower(): x["what"] for x in mode.get("switches", [])}
+    switches = {x["what"].lower(): x["what"] for x in mode.get("switches", []) + mode.get("patterns", [])}
     given = entry.get("articulations") if isinstance(entry.get("articulations"), dict) else {}
     assert isinstance(given, dict)
     articulations = {
@@ -323,13 +332,18 @@ def modes_words(modes: list[dict[str, Any]]) -> str:
     out = []
     for m in modes:
         said = ["opens in it"] if m.get("first") else []
-        said.append(f"{sw.note_name(m['low'])}-{sw.note_name(m['high'])}")
+        if m.get("chordKeys"):
+            said.append("plays the song's chords itself: Spinus holds each chord on its chord keys")
+        else:
+            said.append(f"{sw.note_name(m['low'])}-{sw.note_name(m['high'])}")
         if m.get("notPlaying"):
             said.append(f"{m['notPlaying']} keys between do not play")
         if m.get("goodFor"):
             said.append(m["goodFor"])
         if m.get("voices"):
             said.append(m["voices"])
+        if m.get("patterns"):
+            said.append("patterns: " + ", ".join(x["what"] for x in m["patterns"]))
         if m.get("switches"):
             said.append("switches: " + ", ".join(x["what"] for x in m["switches"]))
         out.append(f"{m['name']} ({'; '.join(said)})")

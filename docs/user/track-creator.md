@@ -628,8 +628,17 @@ sees the modes and their switches, picks one per part and may switch articulatio
 the verse, open in the chorus). Spinus then writes the switch keys itself, as short notes at the start of each
 section the part plays in, so the song plays the same on any computer. A mode entered by a key gets that key
 the same way. The page lists the instruments' modes ("Instruments: Rhythm guitar: Normal mode; palm mute,
-open."). Modes entered only by a button in the plugin, and strummer modes that play chords from chord keys,
-aren't used yet.
+open."). Modes entered only by a button in the plugin aren't used yet.
+
+**Strummer modes.** Some instruments play the chords themselves: you hold a chord on their **chord keys** and
+press a **pattern** (or strum) key, and they strum it in their own rhythm. Mark those keys in Learn this
+instrument as **Special**, with words that say what they are: "chord keys" for the chord zone (an octave or
+more), and "pattern", "strum" or "sequence" for the keys that play it (Read the manual does this for you). For a
+part that plays chords (a rhythm guitar, the chords part), Spinus can then pick that mode: it holds each of the
+song's chords on the chord keys and presses a pattern key with each chord, a busier one where the song is
+louder. Your AI connection can name the pattern for each section. The instrument must recognise the chord you
+hold (often called a detect mode): if its chord keys pick stored chords instead, switch it to recognising them
+in its window, then save that sound with **Save this sound**.
 4. **Writing again replaces the song.** When the project has a song the Track creator wrote, Apply asks
    "Replace Song 1? It will be overwritten (Ctrl+Z brings it back)": **Replace** takes the old song out
    (its channels, patterns, Playlist tracks and markers; the Parts step's channels stay) and puts the new

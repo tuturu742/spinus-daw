@@ -11,7 +11,8 @@ namespace
 juce::var parse (const char* json) { return juce::JSON::parse (juce::String (json)); }
 
 /** A sampled guitar: Normal (E2 to E6, palm mute and slide switches low), Riff (entered by C#7, its own keys),
-    Strummer (entered by C#8, no playing keys) and Tapping (a plugin setting, no key). */
+    Strummer (entered by C#8: chord keys, three pattern keys and a strum-time key) and Tapping (a plugin setting,
+    no key). */
 Profile guitar()
 {
     Profile p;
@@ -33,6 +34,11 @@ Profile guitar()
     strummer.enterKey = 97;
     strummer.goodFor = "strummed rhythm, country and folk";
     strummer.setKeys (36, 59, { Job::special, "chord keys", InstrumentProfiles::Source::manual });
+    strummer.setKeys (60, 60, { Job::special, "play SEQ 1", InstrumentProfiles::Source::manual });
+    strummer.setKeys (61, 61, { Job::special, "play SEQ 2", InstrumentProfiles::Source::manual });
+    strummer.setKeys (63, 63, { Job::special, "play SEQ 3", InstrumentProfiles::Source::manual });
+    strummer.setKeys (86, 86, { Job::special, "strum time control", InstrumentProfiles::Source::manual });
+    strummer.setKeys (25, 25, { Job::switches, "slide-in strum", InstrumentProfiles::Source::manual });
     InstrumentProfiles::Mode tapping;
     tapping.name = "Tapping";
     tapping.goodFor = "country tapping";
@@ -67,11 +73,11 @@ juce::Array<juce::var> notes (const juce::var& song, const char* section)
 TEST_CASE ("Part modes: the modes songwriting can use, and what the AI is told of them", "[instruments][songwriting]")
 {
     const auto g = guitar();
-    // Strummer has no playing keys (a later step), Tapping has no key to enter it.
-    CHECK (partmodes::usable (g) == std::vector<int> { 0, 1 });
+    // Tapping has no key to enter it.
+    CHECK (partmodes::usable (g) == std::vector<int> { 0, 1, 2 });
 
     const auto told = partmodes::brief (g);
-    REQUIRE (told.size() == 2);
+    REQUIRE (told.size() == 3);
     CHECK (told[0]["name"].toString() == "Normal");
     CHECK ((bool)told[0]["first"]);
     CHECK ((int)told[0]["low"] == 40);
@@ -84,6 +90,17 @@ TEST_CASE ("Part modes: the modes songwriting can use, and what the AI is told o
     CHECK (told[1]["name"].toString() == "Riff");
     CHECK_FALSE (told[1].hasProperty ("first"));
     CHECK_FALSE (told[1].hasProperty ("switches"));
+    // A chord mode: its chord keys and pattern keys (not the strum-time key).
+    CHECK (told[2]["name"].toString() == "Strummer");
+    CHECK ((bool)told[2]["chordKeys"]);
+    CHECK ((int)told[2]["low"] == 36);
+    CHECK ((int)told[2]["high"] == 59);
+    REQUIRE (told[2]["patterns"].size() == 3);
+    CHECK (told[2]["patterns"][0]["what"].toString() == "play SEQ 1");
+    CHECK ((int)told[2]["patterns"][2]["key"] == 63);
+    CHECK (told[2]["switches"][0]["what"].toString() == "slide-in strum");
+    CHECK (partmodes::isChordMode (g.modes[2]));
+    CHECK_FALSE (partmodes::isChordMode (g.modes[0]));
 
     Profile none;
     CHECK (partmodes::brief (none).size() == 0);
@@ -96,7 +113,8 @@ TEST_CASE ("Part modes: a mode picked by the words of what it is good for", "[in
     CHECK (partmodes::pick (g, "Guitar, funk riffs") == 1);
     CHECK (partmodes::pick (g, "Rhythm guitar, funk") == 0); // as good a match: the first
     CHECK (partmodes::pick (g, "Lead guitar, metal") == 0);
-    CHECK (partmodes::pick (g, "Guitar, country") == 0); // Strummer and Tapping are not usable yet
+    CHECK (partmodes::pick (g, "Guitar, country") == 0); // Strummer only for a part that plays chords
+    CHECK (partmodes::pick (g, "Rhythm guitar, country", true) == 2);
     CHECK (partmodes::pick (g, "") == 0);
 }
 
@@ -116,8 +134,14 @@ TEST_CASE ("Part modes: the song's own choice, checked against the profile", "[i
     REQUIRE (use.articulations.size() == 1);
     CHECK (use.articulations["verse"] == "palm mute");
 
-    // A mode the song can't use (Strummer has no playing keys yet): picked by the words instead.
-    use = partmodes::useFor (song (R"({"gtr": {"mode": "Strummer"}})"), "gtr", g, "funk");
+    // A chord mode's patterns are named as its articulations are.
+    use = partmodes::useFor (song (R"({"gtr": {"mode": "Strummer", "articulations": {"chorus": "play seq 2"}}})"),
+                             "gtr", g, "");
+    CHECK (use.mode == 2);
+    CHECK (use.articulations["chorus"] == "play SEQ 2");
+
+    // A mode the song can't use (Tapping has no key to enter it): picked by the words instead.
+    use = partmodes::useFor (song (R"({"gtr": {"mode": "Tapping"}})"), "gtr", g, "funk");
     CHECK (use.mode == 1);
     CHECK (use.picked);
 }
@@ -244,4 +268,78 @@ TEST_CASE ("Instrument profiles: the ones Spinus ships, and a profile shared as 
         juce::JSON::parse ("{\"kind\": \"spinus.instrument-profile\", \"version\": 2}"), name, problem));
     CHECK (problem == "it was exported by a newer Spinus.");
     root.deleteRecursively();
+}
+
+TEST_CASE ("Part modes: a chord mode plays the song's chords on its chord keys, with a pattern key",
+           "[instruments][songwriting]")
+{
+    std::map<juce::String, partmodes::Instrument> instruments { { "gtr",
+                                                                  { guitar(), "rhythm guitar, country", true } } };
+    auto chorded = [] (const char* modes)
+    {
+        auto s = song (modes);
+        s.getDynamicObject()->setProperty ("barTicks", 3840);
+        s.getDynamicObject()->setProperty ("sections", juce::JSON::parse (R"([
+                {"id": "verse", "bars": 4, "energy": 0.4, "chords": [
+                    {"bar": 0, "name": "Am", "tones": [9, 0, 4]}, {"bar": 1, "name": "Am", "tones": [9, 0, 4]},
+                    {"bar": 2, "name": "F", "tones": [5, 9, 0]}, {"bar": 3, "name": "G", "tones": [7, 11, 2]}]},
+                {"id": "chorus", "bars": 2, "energy": 1.0, "chords": [
+                    {"bar": 0, "name": "C", "tones": [0, 4, 7]}, {"bar": 1, "name": "B", "tones": [11, 3, 6]}]},
+                {"id": "bridge", "bars": 2, "energy": 0.6, "chords": []}])"));
+        return s;
+    };
+
+    SECTION ("Picked for a part that plays chords; the patterns by the sections' energy")
+    {
+        const auto out = partmodes::apply (chorded ("{}"), instruments);
+        CHECK (out["modes"]["gtr"]["mode"].toString() == "Strummer");
+        const auto verse = notes (out, "verse");
+        // The entering key, then Am held two bars (A2 C3 E3 on the chord keys), F, G; SEQ 2 with each (energy 0.4).
+        REQUIRE (verse.size() == 1 + 3 * 4);
+        CHECK ((int)verse[0]["pitch"] == 97);
+        CHECK ((bool)verse[0]["switch"]);
+        CHECK ((int)verse[1]["pitch"] == 45);
+        CHECK ((int)verse[2]["pitch"] == 48);
+        CHECK ((int)verse[3]["pitch"] == 52);
+        CHECK ((int)verse[1]["start"] == (int)partmodes::switchLead);
+        CHECK ((int)verse[1]["length"] == 2 * 3840 - (int)partmodes::switchLead);
+        CHECK ((int)verse[4]["pitch"] == 61);
+        CHECK ((int)verse[5]["start"] == 2 * 3840);
+        CHECK ((int)verse[5]["pitch"] == 41); // F2 A2 C3
+        CHECK ((int)verse[12]["pitch"] == 61);
+        CHECK ((int)verse[12]["start"] == 3 * 3840 + (int)partmodes::switchLead);
+        // The chorus (energy 1): SEQ 3; B (B2 D#3 F#3) stays inside the chord keys.
+        const auto chorus = notes (out, "chorus");
+        CHECK ((int)chorus[4]["pitch"] == 63);
+        CHECK ((int)chorus[5]["pitch"] == 47);
+        CHECK ((int)chorus[7]["pitch"] == 54);
+        CHECK (notes (out, "bridge").isEmpty()); // the part rests there
+        // Applying again writes the same.
+        CHECK (juce::JSON::toString (partmodes::apply (out, instruments)) == juce::JSON::toString (out));
+        CHECK (partmodes::describe (out, instruments, { { "gtr", "Guitar" } }) ==
+               juce::StringArray { "Guitar: Strummer mode (it plays the song's chords)" });
+    }
+
+    SECTION ("The pattern and a switch the song named")
+    {
+        const auto out =
+            partmodes::apply (chorded (R"({"gtr": {"mode": "Strummer", "articulations": {"verse": "play SEQ 1",
+                         "chorus": "slide-in strum"}}})"),
+                              instruments);
+        // The switch named first goes back to the verse too (as any articulation).
+        const auto verse = notes (out, "verse");
+        CHECK ((int)verse[1]["pitch"] == 25);
+        CHECK ((int)verse[5]["pitch"] == 60);
+        // The chorus keeps SEQ 1 (carried) and switches to slide-in strum after the entering key.
+        const auto chorus = notes (out, "chorus");
+        CHECK ((int)chorus[0]["pitch"] == 97);
+        CHECK ((int)chorus[1]["pitch"] == 25);
+        CHECK ((int)chorus[5]["pitch"] == 60);
+    }
+
+    SECTION ("Not for a part that plays one note at a time")
+    {
+        std::map<juce::String, partmodes::Instrument> lead { { "gtr", { guitar(), "lead guitar, country", false } } };
+        CHECK (partmodes::apply (chorded ("{}"), lead)["modes"]["gtr"]["mode"].toString() == "Normal");
+    }
 }

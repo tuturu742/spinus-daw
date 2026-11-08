@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Track creator: Learn this instrument
 
+- **Strummer modes**: an instrument that plays chords from its chord keys (a guitar strummer) can now be used
+  for a part that plays chords. Spinus holds each chord of the song on the chord keys and presses one of the
+  instrument's pattern keys with it, picked by how loud each section is, or named by your AI connection.
 - **Export... and Import...** in Learn this instrument: share what Spinus learned of an instrument as a file.
   An imported profile is a proposal you Apply, and the keys you marked stay yours. 3x Osc, Surge XT, OB-Xf and
   Odin 2 come with a profile.
