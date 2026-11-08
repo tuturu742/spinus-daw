@@ -119,10 +119,11 @@ An **automation clip** changes a setting over time: a fade-in, a filter sweep, a
 - a channel's name in the Channel Rack, for the channel's **volume**, **pan**, or any **instrument** setting;
 - an effect in the Mixer's slots, and choose **Create automation clip** and the setting.
 
-**The easy way, for a plugin's knob** (FL's "last tweaked"): open the plugin's window, move the knob you
-want to automate, then choose **Edit › Automate the last moved control**. The menu item names the knob
-and the plugin, so you can check it is the right one. In the right-click menus above, the knob you moved
-last is also listed first, as **Last moved: ...**.
+**The easy way** (FL's "last tweaked"): move the knob or fader you want to automate, in a plugin's
+window, the Mixer or the Channel Rack, then press **Ctrl+Shift+L** or choose **Edit › Create automation
+clip for the last moved control**. The menu item names the control and where it is, so you can check it is
+the right one. In the right-click menus above, a plugin knob you moved last is also listed first, as **Last
+moved: ...**.
 
 In those menus every setting shows its current value next to its name, for example **Cutoff (1.20
 kHz)**, which helps to tell the plugin's settings apart.

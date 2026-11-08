@@ -18,7 +18,7 @@ is different, and which features FL Studio users often ask for that Spinus alrea
 | Each channel on its own mixer insert | Automatic: every new channel gets an insert of its own |
 | Draw, Paint, Slice, Select tools | The same, on **P**, **B**, **C**, **E** |
 | Make unique | Shift+right-click a Playlist clip › **Make unique** |
-| Last tweaked parameter | **Edit › Automate the last moved control** ([Automation clips](playlist.md#automation-clips)) |
+| Last tweaked parameter | **Edit › Create automation clip for the last moved control**, **Ctrl+Shift+L** ([Automation clips](playlist.md#automation-clips)) |
 | Filter channels by group | The list next to **Swing** in the Channel Rack ([Groups](channel-rack.md#groups)) |
 | Note repeat / chop, strum, arpeggiate, legato, quantize | The Piano Roll's **Tools** menu ([Note tools](piano-roll.md#note-tools)) |
 | Chord stamps | The Piano Roll's chord list ([Chords](piano-roll.md#chords)) |
