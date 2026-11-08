@@ -89,9 +89,13 @@ original song in the style described, for the user's list of parts, by calling t
 Never copy a reference song: use only the style's numbers.
 
 Write it as a musician would for each instrument: a bass that locks with the kick, chords voiced for the \
-instrument (guitar strums and power chords, piano voicings, held pads), a singable lead with phrases and \
-rests, drums with a groove, fills at section ends and a crash where a section starts. Thin verses, full \
-choruses; let parts come and go between sections.
+instrument (guitar strums and power chords, piano voicings, held pads), drums with a groove. Make it sound \
+composed and played, not generated: a lead built on a 1 to 2 bar motif that comes back (its first phrase ends \
+open, the second starts the same and resolves; the peak note in bar 6 or 7 of 8, the loudest), with rests; \
+a section that comes back changes something (give it its own id, chorus2; the last chorus is the biggest); \
+drums with a variation every 4 bars, a fill closing each 8 and a crash opening the next, ghost snares at \
+velocity 25 to 40; velocities that phrase (accents on the beat, softer off-beats, crescendos into drops). \
+Thin verses, full choruses; let parts come and go between sections.
 
 Notation. Each part's notes for a section are a loop of `bars` bars (1, 2, 4 or up to the section's length) \
 that Spinus repeats over the section. A note is "step pitch length velocity": step is the sixteenth from the \
@@ -360,12 +364,13 @@ def lyric_form(
     summary: dict[str, Any], style: sw.Style, tempo: float, plan: dict[str, Any] | None = None
 ) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]] | None:
     """The lyrics' form at this tempo (songwriter.lyric_form: each sung section as long as its lines, with their
-    syllables), phrased and with the share sung that `plan` chose (vocal_choice); None without sung lines."""
+    syllables), phrased as `plan` chose (vocal_choice); None without sung lines. Nothing is added for the share
+    sung: the model writes its instrumental sections itself (keep_lyrics asks for them)."""
     lyrics = summary.get("lyrics")
     if not isinstance(lyrics, dict) or not any(s.get("lines") for s in lyrics.get("sections") or []):
         return None
-    phrasing, share = vocal_choice(plan or {}, style)
-    return sw.lyric_form(lyrics, tempo, style, lambda kind: 8, {}, phrasing, share)
+    phrasing, _ = vocal_choice(plan or {}, style)
+    return sw.lyric_form(lyrics, tempo, style, lambda kind: 8, {}, phrasing)
 
 
 def vocal_choice(answer: dict[str, Any], style: sw.Style) -> tuple[str, float | None]:
@@ -463,7 +468,7 @@ def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[
     found = lyric_form(setup.summary, setup.style, float(plan["tempo"]), plan)
     if found is None:
         return plan, []
-    form, form_order, form_sung = found
+    form, form_order, _ = found
     fixed = {s["id"]: s for s in form if s.get("words")}
     by_id = {s["id"]: s for s in plan["sections"]}
     form_kinds = {s["id"]: s["kind"] for s in form}
@@ -529,32 +534,20 @@ def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[
         out["phrasing"], out["vocalShare"] = phrasing, share
     if sung := sung_of(order, setup, float(plan["tempo"]), out):
         vocals = setup.style.vocals
-        if share is not None and vocals is not None:
-            # The model's form fitted to the share it chose, as the lyrics' own is: its instrumental sections
-            # lengthened (or more added) until about that much is sung, the words kept.
-            before = sum(next(s["bars"] for s in sections if s["id"] == o) for o in order)
-            sw.fit_share(sections, order, sung, share, vocals.fill, {})
-            for section in sections:  # one it added: the chords of a section of its kind (or the first), its energy
-                if "chords" not in section:
-                    like = next((x for x in sections if x["kind"] == section["kind"] and "chords" in x), sections[0])
-                    section.update(chords=list(like["chords"]), hold=like.get("hold", 1), cue="",
-                                   energy=sw.ENERGY.get(sw.base_kind(section["kind"]), 0.6))  # fmt: skip
-            after = sum(next(s["bars"] for s in sections if s["id"] == o) for o in order)
-            if after != before:
-                kept.append(f"instrumental room for about {share:.0%} sung ({before} bars became {after})")
         out["lyrics"] = sung
         if strict and vocals is not None:
-            # The share sung inside the style's range, when the lyrics' own form (fitted) could be: the changes the
-            # model made keep it there.
+            # The share sung inside the style's range: the model makes the instrumental room itself, with sections
+            # whose music it writes (Spinus pads nothing: filler bars are what made songs sound unwritten).
             have = sw.sung_share(sections, order, sung)
-            could = sw.sung_share(form, form_order, form_sung)
-            if vocals.low - 0.02 <= could <= vocals.high + 0.02 and not vocals.low - 0.02 <= have <= vocals.high + 0.02:
+            total = sum(int(next(s["bars"] for s in sections if s["id"] == o)) for o in order)
+            reachable = have * total / sw.MOST_BARS <= vocals.high + 0.02  # room enough in the longest song
+            if reachable and not vocals.low - 0.02 <= have <= vocals.high + 0.02:
                 raise Unusable(
                     f"about {have:.0%} of this form is sung; this song's range is {vocals.low:.0%} to "
                     f"{vocals.high:.0%}: "
-                    + ("add or lengthen instrumental sections (an intro, a " + vocals.fill + ", a break, an outro)"
+                    + (f"add instrumental sections with their own music (a {vocals.fill}, a solo, a break; an intro "
+                       "or outro of 4 to 8 bars), or lengthen the ones there, and write their parts"
                        if have > vocals.high else "shorten or leave out instrumental sections")
-                    + ", or set vocalShare and Spinus fits the lyrics' form to it"
                 )  # fmt: skip
     return out, kept
 

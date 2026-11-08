@@ -1081,9 +1081,10 @@ def fit_share(
 ) -> None:
     """Instrumental room (in place) until about `target` of the bars is sung, the words kept: when too much is sung,
     an intro before a song that starts singing, an outro after one that ends so, a `fill` section (a drop, a solo,
-    a break) after each chorus in turn, then the instrumental sections lengthened 4 bars at a time (to 32, as long
-    as a section may be); when too little, the instrumental sections shortened 4 bars at a time (to 4). Never past
-    MOST_BARS. The same lyrics, share and fill give the same form."""
+    a break) after each chorus in turn, then the instrumental sections lengthened 4 bars at a time (an intro or
+    outro to 8, another to 16), then the fill again between sung sections; when too little, the instrumental
+    sections shortened 4 bars at a time (to 4). Never past MOST_BARS. The same lyrics, share and fill give
+    the same form."""
     by_id = {s["id"]: s for s in sections}
 
     def total() -> int:
@@ -1144,8 +1145,16 @@ def fit_share(
                 insert(i + 1, sid)
                 i += 1
         i += 1
+
+    def longest(sid: str) -> int:
+        """How long an instrumental section may grow: an intro or outro 8 bars (a long run-in or fade sounds like
+        filler), any other 16."""
+        return 8 if base_kind(by_id[sid]["kind"]) in ("intro", "outro") else 16
+
     while too_sung():
-        longer = [o for o, lines in zip(order, sung["sung"], strict=False) if not lines and by_id[o]["bars"] < 32]
+        longer = [
+            o for o, lines in zip(order, sung["sung"], strict=False) if not lines and by_id[o]["bars"] < longest(o)
+        ]
         # The shortest first (the earliest on a tie): the room spread over the song.
         pick = min(longer, key=lambda o: (int(by_id[o]["bars"]), order.index(o))) if longer else None
         if pick is not None and room(4 * order.count(pick)):
@@ -1451,28 +1460,53 @@ def write_drums(ctx: Context) -> list[dict[str, Any]]:
     kind = base_kind(ctx.section["kind"])
     fills = ("roll", "toms", "short")
     fill = rng.choice(fills if energy >= 0.6 else ("short", "roll"))
+    # Drums that follow the phrases, as the demo songs play them: a variation on the 4th bar of each 4, an open hat
+    # closing each 4-bar phrase, a short fill closing each 8 bars (the section's own at its end) and a crash
+    # opening the next 8; the hats accented by where they fall in the beat; a build rolls into what follows (the
+    # snare speeding up and getting louder, the hats out); an outro fades bar by bar.
+    rolls = (
+        str(ctx.section["kind"]) in ("build", "pre-chorus") and not ctx.last
+    )  # its own kind: a build counts as a verse
+    roll_from = max(0, ctx.bars - 4) if rolls else ctx.bars
+    hat_accent = (1.0, 0.55, 0.75, 0.6)  # on the beat, its "e", "and", "a" (relative)
     for bar in range(ctx.bars):
         if not plays("drums", kind, bar, ctx.bars):
             continue
         pattern = variant if bar % 4 == 3 else base
         end = bar == ctx.bars - 1
+        phrase_end = not end and bar % 8 == 7 and ctx.bars >= 16
         if end and ctx.last:  # the ending: one last hit
             notes.append(drum_note(ctx, bar, 0, "kick", 0.95))
             notes.append(drum_note(ctx, bar, 0, "crash", 0.9))
             continue
-        fill_from = steps // 2 if end and fill != "short" else steps * 3 // 4 if end else steps
+        fill_from = (
+            steps // 2 if end and fill != "short" else steps * 3 // 4 if end or phrase_end else steps
+        )  # fmt: skip
+        fade = 1.0 - 0.12 * max(0, bar - (ctx.bars - 4)) if kind == "outro" else 1.0
+        rolling = bar >= roll_from
         for lane, row in pattern.items():
             for step, on in enumerate(row):
                 if not on or (step >= fill_from and lane != "kick"):
                     continue
                 if step >= fill_from and step % 4 != 0:
                     continue
+                if rolling and lane != "kick":
+                    continue
                 p = lanes[lane][step]
                 strong = step % 4 == 0
-                velocity = 0.5 + 0.35 * p + (0.08 if strong else 0.0) + rng.uniform(-0.04, 0.04)
+                velocity = 0.5 + 0.35 * p + (0.08 if strong else 0.0) + rng.uniform(-0.03, 0.03)
+                drum = drum_of[lane]
                 if lane == "hats":
-                    velocity -= 0.12
-                notes.append(drum_note(ctx, bar, step, drum_of[lane], velocity * (0.8 + 0.2 * energy)))
+                    velocity = (velocity - 0.05) * hat_accent[step % 4]
+                    if bar % 4 == 3 and step == steps - 2 and not end and not phrase_end:
+                        drum, velocity = "openHat", velocity + 0.1
+                notes.append(drum_note(ctx, bar, step, drum, velocity * (0.8 + 0.2 * energy) * fade))
+        if rolling:
+            notes += roll_notes(ctx, bar, bar - roll_from, ctx.bars - roll_from)
+        if phrase_end:
+            notes += fill_notes(ctx, bar, fill_from, "short")
+        if bar % 8 == 0 and bar > 0 and kind not in ("intro", "outro") and not rolling:
+            notes.append(drum_note(ctx, bar, 0, "crash", 0.72))
         if ctx.style.double_kick and kind == "chorus" and not end:
             # Metal's double kick: every sixteenth (every eighth when it is very fast), the off-beats softer.
             every = 1 if float(ctx.plan["tempo"]) <= 170 else 2
@@ -1482,8 +1516,27 @@ def write_drums(ctx: Context) -> list[dict[str, Any]]:
                     notes.append(drum_note(ctx, bar, step, "kick", 0.62 if step % 4 else 0.85))
         if bar == 0 and kind != "intro" and plays("drums", kind, 0, ctx.bars):
             notes.append(drum_note(ctx, bar, 0, "crash", 0.8))
-        if end:
+        if end and not rolling:
             notes += fill_notes(ctx, bar, fill_from, fill)
+    return notes
+
+
+def roll_notes(ctx: Context, bar: int, index: int, bars: int) -> list[dict[str, Any]]:
+    """A build's snare roll, bar `index` of `bars`: quarters, eighths, sixteenths, then 32nds in the last bar,
+    from soft to loud; the last beat of a roll of 4 bars or more is left silent (the breath before the drop)."""
+    steps = ctx.steps
+    every = (4.0, 2.0, 1.0, 0.5)[min(3, index + max(0, 4 - bars))]
+    last = index == bars - 1
+    stop = steps - 4 if last and bars >= 4 else steps
+    notes = []
+    s = 0.0
+    while s < stop - 1e-9:
+        x = (index + s / steps) / max(1, bars)
+        velocity = 0.35 + 0.6 * x
+        note = drum_note(ctx, bar, 0, "snare", velocity)
+        note["start"] = ctx.at(bar, s)
+        notes.append(note)
+        s += every
     return notes
 
 
@@ -1760,10 +1813,11 @@ def write_lead(ctx: Context) -> list[dict[str, Any]]:
         count = max(1, round(per_bar * phrase + rng.uniform(-1, 1)))
         return rhythm(rng, phrase * steps, count, weights)
 
-    # The phrases, one after another: (first bar, bars, onsets in steps, where the last note ends at the latest).
+    # The phrases, one after another: (first bar, bars, onsets in steps, where the last note ends at the latest,
+    # its letter in the A A B A plan).
     # A generator, so each phrase draws its variation after the notes before it (songs without lyrics stay as
     # they were written before).
-    def phrases() -> Iterator[tuple[int, int, list[int], int]]:
+    def phrases() -> Iterator[tuple[int, int, list[int], int, str]]:
         words = ctx.section.get("words")
         if words:
             # Lyrics: a line a phrase, one note a syllable, the last held until the breath before the next line.
@@ -1773,7 +1827,7 @@ def write_lead(ctx: Context) -> list[dict[str, Any]]:
                 if (i + 1) * each > ctx.bars:
                     break
                 onsets = sung_rhythm(int(line["syllables"]), str(line.get("stress") or ""), each * steps, beat)
-                yield (i * each, each, onsets, each * steps - beat)
+                yield (i * each, each, onsets, each * steps - beat, ("A", "A", "B", "A")[i % 4])
         else:
             rhythms = {"A": phrase_rhythm(), "B": phrase_rhythm()}
             plan = ("A", "A", "B", "A")
@@ -1791,31 +1845,53 @@ def write_lead(ctx: Context) -> list[dict[str, Any]]:
                         onsets.sort()
                 onsets = [s for s in onsets if start + s // steps < ctx.bars]
                 last = onsets[-1] if onsets else 0
-                yield (start, phrase, onsets, min(phrase * steps, last + steps // 2 + 4))
+                yield (start, phrase, onsets, min(phrase * steps, last + steps // 2 + 4), letter)
 
+    # A hook, not a string of draws (as the demo songs write theirs): the first A phrase's pitches are the motif,
+    # and every A after it plays them again, fitted to its chords; B is the motif a scale step higher (a
+    # sequence). Of each pair of phrases the first ends open (off the tonic) and the second resolves (on it). The
+    # highest note of each 8 bars is its peak, played loudest.
+    tonic = int(ctx.plan["key"]["tonic"]) % 12
+    motifs: dict[str, list[int]] = {}
     notes: list[dict[str, Any]] = []
     previous = round(centre)
-    for start, length_bars, onsets, last_end in phrases():
+    for number, (start, length_bars, onsets, last_end, letter) in enumerate(phrases()):
+        remembered = motifs.get(letter)
+        if remembered is None and letter == "B" and "A" in motifs:
+            remembered = [step_up(p, scale) for p in motifs["A"]]
+        resolves = number % 2 == 1
+        pitches: list[int] = []
         for i, s in enumerate(onsets):
             bar, step = start + s // steps, s % steps
             end = onsets[i + 1] if i + 1 < len(onsets) else max(s + 1, last_end)
             held = end - s >= 4
-            chord = ctx.chords[bar]["tones"] or [int(ctx.plan["key"]["tonic"])]
-            strong = step % (steps // 2) == 0 or held or i == len(onsets) - 1
+            chord = ctx.chords[bar]["tones"] or [tonic]
+            final = i == len(onsets) - 1
+            strong = step % (steps // 2) == 0 or held or final
             fits = set(chord) if strong else allowed_pitch_classes(chord, scale) & (scale | set(chord))
-            target = centre + span * contour_at(contour, s / (length_bars * steps))
+            if final:
+                ending = fits & {tonic} if resolves else fits - {tonic}
+                fits = ending or fits
             candidates = [p for p in range(style.low, style.high + 1) if p % 12 in fits]
             if not candidates:
                 continue
+            if remembered:
+                want = float(remembered[min(i, len(remembered) - 1)])
 
-            def cost(p: int, target: float = target, before: int = previous) -> float:
-                leap = abs(p - before)
-                return abs(p - target) * 0.5 + (leap if leap > 4 else leap * 0.3) + rng.random() * 1.2
+                def cost(p: int, want: float = want, before: int = previous) -> float:
+                    return abs(p - want) + abs(p - before) * 0.05
+            else:
+                want = centre + span * contour_at(contour, s / (length_bars * steps))
+
+                def cost(p: int, want: float = want, before: int = previous) -> float:
+                    leap = abs(p - before)
+                    return abs(p - want) * 0.5 + (leap if leap > 4 else leap * 0.3) + rng.random() * 1.2
 
             pitch = min(candidates, key=cost)
             previous = pitch
+            pitches.append(pitch)
             length = round((end - s) * TICKS_PER_STEP * 0.92)
-            velocity = 0.7 + (0.1 if step % 4 == 0 else 0.0) + rng.uniform(-0.05, 0.05)
+            velocity = 0.72 + (0.1 if step % 4 == 0 else 0.0) + (0.04 if held else 0.0) + rng.uniform(-0.03, 0.03)
             notes.append(
                 {
                     "start": ctx.at(bar, step),
@@ -1824,7 +1900,23 @@ def write_lead(ctx: Context) -> list[dict[str, Any]]:
                     "velocity": round(min(1.0, velocity), 3),
                 }
             )
+        if letter not in motifs and pitches:
+            motifs[letter] = pitches
+    span_ticks = 8 * steps * TICKS_PER_STEP
+    for first in range(0, ctx.bars * steps * TICKS_PER_STEP, span_ticks):
+        inside = [n for n in notes if first <= n["start"] < first + span_ticks]
+        if inside:
+            peak = max(inside, key=lambda n: (n["pitch"], n["length"]))
+            peak["velocity"] = round(min(1.0, peak["velocity"] + 0.12), 3)
     return notes
+
+
+def step_up(pitch: int, scale: set[int]) -> int:
+    """The next note of the scale above `pitch`."""
+    for p in range(pitch + 1, pitch + 13):
+        if p % 12 in scale:
+            return p
+    return pitch + 2
 
 
 WRITERS = {"drums": write_drums, "bass": write_bass, "chords": write_chords, "lead": write_lead}

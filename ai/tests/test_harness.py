@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 from pathlib import Path
 from typing import Any
 
@@ -773,12 +774,27 @@ def test_a_rhythm_clip_moves_in_time_with_the_beat() -> None:
 
 def test_a_song_has_at_most_so_many_automation_clips() -> None:
     ws = transitioned()
-    for i in range(harness.MOST_AUTOMATION):
-        ws.call("automate", {"part": "bass", "what": "volume", "points": f"1 -{i}; 2 0"})
+    for i in range(harness.MOST_AUTOMATION):  # each over its own half bar
+        ws.call("automate", {"part": "bass", "what": "volume", "points": f"{1 + i / 2} -{i}; {1.5 + i / 2} 0"})
     with pytest.raises(harness.Mistake, match="the most it can have"):
         ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1 1/4", "low": 200, "high": 4000})
     ws.call("remove_automation", {"part": "bass"})
     ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1 1/4", "low": 200, "high": 4000})
+
+
+def test_automation_is_never_written_twice_over_the_same_bars() -> None:
+    ws = transitioned()
+    ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1-2 1/8", "low": 200, "high": 4000})
+    said = ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "1-2 1/8", "low": 200, "high": 4000})
+    assert "already" in said and len(ws.extra["automation"]) == 1  # the same rhythm again: nothing added
+    with pytest.raises(harness.Mistake, match="automated already"):  # another over the same bars would fight it
+        ws.call("rhythm", {"part": "bass", "what": "filter", "pattern": "2 1/16", "low": 300, "high": 5000})
+    ws.call("automate", {"part": "bass", "what": "volume", "points": "1 -6; 2 0"})  # another control: fine
+    chorus = next(sid for sid, s in ws.sections.items() if s["kind"] == "chorus")
+    ws.call("transition", {"kind": "riser", "section": chorus, "bars": 2})
+    clips = len(ws.extra["automation"])
+    ws.call("transition", {"kind": "riser", "section": chorus, "bars": 2})
+    assert len(ws.extra["automation"]) == clips  # a transition placed again adds no second clip
 
 
 def test_transitions_lead_into_and_out_of_sections() -> None:
@@ -1072,7 +1088,7 @@ def described(text: str) -> dict[str, Any]:
 async def test_check_names_the_sections_the_description_asked_for_and_the_model_adds_them(tmp_path: Path) -> None:
     text = "A song with a guitar solo and a breakdown, then the final chorus."
     ws = harness.Workspace.start(harness.setup_of(described(text)), 5, "sketch")
-    missing = [line for line in ws.issues() if line.startswith("form:")]
+    missing = [line for line in ws.issues() if line.startswith("form: the description")]
     assert len(missing) == 2 and "a solo" in missing[0] and "a breakdown" in missing[1]
     sections = [
         {"id": sid, "kind": s["kind"], "bars": s["bars"], "chords": s["chords"]} for sid, s in ws.sections.items()
@@ -1333,23 +1349,23 @@ def test_the_ai_chooses_how_much_is_sung_inside_the_style_range() -> None:
         return [{"id": sid, "kind": ws.sections[sid]["kind"] if sid in ws.sections else sid, "bars": 8,
                  "chords": ["I", "V"]} for sid in dict.fromkeys(order)]  # fmt: skip
 
-    # The model sets the share and the phrasing: Spinus fits the lyrics' form to them.
+    # The model sets the share and the phrasing, and makes the instrumental room itself.
     sung = [o for o in ws.order if ws.sections[o].get("words")]
     lyric_order = list(dict.fromkeys(sung))
-    order = ["intro", "verse", "chorus", "drop", "verse", "chorus", "drop", "outro"]
-    said = ws.tool_set_form(form(order), order, phrasing="normal", vocalShare=0.45)
+    order = ["intro", "verse", "chorus", "drop", "verse", "chorus", "solo", "drop", "outro"]
+    roomy = [{**x, "bars": 16} if x["id"] in ("drop", "solo") else x for x in form(order)]
+    said = ws.tool_set_form(roomy, order, phrasing="normal", vocalShare=0.45)
     assert ws.extra["vocals"] == {"phrasing": "normal", "vocalShare": 0.45} and "phrased normal" in said
     share = sw.sung_share(list(ws.sections.values()), ws.order, ws.plan()["lyrics"])
     assert 0.2 <= share <= 0.5
     # A share outside the range is moved into it.
-    ws.tool_set_form(form(order), order, vocalShare=0.9)
+    ws.tool_set_form(roomy, order, vocalShare=0.9)
     assert ws.extra["vocals"]["vocalShare"] == 0.5
-    # A form that sings nearly all of it gets instrumental room, the words kept.
-    said = ws.tool_set_form(form(["verse", "chorus", "verse", "chorus"]), ["verse", "chorus", "verse", "chorus"])
-    share = sw.sung_share(list(ws.sections.values()), ws.order, ws.plan()["lyrics"])
-    assert "instrumental room" in said and 0.2 <= share <= 0.5, (said, share)
-    assert "energy" in ws.tool_form()  # the sections it added have chords and energy too
-    assert lyric_order == ["verse", "chorus"]
+    # A form that sings nearly all of it: Spinus pads nothing (filler bars sound unwritten); the model is told to
+    # add instrumental sections and write them, and its form stays as it was.
+    with pytest.raises(harness.Mistake, match="add instrumental sections with their own music"):
+        ws.tool_set_form(form(["verse", "chorus", "verse", "chorus"]), ["verse", "chorus", "verse", "chorus"])
+    assert ws.order == order and lyric_order == ["verse", "chorus"]
 
 
 def test_a_one_shot_answer_keeps_the_lyrics_order() -> None:
@@ -1412,3 +1428,25 @@ def test_the_ai_may_change_the_lyrics_form_as_far_as_the_variety_allows() -> Non
             compose.keep_lyrics(compose.check_plan(answer(order), setup_), setup_, strict=True)
     brief = compose.lyrics_brief(s, setup_.style, 0)
     assert brief is not None and "exactly" in brief["fixed"]
+
+
+def test_check_finds_what_sounds_generated_rather_than_composed() -> None:
+    hook = [{"start": s * 240, "pitch": p, "length": 240, "velocity": 0.8}
+            for s, p in zip((0, 2, 4, 6, 16, 18, 20, 22), (60, 62, 64, 67, 62, 64, 66, 69), strict=True)]  # fmt: skip
+    assert harness.has_motif(hook)  # the same intervals and rhythm, a step higher
+    wander = [{**n, "pitch": p} for n, p in zip(hook, (60, 65, 62, 71, 64, 60, 69, 62), strict=True)]
+    assert not harness.has_motif(wander)
+    ws = harness.Workspace.start(setup(), 5, "sketch")
+    chorus = next(sid for sid, s in ws.sections.items() if s["kind"] == "chorus")
+    if ws.order.count(chorus) >= 2:
+        assert any(f"the {chorus} plays" in line for line in ws.issues())
+    # A part all at one velocity, written by the model, is named.
+    lead = next(p["id"] for p in ws.setup.written() if sw.ROLES[p["role"]][2] == "lead")
+    ws.call("write", {"part": lead, "section": chorus, "notes": "; ".join(f"{s * 2} 72 2 100" for s in range(32))})
+    assert any(line.startswith(f"{lead}:") and "one velocity" in line for line in ws.issues())
+    # A lead that wanders, its figures never heard again, is told to build on a motif; a hook is not.
+    draw = random.Random(4)
+    wandering = "; ".join(f"{s * 2} {draw.randrange(55, 80)} 2 {draw.randrange(60, 110)}" for s in range(32))
+    ws.call("write", {"part": lead, "section": chorus, "notes": wandering})
+    if ws.sections[chorus]["bars"] >= 8:
+        assert any(line.startswith(f"{lead}, {chorus}: no motif") for line in ws.issues())

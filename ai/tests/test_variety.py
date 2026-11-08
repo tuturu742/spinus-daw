@@ -26,12 +26,12 @@ SEEDS = range(30)
 # `variety` and the vocabulary's order among chords heard as often, which is Python's set order): balanced must
 # write exactly these.
 BEFORE = {
-    ("sketch", 0): "a4215dda3746967f", ("sketch", 1): "68bd5a635587781e", ("sketch", 2): "2bb21c7e165a5ecc",
-    ("sketch", 3): "e8f94267d4259578", ("sketch", 4): "53e676cf16dfd910", ("sketch", 5): "54db441a2871080f",
-    ("sketch", 6): "62ee3b611a9e6570", ("sketch", 7): "bd2b0534aa3b0fae",
-    ("full", 0): "f1db8468d7dfb43b", ("full", 1): "d473cfd5f0258edb", ("full", 2): "46641a8c9429cc45",
-    ("full", 3): "89da7e5a3ae2ffd4", ("full", 4): "f335614b99edda52", ("full", 5): "4a4881197eaa309c",
-    ("full", 6): "0e4497f9dbd5e015", ("full", 7): "3355851378369970",
+    ("sketch", 0): "c438badc268246e9", ("sketch", 1): "62fb2662a3ba683e", ("sketch", 2): "7fbb8bbec91120fd",
+    ("sketch", 3): "044eee6be3f4716f", ("sketch", 4): "202f76f3266c8891", ("sketch", 5): "715905125a062292",
+    ("sketch", 6): "cb199aa8a639a411", ("sketch", 7): "7d4894388ffcf5c2",
+    ("full", 0): "5706329d7b831701", ("full", 1): "2d177d1d1e357dd1", ("full", 2): "2fc73b6452d16da3",
+    ("full", 3): "24b0bb6eb020ecc3", ("full", 4): "4ea6ea41effab45d", ("full", 5): "ff423e3a460a1d76",
+    ("full", 6): "fc2926307c565c37", ("full", 7): "54b6de34e865daf4",
 }  # fmt: skip
 
 

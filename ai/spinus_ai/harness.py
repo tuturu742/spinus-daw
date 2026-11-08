@@ -92,8 +92,20 @@ programmer: look at the brief and form, write each part, run check, fix what it 
 call finish when the song is good. Write an original song in the style of the brief; never copy a reference song.
 
 Write idiomatically for each instrument: a bass that locks with the kick, chords voiced for the instrument \
-(guitar strums and power chords, piano voicings, held pads), a singable lead with phrases and rests, drums with a \
-groove, fills at section ends and a crash where a section starts. Thin verses, full choruses; parts come and go.
+(guitar strums and power chords, piano voicings, held pads), drums with a groove. Write it so it sounds composed \
+and played by people, not generated:
+- The hook: a 1 to 2 bar motif (a rhythm and a shape) that comes back so the listener can hum it. Its first \
+phrase ends open (on the 5th, or the leading tone over V), the second starts the same and resolves; then an answer \
+or the motif a step higher. Put the peak note in bar 6 or 7 of 8 and make it the loudest. Leave rests; hold the \
+lead back in the intro and builds so the chorus arrives.
+- Repeats change: a section that comes back gets something new (a part enters, the lead ends differently or an \
+octave up, a fill). Give it its own id (chorus2) to change it; the last chorus is the biggest.
+- Parts enter and leave on 4 and 8 bar boundaries inside long sections, not all at bar 1.
+- Drums follow the phrases: a variation every 4 bars, a fill closing each 8 and a crash opening the next, an open \
+hat closing a phrase, ghost snares at velocity 25 to 40; a build is a snare roll speeding up and getting louder.
+- Harmony goes somewhere: a chorus may start on VI or IV and end on V; chords may change faster at a phrase end.
+- Velocity is phrasing: accents on the beat, softer off-beats and pickups, crescendos into drops, fading outros. \
+A part where every note has the same velocity sounds like a machine.
 
 Notation: a note is "step pitch length velocity"; step is the sixteenth from the start of the section (or of the \
 loop, motif or bar range you write), pitch a MIDI note (60 is middle C), length in sixteenths, velocity 1 to 127; \
@@ -101,8 +113,25 @@ notes are separated by semicolons. Drum parts write the drum's name (kick, snare
 tomMid, tomHigh) instead of the pitch. Chords are Roman numerals (i, iv, V7, bVI, Imaj7, Vsus4, vii°...).
 
 Save tokens: write a loop once with loop_bars instead of every bar; reuse phrases with motif and place; copy a \
-section that repeats; fix a few bars with edit, not the whole part; let rules_write fill a part you don't need to \
-shape by hand. Riser and impact parts are placed by Spinus. Keep tool calls small; don't explain between them."""
+section that repeats, then change what should differ; fix a few bars with edit, not the whole part; let \
+rules_write fill a part you don't need to shape by hand. Riser and impact parts are placed by Spinus. Keep tool \
+calls small; don't explain between them."""
+
+
+def has_motif(notes: list[dict[str, Any]], size: int = 4) -> bool:
+    """Whether a figure of `size` notes (the same intervals and the same rhythm) comes back somewhere later in
+    these notes, moved or not: the sign of a hook."""
+    ordered = sorted(notes, key=lambda n: int(n["start"]))
+    pitches = [int(n["pitch"]) for n in ordered]
+    starts = [int(n["start"]) for n in ordered]
+    figures: dict[tuple[tuple[int, ...], tuple[int, ...]], int] = {}
+    for i in range(len(ordered) - size + 1):
+        shape = tuple(pitches[i + k + 1] - pitches[i + k] for k in range(size - 1))
+        timing = tuple(starts[i + k + 1] - starts[i + k] for k in range(size - 1))
+        first = figures.setdefault((shape, timing), i)
+        if i - first >= size:  # heard again, not overlapping itself
+            return True
+    return False
 
 
 def schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -1344,15 +1373,33 @@ class Workspace:
         units = {"volume": (-100.0, 6.0, "dB"), "pan": (-1.0, 1.0, ""), "filter": (CUTOFF[0], CUTOFF[1], "Hz")}[what]
         if any(not units[0] <= v <= units[1] for _, v in read):
             raise Mistake(f"{what} values are {units[0]:g} to {units[1]:g} {units[2]}".rstrip())
-        self.room_for_automation()
-        self.extra.setdefault("automation", []).append(
-            {"part": pid, "what": what, "points": read, "filter": filter, "shape": shape}
-        )
+        if not self.add_clip({"part": pid, "what": what, "points": read, "filter": filter, "shape": shape}):
+            return f"{pid}'s {what} has this very automation already: nothing added."
         return f"Automation: {pid} {what} from bar {read[0][0] + 1:g} to {read[-1][0] + 1:g} ({len(read)} points)."
 
     def room_for_automation(self) -> None:
         if len(self.extra.get("automation", [])) >= MOST_AUTOMATION:
             raise Mistake(f"the song has {MOST_AUTOMATION} automation clips, the most it can have: remove one first")
+
+    def add_clip(self, clip: dict[str, Any]) -> bool:
+        """Adds an automation clip; False when the song has this very clip already (a transition placed twice).
+        A clip moving what another moves on the same part over some of the same bars is refused: the two would
+        fight (a wobble written twice is a chop, not a wobble)."""
+        clips = self.extra.setdefault("automation", [])
+        start, end = clip["points"][0][0], clip["points"][-1][0]
+        for other in clips:
+            if other["part"] != clip["part"] or other["what"] != clip["what"]:
+                continue
+            if [tuple(p) for p in other["points"]] == [tuple(p) for p in clip["points"]]:
+                return False
+            if start < other["points"][-1][0] and other["points"][0][0] < end:
+                raise Mistake(
+                    f"{clip['part']}'s {clip['what']} is automated already in bars {other['points'][0][0] + 1:g} to "
+                    f"{other['points'][-1][0] + 1:g}: remove that clip first, or automate other bars"
+                )
+        self.room_for_automation()
+        clips.append(clip)
+        return True
 
     def tool_rhythm(
         self, part: str, what: str, pattern: str, low: float, high: float, shape: str = "triangle",
@@ -1412,12 +1459,12 @@ class Workspace:
             read.append((end, low))
             if len(read) > MOST_RHYTHM_POINTS:
                 raise Mistake("that is too many moves for one clip: fewer bars, or a slower rate")
-        self.room_for_automation()
         said = "; ".join(f"{int(a) + 1}-{int(b)} {r}" if b - a > 1 else f"{int(b)} {r}" for a, b, _, r in spans)
-        self.extra.setdefault("automation", []).append(
+        if not self.add_clip(
             {"part": pid, "what": what, "points": [(round(b, 5), v) for b, v in read], "filter": filter,
              "shape": "linear", "rhythm": f"{said}, {shape} {low:g} to {high:g}"}
-        )  # fmt: skip
+        ):  # fmt: skip
+            return f"{pid}'s {what} has this very rhythm already: nothing added."
         return f"Rhythm: {pid} {what} {said}, {shape} from {low:g} to {high:g} ({len(read)} points)."
 
     def fx_part(self, kind: str) -> str:
@@ -1482,9 +1529,16 @@ class Workspace:
 
         # Each riser opens and rises, a downlifter closes and falls, a swell rises sharply into the beat.
         def ramp(what: str, a: float, b: float, at: int, shape: str) -> None:
-            self.extra.setdefault("automation", []).append(
-                {"part": pid, "what": what, "points": [(at, a), (at + bars, b)], "filter": "low-pass", "shape": shape}
-            )
+            clip = {
+                "part": pid,
+                "what": what,
+                "points": [(at, a), (at + bars, b)],
+                "filter": "low-pass",
+                "shape": shape,
+            }
+            clips = self.extra.setdefault("automation", [])
+            if not any(c["part"] == pid and c["what"] == what and c["points"] == clip["points"] for c in clips):
+                clips.append(clip)  # a transition placed again is the same clip, not a second one
 
         for place in places:
             if kind == "riser":
@@ -1848,6 +1902,8 @@ class Workspace:
             out += self.energy_issues()
         if not only_part and not only_section:
             out += self.form_issues()
+        if not only_section:
+            out += self.craft_issues(only_part)
         if not only_part and not only_section and self.setup.variety.own_chords:
             chords = [c for sid in self.order for c in self.sections[sid]["chords"]]
             out += [
@@ -1868,6 +1924,60 @@ class Workspace:
             on_master = [e["effect"] for e in self.extra.get("effects", []) if e["part"] == MASTER]
             if "limiter" not in on_master:
                 out.append("master: no limiter (add_effect part master, effect limiter, ceiling '-1 dB')")
+        return out
+
+    def craft_issues(self, only_part: str = "") -> list[str]:
+        """What makes a song sound generated rather than composed and played (the demo songs never do it): a chorus
+        played the same every time, a lead with no motif that comes back, a part whose notes are all one velocity,
+        drums looping one bar through a long section."""
+        out: list[str] = []
+        bar_ticks = self.steps * sw.TICKS_PER_STEP
+        if not only_part:
+            choruses = [sid for sid in self.order if self.sections[sid]["kind"] == "chorus"]
+            if len(choruses) >= 2 and len(set(choruses)) == 1:
+                out.append(
+                    f"form: the {choruses[0]} plays {len(choruses)} times the same: give a later one its own id "
+                    f"({choruses[0]}2) with a change (a part enters, the lead ends differently or an octave up)"
+                )
+        tune = compose.tune_part(self.setup)
+        for p in self.setup.written():
+            pid = p["id"]
+            if (only_part and pid != only_part) or (pid, "") in self.by_rules:
+                continue
+            by = self.notes.get(pid, {})
+            drums = self.drums(pid)
+            base = sw.ROLES[p["role"]][2]
+            written = [n for sid in self.sections if (pid, sid) not in self.by_rules for n in by.get(sid, [])]
+            if len(written) >= 16 and not (drums and p["role"] != "drums"):
+                same = Counter(round(float(n["velocity"]), 2) for n in written).most_common(1)[0]
+                if same[1] >= 0.8 * len(written):
+                    out.append(
+                        f"{pid}: {round(100 * same[1] / len(written))} % of its notes at one velocity "
+                        f"({round(same[0] * 127)}): accent the beats, soften off-beats and pickups, shape the phrases"
+                    )
+            for sid, s in self.sections.items():
+                notes = by.get(sid, [])
+                bars = int(s["bars"])
+                if not notes or (pid, sid) in self.by_rules:
+                    continue
+                if drums and p["role"] == "drums" and bars >= 16:
+                    seen = {
+                        tuple(sorted((int(n["start"]) % bar_ticks, str(n.get("drum"))) for n in notes
+                                     if int(n["start"]) // bar_ticks == b))
+                        for b in range(bars)
+                    }  # fmt: skip
+                    if len(seen) <= 1:
+                        out.append(
+                            f"{pid}, {sid}: the same bar {bars} times: a variation every 4 bars, a fill closing "
+                            "each 8 and a crash opening the next"
+                        )
+                sung = pid == tune and bool(s.get("words"))  # a sung line follows its syllables
+                lead = base == "lead" and not sung and s["kind"] == "chorus" and bars >= 8 and len(notes) >= 8
+                if lead and not has_motif(notes):
+                    out.append(
+                        f"{pid}, {sid}: no motif comes back: build the lead on a 1 to 2 bar figure (the same "
+                        "intervals and rhythm) heard at least twice, the second time answered"
+                    )
         return out
 
     def rules_issues(self, only_part: str = "") -> list[str]:
