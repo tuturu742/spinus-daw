@@ -263,6 +263,13 @@ probeInHelper (const SoundIndexer::Options&, const SoundSource&, const juce::Str
                const juce::File& presetState, int enterKey, const std::function<bool()>& shouldStop,
                const std::function<void (int, int)>& progress, juce::String& problem);
 
+/** Ask the plugin (pluginkeys), in the helper: the names the instrument (with the preset, as for probeInHelper)
+    gives its keys, as a mode's keys (Source::plugin; the others unknown). All unknown when it names none; none when
+    it could not be asked (`problem` says why). */
+std::optional<std::array<InstrumentProfiles::Key, 128>>
+keyNamesInHelper (const SoundIndexer::Options&, const SoundSource&, const juce::String& preset,
+                  const juce::File& presetState, const std::function<bool()>& shouldStop, juce::String& problem);
+
 //==============================================================================
 // Into the project.
 

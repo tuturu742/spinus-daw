@@ -154,6 +154,19 @@ juce::var InstrumentProfiles::toVar (const Profile& profile)
     }
     auto* o = new juce::DynamicObject();
     o->setProperty ("modes", modes);
+    if (! profile.manuals.empty())
+    {
+        juce::Array<juce::var> manuals;
+        for (const auto& manual : profile.manuals)
+        {
+            auto* m = new juce::DynamicObject();
+            m->setProperty ("source", manual.source);
+            if (manual.version.isNotEmpty())
+                m->setProperty ("version", manual.version);
+            manuals.add (juce::var (m));
+        }
+        o->setProperty ("manuals", manuals);
+    }
     return juce::var (o);
 }
 
@@ -180,6 +193,10 @@ std::optional<InstrumentProfiles::Profile> InstrumentProfiles::fromVar (const ju
                                         fromName (sourceNames, r["source"], Source::user) });
             profile.modes.push_back (std::move (mode));
         }
+    if (const auto* manuals = v["manuals"].getArray())
+        for (const auto& m : *manuals)
+            if (const auto source = m["source"].toString().trim(); source.isNotEmpty())
+                profile.manuals.push_back ({ source, m["version"].toString() });
     if (profile.modes.empty())
         return std::nullopt;
     return profile;

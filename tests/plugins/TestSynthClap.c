@@ -547,8 +547,34 @@ static clap_process_status process_block (const clap_plugin_t* p, const clap_pro
     return CLAP_PROCESS_CONTINUE;
 }
 
+/* Note names (clap.note-name), as a sampled instrument names its key switches: two switches, a name for every
+   key (not one key's), and a plain note name (says nothing). */
+static const struct
+{
+    int16_t key;
+    const char* name;
+} note_names[] = { { 12, "KS Soft" }, { 13, "Articulation: hard" }, { -1, "Any key" }, { 60, "C5" } };
+static uint32_t note_name_count (const clap_plugin_t* p)
+{
+    (void)p;
+    return (uint32_t)(sizeof (note_names) / sizeof (note_names[0]));
+}
+static bool note_name_get (const clap_plugin_t* p, uint32_t index, clap_note_name_t* name)
+{
+    if (index >= note_name_count (p))
+        return false;
+    snprintf (name->name, sizeof (name->name), "%s", note_names[index].name);
+    name->port = -1;
+    name->key = note_names[index].key;
+    name->channel = -1;
+    return true;
+}
+static const clap_plugin_note_name_t note_name = { note_name_count, note_name_get };
+
 static const void* get_extension (const clap_plugin_t* p, const char* id)
 {
+    if (strcmp (id, CLAP_EXT_NOTE_NAME) == 0)
+        return self (p)->organ ? NULL : &note_name;
     if (strcmp (id, CLAP_EXT_PRESET_LOAD) == 0)
         return self (p)->organ ? NULL : &preset_load;
     if (strcmp (id, CLAP_EXT_PARAMS) == 0)
