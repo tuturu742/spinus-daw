@@ -2078,9 +2078,12 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
     case automateLastMoved:
     {
         const auto what = session.describeLastMovedControl();
-        info.setInfo (what.isNotEmpty() ? "Automate the last moved control: " + what
-                                        : juce::String ("Automate the last moved control (move one in a plugin first)"),
-                      "Create an automation clip for the plugin control you moved last", "Edit", 0);
+        info.setInfo (
+            what.isNotEmpty()
+                ? "Create automation clip for the last moved control: " + what
+                : juce::String ("Create automation clip for the last moved control (move a knob or fader first)"),
+            "Create an automation clip for the plugin knob or fader you moved last", "Edit", 0);
+        info.addDefaultKeypress ('l', ctrl | shift);
         info.setActive (what.isNotEmpty());
         break;
     }

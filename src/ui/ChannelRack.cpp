@@ -718,12 +718,24 @@ bool ChannelRack::replaceInstrument (model::ChannelId channel, const model::Devi
 
 bool ChannelRack::setChannelVolume (model::ChannelId channel, double db, bool joined)
 {
-    return perform ("channel.set", object ({ { "channel", (int)channel.value }, { "volumeDb", db } }), joined);
+    if (! perform ("channel.set", object ({ { "channel", (int)channel.value }, { "volumeDb", db } }), joined))
+        return false;
+    model::ParameterTarget target;
+    target.kind = model::ParameterTarget::Kind::channelVolume;
+    target.channel = channel;
+    session.noteMovedControl (target); // for Create automation clip for the last moved control
+    return true;
 }
 
 bool ChannelRack::setChannelPan (model::ChannelId channel, double pan, bool joined)
 {
-    return perform ("channel.set", object ({ { "channel", (int)channel.value }, { "pan", pan } }), joined);
+    if (! perform ("channel.set", object ({ { "channel", (int)channel.value }, { "pan", pan } }), joined))
+        return false;
+    model::ParameterTarget target;
+    target.kind = model::ParameterTarget::Kind::channelPan;
+    target.channel = channel;
+    session.noteMovedControl (target); // for Create automation clip for the last moved control
+    return true;
 }
 
 bool ChannelRack::setChannelMuted (model::ChannelId channel, bool muted)
