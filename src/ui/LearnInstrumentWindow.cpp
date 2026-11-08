@@ -181,7 +181,7 @@ private:
         else if (panel.heard.has_value() && panel.heardMode == panel.mode)
         {
             mode = panel.current();
-            keyprobe::merge (mode, *panel.heard);
+            keyprobe::merge (mode, panel.heard.value());
         }
         else
             return;
@@ -455,7 +455,7 @@ void LearnInstrumentPanel::applyHeard()
     if (! heard.has_value())
         return;
     showMode (heardMode);
-    keyprobe::merge (current(), *heard);
+    keyprobe::merge (current(), heard.value());
     forgotten = false;
     discardHeard();
     heardLabel.setText (heardFrom == From::plugin ? "Applied what the instrument says. Save keeps it."
