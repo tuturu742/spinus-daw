@@ -534,6 +534,11 @@ def keep_lyrics(plan: dict[str, Any], setup: Setup, strict: bool) -> tuple[dict[
             # lengthened (or more added) until about that much is sung, the words kept.
             before = sum(next(s["bars"] for s in sections if s["id"] == o) for o in order)
             sw.fit_share(sections, order, sung, share, vocals.fill, {})
+            for section in sections:  # one it added: the chords of a section of its kind (or the first), its energy
+                if "chords" not in section:
+                    like = next((x for x in sections if x["kind"] == section["kind"] and "chords" in x), sections[0])
+                    section.update(chords=list(like["chords"]), hold=like.get("hold", 1), cue="",
+                                   energy=sw.ENERGY.get(sw.base_kind(section["kind"]), 0.6))  # fmt: skip
             after = sum(next(s["bars"] for s in sections if s["id"] == o) for o in order)
             if after != before:
                 kept.append(f"instrumental room for about {share:.0%} sung ({before} bars became {after})")

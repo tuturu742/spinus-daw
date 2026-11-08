@@ -1348,6 +1348,7 @@ def test_the_ai_chooses_how_much_is_sung_inside_the_style_range() -> None:
     said = ws.tool_set_form(form(["verse", "chorus", "verse", "chorus"]), ["verse", "chorus", "verse", "chorus"])
     share = sw.sung_share(list(ws.sections.values()), ws.order, ws.plan()["lyrics"])
     assert "instrumental room" in said and 0.2 <= share <= 0.5, (said, share)
+    assert "energy" in ws.tool_form()  # the sections it added have chords and energy too
     assert lyric_order == ["verse", "chorus"]
 
 
