@@ -902,3 +902,167 @@ TEST_CASE ("A note placed or dragged sounds while the mouse is down", "[ui][pian
     mouse.grid->mouseUp (mouse.event (on, {}, on, false));
     r.session.setRecordArmed (false);
 }
+
+TEST_CASE ("The first note on a new instrument and its new pattern are one undo step", "[ui][pianoroll]")
+{
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Lead"));
+    r.roll.scrollToPitch (60);
+    auto& history = r.session.getHistory();
+    const auto steps = history.getUndoDescriptions().size();
+    Mouse mouse (r.roll);
+    mouse.click (mouse.at (0, 60));
+    REQUIRE (r.roll.getNotes().size() == 1);
+    CHECK (history.getUndoDescriptions().size() == steps + 1);
+    CHECK (history.getUndoDescriptions().strings.getLast() == "Add note");
+    REQUIRE (history.undo());
+    CHECK (r.session.getProject().patterns.empty()); // no empty pattern left behind
+    r.roll.handleUpdateNowIfNeeded();
+    CHECK (r.roll.getNotes().empty());
+
+    // Again (the pattern and the note one step), then a later note is a step of its own.
+    mouse.click (mouse.at (0, 60));
+    mouse.click (mouse.at (480, 62));
+    CHECK (history.getUndoDescriptions().size() == steps + 2);
+}
+
+TEST_CASE ("Snap None: the note tools and Shift+Left/Right use a sixteenth, not a tick", "[ui][pianoroll]")
+{
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Lead"));
+    REQUIRE (r.roll.addNote (60, 0, 3840, 0.8f)); // a one-bar note
+    r.roll.setSnapChoice (PianoRoll::Snap::none);
+    CHECK (r.roll.getSnap() == 1); // free placing with the mouse
+    CHECK (r.roll.getToolStep() == 240);
+
+    // Ctrl+U chops it into sixteenths (not 3,840 notes of one tick).
+    auto* grid = r.roll.getChildComponent (0);
+    REQUIRE (grid->keyPressed (PianoRoll::getNoteToolKey (PianoRoll::NoteTool::chop)));
+    CHECK (r.roll.getNotes().size() == 16);
+
+    // Shift+Right moves the selected note a sixteenth.
+    r.roll.setSelection ({ 1 });
+    const auto was = r.roll.getNotes()[1].start;
+    REQUIRE (grid->keyPressed (juce::KeyPress (juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0)));
+    REQUIRE (r.roll.getSelection().size() == 1);
+    CHECK (r.roll.getNotes()[(size_t)*r.roll.getSelection().begin()].start == was + 240);
+}
+
+TEST_CASE ("With nothing selected, the keys and note tools change every note but select none", "[ui][pianoroll]")
+{
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Lead"));
+    REQUIRE (r.roll.addNote (60, 10, 480, 0.8f));
+    REQUIRE (r.roll.addNote (64, 490, 480, 0.8f));
+    auto* grid = r.roll.getChildComponent (0);
+    using KP = juce::KeyPress;
+
+    CHECK (grid->keyPressed (KP (KP::upKey, juce::ModifierKeys::shiftModifier, 0)));
+    CHECK (pitchesOf (r.roll.getNotes()) == std::vector<int> { 61, 65 });
+    CHECK (r.roll.getSelection().empty());
+    CHECK (grid->keyPressed (KP (KP::rightKey, juce::ModifierKeys::shiftModifier, 0)));
+    CHECK (r.roll.getNotes()[0].start == 250);
+    CHECK (r.roll.getSelection().empty());
+    REQUIRE (r.roll.applyNoteTool (PianoRoll::NoteTool::quantize));
+    CHECK (r.roll.getNotes()[0].start == 240);
+    CHECK (r.roll.getNotes()[1].start == 720);
+    CHECK (r.roll.getSelection().empty());
+
+    // A drag afterwards moves only the note under the mouse.
+    r.roll.scrollToPitch (61);
+    Mouse mouse (r.roll);
+    mouse.drag (mouse.at (300, 61), { mouse.at (300, 63) });
+    CHECK (pitchesOf (r.roll.getNotes()) == std::vector<int> { 63, 65 });
+}
+
+TEST_CASE ("The velocity lane reaches each note of a chord: the selected one, else the bar nearest the mouse",
+           "[ui][pianoroll]")
+{
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Keys"));
+    REQUIRE (r.roll.addNote (60, 0, 960, 0.2f));
+    REQUIRE (r.roll.addNote (64, 0, 960, 0.5f));
+    REQUIRE (r.roll.addNote (67, 0, 960, 0.9f));
+    Mouse lane (r.roll, 3);
+    REQUIRE (lane.grid->getHeight() > 20);
+    const auto yOf = [&] (float velocity) { return 3.0f + (1.0f - velocity) * (float)(lane.grid->getHeight() - 6); };
+    const auto x = r.roll.tickToX (0);
+    const auto button = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+    const auto dragLane = [&] (float fromVelocity, float toVelocity)
+    {
+        const juce::Point<float> from { x, yOf (fromVelocity) }, to { x, yOf (toVelocity) };
+        lane.grid->mouseDown (lane.event (from, button, from, false));
+        lane.grid->mouseDrag (lane.event (to, button, from, true));
+        lane.grid->mouseUp (lane.event (to, {}, from, true));
+        r.roll.handleUpdateNowIfNeeded();
+    };
+    const auto velocityOf = [&r] (int pitch)
+    {
+        for (auto& n : r.roll.getNotes())
+            if (n.pitch == pitch)
+                return n.velocity;
+        return -1.0f;
+    };
+
+    // The middle note's bar top is nearest: it changes, the others don't.
+    dragLane (0.5f, 0.7f);
+    CHECK (std::abs (velocityOf (64) - 0.7f) < 0.02f);
+    CHECK (juce::approximatelyEqual (velocityOf (60), 0.2f));
+    CHECK (juce::approximatelyEqual (velocityOf (67), 0.9f));
+
+    // A selected note comes first, wherever on its stem the mouse goes down.
+    for (int i = 0; i < (int)r.roll.getNotes().size(); ++i)
+        if (r.roll.getNotes()[(size_t)i].pitch == 60)
+            r.roll.setSelection ({ i });
+    dragLane (0.9f, 0.4f);
+    CHECK (std::abs (velocityOf (60) - 0.4f) < 0.02f);
+    CHECK (juce::approximatelyEqual (velocityOf (67), 0.9f));
+}
+
+TEST_CASE ("A change to the project during a velocity lane drag doesn't pull the note away", "[ui][pianoroll]")
+{
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Keys"));
+    const auto keys = r.session.getSelectedChannel();
+    REQUIRE (r.roll.addNote (60, 0, 960, 0.2f));
+    Mouse lane (r.roll, 3);
+    const auto yOf = [&] (float velocity) { return 3.0f + (1.0f - velocity) * (float)(lane.grid->getHeight() - 6); };
+    const auto button = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+    const juce::Point<float> from { r.roll.tickToX (0), yOf (0.2f) }, to { r.roll.tickToX (0), yOf (0.8f) };
+
+    lane.grid->mouseDown (lane.event (from, button, from, false));
+    lane.grid->mouseDrag (lane.event (to, button, from, true));
+    // Something else changes the project mid-drag (here the tempo).
+    juce::String error;
+    auto tempo =
+        commands::CommandRegistry::get().create ("project.setTempo", juce::JSON::parse ("{\"bpm\": 100}"), error);
+    REQUIRE (tempo != nullptr);
+    REQUIRE (r.session.getHistory().perform (std::move (tempo)).wasOk());
+    r.roll.handleUpdateNowIfNeeded();
+    REQUIRE (r.roll.getNotes().size() == 1);
+    CHECK (std::abs (r.roll.getNotes()[0].velocity - 0.8f) < 0.02f); // still the dragged value
+    lane.grid->mouseUp (lane.event (to, {}, from, true));
+    r.roll.handleUpdateNowIfNeeded();
+    const auto* pattern = r.session.getProject().findPattern (r.session.getCurrentPattern());
+    REQUIRE (pattern != nullptr);
+    CHECK (std::abs (pattern->notes.at (keys)[0].velocity - 0.8f) < 0.02f);
+}
+
+TEST_CASE ("The Piano Roll's toolbar never takes the keyboard focus from the grid", "[ui][pianoroll]")
+{
+    Roll r;
+    std::function<void (juce::Component&)> check = [&] (juce::Component& c)
+    {
+        for (auto* child : c.getChildren())
+        {
+            if (dynamic_cast<juce::Button*> (child) != nullptr || dynamic_cast<juce::ComboBox*> (child) != nullptr)
+            {
+                INFO (child->getName() << " " << child->getTitle());
+                CHECK (! child->getWantsKeyboardFocus());
+            }
+            check (*child);
+        }
+    };
+    check (r.roll);
+    CHECK (r.roll.getChildComponent (0)->getWantsKeyboardFocus()); // the grid keeps it
+}

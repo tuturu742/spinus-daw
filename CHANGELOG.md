@@ -16,6 +16,24 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - A new project starts with an empty Track creator, like the Channel Rack and the Mixer. Each saved project keeps
   its own reference songs, summary, description and parts, and opening it brings them back. Songs analyzed once
   stay ready in every project.
+  reload the notes while the mouse was still down, taking away the note being placed. The velocity lane is safe
+  from the same problem now.
+- One click, one undo step: the first step, note, Swing or Triplet change in a new project, and a Playlist clip
+  placed below the last track, used to need two **Ctrl+Z** (the second taking away an empty pattern or empty
+  tracks).
+- Clicking a Channel Rack step no longer resets the release, pan, fine pitch and volume of the other notes.
+- Snap **None** in the Piano Roll: **Ctrl+U** chopped a note into thousands of one-tick notes (and could freeze the
+  window), and **Shift+Left** / **Shift+Right** moved notes one tick. Both use a sixteenth now, like the other note
+  tools.
+- With no note selected, the arrow keys and note tools still change every note, but no longer leave all of them
+  selected (as in FL Studio), so the next drag moves one note, not all.
+- The velocity lane can reach each note of a chord: selected notes come first, then the bar nearest the mouse.
+- The Piano Roll's buttons and lists no longer take the keys away from the notes: after choosing a tool or a snap,
+  **Delete**, **Ctrl+C** and the arrow keys work again without clicking the grid (which added a note).
+- The first Playlist click in a new project did nothing. It now makes **Pattern 1** and places it.
+- Playlist with a folded group: a selection box picked clips on the wrong (hidden) tracks, and **Ctrl+A** then
+  **Shift+arrows** did nothing. Clips folded away now move in time with the others and stay on their tracks.
+- The Playlist no longer crashes if an automation point is being dragged when its clip is undone.
 
 ### Track creator: songs that sound written, not generated
 

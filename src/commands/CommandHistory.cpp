@@ -3,6 +3,8 @@
 #include "core/Log.h"
 #include "model/Validation.h"
 
+#include <algorithm>
+
 namespace spinus::commands
 {
 
@@ -12,12 +14,21 @@ namespace
 class JoinedSteps final : public Command
 {
 public:
-    explicit JoinedSteps (std::unique_ptr<Command> first) { steps.push_back (std::move (first)); }
+    /** `description`: the step's own (see joinStepsSince); empty to use the first command's. */
+    explicit JoinedSteps (std::unique_ptr<Command> first, juce::String description = {})
+        : ownDescription (std::move (description))
+    {
+        steps.push_back (std::move (first));
+    }
 
     void add (std::unique_ptr<Command> c) { steps.push_back (std::move (c)); }
 
-    juce::String getName() const override { return steps.front()->getName(); }
-    juce::String getDescription() const override { return steps.front()->getDescription(); }
+    // The newest command's name: the next command of the gesture joins if it is of the same kind.
+    juce::String getName() const override { return steps.back()->getName(); }
+    juce::String getDescription() const override
+    {
+        return ownDescription.isNotEmpty() ? ownDescription : steps.front()->getDescription();
+    }
     juce::var getParameters() const override { return steps.back()->getParameters(); }
 
     juce::Result perform (Project& p) override
@@ -44,6 +55,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<Command>> steps;
+    juce::String ownDescription;
 };
 } // namespace
 
@@ -101,6 +113,32 @@ bool CommandHistory::joinLastSteps (int count, const juce::String& description)
     undoIds.erase (undoIds.end() - count, undoIds.end());
     undoStack.push_back (std::move (joined));
     undoIds.push_back (state);
+    return true;
+}
+
+bool CommandHistory::joinStepsSince (uint64_t state)
+{
+    size_t first = 0; // the first step made since `state`
+    if (state != baseStateId)
+    {
+        const auto it = std::find (undoIds.begin(), undoIds.end(), state);
+        if (it == undoIds.end())
+            return false;
+        first = (size_t)(it - undoIds.begin()) + 1;
+    }
+    if (undoStack.size() < first + 2)
+        return true;
+
+    // Already performed: the joined step only holds them, to undo them together and redo them in order.
+    const auto description = undoStack.back()->getDescription();
+    auto joined = std::make_unique<JoinedSteps> (std::move (undoStack[first]), description);
+    for (auto i = first + 1; i < undoStack.size(); ++i)
+        joined->add (std::move (undoStack[i]));
+    undoStack.resize (first);
+    undoStack.push_back (std::move (joined));
+    const auto newest = undoIds.back();
+    undoIds.resize (first);
+    undoIds.push_back (newest);
     return true;
 }
 

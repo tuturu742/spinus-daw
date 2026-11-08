@@ -1171,6 +1171,32 @@ TEST_CASE ("The newest undo steps can be joined into one", "[commands]")
     CHECK (history.getProject().channels.size() == 3);
 }
 
+TEST_CASE ("The steps since a state join into one, which the rest of a gesture still joins", "[commands]")
+{
+    // A swing drag on a new project: the pattern it makes, then the swing, then more swing moves.
+    CommandHistory history;
+    const auto empty = history.getStateId();
+    CHECK (history.joinStepsSince (empty)); // nothing to join
+    REQUIRE (history.perform (make ("pattern.add", R"({"length": 3840})")).wasOk());
+    const auto pattern = juce::String ((int)history.getProject().patterns[0].id.value);
+    REQUIRE (history.perform (make ("pattern.setSwing", R"({"pattern": )" + pattern + R"(, "swing": 0.2})")).wasOk());
+    REQUIRE (history.joinStepsSince (empty));
+    REQUIRE (history.getUndoDescriptions().size() == 1);
+    const auto joinedState = history.getStateId();
+    REQUIRE (
+        history.performJoined (make ("pattern.setSwing", R"({"pattern": )" + pattern + R"(, "swing": 0.4})")).wasOk());
+    CHECK (history.getUndoDescriptions().size() == 1);
+    CHECK (history.getStateId() != joinedState);
+    CHECK (! history.joinStepsSince (joinedState)); // no longer on the undo list
+
+    REQUIRE (history.undo());
+    CHECK (history.getProject().patterns.empty());
+    CHECK (history.getStateId() == empty);
+    REQUIRE (history.redo());
+    REQUIRE (history.getProject().patterns.size() == 1);
+    CHECK (juce::approximatelyEqual (history.getProject().patterns[0].swing, 0.4f));
+}
+
 TEST_CASE ("device.setParameters reads text for Spinus devices; for plugins only with a Session", "[commands]")
 {
     CommandHistory history (makeExample());

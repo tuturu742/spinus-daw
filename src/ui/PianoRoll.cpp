@@ -831,16 +831,35 @@ public:
         return range.getStart() + proportion * range.getLength();
     }
 
+    /** The note whose bar is at `p` (-1 if none is within a few pixels): a selected note first, then the
+        nearest by start, then, of notes starting there (a chord), the one whose value is nearest the mouse. */
+    int noteAt (juce::Point<float> p) const
+    {
+        int found = -1;
+        std::tuple<bool, float, float> best;
+        for (size_t i = 0; i < roll.notes.size(); ++i)
+        {
+            const auto& n = roll.notes[i];
+            const auto dx = std::abs (roll.tickToX (n.start) - p.x);
+            if (dx >= 8.0f)
+                continue;
+            const auto key = std::tuple (! roll.isSelected ((int)i), std::round (dx),
+                                         std::abs (valueToY (getNoteValue (n, roll.laneMode)) - p.y));
+            if (found < 0 || key < best)
+            {
+                found = (int)i;
+                best = key;
+            }
+        }
+        return found;
+    }
+
+    /** A drag is changing a note: it holds the note's index into the roll's notes. */
+    bool isEditing() const { return index >= 0; }
+
     void mouseDown (const juce::MouseEvent& e) override
     {
-        index = -1;
-        float best = 8.0f;
-        for (size_t i = 0; i < roll.notes.size(); ++i)
-            if (auto d = std::abs (roll.tickToX (roll.notes[i].start) - e.position.x); d < best)
-            {
-                best = d;
-                index = (int)i;
-            }
+        index = noteAt (e.position);
         before = roll.notes;
         resetting = e.mods.isPopupMenu();
         mouseDrag (e);
@@ -848,7 +867,7 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
-        if (index < 0)
+        if (index < 0 || index >= (int)roll.notes.size())
             return;
         const auto value = resetting ? getLaneDefault (roll.laneMode) : yToValue (e.position.y);
         setNoteValue (roll.notes[(size_t)index], roll.laneMode, value);
@@ -858,17 +877,21 @@ public:
 
     void mouseUp (const juce::MouseEvent&) override
     {
-        if (index < 0)
+        const auto edited = std::exchange (index, -1);
+        if (edited < 0 || edited >= (int)roll.notes.size())
+        {
+            roll.reloadIfDeferred();
             return;
+        }
         const auto changed = roll.notes;
         roll.notes = before;
         if (! (changed == before))
         {
             if (roll.laneMode == LaneMode::velocity)
-                roll.lastVelocity = changed[(size_t)index].velocity;
+                roll.lastVelocity = changed[(size_t)edited].velocity;
             roll.commit (changed, "Change " + getLaneName (roll.laneMode).toLowerCase());
         }
-        index = -1;
+        roll.reloadIfDeferred();
     }
 
 private:
@@ -1019,7 +1042,10 @@ public:
         };
 
         for (auto* b : { &previous, &next, &regenerate, &listen, &discard, &accept })
+        {
+            b->setWantsKeyboardFocus (false); // the grid keeps the keys (see the toolbar)
             addAndMakeVisible (b);
+        }
         setHelpText ("A suggestion: the blue notes. Accept writes them into the pattern; Discard hides them");
     }
 
@@ -1237,6 +1263,13 @@ PianoRoll::PianoRoll (Session& s)
     timelineControls.onFit = [this] { fitPattern(); };
     addAndMakeVisible (timelineControls);
 
+    // The toolbar never takes the keyboard focus (as TimelineControls): after a click on a tool, the snap or the
+    // chord stamp, Delete, Ctrl+C, the arrow keys and the note tools' keys still reach the grid.
+    for (auto* c : std::initializer_list<juce::Component*> { &toolButtons[0], &toolButtons[1], &toolButtons[2],
+                                                             &toolButtons[3], &snapBox, &chordBox, &toolsButton,
+                                                             &scaleButton, &recordIdeaButton, &generateButton })
+        c->setWantsKeyboardFocus (false);
+
     reloadNotes();
     scrollToPitch (66);
     startTimerHz (30);
@@ -1307,7 +1340,7 @@ bool PianoRoll::applyNoteTool (NoteTool which)
     switch (which)
     {
     case NoteTool::quantize:
-        result = nt::quantize (chosen, snap), description = "Quantize notes";
+        result = nt::quantize (chosen, getToolStep()), description = "Quantize notes";
         break;
     case NoteTool::strumUp:
         result = nt::strum (chosen, strumSpacing, true), description = "Strum up";
@@ -1316,10 +1349,10 @@ bool PianoRoll::applyNoteTool (NoteTool which)
         result = nt::strum (chosen, strumSpacing, false), description = "Strum down";
         break;
     case NoteTool::arpeggiate:
-        result = nt::arpeggiate (chosen, snap), description = "Arpeggiate";
+        result = nt::arpeggiate (chosen, getToolStep()), description = "Arpeggiate";
         break;
     case NoteTool::chop:
-        result = nt::chop (chosen, snap), description = "Chop notes";
+        result = nt::chop (chosen, getToolStep()), description = "Chop notes";
         break;
     case NoteTool::legato:
         result = nt::legato (chosen), description = "Legato";
@@ -1334,7 +1367,9 @@ bool PianoRoll::applyNoteTool (NoteTool which)
     }
     auto changed = rest;
     changed.insert (changed.end(), result.begin(), result.end());
-    return commitKeepingSelection (changed, result, description);
+    // The result stays selected only if notes were: with none selected the tool took all of them, and leaving
+    // them all selected would make the next drag move every note (FL Studio selects none either).
+    return commitKeepingSelection (changed, selection.empty() ? std::vector<model::Note>() : result, description);
 }
 
 void PianoRoll::setChordStamp (int choice)
@@ -1429,7 +1464,8 @@ void PianoRoll::handleAsyncUpdate()
 {
     // A reload in the middle of a drag would pull the notes from under it (the first click on a new instrument
     // creates its pattern, and that change arrives while the mouse is still down): wait for the release.
-    if (grid->isEditing())
+    // The velocity lane's drag the same: it holds the index of the note it edits.
+    if (grid->isEditing() || lane->isEditing())
     {
         reloadDeferred = true;
         return;
@@ -1489,7 +1525,12 @@ bool PianoRoll::ensurePattern()
     const auto bar = session.getProject().settings.timeSignature.barTicks();
     juce::String error;
     auto command = commands::CommandRegistry::get().create ("pattern.add", object ({ { "length", (int)bar } }), error);
-    return command != nullptr && session.getHistory().perform (std::move (command)).wasOk();
+    auto& history = session.getHistory();
+    const auto state = history.getStateId();
+    if (command == nullptr || history.perform (std::move (command)).failed())
+        return false;
+    patternMade = { state, history.getStateId() };
+    return true;
 }
 
 bool PianoRoll::commit (std::vector<model::Note> newNotes, const juce::String& description)
@@ -1514,7 +1555,15 @@ bool PianoRoll::commit (std::vector<model::Note> newNotes, const juce::String& d
 
     // Notes placed past the pattern's end make it longer, to the end of their bar (FL), and removing them
     // makes it shorter again: pattern.setNotes keeps the length fitted, in the same undo step.
-    const bool ok = command != nullptr && session.getHistory().perform (std::move (command)).wasOk();
+    auto& history = session.getHistory();
+    // The first notes go in the pattern made for them (at the mouse-down, or just now): one undo step, so a
+    // single Ctrl+Z does not leave an empty pattern behind. Only when nothing else happened in between.
+    std::optional<uint64_t> joinSince;
+    if (const auto made = std::exchange (patternMade, std::nullopt); made && made->second == history.getStateId())
+        joinSince = made->first;
+    const bool ok = command != nullptr && history.perform (std::move (command)).wasOk();
+    if (ok && joinSince)
+        history.joinStepsSince (*joinSince);
     reloadNotes(); // show the committed state now (tests and the release of a drag)
     return ok;
 }
@@ -1581,39 +1630,56 @@ void PianoRoll::selectArea (model::Ticks from, model::Ticks to, int lowPitch, in
 
 bool PianoRoll::moveSelection (model::Ticks deltaTicks, int deltaPitch)
 {
-    if (selection.empty())
-        return false;
+    return moveNotes (selection, deltaTicks, deltaPitch, true);
+}
+
+bool PianoRoll::moveNotes (const std::set<int>& which, model::Ticks deltaTicks, int deltaPitch, bool keepSelected)
+{
     auto changed = notes;
     std::vector<model::Note> moved;
-    for (auto i : selection)
+    for (auto i : which)
     {
+        if (i < 0 || i >= (int)changed.size())
+            continue;
         auto& n = changed[(size_t)i];
         n.start = juce::jmax<model::Ticks> (0, n.start + deltaTicks);
         n.pitch = juce::jlimit (0, 127, n.pitch + deltaPitch);
         moved.push_back (n);
     }
-    return commitKeepingSelection (changed, moved, selection.size() > 1 ? "Move notes" : "Move note");
+    if (moved.empty())
+        return false;
+    const auto description = moved.size() > 1 ? "Move notes" : "Move note";
+    return commitKeepingSelection (changed, keepSelected ? moved : std::vector<model::Note>(), description);
 }
 
+std::set<int> PianoRoll::selectedOrAll() const
+{
+    if (! selection.empty())
+        return selection;
+    std::set<int> all;
+    for (int i = 0; i < (int)notes.size(); ++i)
+        all.insert (i);
+    return all;
+}
+
+// With nothing selected these move every note but select none (FL Studio): the next drag moves one note.
 bool PianoRoll::transposeSelection (int semitones)
 {
-    if (selection.empty())
-        selectAll();
-    for (auto i : selection)
+    const auto which = selectedOrAll();
+    for (auto i : which)
         if (const auto pitch = notes[(size_t)i].pitch + semitones; pitch < 0 || pitch > 127)
             return false;
-    return moveSelection (0, semitones);
+    return moveNotes (which, 0, semitones, ! selection.empty());
 }
 
 bool PianoRoll::nudgeSelection (int steps)
 {
-    if (selection.empty())
-        selectAll();
-    const auto delta = (model::Ticks)steps * (snap > 0 ? snap : model::ticksPerQuarterNote / 4);
-    for (auto i : selection)
+    const auto which = selectedOrAll();
+    const auto delta = (model::Ticks)steps * getToolStep();
+    for (auto i : which)
         if (notes[(size_t)i].start + delta < 0)
             return false;
-    return moveSelection (delta, 0);
+    return moveNotes (which, delta, 0, ! selection.empty());
 }
 
 bool PianoRoll::resizeSelection (model::Ticks deltaTicks, model::Ticks minimum)
@@ -1658,11 +1724,10 @@ bool PianoRoll::cutSelection()
 {
     if (! copySelection())
         return false;
-    if (selection.empty())
-        selectAll();
-    const auto count = selection.size();
+    const auto which = selectedOrAll();
+    const auto count = which.size();
     auto changed = notes;
-    for (auto it = selection.rbegin(); it != selection.rend(); ++it)
+    for (auto it = which.rbegin(); it != which.rend(); ++it)
         changed.erase (changed.begin() + *it);
     return commitKeepingSelection (changed, {}, count > 1 ? "Cut notes" : "Cut note");
 }

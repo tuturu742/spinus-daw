@@ -5,6 +5,7 @@
 #include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
+#include "model/ModelJson.h"
 #include "ui/ChannelRack.h"
 #include "ui/Theme.h"
 
@@ -479,4 +480,73 @@ TEST_CASE ("Channel groups: the rack shows one group, and a group can play throu
     rack.updateNow();
     CHECK (rack.getShownGroup() == ChannelRack::allGroups);
     CHECK (rack.getNumShownChannels() == 3);
+}
+
+TEST_CASE ("The first step, swing or triplet change on a new project is one undo step with its pattern",
+           "[ui][channelrack]")
+{
+    Rack r;
+    REQUIRE (r.rack.addChannel ({}, "Kick"));
+    const auto kick = r.lastChannel();
+    auto& history = r.session.getHistory();
+    const auto steps = history.getUndoDescriptions().size();
+
+    // The first step makes the pattern too: one Ctrl+Z takes back both (no empty pattern left).
+    REQUIRE (r.rack.toggleStep (kick, 0));
+    CHECK (history.getUndoDescriptions().size() == steps + 1);
+    CHECK (history.getUndoDescriptions().strings.getLast() == "Add step");
+    REQUIRE (history.undo());
+    CHECK (r.session.getProject().patterns.empty());
+
+    // Triplet steps the same.
+    REQUIRE (r.rack.setTripletSteps (true));
+    CHECK (history.getUndoDescriptions().size() == steps + 1);
+    REQUIRE (history.undo());
+    CHECK (r.session.getProject().patterns.empty());
+
+    // A swing drag: the pattern, the first move and the rest of the drag, one step.
+    REQUIRE (r.rack.setSwing (0.2, true));
+    REQUIRE (r.rack.setSwing (0.4, true));
+    REQUIRE (r.rack.setSwing (0.6, true));
+    CHECK (history.getUndoDescriptions().size() == steps + 1);
+    CHECK (std::abs (r.rack.getSwing() - 0.6) < 1.0e-4);
+    REQUIRE (history.undo());
+    CHECK (r.session.getProject().patterns.empty());
+
+    // With a pattern there, a step is one step of its own, as before.
+    REQUIRE (r.rack.toggleStep (kick, 0));
+    REQUIRE (r.rack.toggleStep (kick, 4));
+    CHECK (history.getUndoDescriptions().size() == steps + 2);
+}
+
+TEST_CASE ("Clicking a step keeps the other notes' release, pan, fine pitch and volume", "[ui][channelrack]")
+{
+    Rack r;
+    REQUIRE (r.rack.addChannel ({}, "Kick"));
+    const auto kick = r.lastChannel();
+    REQUIRE (r.rack.toggleStep (kick, 0));
+
+    // Lane values set in the Piano Roll on the first note.
+    auto edited = r.session.getProject().findPattern (r.session.getCurrentPattern())->notes.at (kick);
+    REQUIRE (edited.size() == 1);
+    edited[0].releaseVelocity = 0.2f;
+    edited[0].pan = -0.5f;
+    edited[0].finePitchCents = 30.0f;
+    edited[0].expressions["volume"] = 0.4f;
+    juce::Array<juce::var> list;
+    list.add (model::noteToJson (edited[0]));
+    auto* parameters = new juce::DynamicObject();
+    parameters->setProperty ("pattern", (int)r.session.getCurrentPattern().value);
+    parameters->setProperty ("channel", (int)kick.value);
+    parameters->setProperty ("notes", list);
+    juce::String error;
+    auto command = commands::CommandRegistry::get().create ("pattern.setNotes", juce::var (parameters), error);
+    REQUIRE (command != nullptr);
+    REQUIRE (r.session.getHistory().perform (std::move (command)).wasOk());
+
+    REQUIRE (r.rack.toggleStep (kick, 4)); // another step on, then off
+    REQUIRE (r.rack.toggleStep (kick, 4));
+    const auto& notes = r.session.getProject().findPattern (r.session.getCurrentPattern())->notes.at (kick);
+    REQUIRE (notes.size() == 1);
+    CHECK (notes[0] == edited[0]);
 }
