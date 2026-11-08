@@ -110,6 +110,8 @@ def schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
 
 
 PART = {"type": "string", "description": "The part's id, as the brief lists it"}
+VOCALS_PHRASING = "With lyrics: how the lines are phrased, one of the style's phrasings (the brief's vocals)"
+VOCALS_SHARE = "With lyrics: the share of the bars sung, 0 to 1, inside the style's range (the brief's vocals)"
 SECTION = {"type": "string", "description": "The section's id, as form lists it"}
 NOTES = {"type": "string", "description": "'step pitch length velocity; ...' (drums: the drum's name for pitch)"}
 BARS = {"type": "string", "description": "Bars of the section, from 1: '3' or '5-8'"}
@@ -152,6 +154,8 @@ TOOLS = [
                 "order": {"type": "array", "items": {"type": "string"}},
                 "tempo": {"type": "number"},
                 "key": {"type": "string", "description": "'A minor', 'F# major'"},
+                "phrasing": {"type": "string", "enum": list(sw.PHRASINGS), "description": VOCALS_PHRASING},
+                "vocalShare": {"type": "number", "description": VOCALS_SHARE},
             },
             ["sections", "order"],
         ),
@@ -393,6 +397,9 @@ leave so sections build and drop (play_only). Check the energy curve against the
 
 AUTOMATABLE = ("volume", "pan", "filter")
 SHAPES = ("linear", "ease-in", "ease-out")
+RHYTHM_SHAPES = ("triangle", "saw-up", "saw-down", "square")
+MOST_AUTOMATION = 24  # automation clips a song may have: enough for a wobbled drop, not for automating everything
+MOST_RHYTHM_POINTS = 4096  # one rhythm clip's points (16 bars of 1/32 triangles is 1024)
 TRANSITIONS = ("riser", "downlifter", "swell", "impact")
 TRANSITIONS_TOOLS = [
     Tool(
@@ -432,6 +439,27 @@ TRANSITIONS_TOOLS = [
             ["kind", "section"],
         ),
     ),
+    Tool(
+        "rhythm",
+        "A Playlist automation clip that moves in time with the beat, drawn by Spinus: a wobble (a bass's filter "
+        "opening and closing), a tremolo or a gate (its volume), an auto-pan. Give the bars and the rate of each "
+        "stretch, 'bars rate' separated by semicolons: '17-24 1/8; 25-26 1/16' moves once every eighth note "
+        "for bars 17 to 24, then every sixteenth for bars 25 and 26. Rates: 2 (two bars), 1 (a bar), 1/2, 1/4, "
+        "1/8, 1/16, 1/32, with T for triplets (1/8T) or a dot for dotted (1/8.). Each move goes from low to high "
+        "and back, in the shape asked; between the stretches it rests at low.",
+        schema(
+            {
+                "part": PART,
+                "what": {"type": "string", "enum": list(AUTOMATABLE)},
+                "pattern": {"type": "string", "description": "'bars rate; bars rate; ...', e.g. '17-24 1/8; 25 1/16'"},
+                "low": {"type": "number", "description": "The value it rests at (dB, -1..1 or Hz, as for automate)"},
+                "high": {"type": "number", "description": "The value each move reaches"},
+                "shape": {"type": "string", "enum": list(RHYTHM_SHAPES)},
+                "filter": {"type": "string", "enum": ["low-pass", "high-pass"]},
+            },
+            ["part", "what", "pattern", "low", "high"],
+        ),
+    ),
     Tool("automation", "The song's automation clips and transitions so far.", schema({}, [])),
     Tool(
         "remove_automation",
@@ -444,7 +472,8 @@ TOOL_GROUP.update({t.name: "transitions" for t in TRANSITIONS_TOOLS})
 GROUP_SYSTEM["transitions"] = """Transition and automation tools: lead into big sections and out of them \
 (transition: risers before a chorus, an impact on its first beat, a downlifter after a drop, a swell into a \
 new section), and shape parts over time with automation clips (automate: fades, filter sweeps opening a build, \
-a pan moving). Keep them few and purposeful."""
+a pan moving; rhythm: a movement in time with the beat, a wobble bass, a tremolo, a gate, its rate changing \
+from stretch to stretch). Keep them few and purposeful."""
 # Spinus's own effects as automation reads them: the Spinus Filter's cutoff (src/dsp/filter/FilterProcessor.cpp:
 # 20 Hz to 20 kHz, 1 kHz in the middle) and the faders (Tracktion's fader position, exp((dB - 6) / 20)).
 CUTOFF = (20.0, 20000.0, 1000.0)
@@ -466,6 +495,15 @@ def sound_named(candidates: list[dict[str, Any]], said: str) -> dict[str, Any] |
         return named[0]
     inside = [c for c in candidates if c["id"] in text]
     return inside[0] if len(inside) == 1 else None
+
+
+def rate_beats(text: str) -> float:
+    """A rhythm's rate ('1/8', '1/8T', '1/4.', '1', '2') as one move's length in quarter-note beats."""
+    m = re.fullmatch(r"(?:(1)/(2|4|8|16|32)|(1|2))([tT.]?)", str(text).strip())
+    if m is None:
+        raise Mistake(f"a rate is 2, 1, 1/2, 1/4, 1/8, 1/16 or 1/32 (T: triplet, '.': dotted), not '{text}'")
+    beats = 4.0 / int(m.group(2)) if m.group(2) else 4.0 * int(m.group(3))
+    return beats * {"": 1.0, "t": 2.0 / 3.0, "T": 2.0 / 3.0, ".": 1.5}[m.group(4)]
 
 
 def normalised(what: str, value: float) -> float:
@@ -679,6 +717,9 @@ class Workspace:
                 "cue": str(s.get("cue") or ""),
             }
         ws.order = [e["section"] for e in rules["arrangement"]]
+        chosen = {k: rules["plan"][k] for k in ("phrasing", "vocalShare") if k in (rules.get("plan") or {})}
+        if chosen:
+            ws.extra["vocals"] = chosen
         plan, _ = compose.keep_lyrics(ws.plan(), ws.setup, strict=False)  # the sung sections' words, for the checks
         ws.sections, ws.order = {s["id"]: s for s in plan["sections"]}, plan["order"]
         return ws
@@ -765,8 +806,9 @@ class Workspace:
             "key": self.key,
             "sections": [self.sections[sid] for sid in self.sections if sid in self.order],
             "order": self.order,
+            **self.extra.get("vocals", {}),
         }
-        if sung := compose.sung_of(self.order, self.setup, self.tempo):
+        if sung := compose.sung_of(self.order, self.setup, self.tempo, plan):
             plan["lyrics"] = sung
         return plan
 
@@ -884,7 +926,7 @@ class Workspace:
     def tool_form(self) -> str:
         lines = [
             f"Tempo {self.tempo:g}, key {self.key['name']}. Order: {' '.join(self.order)} "
-            f"({sum(self.sections[s]['bars'] for s in self.order)} bars)."
+            f"({sum(self.sections[s]['bars'] for s in self.order)} bars).{self.vocals_said()}"
         ]
         for sid, s in self.sections.items():
             has = [p for p, by in self.notes.items() if by.get(sid)]
@@ -929,19 +971,30 @@ class Workspace:
         return "\n".join(lines) + f"\npick_sound with the part and a number (1 to {len(everything)})."
 
     def tool_set_form(
-        self, sections: list[dict[str, Any]], order: list[str], tempo: float | None = None, key: str | None = None
+        self,
+        sections: list[dict[str, Any]],
+        order: list[str],
+        tempo: float | None = None,
+        key: str | None = None,
+        phrasing: str | None = None,
+        vocalShare: float | None = None,
     ) -> str:
+        vocals = self.extra.get("vocals", {})
         answer: dict[str, Any] = {
             "sections": sections,
             "order": order,
             "tempo": tempo or self.tempo,
             "key": key or self.key["name"],
+            "phrasing": phrasing or vocals.get("phrasing"),
+            "vocalShare": vocalShare if vocalShare is not None else vocals.get("vocalShare"),
         }
         try:
             plan, kept = compose.keep_lyrics(compose.check_plan(answer, self.setup), self.setup, strict=True)
         except compose.Unusable as why:
             raise Mistake(str(why)) from why
         old = self.sections
+        if "vocalShare" in plan:
+            self.extra["vocals"] = {"phrasing": plan["phrasing"], "vocalShare": plan["vocalShare"]}
         self.tempo, self.key = plan["tempo"], plan["key"]
         self.sections = {s["id"]: s for s in plan["sections"]}
         self.order = plan["order"]
@@ -956,6 +1009,18 @@ class Workspace:
         return (
             f"Form set: {' '.join(self.order)}, {sum(self.sections[s]['bars'] for s in self.order)} bars, "
             f"{self.tempo:g} BPM, {self.key['name']}." + (f" Kept for the lyrics: {'; '.join(kept)}." if kept else "")
+        ) + self.vocals_said()
+
+    def vocals_said(self) -> str:
+        """After a form: how much of it is sung (and the style's range) and the phrasing; empty without lyrics."""
+        vocals, chosen = self.setup.style.vocals, self.extra.get("vocals")
+        plan = self.plan()
+        if vocals is None or not chosen or not plan.get("lyrics"):
+            return ""
+        have = sw.sung_share(list(self.sections.values()), self.order, plan["lyrics"])
+        return (
+            f" About {have:.0%} sung (the style: {vocals.low:.0%} to {vocals.high:.0%}; "
+            f"asked {chosen['vocalShare']:.0%}), phrased {chosen['phrasing']}."
         )
 
     def tool_set_chords(self, section: str, chords: list[str], barsPerChord: int = 1) -> str:
@@ -1279,10 +1344,81 @@ class Workspace:
         units = {"volume": (-100.0, 6.0, "dB"), "pan": (-1.0, 1.0, ""), "filter": (CUTOFF[0], CUTOFF[1], "Hz")}[what]
         if any(not units[0] <= v <= units[1] for _, v in read):
             raise Mistake(f"{what} values are {units[0]:g} to {units[1]:g} {units[2]}".rstrip())
+        self.room_for_automation()
         self.extra.setdefault("automation", []).append(
             {"part": pid, "what": what, "points": read, "filter": filter, "shape": shape}
         )
         return f"Automation: {pid} {what} from bar {read[0][0] + 1:g} to {read[-1][0] + 1:g} ({len(read)} points)."
+
+    def room_for_automation(self) -> None:
+        if len(self.extra.get("automation", [])) >= MOST_AUTOMATION:
+            raise Mistake(f"the song has {MOST_AUTOMATION} automation clips, the most it can have: remove one first")
+
+    def tool_rhythm(
+        self, part: str, what: str, pattern: str, low: float, high: float, shape: str = "triangle",
+        filter: str = "low-pass",
+    ) -> str:  # fmt: skip
+        pid = MASTER if str(part).strip().lower() == MASTER else self.part(part)["id"]
+        if what not in AUTOMATABLE:
+            raise Mistake(f"automate one of {', '.join(AUTOMATABLE)}")
+        if shape not in RHYTHM_SHAPES:
+            raise Mistake(f"a rhythm's shape is one of {', '.join(RHYTHM_SHAPES)}")
+        if filter not in ("low-pass", "high-pass"):
+            raise Mistake("a filter is low-pass or high-pass")
+        units = {"volume": (-100.0, 6.0, "dB"), "pan": (-1.0, 1.0, ""), "filter": (CUTOFF[0], CUTOFF[1], "Hz")}[what]
+        try:
+            low, high = float(low), float(high)
+        except (TypeError, ValueError):
+            raise Mistake("low and high are numbers") from None
+        if not all(math.isfinite(v) and units[0] <= v <= units[1] for v in (low, high)):
+            raise Mistake(f"{what} values are {units[0]:g} to {units[1]:g} {units[2]}".rstrip())
+        if low == high:
+            raise Mistake("low and high are the same: nothing would move")
+        total = self.song_bars()
+        beats = max(1, int(self.setup.style.beats_per_bar))
+        spans: list[tuple[float, float, float, str]] = []  # start, end (bars from 0), a move's length in bars, rate
+        for raw in re.split(r"[;\n]+", str(pattern)):
+            fields = raw.replace(",", " ").split()
+            if not fields:
+                continue
+            m = re.fullmatch(r"(\d+)(?:\s*-\s*(\d+))?", fields[0]) if len(fields) == 2 else None
+            if m is None:
+                raise Mistake(f"a stretch is 'bars rate', e.g. '17-24 1/8', not '{raw.strip()}'")
+            first, last = int(m.group(1)), int(m.group(2) or m.group(1))
+            if not 1 <= first <= last <= total:
+                raise Mistake(f"a stretch's bars are 1 to {total} (the song's last bar), first to last")
+            spans.append((first - 1.0, float(last), rate_beats(fields[1]) / beats, fields[1]))
+        if not spans:
+            raise Mistake("a rhythm needs one stretch or more: 'bars rate', e.g. '17-24 1/8'")
+        spans.sort()
+        for (_, end, _, _), (start, _, _, _) in itertools.pairwise(spans):
+            if start < end:
+                raise Mistake("the stretches overlap: give each bar one rate")
+        read: list[tuple[float, float]] = []
+        for start, end, move, _ in spans:
+            edge = move * 0.02  # how long a step takes (square, saw): sudden, not a click
+            t = start
+            while t < end - 1e-9:
+                length = min(move, end - t)
+                if shape == "triangle":
+                    read += [(t, low), (t + length / 2, high)]
+                elif shape == "saw-up":
+                    read += [(t, low), (t + length - edge, high)]
+                elif shape == "saw-down":
+                    read += [(t, high), (t + length - edge, low)]
+                else:
+                    read += [(t, high), (t + length / 2 - edge, high), (t + length / 2, low), (t + length - edge, low)]
+                t += move
+            read.append((end, low))
+            if len(read) > MOST_RHYTHM_POINTS:
+                raise Mistake("that is too many moves for one clip: fewer bars, or a slower rate")
+        self.room_for_automation()
+        said = "; ".join(f"{int(a) + 1}-{int(b)} {r}" if b - a > 1 else f"{int(b)} {r}" for a, b, _, r in spans)
+        self.extra.setdefault("automation", []).append(
+            {"part": pid, "what": what, "points": [(round(b, 5), v) for b, v in read], "filter": filter,
+             "shape": "linear", "rhythm": f"{said}, {shape} {low:g} to {high:g}"}
+        )  # fmt: skip
+        return f"Rhythm: {pid} {what} {said}, {shape} from {low:g} to {high:g} ({len(read)} points)."
 
     def fx_part(self, kind: str) -> str:
         """The part a transition plays on: the user's of its role, else one the AI adds for it."""
@@ -1369,7 +1505,8 @@ class Workspace:
     def tool_automation(self) -> str:
         lines = []
         for a in self.extra.get("automation", []):
-            values = ", ".join(f"bar {b + 1:g}: {v:g}" for b, v in a["points"])
+            values = ("in time with the beat, " + a["rhythm"]) if a.get("rhythm") else ", ".join(
+                f"bar {b + 1:g}: {v:g}" for b, v in a["points"])  # fmt: skip
             lines.append(
                 f"{a['part']} {a['what']}" + (f" ({a['filter']})" if a["what"] == "filter" else "") + f": {values}"
             )

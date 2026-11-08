@@ -542,6 +542,52 @@ class Vocabulary:
         return after[b] / max(1, sum(after.values()))
 
 
+PHRASINGS = ("normal", "half", "double")  # a sung line at the tempo, over the half-time feel, or twice as dense
+SHARE_GAP = 0.05  # the narrowest range of the share sung
+
+
+@dataclass(frozen=True)
+class Vocals:
+    """How much of a song with lyrics is sung (a share of its bars, low to high: the rest is instrumental intros,
+    drops, breaks, solos and outros), the lyric phrasings that suit it (the commonest first) and the kind of the
+    instrumental section added to make room."""
+
+    low: float
+    high: float
+    phrasings: tuple[str, ...] = ("normal",)
+    fill: str = "break"
+
+    def middle(self) -> float:
+        return (self.low + self.high) / 2
+
+
+def vocals_of(summary: dict[str, Any]) -> Vocals | None:
+    """The style's vocals: the genre's (a described song's `described.vocals`), its range replaced by the user's
+    (`vocalShare`: {low, high}, the description page's slider); None when neither says (the lyrics' form as it
+    comes)."""
+    found = (summary.get("described") or {}).get("vocals") if isinstance(summary.get("described"), dict) else None
+    user = summary.get("vocalShare")
+    if not isinstance(found, dict) and not isinstance(user, dict):
+        return None
+    given = user if isinstance(user, dict) else found
+    assert isinstance(given, dict)
+    try:
+        low, high = float(given.get("low", 0.0)), float(given.get("high", 1.0))
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(low) and math.isfinite(high)):
+        return None
+    low, high = max(0.0, min(1.0, low)), max(0.0, min(1.0, high))
+    low, high = min(low, high), max(low, high)
+    if high - low < SHARE_GAP:
+        high = min(1.0, low + SHARE_GAP)
+        low = high - SHARE_GAP
+    genre = found if isinstance(found, dict) else {}
+    phrasings = tuple(p for p in genre.get("phrasing") or [] if p in PHRASINGS) or ("normal",)
+    fill = str(genre.get("fill") or "break")
+    return Vocals(round(low, 3), round(high, 3), phrasings, fill if fill in KINDS else "break")
+
+
 @dataclass
 class Style:
     tempo: float
@@ -563,6 +609,7 @@ class Style:
     double_kick: bool = False  # the drums play a double kick in the choruses (metal)
     key_fixed: bool = False  # a key the user wrote: not moved a step
     guitars: tuple[str, ...] = ()  # the guitar roles the reference songs have (guitar_roles)
+    vocals: Vocals | None = None  # how much of a song with lyrics is sung, and how (vocals_of); None: as they come
 
     @staticmethod
     def from_summary(summary: dict[str, Any]) -> Style:
@@ -647,6 +694,7 @@ class Style:
             double_kick=bool(drums.get("doubleKick")),
             key_fixed=bool(summary.get("keyFixed")),
             guitars=guitar_roles(summary),
+            vocals=vocals_of(summary),
         )
 
     def vocabulary(self, mode: str) -> Vocabulary:
@@ -877,6 +925,7 @@ def make_plan(
     ]
     order = list(form)
     sung: dict[str, Any] | None = None
+    phrasing, share = "normal", None
     if lyrics and any(s.get("lines") for s in lyrics.get("sections") or []):
         drawn: dict[str, int] = {}
 
@@ -884,8 +933,11 @@ def make_plan(
             """An instrumental section's bars: as the rules draw them, one length a kind."""
             return drawn.setdefault(kind, draw(base_kind(kind)))
 
-        sections, order, sung = lyric_form(lyrics, tempo, style, instrumental, contour)
+        phrasing, share = choose_vocals(style, seed, variety)
+        sections, order, sung = lyric_form(lyrics, tempo, style, instrumental, contour, phrasing, share)
         free_form(sections, order, sung, variety, rng, instrumental, contour)
+        if share is not None and style.vocals is not None:
+            fit_share(sections, order, sung, share, style.vocals.fill, contour)
     return {
         "tempo": tempo,
         "key": {"tonic": tonic, "scale": mode, "name": key_name(tonic, mode)},
@@ -895,6 +947,7 @@ def make_plan(
         "size": size,
         "parts": chosen,
         **({"lyrics": sung} if sung else {}),
+        **({"phrasing": phrasing, "vocalShare": share} if sung and share is not None else {}),
     }
 
 
@@ -902,16 +955,40 @@ def make_plan(
 # Lyrics: the form the tags give, sections as long as their lines, one note a syllable
 
 
-def line_bars(syllables: int, tempo: float, beats: int) -> int:
+def choose_vocals(style: Style, seed: int, variety: Variety = BALANCED) -> tuple[str, float | None]:
+    """A song's lyric phrasing and the share of it sung, inside the style's (Vocals): close, the commonest phrasing
+    and the middle of the range; otherwise drawn (the commonest phrasing most often). The style's own seed, so
+    the rest of the plan draws as before. ("normal", None) when the style says nothing."""
+    vocals = style.vocals
+    if vocals is None:
+        return "normal", None
+    if variety.form_changes == 0:
+        return vocals.phrasings[0], round(vocals.middle(), 3)
+    rng = rng_for(seed, "vocals")
+    weights = [0.6, 0.3, 0.1][: len(vocals.phrasings)]
+    phrasing = rng.choices(vocals.phrasings, weights=weights)[0]
+    return phrasing, round(rng.uniform(vocals.low, vocals.high), 3)
+
+
+def line_bars(syllables: int, tempo: float, beats: int, phrasing: str = "normal") -> int:
     """The bars a sung line takes: its syllables on eighths (on quarters past 150 BPM) with a beat left to
-    breathe; two bars at least from 80 BPM up, four at most."""
+    breathe; two bars at least from 80 BPM up, four at most. Phrased "half" (over the half-time feel): twice
+    that, eight at most; "double" (a fast flow): on sixteenths (eighths past 150 BPM), from one bar up."""
+    if phrasing == "double":
+        per_beat = 4 if tempo <= 150 else 2
+        for bars in (1, 2, 4):
+            if syllables <= (bars * beats - 1) * per_beat:
+                return bars
+        return 4
     per_beat = 2 if tempo <= 150 else 1
+    normal = 4
     for bars in (1, 2, 4):
         if bars == 1 and tempo >= 80:
             continue
         if syllables <= (bars * beats - 1) * per_beat:
-            return bars
-    return 4
+            normal = bars
+            break
+    return min(8, normal * 2) if phrasing == "half" else normal
 
 
 def lyric_form(
@@ -920,6 +997,8 @@ def lyric_form(
     style: Style,
     instrumental: Any,
     contour: dict[str, str],
+    phrasing: str = "normal",
+    share: float | None = None,
 ) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
     """The plan's sections and order from the lyrics' sections, in their order (a repeat plays the same
     section): a sung section is its lines' bars (line_bars of its longest line, a line after another), rounded
@@ -927,7 +1006,9 @@ def lyric_form(
     (a tag with no lines) is drawn like the rules' sections (`instrumental(kind)`). Sections of a kind with as
     many lines and bars are one section: the same music, the tune from the first one's syllables (as verses
     share a tune whose words differ a syllable here and there); otherwise "verse-2"... Also
-    what is sung where: {"language", "sung": the lines of each entry of the order}."""
+    what is sung where: {"language", "sung": the lines of each entry of the order}. Lines are phrased as
+    `phrasing` says (line_bars); with a `share`, instrumental sections are added or changed until about that
+    share of the bars is sung (fit_share)."""
     sections: list[dict[str, Any]] = []
     order: list[str] = []
     sung: list[list[str]] = []
@@ -940,7 +1021,9 @@ def lyric_form(
         lines = [line for line in found.get("lines") or [] if isinstance(line, dict)]
         each = 0
         if lines:
-            each = max(line_bars(int(line.get("syllables") or 1), tempo, style.beats_per_bar) for line in lines)
+            each = max(
+                line_bars(int(line.get("syllables") or 1), tempo, style.beats_per_bar, phrasing) for line in lines
+            )
             while len(lines) * each > SECTION_BARS[1] and each > 1:
                 each //= 2
             lines = lines[: SECTION_BARS[1] // each]
@@ -973,7 +1056,116 @@ def lyric_form(
             sections.append(section)
         order.append(sid)
         sung.append([str(line.get("text") or "") for line in lines])
-    return sections, order, {"language": str(lyrics.get("language") or ""), "sung": sung}
+    found = {"language": str(lyrics.get("language") or ""), "sung": sung}
+    if share is not None:
+        fill = style.vocals.fill if style.vocals else "break"
+        fit_share(sections, order, found, share, fill, contour)
+    return sections, order, found
+
+
+def sung_share(sections: list[dict[str, Any]], order: list[str], sung: dict[str, Any]) -> float:
+    """The share of the song's bars that is sung (0 to 1)."""
+    bars = {s["id"]: int(s["bars"]) for s in sections}
+    total = sum(bars[o] for o in order)
+    on = sum(bars[o] for o, lines in zip(order, sung["sung"], strict=False) if lines)
+    return on / total if total else 0.0
+
+
+def fit_share(
+    sections: list[dict[str, Any]],
+    order: list[str],
+    sung: dict[str, Any],
+    target: float,
+    fill: str,
+    contour: dict[str, str],
+) -> None:
+    """Instrumental room (in place) until about `target` of the bars is sung, the words kept: when too much is sung,
+    an intro before a song that starts singing, an outro after one that ends so, a `fill` section (a drop, a solo,
+    a break) after each chorus in turn, then the instrumental sections lengthened 4 bars at a time (to 32, as long
+    as a section may be); when too little, the instrumental sections shortened 4 bars at a time (to 4). Never past
+    MOST_BARS. The same lyrics, share and fill give the same form."""
+    by_id = {s["id"]: s for s in sections}
+
+    def total() -> int:
+        return sum(int(by_id[o]["bars"]) for o in order)
+
+    def sung_bars() -> int:
+        return sum(int(by_id[o]["bars"]) for o, lines in zip(order, sung["sung"], strict=False) if lines)
+
+    if not sung_bars() or not 0.0 < target <= 1.0:
+        return
+
+    def added(kind: str, bars: int) -> str:
+        """The id of an instrumental section of this kind (one music wherever it plays), made when new."""
+        for sid in (kind, f"{kind}-added"):
+            s = by_id.get(sid)
+            if s is not None and not s.get("words") and s["kind"] == kind:
+                return sid
+            if s is None:
+                section = {"id": sid, "kind": kind, "bars": bars,
+                           "contour": KIND_CONTOUR.get(kind) or contour.get(base_kind(kind), "arch")}  # fmt: skip
+                sections.append(section)
+                by_id[sid] = section
+                return sid
+        return ""
+
+    def insert(at: int, sid: str) -> None:
+        order.insert(at, sid)
+        sung["sung"].insert(at, [])
+
+    def too_sung() -> bool:
+        return sung_bars() / total() > target + 0.01
+
+    def room(bars: int) -> bool:
+        """Room for `bars` more, and they bring the share sung closer to the target."""
+        if total() + bars > MOST_BARS:
+            return False
+        on = sung_bars()
+        return abs(on / (total() + bars) - target) < abs(on / total() - target)
+
+    if too_sung() and sung["sung"][0] and room(8) and (sid := added("intro", 8)):
+        insert(0, sid)
+    if too_sung() and sung["sung"][-1] and room(8) and (sid := added("outro", 8)):
+        insert(len(order), sid)
+    i = 0
+    while too_sung() and i < len(order):
+        s = by_id[order[i]]
+        follows = order[i + 1] if i + 1 < len(order) else None
+        if (
+            s["kind"] == "chorus"
+            and sung["sung"][i]
+            and follows != order[i]
+            and (follows is None or sung["sung"][i + 1])
+        ):
+            if follows is None:
+                break  # the song's end: the outro is there
+            bars = int(by_id[fill]["bars"]) if fill in by_id else 8
+            if room(bars) and (sid := added(fill, 8)):
+                insert(i + 1, sid)
+                i += 1
+        i += 1
+    while too_sung():
+        longer = [o for o, lines in zip(order, sung["sung"], strict=False) if not lines and by_id[o]["bars"] < 32]
+        # The shortest first (the earliest on a tie): the room spread over the song.
+        pick = min(longer, key=lambda o: (int(by_id[o]["bars"]), order.index(o))) if longer else None
+        if pick is not None and room(4 * order.count(pick)):
+            by_id[pick]["bars"] = int(by_id[pick]["bars"]) + 4
+            continue
+        # Every instrumental section as long as it may be: the fill again, between the last two sung entries next
+        # to each other (before a chorus sung twice, not between its plays).
+        between = [
+            i for i in range(1, len(order)) if sung["sung"][i] and sung["sung"][i - 1] and order[i] != order[i - 1]
+        ]
+        sid = added(fill, 8)
+        if not between or not sid or not room(int(by_id[sid]["bars"])):
+            break
+        insert(between[-1], sid)
+    while sung_bars() / total() < target - 0.01:
+        shorter = [o for o, lines in zip(order, sung["sung"], strict=False) if not lines and by_id[o]["bars"] > 4]
+        if not shorter:
+            break
+        pick = max(shorter, key=lambda o: (int(by_id[o]["bars"]), -order.index(o)))
+        by_id[pick]["bars"] = int(by_id[pick]["bars"]) - 4
 
 
 def free_form(
