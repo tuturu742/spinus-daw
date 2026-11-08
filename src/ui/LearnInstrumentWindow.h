@@ -35,7 +35,7 @@ public:
     using Profile = InstrumentProfiles::Profile;
     using Job = InstrumentProfiles::Job;
 
-    LearnInstrumentPanel (const juce::String& instrumentName, std::optional<Profile> start);
+    LearnInstrumentPanel (const juce::String& instrumentName, const std::optional<Profile>& start);
     ~LearnInstrumentPanel() override;
 
     /** Save (with the profile as it is now; nullopt when forgotten) and Cancel. */
