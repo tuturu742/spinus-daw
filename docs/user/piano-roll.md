@@ -34,7 +34,8 @@ automatically.
   The area after its end is shaded: placing, moving or painting a note there makes the pattern longer, to
   the end of that note's bar, and removing the notes from the last bars makes it shorter again (in the
   same undo step). A 3/4 pattern is three beats long, also on the Playlist.
-- Note names follow FL Studio: middle C is **C5**.
+- Note names follow FL Studio: middle C is **C5**. When the scale highlight (or the song's key) is a key written
+  with flats, such as C minor or F major, notes and chords use flats: **Eb5** and **Bb** rather than **D#5** and **A#**.
 - Every change is one undo step (**Ctrl+Z**).
 - In pattern mode, press **Space** to hear the pattern; a line shows the playing position.
 

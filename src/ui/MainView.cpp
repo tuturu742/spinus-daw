@@ -146,13 +146,19 @@ public:
         newPatternButton.onClick = [this] { view.addPattern(); };
         addAndMakeVisible (newPatternButton);
 
-        tempo.onCommit = [this] (double bpm)
+        tempo.onCommit = [this] (double bpm, bool continuing)
         {
             juce::String error;
             auto command = commands::CommandRegistry::get().create (
                 "project.setTempo", juce::JSON::parse ("{\"bpm\": " + juce::String (bpm, 2) + "}"), error);
-            if (command != nullptr)
-                view.session.getHistory().perform (std::move (command));
+            if (command == nullptr)
+                return;
+            // Wheel notches close together are one undo step, as long as nothing else (an undo, another
+            // edit) came between them.
+            auto& history = view.session.getHistory();
+            const bool join = continuing && history.getStateId() == stateAfterWheel;
+            if ((join ? history.performJoined (std::move (command)) : history.perform (std::move (command))).wasOk())
+                stateAfterWheel = history.getStateId();
         };
         addAndMakeVisible (tempo);
 
@@ -171,6 +177,8 @@ public:
     }
 
     ~TopBar() override { view.session.removeChangeListener (this); }
+
+    TempoControl& getTempo() noexcept { return tempo; }
 
     /** Updates everything that mirrors the project or the session. */
     void refresh()
@@ -445,12 +453,15 @@ private:
     };
     PatternList patternBox { view };
     TempoControl tempo;
+    uint64_t stateAfterWheel = 0; // the history's state after the last tempo change
     std::unique_ptr<juce::Drawable> logo = createLogo();
     juce::Rectangle<int> logoArea, positionArea, cpuArea;
     juce::TextButton signatureButton;
     juce::String position = "1:01:01";
     float cpu = 0.0f;
 };
+
+TempoControl& MainView::getTempoControl() noexcept { return topBar->getTempo(); }
 
 class MainView::Dock final : public juce::Component
 {
@@ -1515,7 +1526,13 @@ bool MainView::saveProjectTo (const juce::File& folder)
 
     if (auto r = folder == juce::File() ? document->save() : document->saveAs (folder); r.failed())
     {
-        showProblem ("Could not save the project", r.getErrorMessage());
+        // The reason, then what to do: nothing is lost yet.
+        auto message = r.getErrorMessage().trimEnd();
+        if (! message.endsWithChar ('.'))
+            message << '.';
+        showProblem ("Could not save the project",
+                     message + "\n\nYour work is still open in Spinus. Try File > Save as... (Ctrl+Shift+S) and "
+                               "choose another folder, for example one in your Music folder.");
         return false;
     }
 
@@ -1670,7 +1687,8 @@ void MainView::offerRecovery()
     if (document == nullptr)
         return;
 
-    const auto recoveries = document->findRecoveries();
+    auto recoveries = document->findRecoveries();
+    std::erase_if (recoveries, [this] (const auto& r) { return r.projectFolder == recoveryAsked; });
     if (recoveries.empty())
         return;
 
@@ -1680,6 +1698,7 @@ void MainView::offerRecovery()
 void MainView::askToRecover (const ProjectDocument::Recovery& recovery, const std::function<void()>& otherwise)
 {
     const auto when = recovery.time.toString (true, true, false);
+    recoveryAsked = recovery.projectFolder;
     messageBox (juce::MessageBoxOptions()
                     .withIconType (juce::MessageBoxIconType::WarningIcon)
                     .withTitle ("Recover your work?")
@@ -1695,6 +1714,8 @@ void MainView::askToRecover (const ProjectDocument::Recovery& recovery, const st
                 {
                     if (safe == nullptr)
                         return;
+                    if (safe->recoveryAsked == recovery.projectFolder)
+                        safe->recoveryAsked = juce::File();
                     if (button != 0)
                     {
                         ProjectDocument::discard (recovery);
@@ -2059,6 +2080,7 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
         info.setInfo ("Redo", history.canRedo() ? "Redo: " + history.getRedoDescriptions()[0] : "Nothing to redo",
                       "Edit", 0);
         info.addDefaultKeypress ('z', ctrl | shift);
+        info.addDefaultKeypress ('y', ctrl);
         info.setActive (history.canRedo());
         break;
     case playStop:
@@ -2306,6 +2328,10 @@ bool MainView::perform (const InvocationInfo& info)
                                      ? "Recorded " + juce::String (session.getLastRecordedCount()) +
                                            " notes (Ctrl+Z undoes them)"
                                      : juce::String ("Nothing was recorded"));
+        else if (session.isPlaying() &&
+                 session.getEdit().engine.getDeviceManager().deviceManager.getCurrentAudioDevice() == nullptr)
+            hintBar.showMessage ("Playing, but you will hear nothing: no sound card is open. Choose one in "
+                                 "Options > Audio settings... (F10)");
         return true;
     }
 

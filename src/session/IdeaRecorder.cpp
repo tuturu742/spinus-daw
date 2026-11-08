@@ -64,9 +64,10 @@ juce::Result IdeaRecorder::begin()
 {
     auto& edit = session.getEdit();
     if (recording::findAudioInput (edit) == nullptr)
-        return juce::Result::fail ("Spinus has no audio input to record from: choose one in Options › Audio.");
+        return juce::Result::fail (
+            "Spinus has no audio input to record from: choose one in Options › Audio settings... (F10).");
 
-    // The input chosen in Options › Audio, switched on (a sound card with many inputs has those in use in the
+    // The input chosen in Options › Audio settings, switched on (a sound card with many inputs has those in use in the
     // recording input).
     const auto chosen = recording::getDefaultInput (edit.engine);
     if (! inputUse)
@@ -80,7 +81,8 @@ juce::Result IdeaRecorder::begin()
     if (input == nullptr)
     {
         inputUse.reset();
-        return juce::Result::fail ("Spinus has no audio input to record from: choose one in Options › Audio.");
+        return juce::Result::fail (
+            "Spinus has no audio input to record from: choose one in Options › Audio settings... (F10).");
     }
     const auto order = recording::activeInputChannels (edit.engine);
     const auto at = std::find (order.begin(), order.end(), chosen);

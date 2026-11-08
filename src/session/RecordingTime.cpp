@@ -77,7 +77,7 @@ juce::Result useInputs (te::Engine& engine, const std::set<int>& inputs)
     auto& manager = engine.getDeviceManager().deviceManager;
     auto* device = manager.getCurrentAudioDevice();
     if (device == nullptr)
-        return juce::Result::fail ("Spinus has no sound card open: choose one in Options › Audio.");
+        return juce::Result::fail ("Spinus has no sound card open: choose one in Options › Audio settings... (F10).");
     const auto count = device->getInputChannelNames().size();
     const auto active = device->getActiveInputChannels();
     bool missing = false;

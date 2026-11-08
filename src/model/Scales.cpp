@@ -52,4 +52,25 @@ int nearestNoteInKey (const Key& key, float pitch)
     return best;
 }
 
+bool usesFlats (const Key& key)
+{
+    // Semitones from the key's first note up to its major key's first note.
+    const auto scale = key.scale.toLowerCase();
+    const int toMajor = scale == "minor" || scale == "harmonic minor" || scale == "minor pentatonic" || scale == "blues"
+                            ? 3
+                        : scale == "dorian"     ? 10
+                        : scale == "mixolydian" ? 5
+                                                : 0;
+    const auto major = ((key.tonic + toMajor) % 12 + 12) % 12;
+    return major == 5 || major == 10 || major == 3 || major == 8 || major == 1;
+}
+
+juce::String pitchClassName (int pitch, bool flats)
+{
+    static const char* sharpNames[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    static const char* flatNames[] = { "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B" };
+    const auto pc = (pitch % 12 + 12) % 12;
+    return flats ? flatNames[pc] : sharpNames[pc];
+}
+
 } // namespace spinus::model

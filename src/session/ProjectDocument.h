@@ -75,6 +75,10 @@ public:
     /** The recovery for one project folder, if its last session crashed with unsaved work. */
     static std::optional<Recovery> findRecovery (const juce::File& projectFolder, bool untitled = false);
 
+    /** True if a running Spinus has the project (its folder or .spn file) open: one being started for it
+        says so instead of opening it a second time. */
+    static bool isOpenInSpinus (const juce::File& projectFileOrFolder);
+
     /** Opens the autosave as the project (with unsaved changes, so the user decides whether to keep it). */
     juce::Result recover (const Recovery&);
 

@@ -24,7 +24,8 @@ std::vector<int> chordOn (int root, const ChordType&);
 std::vector<int> chordInKey (int root, const Key&, int notes);
 
 /** "Cm7", "F/A", "G": the chord the notes make, with the bass after a slash when it isn't the root; empty
-    when the notes aren't a chord Spinus knows (or are fewer than three different notes). */
-juce::String nameChord (const std::vector<int>& pitches);
+    when the notes aren't a chord Spinus knows (or are fewer than three different notes). With `flats`, "Bb",
+    not "A#" (a key written with flats, usesFlats). */
+juce::String nameChord (const std::vector<int>& pitches, bool flats = false);
 
 } // namespace spinus::model

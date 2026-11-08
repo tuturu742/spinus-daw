@@ -422,6 +422,14 @@ ChannelRack::ChannelRack (Session& s) : Panel ("channelRack", "Channel Rack"), s
     rowHolder.addAndMakeVisible (swingLabel);
     rowHolder.addChildComponent (groupFilter);
 
+    // An empty project: what to do first, as the Piano Roll says when it has no channel.
+    emptyMessage.setText ("No instruments yet. Click + Add channel, or drag an instrument here from the Browser "
+                          "(F8). Then click the steps to make a beat.",
+                          juce::dontSendNotification);
+    emptyMessage.setJustificationType (juce::Justification::topLeft);
+    emptyMessage.setInterceptsMouseClicks (false, false);
+    rowHolder.addChildComponent (emptyMessage);
+
     session.addChangeListener (this);
     historyListener = session.getHistory().addListener ([this] (const commands::ChangeSet&) { triggerAsyncUpdate(); });
     rebuild();
@@ -439,6 +447,8 @@ void ChannelRack::rebuild()
 {
     // Audio tracks (vocals, stems) have their own panel (AudioTracks).
     updateGroupFilter();
+    const auto& all = session.getProject().channels;
+    emptyMessage.setVisible (std::none_of (all.begin(), all.end(), [] (auto& c) { return ! c.audioTrack; }));
     std::vector<const model::Channel*> channels;
     for (auto& channel : session.getProject().channels)
         if (! channel.audioTrack && (shownGroup == allGroups ||
@@ -487,7 +497,8 @@ void ChannelRack::resized()
         swingKnob.setValue (swing * 100.0, juce::dontSendNotification);
     swingLabel.setText ("Swing " + juce::String (juce::roundToInt (swing * 100.0)) + "%", juce::dontSendNotification);
     groupFilter.setBounds (swingLabel.getRight() + 4, y + 8, 150, 24);
-    rowHolder.setSize (width, y + 40);
+    emptyMessage.setBounds (8, y + 40, juce::jmax (200, viewport.getMaximumVisibleWidth() - 16), 48);
+    rowHolder.setSize (width, y + (emptyMessage.isVisible() ? 92 : 40));
 }
 
 void ChannelRack::paint (juce::Graphics& g) { g.fillAll (themeOf (*this).get ("panel")); }

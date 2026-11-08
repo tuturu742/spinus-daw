@@ -34,6 +34,7 @@
 #include "ui/About.h"
 #include "ui/AiSettingsDialog.h"
 #include "ui/Manual.h"
+#include "project/ProjectFiles.h"
 #include "session/ProjectDocument.h"
 #include "ui/ChannelRack.h"
 #include "ui/Logo.h"
@@ -270,6 +271,23 @@ public:
             return;
         }
 
+        // A project double-clicked in the file manager that another Spinus already has open: say so, rather than
+        // start a second, empty Spinus showing an error. (Bringing the other window forward would need the two
+        // programs to talk to each other.)
+        const auto projectToOpen = projectArgument (args);
+        if (projectToOpen != juce::File() && ProjectDocument::isOpenInSpinus (projectToOpen))
+        {
+            const auto name = project::projectName (project::projectFolderFor (projectToOpen));
+            core::Logs::info ("start", name + " is open in another Spinus: not opened twice");
+            juce::AlertWindow::showAsync (
+                juce::MessageBoxOptions::makeOptionsOk (
+                    juce::MessageBoxIconType::InfoIcon, "Already open",
+                    name + " is already open in another Spinus window. Switch to that window (Alt+Tab, or click it in "
+                           "the taskbar). This Spinus closes now."),
+                [] (int) { quit(); });
+            return;
+        }
+
         document = std::make_unique<ProjectDocument> (*session, getSettingsFolder());
         mainWindow = std::make_unique<MainWindow> (getApplicationName(), *session, *document,
                                                    getSettingsFolder().getChildFile ("main-window.txt"));
@@ -288,13 +306,8 @@ public:
         view.setWindowsPlugins (windows.get(), getHelperProgram ("spinus-plugin-scanner"));
 
         // `spinus "Song/Song.spn"` (or the folder) opens that project; otherwise offer crashed work, if any.
-        for (auto& arg : args)
-            if (! arg.startsWith ("-") &&
-                juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()).exists())
-            {
-                view.openProjectFile (juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()));
-                break;
-            }
+        if (projectToOpen != juce::File())
+            view.openProjectFile (projectToOpen);
         if (crashed)
             view.offerToRunSeparately (crashed->key, crashed->name, [v = &view] { v->offerRecovery(); });
         else
@@ -371,6 +384,16 @@ public:
     }
 
 private:
+    /** `spinus "Song/Song.spn"` (or the folder): the project to open, if any. */
+    static juce::File projectArgument (const juce::StringArray& args)
+    {
+        for (auto& arg : args)
+            if (! arg.startsWith ("-") &&
+                juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()).exists())
+                return juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted());
+        return {};
+    }
+
     static bool isAgentCommandLine (const juce::String& commandLine)
     {
         const auto args = juce::StringArray::fromTokens (commandLine, true);

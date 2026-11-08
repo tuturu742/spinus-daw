@@ -29,20 +29,25 @@ const char* const lockName = ".session.lock";
 juce::Result writeAtomically (const juce::File& target, const void* data, size_t size)
 {
     if (! target.getParentDirectory().createDirectory())
-        return juce::Result::fail ("cannot create " + target.getParentDirectory().getFullPathName());
+        return juce::Result::fail ("Spinus could not create the folder " +
+                                   target.getParentDirectory().getFullPathName() +
+                                   describeWriteProblem (target.getParentDirectory()));
 
     juce::TemporaryFile temp (target, juce::TemporaryFile::useHiddenFile);
     {
         juce::FileOutputStream out (temp.getFile());
         if (out.failedToOpen() || ! out.write (data, size))
-            return juce::Result::fail ("cannot write " + target.getFullPathName());
+            return juce::Result::fail ("Spinus could not write " + target.getFullPathName() +
+                                       describeWriteProblem (target));
         out.flush();
         if (out.getStatus().failed())
             return out.getStatus();
     }
 
-    return temp.overwriteTargetFileWithTemporary() ? juce::Result::ok()
-                                                   : juce::Result::fail ("cannot replace " + target.getFullPathName());
+    return temp.overwriteTargetFileWithTemporary()
+               ? juce::Result::ok()
+               : juce::Result::fail ("Spinus could not replace " + target.getFullPathName() +
+                                     describeWriteProblem (target));
 }
 
 juce::String stateFileName (model::DeviceId id) { return juce::String (id.value) + ".bin"; }
@@ -96,6 +101,27 @@ juce::Result readModelAndStates (const juce::File& folder, ProjectData& result)
 } // namespace
 
 //==============================================================================
+juce::String describeWriteProblem (const juce::File& target)
+{
+    // The nearest folder that exists: where the file or the missing folders would be made.
+    auto existing = target;
+    while (! existing.exists() && existing.getParentDirectory() != existing)
+        existing = existing.getParentDirectory();
+    if (! existing.exists())
+        return ": " + target.getFullPathName() + " is on a drive or folder that is not there (was it removed?)";
+
+    if (existing != target && existing.existsAsFile())
+        return ": " + existing.getFullPathName() + " is a file, not a folder";
+    if (! existing.hasWriteAccess())
+        return existing == target && target.existsAsFile()
+                   ? ": the file is read-only"
+                   : ": you have no permission to write in " +
+                         (existing.isDirectory() ? existing : existing.getParentDirectory()).getFullPathName();
+    if (const auto free = existing.getBytesFreeOnVolume(); free > 0 && free < (juce::int64)1024 * 1024)
+        return ": the disk is full";
+    return {};
+}
+
 juce::String projectName (const juce::File& folder)
 {
     const auto name = folder.getFileName();
@@ -127,7 +153,8 @@ juce::File projectFolderFor (const juce::File& chosen)
 juce::Result saveProject (const juce::File& folder, const ProjectData& data)
 {
     if (! folder.createDirectory())
-        return juce::Result::fail ("cannot create " + folder.getFullPathName());
+        return juce::Result::fail ("Spinus could not create the folder " + folder.getFullPathName() +
+                                   describeWriteProblem (folder));
 
     folder.getChildFile (audioFolder).createDirectory();
 
@@ -159,7 +186,8 @@ juce::Result importAudioFile (const juce::File& folder, const juce::File& source
 
     const auto audio = folder.getChildFile (audioFolder);
     if (! audio.createDirectory())
-        return juce::Result::fail ("cannot create " + audio.getFullPathName());
+        return juce::Result::fail ("Spinus could not create the folder " + audio.getFullPathName() +
+                                   describeWriteProblem (audio));
 
     auto target = audio.getChildFile (source.getFileName());
 
@@ -174,7 +202,8 @@ juce::Result importAudioFile (const juce::File& folder, const juce::File& source
         target = target.getNonexistentSibling (true);
 
     if (! source.copyFileTo (target))
-        return juce::Result::fail ("cannot copy " + source.getFullPathName() + " into the project");
+        return juce::Result::fail ("Spinus could not copy " + source.getFullPathName() + " into the project" +
+                                   describeWriteProblem (target));
 
     relativePath = target.getFileName();
     return juce::Result::ok();

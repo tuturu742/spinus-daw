@@ -26,7 +26,7 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 | Rename, colour or delete a track | Right-click its name. The track's name is drawn on its colour, and the track itself is faintly tinted with it. Deleting a track also removes its clips. |
 | Group tracks | Right-click a track › **Group with the track above** (see [Track groups](#track-groups)). |
 | Choose a take | **Alt+click** an audio clip that has other takes at the same time: it plays, they are muted there (see [Takes and comping](audio-tracks.md#takes-and-comping)). |
-| Move the song position | Click or drag in the ruler (song mode). |
+| Move the song position | Click or drag in the ruler. In pattern mode this moves the playhead too, but Play still starts the current pattern from its beginning: switch to song mode (**L**) to play the song from there. |
 | Markers | **Double-click** the ruler to put a marker there ("Marker 1"): a named point to see the song's parts. **Click** a marker to jump to it, **drag** it to move it, **right-click** it to rename or remove it. Its line shows faintly across the tracks. |
 | Loop part of the song | Hold the right mouse button and drag across the ruler: song mode then plays that part over and over (it starts there if the position is outside it). The part is shaded across the tracks too. Right-click the ruler to stop looping. |
 | Grid | The list next to the tools: bar, beat (the default), 1/2 or 1/4 beat, triplets, or no grid. Hold **Alt** while dragging to place freely. |

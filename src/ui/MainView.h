@@ -22,6 +22,7 @@ namespace spinus::ui
     ProjectDocument (without one, e.g. for snapshots, the project commands are disabled).
 */
 class Browser;
+class TempoControl;
 
 class MainView : public juce::Component,
                  public juce::ApplicationCommandTarget,
@@ -107,6 +108,8 @@ public:
     juce::ValueTree getCurrentLayout() const;
     Workspace& getWorkspace() noexcept { return workspace; }
     HintBar& getHintBar() noexcept { return hintBar; }
+    /** The top bar's tempo box. */
+    TempoControl& getTempoControl() noexcept;
     Browser& getBrowser() noexcept { return *browser; }
     bool isBrowserVisible() const noexcept { return browserVisible; }
     bool isAssistantVisible() const noexcept { return assistantVisible; }
@@ -142,7 +145,8 @@ public:
     /** Asks to save changes, then closes the app (the window's close button, Ctrl+Q). */
     void quitApp();
 
-    /** Offers the newest autosave of a project whose last session crashed, if any (on startup). */
+    /** Offers the newest autosave of a project whose last session crashed, if any (on startup). A project
+        already being offered (opened from the file manager or the command line) is not offered twice. */
     void offerRecovery();
 
     /** Spinus closed unexpectedly last time while this plugin was working: offers to run it in
@@ -265,6 +269,7 @@ private:
     void updateTitle();
     void showProblem (const juce::String& title, const juce::String& message);
     void askToRecover (const ProjectDocument::Recovery&, const std::function<void()>& otherwise);
+    juce::File recoveryAsked; // the project folder whose "Recover your work?" is open
     void saveThen (const std::function<void()>& then);
     void saveAsThen (const std::function<void()>& then);
     void chooseProjectToOpen();

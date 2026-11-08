@@ -480,3 +480,19 @@ TEST_CASE ("Channel groups: the rack shows one group, and a group can play throu
     CHECK (rack.getShownGroup() == ChannelRack::allGroups);
     CHECK (rack.getNumShownChannels() == 3);
 }
+
+TEST_CASE ("An empty Channel Rack says how to add the first instrument", "[ui][channelrack]")
+{
+    Rack r;
+    r.rack.setSize (640, 320);
+    CHECK (r.rack.getEmptyMessage().isVisible());
+    CHECK (r.rack.getEmptyMessage().getText().contains ("+ Add channel"));
+
+    REQUIRE (r.rack.addChannel ({}, "Kick"));
+    r.rack.updateNow();
+    CHECK (! r.rack.getEmptyMessage().isVisible());
+
+    r.session.getHistory().undo();
+    r.rack.updateNow();
+    CHECK (r.rack.getEmptyMessage().isVisible());
+}
