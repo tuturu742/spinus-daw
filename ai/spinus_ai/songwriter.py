@@ -1929,7 +1929,18 @@ WRITERS = {"drums": write_drums, "bass": write_bass, "chords": write_chords, "le
 def layer_plays(layer: str, kind: str, bar: int, bars: int, instance: int = 0) -> bool:
     """Which extra layers play in which sections: the choruses have them all, the verses none (they stay thin),
     the bridge breaks down to the pad and builds again with the arpeggio, the intro and outro have the pad. A
-    second part of the four roles (another chords part, a harmony) plays in the choruses and the bridge."""
+    second part of the four roles (another chords part, a harmony) plays in the choruses and the bridge. Inside a
+    long section the extras enter on its half-way bar, as the demo songs add a part every 8 bars rather than all
+    at bar 1: in a chorus of 8 bars or more the counter-melody, brass and woodwinds (and, from 16 bars, the
+    arpeggio); in a verse of 16 bars or more the percussion and a pad."""
+    late = bar < bars // 2
+    if kind == "chorus" and late and (layer in ("counter", "brass", "woodwinds") or (layer == "arp" and bars >= 16)):
+        return False
+    if kind == "verse" and bars >= 16:
+        if layer == "percussion":
+            return not late
+        if layer == "pad":
+            return not late
     if instance > 0 and layer in ("drums", "bass", "chords", "lead"):
         return kind == "chorus" or (kind == "bridge" and bar >= bars // 2)
     if layer == "pad":

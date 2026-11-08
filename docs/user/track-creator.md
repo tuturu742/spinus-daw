@@ -612,6 +612,9 @@ anywhere and no AI connection is needed.
   played loudest. It stays in your songs' vocal range at about as many notes a bar, with the chord's own
   notes on the strong beats. Only the style is used: your
   songs' melodies are never read (the summary has none).
+- **Parts come in as the song builds**: in a long chorus the counter-melody, brass and woodwinds (and the
+  arpeggio, from 16 bars) join halfway through; in a long verse a pad and the percussion join halfway, leading
+  into the chorus.
 - **The other roles** play as their instruments do (see the table on
   [Sounds for each part](#sounds-for-each-part)): power-chord chugs for a metal rhythm guitar, strummed
   open chords for an acoustic one, two hands for the piano, held chords for strings and organ, stabs for

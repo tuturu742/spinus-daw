@@ -217,8 +217,18 @@ def test_a_full_arrangement_has_parts_that_come_and_go_by_section() -> None:
         return {layer for layer, by in full["layerParts"].items() if by.get(sid)}
 
     assert {"pad", "arp", "counter"} <= playing("chorus")
-    assert not {"pad", "arp", "counter"} & playing("verse")
+    assert not {"arp", "counter"} & playing("verse")
     assert len(playing("chorus")) > len(playing("verse"))
+    # Inside a long section the extras enter on the half-way bar: a long verse's pad from then, a long chorus's
+    # counter-melody too.
+    by_id = {x["id"]: x for x in full["sections"]}
+    for sid, kind, layer in (("verse", "verse", "pad"), ("chorus", "chorus", "counter")):
+        half = by_id[sid]["bars"] // 2 * full["barTicks"]
+        notes = full["layerParts"].get(layer, {}).get(sid, [])
+        if by_id[sid]["bars"] >= (16 if kind == "verse" else 8):
+            assert notes and min(n["start"] for n in notes) >= half, (sid, layer)
+        else:
+            assert not (kind == "verse" and notes), (sid, layer)
 
     # The pad and arpeggio play the chords' notes; the counter-melody never rubs against the lead.
     by_id = {x["id"]: x for x in full["sections"]}
