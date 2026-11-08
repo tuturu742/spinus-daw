@@ -1045,10 +1045,10 @@ void LearnInstrumentWindow::exportProfile()
     const auto shared = panel->getShared();
     const auto file = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
                           .getChildFile (juce::File::createLegalFileName (name + " profile.json"));
-    chooser = std::make_unique<juce::FileChooser> ("Export the profile of " + name, file, "*.json");
+    chooser = std::make_unique<core::FileDialog> ("Export the profile of " + name, file, "*.json", this);
     chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles |
                               juce::FileBrowserComponent::warnAboutOverwriting,
-                          [shared, a = alive] (const juce::FileChooser& fc)
+                          [shared, a = alive] (const core::FileDialog& fc)
                           {
                               if (*a && fc.getResult() != juce::File())
                                   fc.getResult().replaceWithText (juce::JSON::toString (shared));
@@ -1057,9 +1057,9 @@ void LearnInstrumentWindow::exportProfile()
 
 void LearnInstrumentWindow::importProfile()
 {
-    chooser = std::make_unique<juce::FileChooser> ("Import a profile for " + name, juce::File(), "*.json");
+    chooser = std::make_unique<core::FileDialog> ("Import a profile for " + name, juce::File(), "*.json", this);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                          [this, a = alive] (const juce::FileChooser& fc)
+                          [this, a = alive] (const core::FileDialog& fc)
                           {
                               if (! *a || fc.getResult() == juce::File())
                                   return;
