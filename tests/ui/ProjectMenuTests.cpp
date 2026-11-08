@@ -198,6 +198,70 @@ TEST_CASE ("Opening a project whose last session crashed offers the autosave", "
     CHECK (ui.view.getWindowTitle() == "Crashed - Spinus DAW");
 }
 
+TEST_CASE ("A crashed project opened from the file manager is offered for recovery once", "[ui][document]")
+{
+    Ui ui;
+    const auto folder = ui.root.getChildFile ("Crashed");
+    ui.edit();
+    REQUIRE (ui.view.saveProjectTo (folder)); // also in the recent list, where the start-up check looks
+    ui.edit();
+    REQUIRE (ui.document.autosave().wasOk());
+    ui.document.newProject();
+    folder.getChildFile (".session.lock").replaceWithText ("pid 999999999\n");
+
+    // As at start-up: the project given to open, then the check for crashed work. The first question is still
+    // open (the real window answers later) when the check runs.
+    std::vector<std::function<void (int)>> open;
+    ui.view.setMessageBoxHandler (
+        [&] (const juce::MessageBoxOptions& options, const std::function<void (int)>& done)
+        {
+            ui.questions.add (options.getTitle());
+            open.push_back (done);
+        });
+    REQUIRE (ui.view.openProjectFile (folder));
+    ui.view.offerRecovery();
+    CHECK (ui.questions == juce::StringArray { "Recover your work?" });
+
+    REQUIRE (open.size() == 1);
+    open.front() (0); // Recover
+    CHECK (ui.view.getWindowTitle() == "Crashed* - Spinus DAW");
+}
+
+TEST_CASE ("A project open in another Spinus is known before a second one opens it", "[ui][document]")
+{
+    Ui ui;
+    const auto folder = ui.root.getChildFile ("Open");
+    REQUIRE (ui.view.saveProjectTo (folder));
+    CHECK (ProjectDocument::isOpenInSpinus (folder));
+    CHECK (ProjectDocument::isOpenInSpinus (folder.getChildFile ("Open.spn")));
+
+    ui.document.newProject();
+    CHECK (! ProjectDocument::isOpenInSpinus (folder));
+    CHECK (! ProjectDocument::isOpenInSpinus (ui.root.getChildFile ("Missing")));
+}
+
+TEST_CASE ("A failed save says why and what to do next", "[ui][document]")
+{
+#if ! JUCE_WINDOWS
+    Ui ui;
+    const auto locked = ui.root.getChildFile ("Locked");
+    REQUIRE (locked.createDirectory());
+    REQUIRE (locked.setReadOnly (true));
+    if (locked.hasWriteAccess())
+        SKIP ("Read-only folders can be written here (running as root?)");
+
+    juce::String message;
+    ui.view.setMessageBoxHandler ([&] (const juce::MessageBoxOptions& options, const std::function<void (int)>&)
+                                  { message = options.getMessage(); });
+    CHECK (! ui.view.saveProjectTo (locked.getChildFile ("Song")));
+    INFO (message);
+    CHECK (message.contains ("no permission to write in " + locked.getFullPathName()));
+    CHECK (message.contains ("Your work is still open"));
+    CHECK (message.contains ("Save as..."));
+    locked.setReadOnly (false);
+#endif
+}
+
 TEST_CASE ("Without a project document the project commands are disabled", "[ui][document]")
 {
     EngineHost host { { .openAudioDevice = false } };

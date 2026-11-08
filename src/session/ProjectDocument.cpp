@@ -221,15 +221,19 @@ juce::Result ProjectDocument::saveIntoNewFolder (juce::File newFolder)
     if (project::SessionLock::getState (newFolder) == project::SessionLock::State::openInSpinus)
         return juce::Result::fail (newFolder.getFileName() + " is open in another Spinus window");
 
-    // The audio files the project uses come along (the cache does not: it is rebuilt when needed).
+    // The audio files the project uses come along (the cache does not: it is rebuilt when needed). Saving over
+    // another project (Replace), a file of the same name there is that project's, not this one's: replaced.
     if (! isUntitled())
     {
         const auto oldAudio = folder.getChildFile ("audio");
         for (auto& file : oldAudio.findChildFiles (juce::File::findFiles, true))
         {
             const auto target = newFolder.getChildFile ("audio").getChildFile (file.getRelativePathFrom (oldAudio));
-            if (! target.exists() && (! target.getParentDirectory().createDirectory() || ! file.copyFileTo (target)))
-                return juce::Result::fail ("cannot copy " + file.getFullPathName() + " into the new project");
+            if (target.existsAsFile() && target.getSize() == file.getSize() && target.hasIdenticalContentTo (file))
+                continue;
+            if (! target.getParentDirectory().createDirectory() || ! file.copyFileTo (target))
+                return juce::Result::fail ("cannot copy " + file.getFullPathName() + " into the new project" +
+                                           project::describeWriteProblem (target));
         }
     }
 
@@ -264,7 +268,8 @@ juce::Result ProjectDocument::autosave()
             getUnsavedRoot().getChildFile (now.formatted ("Untitled %Y%m%d-%H%M%S")).getNonexistentSibling (true);
         if (! untitledFolder.createDirectory())
             return noted ("Autosaved", "autosave", untitledFolder, started,
-                          juce::Result::fail ("cannot create " + untitledFolder.getFullPathName()));
+                          juce::Result::fail ("Spinus could not create the folder " + untitledFolder.getFullPathName() +
+                                              project::describeWriteProblem (untitledFolder)));
         lock = std::make_unique<project::SessionLock> (untitledFolder);
     }
 
@@ -301,6 +306,12 @@ std::optional<ProjectDocument::Recovery> ProjectDocument::findRecovery (const ju
     return Recovery { projectFolder, *newest, untitled,
                       untitled ? juce::String ("Untitled") : project::projectName (projectFolder),
                       project::findProjectFile (*newest).getLastModificationTime() };
+}
+
+bool ProjectDocument::isOpenInSpinus (const juce::File& projectFileOrFolder)
+{
+    const auto folder = project::projectFolderFor (projectFileOrFolder);
+    return folder.isDirectory() && project::SessionLock::getState (folder) == project::SessionLock::State::openInSpinus;
 }
 
 std::vector<ProjectDocument::Recovery> ProjectDocument::findRecoveries() const

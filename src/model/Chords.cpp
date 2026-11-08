@@ -51,9 +51,8 @@ std::vector<int> chordInKey (int root, const Key& key, int notes)
     return chord;
 }
 
-juce::String nameChord (const std::vector<int>& pitches)
+juce::String nameChord (const std::vector<int>& pitches, bool flats)
 {
-    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     std::set<int> classes;
     int bass = 128;
     for (auto p : pitches)
@@ -74,8 +73,8 @@ juce::String nameChord (const std::vector<int>& pitches)
             for (auto interval : type.intervals)
                 want.insert ((root + interval) % 12);
             if (want == classes)
-                return juce::String (names[root]) + type.suffix +
-                       (bass % 12 != root ? "/" + juce::String (names[bass % 12]) : "");
+                return pitchClassName (root, flats) + type.suffix +
+                       (bass % 12 != root ? "/" + pitchClassName (bass, flats) : "");
         }
     return {};
 }

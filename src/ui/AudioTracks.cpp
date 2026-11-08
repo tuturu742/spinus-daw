@@ -311,7 +311,7 @@ private:
             return n.isEmpty() || n.containsOnly ("0123456789") ? "Input " + juce::String (i + 1) : n;
         };
         input.clear (juce::dontSendNotification);
-        input.addItem ("Default input", 1); // the one in Options › Audio
+        input.addItem ("Default input", 1); // the one in Options › Audio settings
         for (int i = 0; i < names.size(); ++i)
             input.addItem (label (i), i + 2);
         if (names.size() > 1)
@@ -360,9 +360,10 @@ AudioTracks::AudioTracks (Session& s) : Panel ("audioTracks", "Audio tracks"), s
     addTrackButton.setHelpText ("Add an empty audio track to record into: choose its input and arm it");
     addTrackButton.onClick = [this] { addRecordingTrack(); };
 
-    recordButton.setHelpText ("Record while the song plays from the current position: every armed track from its "
-                              "own input, all at once; with none armed, the input chosen in Options › Audio into a "
-                              "new track (or the one chosen beside)");
+    recordButton.setHelpText (
+        "Record while the song plays from the current position: every armed track from its "
+        "own input, all at once; with none armed, the input chosen in Options › Audio settings into a "
+        "new track (or the one chosen beside)");
     recordButton.onClick = [this] { toggleRecording(); };
     recordButton.setButtonText (juce::String (juce::CharPointer_UTF8 ("\xe2\x97\x8f Record audio")));
     recordInto.setHelpText ("Where a recording goes: a new track, or into a track; over audio already on it, it "

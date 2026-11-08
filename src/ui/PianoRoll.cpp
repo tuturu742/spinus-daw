@@ -26,11 +26,10 @@ bool isBlackKey (int pitch)
     return n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
 }
 
-/** FL's note names: MIDI 60 is C5. */
-juce::String noteName (int pitch)
+/** FL's note names: MIDI 60 is C5. With `flats`, Eb5 rather than D#5 (a key written with flats). */
+juce::String noteName (int pitch, bool flats = false)
 {
-    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    return juce::String (names[pitch % 12]) + juce::String (pitch / 12);
+    return model::pitchClassName (pitch, flats) + juce::String (pitch / 12);
 }
 
 juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items)
@@ -133,6 +132,7 @@ public:
 
         // Notes; dimmed while a suggestion for them is shown.
         const auto* suggested = roll.getSuggestedNotes();
+        const bool flats = key.has_value() && model::usesFlats (key.value()); // C minor: Eb5 and Bb, not D#5 and A#
         for (size_t i = 0; i < roll.notes.size(); ++i)
         {
             const auto& n = roll.notes[i];
@@ -151,7 +151,7 @@ public:
             {
                 g.setColour (theme.get ("background"));
                 g.setFont (juce::FontOptions (10.0f));
-                g.drawText (noteName (n.pitch), r.reduced (3.0f, 0.0f), juce::Justification::centredLeft, false);
+                g.drawText (noteName (n.pitch, flats), r.reduced (3.0f, 0.0f), juce::Justification::centredLeft, false);
             }
         }
 
@@ -163,7 +163,7 @@ public:
             g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
             for (auto& [start, chord] : together)
             {
-                const auto name = model::nameChord (chord);
+                const auto name = model::nameChord (chord, flats);
                 if (name.isEmpty())
                     continue;
                 const auto top = *std::max_element (chord.begin(), chord.end());

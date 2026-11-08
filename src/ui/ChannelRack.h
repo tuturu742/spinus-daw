@@ -127,6 +127,9 @@ public:
 
     int getNumRows() const { return (int)rows.size(); }
 
+    /** The hint shown while the project has no instruments (tests). */
+    const juce::Label& getEmptyMessage() const noexcept { return emptyMessage; }
+
     /** Applies pending updates now (tests). */
     void updateNow() { handleUpdateNowIfNeeded(); }
     int getPlayingStep() const noexcept { return playingStep; }
@@ -162,7 +165,7 @@ private:
     juce::Viewport viewport;
     juce::TextButton addButton, tripletButton;
     juce::Slider swingKnob;
-    juce::Label swingLabel;
+    juce::Label swingLabel, emptyMessage;
     juce::ComboBox groupFilter;
     juce::String shownGroup;
     void updateGroupFilter();

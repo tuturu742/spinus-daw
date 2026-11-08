@@ -50,7 +50,7 @@ void AudioRecorder::keepMetering()
 {
     if (! metering || recording)
         return;
-    // An armed track's input switched off (another input chosen in Options › Audio), or a track armed:
+    // An armed track's input switched off (another input chosen in Options › Audio settings), or a track armed:
     // switch it on again (tried once per change of what is armed or switched on).
     const auto wanted = armedInputs();
     const auto active = recording::activeInputChannels (session.getEdit().engine);
@@ -92,7 +92,8 @@ juce::Result AudioRecorder::attach()
         return juce::Result::ok();
     input = recording::findAudioInput (session.getEdit());
     if (input == nullptr)
-        return juce::Result::fail ("Spinus has no audio input to record from: choose one in Options › Audio.");
+        return juce::Result::fail (
+            "Spinus has no audio input to record from: choose one in Options › Audio settings... (F10).");
     inputOrder = recording::activeInputChannels (session.getEdit().engine);
     for (auto& level : levels)
         level = 0.0f;
@@ -162,7 +163,8 @@ juce::Result AudioRecorder::start()
             needed.insert (source->first + c);
 
     if (recording::findAudioInput (edit) == nullptr)
-        return juce::Result::fail ("Spinus has no audio input to record from: choose one in Options › Audio.");
+        return juce::Result::fail (
+            "Spinus has no audio input to record from: choose one in Options › Audio settings... (F10).");
     if (! inputUse)
         inputUse.emplace (engine);
     if (auto used = recording::useInputs (engine, needed); used.failed())

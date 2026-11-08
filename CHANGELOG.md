@@ -34,6 +34,27 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Playlist with a folded group: a selection box picked clips on the wrong (hidden) tracks, and **Ctrl+A** then
   **Shift+arrows** did nothing. Clips folded away now move in time with the others and stay on their tracks.
 - The Playlist no longer crashes if an automation point is being dragged when its clip is undone.
+- The tempo box no longer stays stuck over the tempo after a double-click: Escape, Enter or clicking elsewhere
+  closes it. A typed tempo above 999 or below 20 BPM is set to 999 or 20; text that is not a number changes
+  nothing.
+- Scrolling the mouse wheel over the tempo is one undo step per scroll, not one per notch.
+- Save as over another project (Replace) puts this project's audio files there: an audio file of the same name
+  from the old project no longer stays and plays in place of yours.
+- Pressing Play with no sound card open now says why nothing is heard, and where to choose one (Options › Audio
+  settings..., F10).
+- A crashed project opened from the file manager or the command line asks "Recover your work?" once, not twice.
+- When Spinus can't save, the message says why (no permission to write there, a file in the way, a full disk) and
+  what to do next.
+- Opening a project that another Spinus already has open (double-clicking its .spn file) says so and points to
+  that window, instead of starting a second, empty Spinus with an error.
+- **Ctrl+Y** redoes, as **Ctrl+Shift+Z** does.
+- An empty Channel Rack says how to add the first instrument.
+- In a key written with flats (C minor, F major, ...), the Piano Roll names notes and chords with flats: Eb5 and
+  Bb, not D#5 and A#.
+- Recording messages name the real menu item, Options › Audio settings....
+- Manual: Projects do show in the Browser (Known issues); `--no-audio`, `--snapshot`, `--version` and
+  `--self-test` are on the command-line page; Backspace deletes like Delete; what clicking the Playlist's ruler
+  does in pattern mode.
 
 ### Track creator: songs that sound written, not generated
 

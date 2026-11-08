@@ -19,7 +19,16 @@ projects or your logs.
 
 Each option prints JSON, one object per line, so a program can read it. An option Spinus doesn't know
 (`--hepl`, `--list`) is refused with "unknown option" and the list above, exit code 1: none of these ever
-opens Spinus's window. Only `spinus` alone, or `spinus <project>`, does.
+opens Spinus's window. Only `spinus` alone, `spinus <project>` or `spinus --no-audio` does.
+
+A few more options, for checking and for tools:
+
+| Option | What it does |
+|---|---|
+| `spinus --version` | Prints Spinus's version and ends. |
+| `spinus --no-audio` | Opens Spinus's window as usual, but without a sound card: nothing plays out loud. Useful when the sound card stops Spinus from starting. Add a project to open it too. |
+| `spinus --snapshot <file.png>` | Draws an empty Spinus main window (1280 by 800, with the Mixer and Piano Roll open) into a picture and ends, without showing the window or opening a sound card. For screenshots and tools. |
+| `spinus --self-test [<folder>]` | Checks that Spinus works on this computer ([Troubleshooting](troubleshooting.md)). |
 
 **In the Flatpak**, start Spinus as `flatpak run io.github.tuturu742.spinus` followed by the option:
 

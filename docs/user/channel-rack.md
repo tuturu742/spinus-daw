@@ -4,7 +4,8 @@
 
 The Channel Rack lists your channels: each one is an instrument. Next to each channel is its **step
 sequencer** for the current pattern (chosen in the top bar, or by clicking a pattern clip in the
-[Playlist](playlist.md)).
+[Playlist](playlist.md)). A new, empty project has no channels: the Channel Rack then says how to add
+the first one (**+ Add channel**, or drag an instrument in from the [Browser](browser.md)).
 
 | Part | What it does |
 |---|---|

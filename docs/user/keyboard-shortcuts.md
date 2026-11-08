@@ -51,7 +51,7 @@ Keyboard shortcuts...**) only while **Show experimental features** is ticked in 
 | **Ctrl+R** | [Export audio](export.md) |
 | **Ctrl+Q** | Quit |
 | **Ctrl+Z** | Undo |
-| **Ctrl+Shift+Z** | Redo |
+| **Ctrl+Shift+Z**, **Ctrl+Y** | Redo |
 | **Ctrl+Shift+L** | [Create automation clip for the last moved control](playlist.md#automation-clips): the knob or fader you moved last |
 
 ## Tools (Piano Roll and Playlist)
@@ -71,7 +71,7 @@ They pick the tool in the Piano Roll when it is in front, otherwise in the Playl
 |---|---|
 | **Ctrl+A** | Select all |
 | **Escape**, **Ctrl+D** | Select none |
-| **Delete** | Delete the selection |
+| **Delete**, **Backspace** | Delete the selection |
 | **Ctrl+C**, **Ctrl+X**, **Ctrl+V** | Copy, cut and paste notes (Piano Roll) or clips (Playlist) |
 | **Ctrl+B** | Duplicate the selection right after itself (Piano Roll and Playlist) |
 | **Shift+Left**, **Shift+Right** | Move the selection a grid step earlier or later (Piano Roll and Playlist) |

@@ -93,7 +93,7 @@ All of them are listed in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 ## Undo
 
-**Ctrl+Z** undoes the last change and **Ctrl+Shift+Z** redoes it. The hint bar shows what was undone.
+**Ctrl+Z** undoes the last change and **Ctrl+Shift+Z** (or **Ctrl+Y**) redoes it. The hint bar shows what was undone.
 
 The **History** panel (**Ctrl+H**) lists every change, oldest at the top. Click any step to go back
 (or forward) to it; steps you can still redo are dimmed. "Open project" is the project as it was opened.

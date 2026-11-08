@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "ExampleProject.h"
+#include "model/Chords.h"
 #include "model/ModelJson.h"
+#include "model/Scales.h"
 #include "model/Validation.h"
 
 using namespace spinus::model;
@@ -319,4 +321,28 @@ TEST_CASE ("A song of many instruments becomes project text quickly, with plain 
     Project loaded;
     REQUIRE (fromJsonText (text, loaded).wasOk());
     CHECK (loaded == p);
+}
+
+TEST_CASE ("Keys written with flats name their notes and chords with flats", "[model]")
+{
+    CHECK (usesFlats (Key { 0, "minor" }));        // C minor: Eb, Ab, Bb
+    CHECK (usesFlats (Key { 5, "major" }));        // F major: Bb
+    CHECK (usesFlats (Key { 2, "minor" }));        // D minor
+    CHECK (usesFlats (Key { 10, "major" }));       // Bb major
+    CHECK (usesFlats (Key { 7, "dorian" }));       // G dorian: F major's notes
+    CHECK (! usesFlats (Key { 2, "dorian" }));     // D dorian: C major's notes
+    CHECK (! usesFlats (Key { 0, "major" }));      // C major
+    CHECK (! usesFlats (Key { 9, "minor" }));      // A minor
+    CHECK (! usesFlats (Key { 4, "minor" }));      // E minor: F#
+    CHECK (! usesFlats (Key { 7, "mixolydian" })); // G mixolydian: C major's notes
+
+    CHECK (pitchClassName (63) == "D#");
+    CHECK (pitchClassName (63, true) == "Eb");
+    CHECK (pitchClassName (70, true) == "Bb");
+    CHECK (pitchClassName (60, true) == "C");
+
+    CHECK (nameChord ({ 58, 62, 65 }) == "A#");
+    CHECK (nameChord ({ 58, 62, 65 }, true) == "Bb");
+    CHECK (nameChord ({ 63, 67, 70 }, true) == "Eb");
+    CHECK (nameChord ({ 62, 67, 70 }, true) == "Gm/D");
 }

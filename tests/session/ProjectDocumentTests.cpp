@@ -177,6 +177,22 @@ TEST_CASE ("Save As takes the project's audio files along", "[session][document]
     CHECK (f.document->getRecentProjects().size() == 2);
 }
 
+TEST_CASE ("Save As over another project puts this project's audio there, not the old project's", "[session][document]")
+{
+    Fixture f;
+    // An older project with its own audio/kick.wav.
+    requireOk (f.document->saveAs (f.temp.root.getChildFile ("Old")));
+    REQUIRE (f.temp.root.getChildFile ("Old/audio/kick.wav").replaceWithText ("the old project's kick"));
+    f.document->newProject();
+
+    // This project, with a different kick.wav of the same name, saved over it (Save As > Replace).
+    f.session.getHistory().reset (test::makeExample());
+    requireOk (f.document->saveAs (f.temp.root.getChildFile ("New")));
+    REQUIRE (f.temp.root.getChildFile ("New/audio/kick.wav").replaceWithText ("this project's kick"));
+    requireOk (f.document->saveAs (f.temp.root.getChildFile ("Old")));
+    CHECK (f.temp.root.getChildFile ("Old/audio/kick.wav").loadFileAsString() == "this project's kick");
+}
+
 TEST_CASE ("Save As makes a folder with a .spn file, never mixed into another folder", "[session][document]")
 {
     Fixture f;
