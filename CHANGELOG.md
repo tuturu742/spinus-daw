@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Track creator: Learn this instrument
 
+- **Read the manual** in Learn this instrument: add an instrument's manuals (PDF files or web pages, as many as
+  it has) and the AI proposes its modes, how to enter each, what each suits and what their keys do. Apply takes
+  it, keeping what you set; each manual remembers the instrument version it was read for. Needs AI.
 - **Ask the plugin** in Learn this instrument: Spinus reads the names an instrument gives its keys (a drum
   machine's "Kick", a key switch's "Palm mute") and proposes them, switches as switches. Few instruments name
   their keys; Spinus's Drum Machine names its pads.

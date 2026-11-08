@@ -422,6 +422,21 @@ and drums": those three), or empty. Then:
   What it says is a proposal like a listening's: **Apply** or **Discard**, and keys you marked stay yours.
   Spinus's own Drum Machine names its pads by their sounds.
 
+  **Read the manual** has the AI read the instrument's manuals and propose what they say: its modes (a guitar's
+  normal and strummer modes), how to enter each (a button, or the key that switches to it), what each suits,
+  whether it plays chords, and what the keys of each mode do. Add manuals on the **Manuals** row: type or paste
+  a web page's address and press **Add**, or **Choose file...** for a PDF (or a page saved as a file) on this
+  computer. Add as many as you have, official or not, one per mode if that is how they come; a manual behind a
+  login or a paywall can be downloaded and added as a file. Then press **Read the manual**. What it says is a
+  proposal: the keys that would change get a dot, and **Apply** adds the modes it names, fills in what a mode
+  doesn't say yet and marks the keys, leaving everything you set yourself as it is (**Discard** drops it).
+  Manuals number octaves differently (middle C is C3 in many, C4 in others; Spinus calls it C5); when a manual
+  doesn't say, Spinus moves its keys by octaves to fit what it heard with Listen to every key, so listening
+  first helps. Each manual is noted with the instrument's version it was read for; after the instrument is
+  updated, the list says it may be out of date, so you can read it again. Read the manual needs the AI turned
+  on (Options > AI) and an AI connection; the manuals' text goes only to the AI you chose, and Spinus keeps
+  only what they say about the keys (where the manuals are, not their text).
+
   An instrument can have several **modes** (a sampled guitar's normal and strummer modes): **Add mode**, name
   it, and say how to enter it (in words, or the key that switches to it), what it is good for ("strummed rhythm,
   country and folk") and whether it plays chords. Each mode has its own keyboard. For now Spinus writes in the

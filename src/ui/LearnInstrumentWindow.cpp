@@ -1,6 +1,8 @@
 #include "LearnInstrumentWindow.h"
 
 #include "Theme.h"
+#include "ai/AiService.h"
+#include "ai/AnalysisJobs.h"
 #include "session/KeyProbe.h"
 #include "session/PartSounds.h"
 #include "WindowStacking.h"
@@ -167,10 +169,20 @@ private:
     /** A key Apply would change: a dot of the colour it would take. */
     void paintHeard (juce::Graphics& g, const Theme& theme, int note, juce::Rectangle<float> r) const
     {
-        if (! panel.heard.has_value() || panel.heardMode != panel.mode)
+        InstrumentProfiles::Mode mode;
+        if (panel.reading.has_value())
+        {
+            auto applied = panel.profile;
+            manualreading::apply (applied, *panel.reading);
+            mode = applied.modes[(size_t)panel.mode];
+        }
+        else if (panel.heard.has_value() && panel.heardMode == panel.mode)
+        {
+            mode = panel.current();
+            keyprobe::merge (mode, *panel.heard);
+        }
+        else
             return;
-        auto mode = panel.current();
-        keyprobe::merge (mode, *panel.heard);
         if (mode.keys[(size_t)note] == panel.current().keys[(size_t)note])
             return;
         const auto size = juce::jmin (r.getWidth(), r.getHeight());
@@ -285,16 +297,38 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
     discardButton.setTooltip ("Drop what was found");
     discardButton.onClick = [this] { discardHeard(); };
     heardLabel.setJustificationType (juce::Justification::centredLeft);
+    manualsLabel.setText ("Manuals:", juce::dontSendNotification);
+    manualsBox.setTooltip ("The instrument's manuals, for Read the manual: PDF files or web pages, official or not");
+    removeManualButton.setTooltip ("Remove the manual shown");
+    removeManualButton.onClick = [this] { removeManual (manualsBox.getSelectedItemIndex()); };
+    manualEditor.setTextToShowWhenEmpty ("a web page: https://...", juce::Colours::grey);
+    manualEditor.onReturnKey = [this] { addManual (manualEditor.getText()); };
+    addManualButton.setTooltip ("Add the web page or file typed on the left");
+    addManualButton.onClick = [this] { addManual (manualEditor.getText()); };
+    chooseManualButton.setTooltip ("A manual on this computer: a PDF, or a web page saved as a file");
+    chooseManualButton.onClick = [this]
+    {
+        if (onChooseManual)
+            onChooseManual();
+    };
+    readButton.onClick = [this]
+    {
+        if (onRead && ! readingNow && readWhyNot.isEmpty() && ! profile.manuals.empty())
+            onRead();
+    };
     for (auto* c : std::initializer_list<juce::Component*> {
-             &intro,         &modeLabel,      &modeBox,     &addModeButton, &removeModeButton, &modeName,
-             &enterLabel,    &enterEditor,    &enterKeyBox, &goodForLabel,  &goodForEditor,    &voicesBox,
-             keyboard.get(), &selectionLabel, &whatEditor,  &playsButton,   &switchButton,     &specialButton,
-             &unusedButton,  &unknownButton,  &summary,     &forgetButton,  &cancelButton,     &saveButton,
-             &listenButton,  &askButton,      &heardLabel })
+             &intro,         &modeLabel,          &modeBox,         &addModeButton,  &removeModeButton,
+             &modeName,      &enterLabel,         &enterEditor,     &enterKeyBox,    &goodForLabel,
+             &goodForEditor, &voicesBox,          keyboard.get(),   &selectionLabel, &whatEditor,
+             &playsButton,   &switchButton,       &specialButton,   &unusedButton,   &unknownButton,
+             &summary,       &forgetButton,       &cancelButton,    &saveButton,     &listenButton,
+             &askButton,     &heardLabel,         &manualsLabel,    &manualsBox,     &removeManualButton,
+             &manualEditor,  &chooseManualButton, &addManualButton, &readButton })
         addAndMakeVisible (c);
     addChildComponent (applyButton);
     addChildComponent (discardButton);
-    setSize (980, 470);
+    setSize (980, 504);
+    updateManuals();
     showMode (0);
 }
 
@@ -336,6 +370,7 @@ void LearnInstrumentPanel::setHeard (std::optional<std::array<InstrumentProfiles
                                      const juce::String& problem, From from)
 {
     setListening ({});
+    reading.reset();
     heard = std::move (keys);
     heardFrom = from;
     const auto plugin = from == From::plugin;
@@ -387,6 +422,19 @@ void LearnInstrumentPanel::setHeard (std::optional<std::array<InstrumentProfiles
 
 void LearnInstrumentPanel::applyHeard()
 {
+    if (reading.has_value())
+    {
+        const auto changes = manualreading::apply (profile, *reading);
+        for (auto& manual : profile.manuals)
+            manual.version = instrumentVersion;
+        forgotten = false;
+        discardHeard();
+        updateManuals();
+        heardLabel.setText ("Applied what the manual says (" + juce::String (changes) +
+                                (changes == 1 ? " change" : " changes") + "). Save keeps it.",
+                            juce::dontSendNotification);
+        return;
+    }
     if (! heard.has_value())
         return;
     showMode (heardMode);
@@ -401,10 +449,146 @@ void LearnInstrumentPanel::applyHeard()
 void LearnInstrumentPanel::discardHeard()
 {
     heard.reset();
+    reading.reset();
     applyButton.setVisible (false);
     discardButton.setVisible (false);
     heardLabel.setText ({}, juce::dontSendNotification);
     updateFields();
+}
+
+void LearnInstrumentPanel::addManual (const juce::String& typed)
+{
+    auto source = typed.trim().unquoted();
+    if (source.isEmpty())
+        return;
+    if (! source.startsWith ("https://") && ! source.startsWith ("http://"))
+    {
+        if (source.startsWith ("www."))
+            source = "https://" + source;
+        else if (! juce::File::isAbsolutePath (source) || ! juce::File (source).existsAsFile())
+        {
+            heardLabel.setText ("A manual is a web page's address (https://...) or a file on this computer: use "
+                                "Choose file....",
+                                juce::dontSendNotification);
+            return;
+        }
+    }
+    if (std::none_of (profile.manuals.begin(), profile.manuals.end(),
+                      [&] (const InstrumentProfiles::Manual& m) { return m.source == source; }))
+        profile.manuals.push_back ({ source, {} });
+    manualEditor.clear();
+    forgotten = false;
+    updateManuals();
+    manualsBox.setSelectedItemIndex ((int)profile.manuals.size() - 1, juce::dontSendNotification);
+}
+
+void LearnInstrumentPanel::removeManual (int index)
+{
+    if (index < 0 || index >= (int)profile.manuals.size())
+        return;
+    profile.manuals.erase (profile.manuals.begin() + index);
+    updateManuals();
+}
+
+void LearnInstrumentPanel::setInstrumentVersion (const juce::String& version)
+{
+    instrumentVersion = version;
+    updateManuals();
+}
+
+void LearnInstrumentPanel::setCanRead (const juce::String& whyNot)
+{
+    readWhyNot = whyNot;
+    updateManuals();
+}
+
+void LearnInstrumentPanel::setReadingProgress (const juce::String& progress)
+{
+    readingNow = progress.isNotEmpty();
+    if (readingNow)
+        heardLabel.setText (progress, juce::dontSendNotification);
+    for (auto* c : std::initializer_list<juce::Component*> { &listenButton, &askButton })
+        c->setEnabled (! readingNow);
+    updateManuals();
+}
+
+void LearnInstrumentPanel::setReading (std::optional<manualreading::Reading> read, const juce::String& problem)
+{
+    setReadingProgress ({});
+    heard.reset();
+    reading = std::move (read);
+    if (! reading.has_value())
+        heardLabel.setText ("The manual was not read: " + problem, juce::dontSendNotification);
+    else
+    {
+        manualreading::fitOctaves (*reading, profile);
+        auto applied = profile;
+        const auto modesBefore = applied.modes.size();
+        const auto changes = manualreading::apply (applied, *reading);
+        const auto added = (int)(applied.modes.size() - modesBefore);
+        juce::String text = "The manual says: " + manualreading::describe (*reading) + ". Apply changes " +
+                            juce::String (changes) + (changes == 1 ? " thing" : " things") +
+                            (added > 0 ? " (" + juce::String (added) + (added == 1 ? " new mode" : " new modes") + ")"
+                                       : juce::String()) +
+                            "; keys marked with a dot.";
+        if (! reading->middleCSaid)
+            text << (reading->octavesMoved != 0
+                         ? " It doesn't say how it numbers octaves: its keys were moved " +
+                               juce::String (std::abs (reading->octavesMoved)) +
+                               (std::abs (reading->octavesMoved) == 1 ? " octave " : " octaves ") +
+                               (reading->octavesMoved > 0 ? "up" : "down") + " to fit the keys Spinus knows."
+                         : " It doesn't say how it numbers octaves (C3 taken as middle C): check the keys.");
+        if (! reading->problems.isEmpty())
+            text << " Not read: " << reading->problems.joinIntoString ("; ") << ".";
+        heardLabel.setText (text, juce::dontSendNotification);
+    }
+    applyButton.setVisible (reading.has_value());
+    discardButton.setVisible (reading.has_value());
+    keyboard->repaint();
+}
+
+juce::String LearnInstrumentPanel::getManualsText() const
+{
+    if (profile.manuals.empty())
+        return "No manual yet";
+    juce::StringArray names;
+    juce::String stale;
+    for (const auto& manual : profile.manuals)
+    {
+        names.add (manual.isWebPage() ? manual.source.fromFirstOccurrenceOf ("://", false, false)
+                                      : juce::File (manual.source).getFileName());
+        if (manual.version.isNotEmpty() && instrumentVersion.isNotEmpty() && manual.version != instrumentVersion)
+            stale = " (read for " + manual.version + "; the instrument is " + instrumentVersion +
+                    " now: it may be out of date, read it again)";
+    }
+    return juce::String ((int)names.size()) + (names.size() == 1 ? " manual: " : " manuals: ") +
+           names.joinIntoString (", ") + stale;
+}
+
+void LearnInstrumentPanel::updateManuals()
+{
+    const auto shown = juce::jmax (0, manualsBox.getSelectedItemIndex());
+    manualsBox.clear (juce::dontSendNotification);
+    for (size_t i = 0; i < profile.manuals.size(); ++i)
+    {
+        const auto& manual = profile.manuals[i];
+        auto label = manual.isWebPage() ? manual.source.fromFirstOccurrenceOf ("://", false, false)
+                                        : juce::File (manual.source).getFileName();
+        if (manual.version.isNotEmpty() && instrumentVersion.isNotEmpty() && manual.version != instrumentVersion)
+            label << " (read for " << manual.version << ")";
+        manualsBox.addItem (label, (int)i + 1);
+    }
+    manualsBox.setTextWhenNothingSelected (getManualsText());
+    if (! profile.manuals.empty())
+        manualsBox.setSelectedItemIndex (juce::jmin (shown, (int)profile.manuals.size() - 1),
+                                         juce::dontSendNotification);
+    removeManualButton.setEnabled (! profile.manuals.empty());
+    readButton.setEnabled (readWhyNot.isEmpty() && ! profile.manuals.empty() && ! readingNow);
+    readButton.setTooltip (readWhyNot.isNotEmpty() ? readWhyNot
+                           : profile.manuals.empty()
+                               ? juce::String ("Add a manual first: a PDF on this computer or a web page")
+                               : juce::String ("The AI reads the manuals and proposes the modes they name, how to "
+                                               "enter each and what their keys do; shown for you to Apply"));
 }
 
 void LearnInstrumentPanel::addMode (const juce::String& modeName_)
@@ -527,7 +711,7 @@ void LearnInstrumentPanel::paint (juce::Graphics& g)
     const auto& theme = themeOf (*this);
     g.fillAll (theme.get ("panel"));
     heardLabel.setColour (juce::Label::textColourId, theme.get ("textDim"));
-    for (auto* l : { &intro, &modeLabel, &enterLabel, &goodForLabel, &selectionLabel })
+    for (auto* l : { &intro, &modeLabel, &enterLabel, &goodForLabel, &selectionLabel, &manualsLabel })
         l->setColour (juce::Label::textColourId, theme.get ("text"));
     summary.setColour (juce::Label::textColourId, theme.get ("accent"));
     // Each button the colour of the keys it marks: the keyboard's legend.
@@ -581,6 +765,21 @@ void LearnInstrumentPanel::resized()
         goodForEditor.setBounds (r);
     }
     {
+        auto r = row();
+        manualsLabel.setBounds (r.removeFromLeft (110));
+        manualsBox.setBounds (r.removeFromLeft (200));
+        r.removeFromLeft (6);
+        removeManualButton.setBounds (r.removeFromLeft (76));
+        r.removeFromLeft (8);
+        readButton.setBounds (r.removeFromRight (140));
+        r.removeFromRight (8);
+        addManualButton.setBounds (r.removeFromRight (56));
+        r.removeFromRight (6);
+        chooseManualButton.setBounds (r.removeFromRight (110));
+        r.removeFromRight (6);
+        manualEditor.setBounds (r);
+    }
+    {
         auto r = area.removeFromBottom (28);
         saveButton.setBounds (r.removeFromRight (90));
         r.removeFromRight (8);
@@ -630,7 +829,7 @@ std::vector<LearnInstrumentWindow*>& openWindows()
 
 void LearnInstrumentWindow::open (const juce::File& indexFolder, const juce::String& instrument,
                                   const juce::String& name, juce::Component* near, Saved saved,
-                                  std::optional<Listening> listening)
+                                  std::optional<Listening> listening, ai::AiService* service)
 {
     for (auto* w : openWindows())
         if (w->instrument == instrument)
@@ -638,16 +837,19 @@ void LearnInstrumentWindow::open (const juce::File& indexFolder, const juce::Str
             w->toFront (true);
             return;
         }
-    auto* window = new LearnInstrumentWindow (indexFolder, instrument, name, std::move (saved), std::move (listening));
+    auto* window =
+        new LearnInstrumentWindow (indexFolder, instrument, name, std::move (saved), std::move (listening), service);
     if (near != nullptr && near->isOnDesktop())
         keepAboveOwner (*window, *near);
     window->setVisible (true);
 }
 
 LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const juce::String& key,
-                                              const juce::String& name, Saved s, std::optional<Listening> l)
-    : juce::DocumentWindow ("Learn " + name, juce::Colours::black, juce::DocumentWindow::closeButton, false),
-      indexFolder (folder), instrument (key), saved (std::move (s)), listening (std::move (l))
+                                              const juce::String& instrumentName, Saved s, std::optional<Listening> l,
+                                              ai::AiService* aiService)
+    : juce::DocumentWindow ("Learn " + instrumentName, juce::Colours::black, juce::DocumentWindow::closeButton, false),
+      indexFolder (folder), instrument (key), saved (std::move (s)), listening (std::move (l)), service (aiService),
+      name (instrumentName)
 {
     InstrumentProfiles profiles (indexFolder);
     profiles.load();
@@ -666,6 +868,13 @@ LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const ju
     panel->onListen = [this] (int enterKey) { listen (enterKey); };
     panel->onStopListening = [this] { stopping->store (true); };
     panel->onAsk = [this] { ask(); };
+    panel->onRead = [this] { readManuals(); };
+    panel->onChooseManual = [this] { chooseManual(); };
+    if (listening.has_value()) // the plugin's version, the first part of its fingerprint
+        panel->setInstrumentVersion (listening->source.fingerprint.upToFirstOccurrenceOf ("|", false, false));
+    panel->setCanRead (service == nullptr || ! service->isEnabled()
+                           ? "Reading a manual needs the AI: turn it on in Options > AI and add a connection"
+                           : juce::String());
     setUsingNativeTitleBar (true);
     setContentOwned (panel, true);
     setResizable (true, false);
@@ -767,6 +976,57 @@ void LearnInstrumentWindow::ask()
                     if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
                         p->setHeard (*found, *problem, LearnInstrumentPanel::From::plugin);
                 });
+        });
+}
+
+void LearnInstrumentWindow::chooseManual()
+{
+    chooser =
+        std::make_unique<juce::FileChooser> ("A manual for " + name, juce::File(), "*.pdf;*.html;*.htm;*.txt;*.md");
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [this, a = alive] (const juce::FileChooser& fc)
+                          {
+                              if (! *a || fc.getResult() == juce::File())
+                                  return;
+                              if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
+                                  p->addManual (fc.getResult().getFullPathName());
+                          });
+}
+
+void LearnInstrumentWindow::readManuals()
+{
+    auto* panel = dynamic_cast<LearnInstrumentPanel*> (getContentComponent());
+    if (panel == nullptr || service == nullptr)
+        return;
+    juce::Array<juce::var> manuals;
+    for (const auto& manual : panel->getManuals())
+    {
+        auto* m = new juce::DynamicObject();
+        m->setProperty (manual.isWebPage() ? "url" : "file", manual.source);
+        manuals.add (juce::var (m));
+    }
+    auto* params = new juce::DynamicObject();
+    params->setProperty ("instrument", name);
+    params->setProperty ("manuals", manuals);
+    panel->setReadingProgress ("The AI is reading the manual...");
+    ai::runJob (
+        *service, "ai.v1.instrument.readManual", juce::var (params), alive, {},
+        [this, a = alive] (const juce::var& result, const juce::String& error)
+        {
+            if (! *a)
+                return;
+            if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
+            {
+                auto read = error.isEmpty() ? manualreading::fromVar (result) : std::nullopt;
+                p->setReading (std::move (read), error.isNotEmpty() ? error : juce::String ("it named no mode."));
+            }
+        },
+        [this, a = alive] (double, double, const juce::String& step)
+        {
+            if (! *a || step.isEmpty())
+                return;
+            if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
+                p->setReadingProgress (step);
         });
 }
 

@@ -1959,6 +1959,40 @@ TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][
     CHECK_FALSE (panel.hasHeard());
     CHECK (panel.getHeardText().startsWith ("The instrument names none of its keys"));
 
+    // Read the manual: manuals are added (a web page, a file), the button says why it can't read without AI, and
+    // what the AI read is a proposal that adds the Strummer mode.
+    CHECK (panel.getManualsText() == "No manual yet");
+    panel.addManual ("not a manual");
+    CHECK (panel.getManuals().empty());
+    CHECK (panel.getHeardText().startsWith ("A manual is a web page's address"));
+    panel.addManual ("https://example.org/strummer");
+    panel.addManual ("www.example.org/bass");
+    panel.addManual ("https://example.org/strummer"); // once
+    REQUIRE (panel.getManuals().size() == 2);
+    CHECK (panel.getManuals()[1].source == "https://www.example.org/bass");
+    panel.removeManual (1);
+    CHECK (panel.getManualsText() == "1 manual: example.org/strummer");
+    panel.setCanRead ("Reading a manual needs the AI");
+    panel.setInstrumentVersion ("1.0.3");
+    auto answer = juce::JSON::parse (R"({"middleCSaid": true, "modes": [
+        {"name": "Strummer", "enter": "the C#6 key", "enterKey": 97, "voices": "chords",
+         "zones": [{"from": 60, "to": 71, "job": "special", "what": "chord keys"}]}], "by": "claude-test"})");
+    panel.setReading (manualreading::fromVar (answer));
+    CHECK (panel.hasReading());
+    CHECK (panel.getHeardText().startsWith ("The manual says: 1 mode: Strummer (entered by C#8, MIDI 97). Apply "
+                                            "changes 1 thing (1 new mode)"));
+    const auto modesBefore = panel.getProfile()->modes.size();
+    panel.applyHeard();
+    CHECK_FALSE (panel.hasReading());
+    CHECK (panel.getHeardText().startsWith ("Applied what the manual says"));
+    REQUIRE (panel.getProfile()->modes.size() == modesBefore + 1);
+    CHECK (panel.getProfile()->modes.back().keys[65].what == "chord keys");
+    CHECK (panel.getManuals()[0].version == "1.0.3"); // read for this version
+    panel.setInstrumentVersion ("1.1.0");
+    CHECK (panel.getManualsText().contains ("read for 1.0.3; the instrument is 1.1.0 now"));
+    panel.setReading (std::nullopt, "No AI connection.");
+    CHECK (panel.getHeardText() == "The manual was not read: No AI connection.");
+
     // Forgotten: saved as nothing.
     panel.forget();
     CHECK (panel.getSummaryText().startsWith ("Forgotten"));

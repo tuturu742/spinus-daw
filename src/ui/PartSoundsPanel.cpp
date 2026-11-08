@@ -1626,7 +1626,7 @@ void PartSoundsPanel::learnInstrument (const juce::String& instrument, const Sou
                                                        : name + " plays any note: which keys play is not known.",
                                       juce::dontSendNotification);
         },
-        std::move (listening));
+        std::move (listening), context.service);
 }
 
 bool PartSoundsPanel::usePresetFolder (const SoundSource& instrument, const juce::File& folder, bool use)

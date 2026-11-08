@@ -92,9 +92,20 @@ public:
         void setKeys (int from, int to, const Key& key);
         bool operator== (const Mode&) const = default;
     };
+    /** A manual of the instrument (Read the manual): a PDF or other file on this computer, or a web page, and
+        the plugin version it was last read for (empty until read), so a profile can say it may be out of date
+        after the plugin is updated. Only where the manual is, never its text. */
+    struct Manual
+    {
+        juce::String source; // a file's full path, or a web page's address
+        juce::String version;
+        bool isWebPage() const { return source.startsWith ("https://") || source.startsWith ("http://"); }
+        bool operator== (const Manual&) const = default;
+    };
     struct Profile
     {
         std::vector<Mode> modes;
+        std::vector<Manual> manuals;
         bool operator== (const Profile&) const = default;
     };
 

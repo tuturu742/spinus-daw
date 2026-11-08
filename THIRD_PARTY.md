@@ -89,6 +89,7 @@ development build uses `uv` with `ai/uv.lock`.
 |---|---|---|---|
 | [httpx](https://www.python-httpx.org) | BSD-3-Clause | Talking to model providers (streaming) | Arch: `python-httpx` |
 | [keyring](https://github.com/jaraco/keyring) | MIT | Keeping connection keys in the system keyring | Arch: `python-keyring` (with SecretStorage, BSD-3-Clause, and jeepney, MIT) |
+| [pypdf](https://github.com/py-pdf/pypdf) | BSD-3-Clause | Reading the text of PDF manuals (Learn this instrument) | Arch: `python-pypdf` |
 | [ONNX Runtime](https://onnxruntime.ai) | MIT | Running local embedding models for manual search (optional) | Arch: `python-onnxruntime-cpu` |
 | [NumPy](https://numpy.org) | BSD-3-Clause | Listening to takes (pitch, onsets, beatbox sounds) and vectors for local embedding models (optional) | Arch: `python-numpy` |
 | [tokenizers](https://github.com/huggingface/tokenizers) | Apache-2.0 | Models that need a tokenizer other than Spinus's built-in WordPiece (optional) | AUR: `python-tokenizers` |
@@ -106,7 +107,7 @@ against that a desktop may lack (linuxdeploy's choice; glibc, ALSA, X and GL sta
 | Component | License | In | Notes |
 |---|---|---|---|
 | [Python](https://www.python.org) 3.12 (python-build-standalone) | PSF-2.0 | AppImage, Flatpak | Runs the AI service |
-| httpx, httpcore, h11, anyio, idna, certifi, keyring, SecretStorage, jeepney, jaraco.\*, more-itertools, cryptography, cffi, pycparser, typing-extensions, NumPy, ONNX Runtime, flatbuffers, protobuf, packaging | BSD-3-Clause, MIT, Apache-2.0, MPL-2.0 (certifi), PSF-2.0 | AppImage, Flatpak, Windows | The AI service's packages, as in the table above (ONNX Runtime and its dependencies for turning parts into notes) |
+| httpx, httpcore, h11, anyio, idna, certifi, keyring, pypdf, SecretStorage, jeepney, jaraco.\*, more-itertools, cryptography, cffi, pycparser, typing-extensions, NumPy, ONNX Runtime, flatbuffers, protobuf, packaging | BSD-3-Clause, MIT, Apache-2.0, MPL-2.0 (certifi), PSF-2.0 | AppImage, Flatpak, Windows | The AI service's packages, as in the table above (ONNX Runtime and its dependencies for turning parts into notes) |
 | [uv](https://github.com/astral-sh/uv) | MIT or Apache-2.0 | AppImage, Flatpak, Windows | Installs the analysis engine on request |
 | [Rubber Band Library](https://breakfastquay.com/rubberband/) 4.0.0 | GPL-2.0-or-later | Flatpak (built), AppImage (Ubuntu's 3.3) | See above |
 | libcurl, libarchive and the libraries they use (OpenSSL: Apache-2.0; GnuTLS: LGPL-2.1-or-later; nghttp2, zstd, lz4, xz, krb5, libxml2: MIT/BSD; ICU: Unicode-3.0) | as listed | AppImage | From Ubuntu 24.04 |

@@ -36,6 +36,7 @@ pkgbase = spinus-git
 	optdepends = pipewire-jack: low-latency audio through PipeWire (recommended)
 	optdepends = python-httpx: AI features (off until turned on in Options > AI)
 	optdepends = python-keyring: storing AI connection keys in the system keyring
+	optdepends = python-pypdf: reading PDF manuals in Learn this instrument
 	optdepends = python-onnxruntime-cpu: local embedding models for manual search (with python-numpy)
 	optdepends = python-numpy: hum, sing or beatbox an idea to notes; local embedding models for manual search
 	optdepends = uv: installing the analysis engine (PyTorch) for song analysis
