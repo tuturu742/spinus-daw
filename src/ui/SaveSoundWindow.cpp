@@ -1,5 +1,4 @@
 #include "SaveSoundWindow.h"
-#include "NoteRangeMenu.h"
 
 #include "WindowStacking.h"
 
@@ -54,19 +53,19 @@ public:
         nameEditor.setTooltip ("The name your saved sound is listed under (Your saved sounds)");
         playButton.setTooltip ("Hear the part's phrase with the sound as it is set up now");
         playButton.onClick = [this] { played (window.play()); };
-        notesButton.setTooltip ("The notes it may play: for an instrument whose other keys switch what it plays "
-                                "(Play, Listen and the song keep to them)");
+        notesButton.setTooltip ("Learn this instrument: which keys play and which switch what it plays (Play, Listen "
+                                "and the song keep to the keys that play)");
         notesButton.onClick = [this]
         {
-            makeNoteRangeMenu (window.notes.range,
-                               [safe = juce::Component::SafePointer<Content> (this)] (auto range)
-                               {
-                                   if (safe != nullptr)
-                                       safe->window.setNotes (range);
-                               })
-                .showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&notesButton));
+            if (window.notes.learn)
+                window.notes.learn (
+                    [safe = juce::Component::SafePointer<Content> (this)] (std::optional<PlayableKeys> keys)
+                    {
+                        if (safe != nullptr)
+                            safe->window.setNotes (keys);
+                    });
         };
-        notesButton.setVisible (window.notes.onChange != nullptr);
+        notesButton.setVisible (window.notes.learn != nullptr);
         saveButton.onClick = [this] { window.save (nameEditor.getText()); };
         saveButton.setTooltip ("Keep this sound under its name and close the window");
         keepButton.setTooltip ("Keep this sound under its name and leave the window open: set up the next sound "
@@ -78,7 +77,7 @@ public:
                                                                  &keepButton, &saveButton, &cancelButton })
             addAndMakeVisible (c);
         addChildComponent (notesButton);
-        notesButton.setVisible (window.notes.onChange != nullptr);
+        notesButton.setVisible (window.notes.learn != nullptr);
         updateNotesText();
         nameLabel.setText ("Name:", juce::dontSendNotification);
         setSize (juce::jmax (minWidth, editor->getWidth()), editor->getHeight() + bar);
@@ -119,9 +118,12 @@ public:
 
     void updateNotesText()
     {
-        notesButton.setButtonText ("Notes: " + (window.notes.range.has_value()
-                                                    ? NoteRanges::describe (*window.notes.range)
-                                                    : juce::String ("any")));
+        notesButton.setButtonText (
+            "Keys: " +
+            (window.notes.playable.has_value()
+                 ? keyName (window.notes.playable->lowest()) + " to " + keyName (window.notes.playable->highest())
+                 : juce::String ("any")) +
+            "...");
     }
 
     /** Says it plays, then, once the phrase has ended, whether anything was heard. */
@@ -321,10 +323,10 @@ std::vector<int> SaveSoundWindow::playedNotesLastOpened()
     return played;
 }
 
-void SaveSoundWindow::setNotesLastOpened (std::optional<NoteRanges::Range> range)
+void SaveSoundWindow::setNotesLastOpened (std::optional<PlayableKeys> keys)
 {
     if (! openWindows().empty())
-        openWindows().back()->setNotes (range);
+        openWindows().back()->setNotes (keys);
 }
 
 float SaveSoundWindow::mixLastOpened (double seconds)
@@ -371,17 +373,15 @@ void SaveSoundWindow::finish()
 std::vector<OfflineInstrument::Note> SaveSoundWindow::playedPhrase() const
 {
     auto played = phrase;
-    if (notes.range.has_value())
+    if (notes.playable.has_value())
         for (auto& n : played)
-            n.note = NoteRanges::fit (n.note, *notes.range);
+            n.note = notes.playable->fit (n.note);
     return played;
 }
 
-void SaveSoundWindow::setNotes (std::optional<NoteRanges::Range> range)
+void SaveSoundWindow::setNotes (std::optional<PlayableKeys> keys)
 {
-    notes.range = range;
-    if (notes.onChange)
-        notes.onChange (range);
+    notes.playable = keys;
     if (content != nullptr)
     {
         content->updateNotesText();

@@ -180,6 +180,7 @@ class Service:
             "ai.v1.song.compose": self.song_compose,
             "ai.v1.song.composer": self.song_composer,
             "ai.v1.song.composeStop": self.song_compose_stop,
+            "ai.v1.instrument.readManual": self.instrument_read_manual,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -1034,14 +1035,17 @@ class Service:
             raise RpcError(-32602, f"The reasoning level is {', '.join(EFFORTS)}, or none for the model's own.")
         try:
             setup = compose.Setup.make(summary, params.get("parts"), size, params.get("candidates"),
-                                       params.get("current"), params.get("effects"), params.get("variety"))  # fmt: skip
+                                       params.get("current"), params.get("effects"), params.get("variety"),
+                                       params.get("modes"))  # fmt: skip
         except ValueError as error:
             raise RpcError(-32602, str(error)) from error
         return setup, effort
 
     async def song_compose(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song written by the AI, opt-in: {summary, seed, parts, arrangement, candidates (part id -> [{id, name}]:
-        sounds from the sound index it may pick), current (part id -> its sound in words), variety ("close",
+        sounds from the sound index it may pick, each with its instrument's modes when Spinus learned them), current
+        (part id -> its sound in words), modes (part id -> the modes of that sound's instrument: [{name, goodFor, low,
+        high, switches, ...}], partmodes::brief), variety ("close",
         "balanced", the default, or "adventurous": the freedom the brief gives and how closely Spinus's checks hold the
         song to the references), effort ("low", "medium",
         "high", "xhigh" or none: the model's own), tools (the harness's groups of tools allowed: a depth, basic,
@@ -1147,6 +1151,31 @@ class Service:
         if not routes:
             return {"available": False, "reason": "No AI connection is set up: add one in Options > AI."}
         return {"available": True, "connection": routes[0].connection.name, "model": routes[0].model, "reason": ""}
+
+    async def instrument_read_manual(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Learn this instrument's Read the manual (spinus_ai.manuals): {instrument (its name), manuals: [{file} or
+        {url}]} -> {modes: [{name, enter, enterKey, goodFor, voices, zones: [{from, to, job, what}]}] (keys as MIDI
+        notes), middleC, middleCSaid, notes, read: [{source, title, pages, chars} or {source, problem}], by}. A
+        proposal: Spinus shows it for the user to Apply."""
+        from . import manuals
+        from .assistant import NoConnection
+
+        listed = params.get("manuals")
+        if not isinstance(listed, list) or not listed or not all(isinstance(m, dict) for m in listed):
+            raise RpcError(-32602, "Add a manual first: a PDF, a web page or a text file.")
+        instrument = str(params.get("instrument") or "the instrument")[:100]
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            try:
+                return await manuals.read_manuals(
+                    self.client, self.connections, self.routing, self.usage, instrument, listed, say
+                )
+            except NoConnection as error:
+                raise RpcError(-32000, "Reading a manual needs an AI connection: add one in Options > AI.") from error
+            except manuals.ManualError as error:
+                raise RpcError(-32000, str(error)) from error
+
+        return {"job": self.job(notify, work)}
 
     async def song_describe(self, params: dict[str, Any], notify: Notify) -> Any:
         """A song described in words read into a style summary (spinus_ai.describe): {text, ai (let the AI read

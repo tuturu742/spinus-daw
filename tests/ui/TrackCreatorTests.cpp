@@ -11,6 +11,7 @@
 #include "session/PartSounds.h"
 #include "session/UserRoles.h"
 #include "ui/PartSoundsPanel.h"
+#include "ui/LearnInstrumentWindow.h"
 #include "ui/SaveSoundWindow.h"
 #include "dsp/SpinusPluginFormat.h"
 #include "session/SongPreparation.h"
@@ -1746,20 +1747,37 @@ TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the us
     CHECK (SaveSoundWindow::mixLastOpened (0.5) < 1.0e-4f); // nothing played yet
     CHECK (SaveSoundWindow::playLastOpened());
     CHECK (SaveSoundWindow::mixLastOpened (3.0) > 0.01f);
-    // Notes...: an instrument whose low keys switch what it plays. Play keeps to the notes set, and so does the
-    // rest of the Track creator (kept beside the index for this instrument).
-    SaveSoundWindow::setNotesLastOpened (NoteRanges::Range { 60, 84 });
+    // Keys...: Learn this instrument, for one whose low keys switch what it plays. Once saved, Play keeps to the keys
+    // that play, and so does the rest of the Track creator (kept beside the index for this instrument).
+    panel.learnInstrument (osc.key, osc, {}, {},
+                           [] (std::optional<PlayableKeys> keys) { SaveSoundWindow::setNotesLastOpened (keys); });
+    REQUIRE (LearnInstrumentWindow::getNumOpen() == 1);
+    auto* learn = LearnInstrumentWindow::lastOpened();
+    REQUIRE (learn != nullptr);
+    // 3x Osc comes with a profile (every key plays); here it stands in for a sampled instrument.
+    CHECK (learn->describeKey (36).contains ("(comes with Spinus)"));
+    learn->selectKeys (0, 127);
+    learn->markSelected (InstrumentProfiles::Job::unknown);
+    learn->selectKeys (60, 84);
+    learn->markSelected (InstrumentProfiles::Job::plays);
+    learn->selectKeys (36, 36);
+    learn->markSelected (InstrumentProfiles::Job::switches, "palm mute");
+    CHECK (learn->getSummaryText() == "Plays C5 to C7; 1 switch key.");
+    CHECK (learn->describeKey (36).startsWith ("C3 (MIDI 36): a switch key, palm mute (set by you)"));
+    learn->save();
+    REQUIRE (waitFor ([] { return LearnInstrumentWindow::getNumOpen() == 0; }, 5000));
     for (const auto note : SaveSoundWindow::playedNotesLastOpened())
     {
         CHECK (note >= 60);
         CHECK (note <= 84);
     }
     {
-        NoteRanges kept (context.indexFolder);
+        InstrumentProfiles kept (context.indexFolder);
         kept.load();
-        CHECK (kept.get (osc.key) == std::optional<NoteRanges::Range> ({ 60, 84 }));
+        CHECK (kept.playable (osc.key) == std::optional<PlayableKeys> (PlayableKeys::between (60, 84)));
     }
-    CHECK (parts::noteRangeFor (start, context.indexFolder).has_value());
+    CHECK (parts::playableFor (start, context.indexFolder).has_value());
+    CHECK (panel.getStatusText().contains ("plays C5 to C7 now"));
     REQUIRE (SaveSoundWindow::saveLastOpened ("Deep Bass"));
     REQUIRE (waitFor (
         [&]
@@ -1900,8 +1918,8 @@ TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screens
     start.source.stockType = "spinus.3x-osc";
     juce::String problem;
     SaveSoundWindow::Notes notes;
-    notes.range = NoteRanges::Range { 40, 76 };
-    notes.onChange = [] (std::optional<NoteRanges::Range>) {};
+    notes.playable = PlayableKeys::between (40, 76);
+    notes.learn = [] (const std::function<void (std::optional<PlayableKeys>)>&) {};
     const auto opened =
         SaveSoundWindow::open (session, start, "Bass (3x Osc)", {}, std::move (notes), nullptr, {}, problem);
     REQUIRE (opened);
@@ -1921,5 +1939,189 @@ TEST_CASE ("Track creator Save this sound screenshot for the manual", "[.screens
     const auto image = content->createComponentSnapshot (content->getLocalBounds());
     REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
     SaveSoundWindow::closeAll();
+    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+}
+
+TEST_CASE ("Learn this instrument: modes, keys marked by job, forgotten", "[ui][trackcreator]")
+{
+    LearnInstrumentPanel panel ("Guitar", std::nullopt);
+    CHECK (panel.getSummaryText() == "Which keys play is not known: it plays any note.");
+    std::optional<InstrumentProfiles::Profile> saved;
+    bool called = false;
+    panel.onSave = [&] (std::optional<InstrumentProfiles::Profile> p)
+    {
+        saved = std::move (p);
+        called = true;
+    };
+    panel.selectKeys (64, 40); // dragged right to left
+    panel.markSelected (InstrumentProfiles::Job::plays);
+    panel.selectKeys (52, 52);
+    panel.markSelected (InstrumentProfiles::Job::special, "  slide  ");
+    panel.selectKeys (30, 30);
+    panel.markSelected (InstrumentProfiles::Job::unused, "ignored");
+    CHECK (panel.getSummaryText() == "Plays E3 to E5, 1 key between does not play; 1 special key; 1 key does nothing.");
+    CHECK (panel.describeKey (52) == "E4 (MIDI 52): a special key, slide (set by you)");
+    CHECK (panel.describeKey (30) == "F#2 (MIDI 30): does nothing (set by you)");
+    CHECK (panel.describeKey (100) == "E8 (MIDI 100): not known");
+
+    // A second mode, with its own keys; removing it leaves the first.
+    panel.addMode ("Strummer");
+    CHECK (panel.getMode() == 1);
+    CHECK (panel.getSummaryText() == "Which keys play is not known: it plays any note.");
+    panel.selectKeys (48, 59);
+    panel.markSelected (InstrumentProfiles::Job::special, "chord keys");
+    panel.save();
+    REQUIRE (called);
+    REQUIRE (saved.has_value());
+    REQUIRE (saved.value().modes.size() == 2);
+    CHECK (saved.value().modes[1].name == "Strummer");
+    CHECK (saved.value().modes[1].keys[50].what == "chord keys");
+    CHECK (saved.value().modes[0].playable().value().lowest() == 40);
+    panel.removeMode();
+    CHECK (panel.getMode() == 0);
+    CHECK (panel.getProfile().value().modes.size() == 1);
+
+    // Listen to every key: what was heard is a proposal; Apply takes it, the keys set by hand staying.
+    std::array<InstrumentProfiles::Key, 128> heard {};
+    for (int n = 36; n <= 70; ++n)
+        heard[(size_t)n] = { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::probing };
+    heard[24] = { InstrumentProfiles::Job::switches, "changes how it plays", InstrumentProfiles::Source::probing };
+    panel.setListening ("Listening: 3 of 128 keys...");
+    CHECK (panel.getHeardText() == "Listening: 3 of 128 keys...");
+    panel.setHeard (heard);
+    CHECK (panel.hasHeard());
+    CHECK (panel.getHeardText().startsWith ("Heard: 35 keys play, 1 switch. Apply changes"));
+    CHECK (panel.getProfile().value().modes[0].keys[36].job == InstrumentProfiles::Job::unknown); // not yet
+    panel.applyHeard();
+    CHECK_FALSE (panel.hasHeard());
+    const auto applied = panel.getProfile().value().modes[0];
+    CHECK (applied.keys[36].job == InstrumentProfiles::Job::plays);
+    CHECK (applied.keys[24].job == InstrumentProfiles::Job::switches);
+    CHECK (applied.keys[52].job == InstrumentProfiles::Job::special); // set by hand: stays
+    CHECK (applied.keys[52].what == "slide");
+    panel.setHeard (std::nullopt, "it made no sound.");
+    CHECK (panel.getHeardText() == "Nothing heard: it made no sound.");
+
+    // Ask the plugin: its key names are a proposal too; a plugin that names none says so.
+    std::array<InstrumentProfiles::Key, 128> named {};
+    named[25] = { InstrumentProfiles::Job::switches, "Palm mute", InstrumentProfiles::Source::plugin };
+    named[60] = { InstrumentProfiles::Job::plays, "Open", InstrumentProfiles::Source::plugin };
+    panel.setHeard (named, {}, LearnInstrumentPanel::From::plugin);
+    CHECK (panel.hasHeard());
+    CHECK (panel.getHeardText().startsWith ("The instrument says: 2 keys named, 1 of them switches. Apply changes"));
+    panel.applyHeard();
+    CHECK (panel.getHeardText() == "Applied what the instrument says. Save keeps it.");
+    CHECK (panel.getProfile().value().modes[0].keys[25].what == "Palm mute");
+    CHECK (panel.getProfile().value().modes[0].keys[25].source == InstrumentProfiles::Source::plugin);
+    panel.setHeard (std::array<InstrumentProfiles::Key, 128> {}, {}, LearnInstrumentPanel::From::plugin);
+    CHECK_FALSE (panel.hasHeard());
+    CHECK (panel.getHeardText().startsWith ("The instrument names none of its keys"));
+
+    // Read the manual: manuals are added (a web page, a file), the button says why it can't read without AI, and
+    // what the AI read is a proposal that adds the Strummer mode.
+    CHECK (panel.getManualsText() == "No manual yet");
+    panel.addManual ("not a manual");
+    CHECK (panel.getManuals().empty());
+    CHECK (panel.getHeardText().startsWith ("A manual is a web page's address"));
+    panel.addManual ("https://example.org/strummer");
+    panel.addManual ("www.example.org/bass");
+    panel.addManual ("https://example.org/strummer"); // once
+    REQUIRE (panel.getManuals().size() == 2);
+    CHECK (panel.getManuals()[1].source == "https://www.example.org/bass");
+    panel.removeManual (1);
+    CHECK (panel.getManualsText() == "1 manual: example.org/strummer");
+    panel.setCanRead ("Reading a manual needs the AI");
+    panel.setInstrumentVersion ("1.0.3");
+    auto answer = juce::JSON::parse (R"({"middleCSaid": true, "modes": [
+        {"name": "Strummer", "enter": "the C#6 key", "enterKey": 97, "voices": "chords",
+         "zones": [{"from": 60, "to": 71, "job": "special", "what": "chord keys"}]}], "by": "claude-test"})");
+    panel.setReading (manualreading::fromVar (answer));
+    CHECK (panel.hasReading());
+    CHECK (panel.getHeardText().startsWith ("The manual says: 1 mode: Strummer (entered by C#8, MIDI 97). Apply "
+                                            "changes 1 thing (1 new mode)"));
+    const auto modesBefore = panel.getProfile().value().modes.size();
+    panel.applyHeard();
+    CHECK_FALSE (panel.hasReading());
+    CHECK (panel.getHeardText().startsWith ("Applied what the manual says"));
+    REQUIRE (panel.getProfile().value().modes.size() == modesBefore + 1);
+    CHECK (panel.getProfile().value().modes.back().keys[65].what == "chord keys");
+    CHECK (panel.getManuals()[0].version == "1.0.3"); // read for this version
+    panel.setInstrumentVersion ("1.1.0");
+    CHECK (panel.getManualsText().contains ("read for 1.0.3; the instrument is 1.1.0 now"));
+    panel.setReading (std::nullopt, "No AI connection.");
+    CHECK (panel.getHeardText() == "The manual was not read: No AI connection.");
+
+    // Forgotten: saved as nothing.
+    panel.forget();
+    CHECK (panel.getSummaryText().startsWith ("Forgotten"));
+    called = false;
+    panel.save();
+    CHECK (called);
+    CHECK_FALSE (saved.has_value());
+}
+
+TEST_CASE ("Learn this instrument: a profile exported and imported as a proposal", "[ui][trackcreator]")
+{
+    InstrumentProfiles::Profile mine;
+    InstrumentProfiles::Mode normal;
+    normal.setKeys (40, 76, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+    mine.modes.push_back (normal);
+    // Someone else's: a second mode entered by a key.
+    InstrumentProfiles::Profile theirs;
+    InstrumentProfiles::Mode played, riff;
+    played.setKeys (40, 88, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::probing });
+    played.setKeys (24, 24, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+    riff.name = "Riff";
+    riff.enterKey = 85;
+    riff.setKeys (48, 72, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::manual });
+    theirs.modes = { played, riff };
+    LearnInstrumentPanel exporting ("Guitar M", theirs);
+    const auto shared = exporting.getShared();
+    CHECK (juce::JSON::toString (shared) == juce::JSON::toString (InstrumentProfiles::toShared (theirs, "Guitar M")));
+
+    LearnInstrumentPanel panel ("Guitar", mine);
+    CHECK_FALSE (panel.importShared (juce::JSON::parse ("{}"), "notes.json"));
+    CHECK (panel.getHeardText() == "notes.json was not imported: it is not an instrument profile Spinus exported.");
+    REQUIRE (panel.importShared (shared, "Guitar M profile.json"));
+    CHECK (panel.hasReading());
+    INFO (panel.getHeardText());
+    CHECK (panel.getHeardText().startsWith (
+        "Guitar M profile.json (exported for Guitar M) says: 2 modes: Normal, Riff (entered by C#7, MIDI 85). "
+        "Apply changes"));
+    panel.applyHeard();
+    CHECK (panel.getHeardText().startsWith ("Applied what the file says"));
+    const auto profile = panel.getProfile();
+    REQUIRE (profile.has_value());
+    REQUIRE (profile.value().modes.size() == 2);
+    // The keys the user set stay theirs; the others come in as imported.
+    CHECK (profile.value().modes[0].keys[50].source == InstrumentProfiles::Source::user);
+    CHECK (profile.value().modes[0].keys[24].source == InstrumentProfiles::Source::imported);
+    CHECK (profile.value().modes[0].keys[80].job == InstrumentProfiles::Job::plays);
+    CHECK (panel.describeKey (24).contains ("(from an imported profile)"));
+}
+
+TEST_CASE ("Learn this instrument screenshot for the manual", "[.screenshot][manual]")
+{
+    SpinusLookAndFeel look (Theme::dark());
+    juce::LookAndFeel::setDefaultLookAndFeel (&look);
+    {
+        InstrumentProfiles::Mode normal;
+        normal.setKeys (40, 88, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+        normal.setKeys (
+            24, 26,
+            { InstrumentProfiles::Job::switches, "palm mute, slide, harmonics", InstrumentProfiles::Source::user });
+        normal.setKeys (27, 39, { InstrumentProfiles::Job::unused, {}, InstrumentProfiles::Source::user });
+        InstrumentProfiles::Mode strummer;
+        strummer.name = "Strummer";
+        LearnInstrumentPanel panel ("a sampled guitar", InstrumentProfiles::Profile { { normal, strummer } });
+        panel.selectKeys (24, 26);
+        const auto file = juce::File (SPINUS_TEST_FILES_DIR)
+                              .getParentDirectory()
+                              .getChildFile ("docs/user/images/learn-instrument.png");
+        file.deleteFile();
+        juce::FileOutputStream stream (file);
+        const auto image = panel.createComponentSnapshot (panel.getLocalBounds());
+        REQUIRE (juce::PNGImageFormat().writeImageToStream (image, stream));
+    }
     juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
 }

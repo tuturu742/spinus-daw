@@ -582,19 +582,31 @@ bool SongWriterPanel::redo (const juce::String& part, const juce::String& sectio
     return true;
 }
 
-juce::var SongWriterPanel::songForProject()
+std::map<juce::String, partmodes::Instrument> SongWriterPanel::instrumentsForSong()
 {
-    std::map<juce::String, NoteRanges::Range> ranges;
+    // Each part's instrument profile, by layer id (a full arrangement) or part, and the words its mode is picked by
+    // when the song names none: the part's name and role, and the genre.
+    std::map<juce::String, partmodes::Instrument> instruments;
+    const auto genre = context.summary["described"]["genreName"].toString();
+    auto add = [&] (const juce::String& id, const parts::Choice& choice, const juce::String& words, bool chords)
+    {
+        if (auto profile = parts::profileFor (choice, context.indexFolder))
+            instruments[id] = { std::move (*profile), words + " " + genre, chords };
+    };
+    // The parts that play chords, which may play in a chord mode (a strummer).
+    static const juce::StringArray chordRoles { "chords",       "rhythm-guitar", "acoustic-guitar",
+                                                "clean-guitar", "piano",         "organ",
+                                                "pad" };
     for (const auto& layer : song::layersOf (song))
         if (const auto chosen = layer.drums || layer.part == "fx" ? std::nullopt : chosenForLayer (layer))
-            if (const auto range = parts::noteRangeFor (chosen->choice, context.indexFolder))
-                ranges[layer.id] = *range;
+            add (layer.id, chosen->choice, layer.name + " " + layer.role, chordRoles.contains (layer.role));
     for (const auto& part : song::partNames())
         if (const auto* chosen = part == "drums" ? nullptr : chosenFor (context.sounds, part))
-            if (const auto range = parts::noteRangeFor (chosen->choice, context.indexFolder))
-                ranges[part] = *range;
-    return song::keepToRanges (song, ranges);
+            add (part, chosen->choice, part, part == "chords");
+    return instruments;
 }
+
+juce::var SongWriterPanel::songForProject() { return partmodes::apply (song, instrumentsForSong()); }
 
 song::Options SongWriterPanel::optionsFor (const model::Project& project, const juce::String& replace)
 {
@@ -872,12 +884,14 @@ void SongWriterPanel::setRounds (int rounds)
     roundsBox.setSelectedId (juce::jlimit (0, 3, rounds) + 1, juce::dontSendNotification);
 }
 
-juce::var SongWriterPanel::candidatesFor (juce::var& current)
+juce::var SongWriterPanel::candidatesFor (juce::var& current, juce::var& instrumentModes)
 {
     candidateChoices.clear();
     auto* candidates = new juce::DynamicObject();
     auto* now = new juce::DynamicObject();
     current = juce::var (now);
+    auto* played = new juce::DynamicObject();
+    instrumentModes = juce::var (played);
     SoundIndex index (context.indexFolder);
     if (context.indexFolder != juce::File())
         index.load();
@@ -894,6 +908,9 @@ juce::var SongWriterPanel::candidatesFor (juce::var& current)
             }())
         {
             now->setProperty (p.id, chosen->choice.title()); // the user's choice: the AI only hears of it
+            if (const auto profile = parts::profileFor (chosen->choice, context.indexFolder))
+                if (const auto modes = partmodes::brief (*profile); modes.size() > 0)
+                    played->setProperty (p.id, modes); // ...and of its instrument's modes
             continue;
         }
         if (index.instruments.empty())
@@ -906,7 +923,11 @@ juce::var SongWriterPanel::candidatesFor (juce::var& current)
                 continue;
             const auto id = c.instrument + "|" + c.preset;
             candidateChoices[p.id][id] = c;
-            list.add (object ({ { "id", id }, { "name", c.title() } }));
+            auto entry = object ({ { "id", id }, { "name", c.title() } });
+            if (const auto profile = parts::profileFor (c, context.indexFolder))
+                if (const auto modes = partmodes::brief (*profile); modes.size() > 0)
+                    entry.getDynamicObject()->setProperty ("modes", modes);
+            list.add (entry);
         }
         if (! list.isEmpty())
             candidates->setProperty (p.id, list);
@@ -944,12 +965,13 @@ juce::var SongWriterPanel::composeParams (int seed)
     juce::Array<juce::var> list;
     for (const auto& p : context.parts)
         list.add (object ({ { "id", p.id }, { "name", p.name }, { "role", p.role } }));
-    juce::var current;
-    const auto candidates = candidatesFor (current);
+    juce::var current, modes;
+    const auto candidates = candidatesFor (current, modes);
     auto params = object ({ { "summary", context.summary },
                             { "seed", seed },
                             { "candidates", candidates },
                             { "current", current },
+                            { "modes", modes },
                             { "effort", getEffort() },
                             { "variety", getVariety() },
                             { "rounds", getRounds() },
@@ -1160,6 +1182,18 @@ void SongWriterPanel::show()
     if (const auto& described = context.summary["described"]; described.isObject())
         lines.add ("From your description. " + described["understood"].toString() + ".");
     lines.add (song::describe (song));
+    // The instruments' modes and articulations, as the project will play them.
+    if (const auto instruments = instrumentsForSong(); ! instruments.empty())
+    {
+        std::map<juce::String, juce::String> names;
+        for (const auto& layer : song::layersOf (song))
+            names[layer.id] = layer.name;
+        for (const auto& part : song::partNames())
+            names.emplace (part, song::displayName (part));
+        const auto played = partmodes::apply (song, instruments);
+        if (const auto modes = partmodes::describe (played, instruments, names); ! modes.isEmpty())
+            lines.add ("Instruments: " + modes.joinIntoString ("; ") + ".");
+    }
     const auto& checks = song["checks"];
     if (checks.isObject())
     {

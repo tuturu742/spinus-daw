@@ -24,9 +24,10 @@ namespace spinus::ui
     plugins through Wine among them), into a hidden edit of its own: nothing in the project changes.
 
     The instrument plays live through the sound card while the window is open (LiveInstrument, through the
-    sample preview), so what the user does in its window is heard, and Play plays the part's phrase on it. Notes...
-    sets the notes the instrument may play: many sampled instruments switch what they play with keys outside
-    their range, so Play (and the rest of the Track creator) keeps to the notes set, moving the phrase by octaves.
+    sample preview), so what the user does in its window is heard, and Play plays the part's phrase on it. Keys...
+    opens Learn this instrument (LearnInstrumentWindow): many sampled instruments switch what they play with keys
+    outside their range, so Play (and the rest of the Track creator) keeps to the keys that play, moving the phrase
+    by octaves.
 
     Message thread. The window deletes itself when closed (Save, or Close/Cancel, which keeps what was saved with Save
     and keep open and nothing else). `onSave` is called once it has gone, when anything was saved,
@@ -42,12 +43,13 @@ public:
     /** Every sound saved in the window, in order. */
     using OnSave = std::function<void (std::vector<Saved>)>;
 
-    /** The notes the instrument may play (NoteRanges): Play keeps to them (moved by octaves), and Notes... next to
-        it changes them (`onChange`, which keeps them). No `onChange`: no Notes... button (the drums). */
+    /** The keys the instrument plays (InstrumentProfiles): Play keeps to them (moved by octaves), and Keys... next
+        to it opens Learn this instrument (`learn`, which calls back with the keys once it is saved). No `learn`: no
+        Keys... button (the drums). */
     struct Notes
     {
-        std::optional<NoteRanges::Range> range;
-        std::function<void (std::optional<NoteRanges::Range>)> onChange;
+        std::optional<PlayableKeys> playable;
+        std::function<void (std::function<void (std::optional<PlayableKeys>)>)> learn;
     };
 
     /** Opens the window for `start`'s instrument with its sound (a preset, a saved sound, or as it opens), the
@@ -71,8 +73,8 @@ public:
     static bool playLastOpened();
     /** For tests: the notes Play plays in the window opened last, as it is now. */
     static std::vector<int> playedNotesLastOpened();
-    /** For tests: Notes... in the window opened last. */
-    static void setNotesLastOpened (std::optional<NoteRanges::Range>);
+    /** For tests: the keys the window opened last plays, as Learn this instrument says once saved. */
+    static void setNotesLastOpened (std::optional<PlayableKeys>);
     /** For tests (no sound card): what the window opened last plays in the next `seconds`; its loudest sample. */
     static float mixLastOpened (double seconds);
 
@@ -90,7 +92,7 @@ private:
     void finish();
     bool play();
     std::vector<OfflineInstrument::Note> playedPhrase() const;
-    void setNotes (std::optional<NoteRanges::Range>);
+    void setNotes (std::optional<PlayableKeys>);
     void close (std::function<void()> afterwards = {});
 
     Session& session;

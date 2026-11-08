@@ -96,6 +96,8 @@ public:
     double getTailLengthSeconds() const override { return 2.0; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
+    /** A pad's name for its note ("Kick"): what Learn this instrument's Ask the plugin reads. Message thread. */
+    std::optional<juce::String> getNameForMidiNoteNumber (int note, int midiChannel) override;
     bool isMidiEffect() const override { return false; }
 
     juce::AudioProcessorEditor* createEditor() override;

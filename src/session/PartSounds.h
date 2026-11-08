@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NoteRanges.h"
+#include "InstrumentProfiles.h"
 #include "Session.h"
 #include "SoundDescriptors.h"
 #include "SoundIndex.h"
@@ -254,6 +254,22 @@ std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options&, cons
                                               const std::function<bool()>& shouldStop,
                                               const std::function<void (int, double)>& progress, juce::String& problem);
 
+/** Listen to every key in the helper (KeyProbe): the instrument with the preset (an id; empty for its own sound; for
+    a saved sound, `presetState` is the file with its state), in the mode `enterKey` enters (-1: as it opens).
+    `progress` gets (keys done, keys in all). The keys heard, as a mode's (Source::probing; the others unknown); none
+    when nothing could be heard (`problem` says why: it made no sound in tune, a crash, a hang, a stop). */
+std::optional<std::array<InstrumentProfiles::Key, 128>>
+probeInHelper (const SoundIndexer::Options&, const SoundSource&, const juce::String& preset,
+               const juce::File& presetState, int enterKey, const std::function<bool()>& shouldStop,
+               const std::function<void (int, int)>& progress, juce::String& problem);
+
+/** Ask the plugin (pluginkeys), in the helper: the names the instrument (with the preset, as for probeInHelper)
+    gives its keys, as a mode's keys (Source::plugin; the others unknown). All unknown when it names none; none when
+    it could not be asked (`problem` says why). */
+std::optional<std::array<InstrumentProfiles::Key, 128>>
+keyNamesInHelper (const SoundIndexer::Options&, const SoundSource&, const juce::String& preset,
+                  const juce::File& presetState, const std::function<bool()>& shouldStop, juce::String& problem);
+
 //==============================================================================
 // Into the project.
 
@@ -262,13 +278,16 @@ std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options&, cons
     (drums: kick, snare and hats from the summary's most played steps). Times in seconds at `tempo`. */
 std::vector<OfflineInstrument::Note> auditionPhrase (const Target&, const Choice&, double tempo,
                                                      const juce::var& summary = {},
-                                                     std::optional<NoteRanges::Range> range = {});
+                                                     std::optional<PlayableKeys> playable = {});
 
-/** The instrument a choice plays, as the sound index, the user's roles and note ranges know it. */
+/** The instrument a choice plays, as the sound index, the user's roles and instrument profiles know it. */
 juce::String instrumentKey (const Choice&);
-/** The notes the user lets a choice's instrument play (NoteRanges, kept beside the index in `indexFolder`), if
-    any. Never for the drums' own kit notes (a kit or a loop). */
-std::optional<NoteRanges::Range> noteRangeFor (const Choice&, const juce::File& indexFolder);
+/** The keys a choice's instrument plays as it opens (its profile's first mode, InstrumentProfiles, kept beside the
+    index in `indexFolder`), if they are known. Never for the drums' own kit notes (a kit or a loop). */
+std::optional<PlayableKeys> playableFor (const Choice&, const juce::File& indexFolder);
+/** A choice's instrument's whole profile (its modes, InstrumentProfiles), if Spinus learned it. Never for a kit or
+    a loop. */
+std::optional<InstrumentProfiles::Profile> profileFor (const Choice&, const juce::File& indexFolder);
 
 /** What the user adds: a sound per part, its tuning and effects, and the mix. */
 struct Plan
@@ -278,9 +297,9 @@ struct Plan
         Target target; // its id, name and role: the part of the list
         Choice choice;
         std::optional<SynthMatchResult> tuned;
-        juce::Array<juce::var> effects;         // spinus_ai.mixplan items for its insert (eq, compressor, gate)
-        double volumeDb = 0.0;                  // its insert's fader
-        std::optional<NoteRanges::Range> notes; // the notes its instrument may play (noteRangeFor), if limited
+        juce::Array<juce::var> effects;    // spinus_ai.mixplan items for its insert (eq, compressor, gate)
+        double volumeDb = 0.0;             // its insert's fader
+        std::optional<PlayableKeys> notes; // the keys its instrument plays (playableFor), if known
     };
     std::vector<Part> parts;
     juce::Array<juce::var> master; // items for the master (limiter, eq)

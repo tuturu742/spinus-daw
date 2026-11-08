@@ -306,3 +306,88 @@ async def test_a_model_that_allows_a_shorter_answer_is_asked_again(tmp_path: Pat
     request = Request("m", "sys", [Message("user", [Text("hi")])], [], None)
     await complete(client, Connection("a", "A", "anthropic", "https://y.test"), "k", request, no_text)
     assert sizes == [64000, 8192]
+
+
+# A sampled guitar's modes as Spinus lists them (partmodes::brief): Normal with switches, and a riff player.
+GUITAR_MODES = [
+    {
+        "name": "Normal",
+        "goodFor": "picked lines, metal rhythm",
+        "low": 40,
+        "high": 88,
+        "switches": [{"what": "palm mute", "key": 24}, {"what": "open", "key": 26}],
+        "first": True,
+    },
+    {"name": "Riff", "goodFor": "funk riffs", "low": 48, "high": 72},
+]
+
+
+def test_modes_reach_the_model_and_its_choice_is_kept_to_them() -> None:
+    setup = compose.Setup.make(summary(), PARTS, "sketch", CANDIDATES, {"gtr": "Ample Guitar"}, modes={
+        "gtr": [*GUITAR_MODES, {"name": "Broken", "low": 90, "high": 10}],
+    })  # fmt: skip
+    assert [m["name"] for m in setup.modes["gtr"]] == ["Normal", "Riff"]  # a mode with no keys is left out
+    brief = next(b for b in compose.part_brief(setup) if b["id"] == "gtr")
+    assert brief["modes"] == setup.modes["gtr"] and brief["range"] == [40, 88]
+    assert "Riff (C3-C5; funk riffs)" in compose.modes_words(setup.modes["gtr"])
+
+    answer = song_answer()
+    answer["parts"]["gtr"] = {
+        "mode": "riff",
+        "articulations": {"verse": "palm mute"},  # Riff has no switches: dropped
+        "sections": {"verse": "", "chorus": {"bars": 1, "notes": "0 84 4 90"}},
+    }
+    checked = compose.check_answer(answer, setup)
+    assert checked.modes["gtr"] == {"mode": "Riff", "articulations": {}}
+    # Folded into the Riff mode's range, not the role's.
+    assert {n["pitch"] for n in checked.notes["gtr"]["chorus"]} == {72}
+
+    answer["parts"]["gtr"]["mode"] = "Normal"
+    answer["parts"]["gtr"]["articulations"] = {"verse": "Palm Mute", "chorus": "wah", "nowhere": "open"}
+    checked = compose.check_answer(answer, setup)
+    assert checked.modes["gtr"] == {"mode": "Normal", "articulations": {"verse": "palm mute"}}
+    song = compose.build_song(checked, setup, 3, "sketch")
+    assert song["modes"] == {"gtr": {"mode": "Normal", "articulations": {"verse": "palm mute"}}}
+
+    # A mode it doesn't have: none kept, and the notes keep to the first mode's range.
+    answer["parts"]["gtr"]["mode"] = "Strummer"
+    assert "gtr" not in compose.check_answer(answer, setup).modes
+
+    # A revision that names only a mode keeps the sections it left out.
+    whole = compose.merged(answer, {"parts": {"gtr": {"mode": "Riff", "articulations": {"chorus": "open"}}}})
+    assert whole["parts"]["gtr"]["mode"] == "Riff" and "chorus" in whole["parts"]["gtr"]["sections"]
+
+
+def test_a_candidate_sounds_modes_follow_the_pick() -> None:
+    candidates = {"gtr": [{"id": "ample:M", "name": "Guitar M", "modes": GUITAR_MODES}, {"id": "synth:A", "name": "A"}]}
+    setup = compose.Setup.make(summary(), PARTS, "sketch", candidates)
+    assert compose.modes_of(setup, "gtr", "ample:M")[1]["name"] == "Riff"
+    assert compose.modes_of(setup, "gtr", "synth:A") == []
+    assert compose.bounds_of(setup, "gtr", "rhythm-guitar", "ample:M", "Riff") == (48, 72)
+    assert compose.bounds_of(setup, "gtr", "rhythm-guitar", "synth:A") == compose.RANGES["rhythm-guitar"]
+
+
+def test_a_chord_mode_takes_patterns_as_articulations() -> None:
+    strummer = {
+        "name": "Strummer",
+        "goodFor": "strummed rhythm",
+        "low": 36,
+        "high": 59,
+        "chordKeys": True,
+        "patterns": [{"what": "play SEQ 1", "key": 60}, {"what": "play SEQ 2", "key": 61}],
+        "switches": [{"what": "slide-in strum", "key": 25}],
+    }
+    setup = compose.Setup.make(summary(), PARTS, "sketch", None, None, modes={"gtr": [*GUITAR_MODES, strummer]})
+    assert setup.modes["gtr"][2]["chordKeys"] and len(setup.modes["gtr"][2]["patterns"]) == 2
+    words = compose.modes_words(setup.modes["gtr"])
+    assert "Strummer (plays the song's chords itself" in words and "patterns: play SEQ 1, play SEQ 2" in words
+    answer = song_answer()
+    answer["parts"]["gtr"] = {
+        "mode": "Strummer",
+        "articulations": {"verse": "Play SEQ 1", "chorus": "slide-in strum"},
+        "sections": {"verse": {"bars": 1, "notes": "0 90 4 90"}, "chorus": {"bars": 1, "notes": "0 30 4 90"}},
+    }
+    checked = compose.check_answer(answer, setup)
+    assert checked.modes["gtr"]["articulations"] == {"verse": "play SEQ 1", "chorus": "slide-in strum"}
+    # Its notes only say where it plays: not folded into the chord keys' range.
+    assert {n["pitch"] for n in checked.notes["gtr"]["verse"]} == {90}

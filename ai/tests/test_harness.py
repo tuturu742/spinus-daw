@@ -1450,3 +1450,51 @@ def test_check_finds_what_sounds_generated_rather_than_composed() -> None:
     ws.call("write", {"part": lead, "section": chorus, "notes": wandering})
     if ws.sections[chorus]["bars"] >= 8:
         assert any(line.startswith(f"{lead}, {chorus}: no motif") for line in ws.issues())
+
+
+def test_set_mode_plays_a_part_in_its_instruments_mode_with_articulations() -> None:
+    modes = [
+        {"name": "Normal", "low": 40, "high": 88, "switches": [{"what": "palm mute", "key": 24}], "first": True},
+        {"name": "Riff", "goodFor": "funk riffs", "low": 48, "high": 72},
+    ]
+    ws = harness.Workspace.start(harness.setup_of({**BRIEF, "modes": {"keys": modes}}), 5, "sketch")
+    assert "modes: Normal (opens in it; E2-E6; switches: palm mute), Riff" in ws.call("brief", {})
+    first, second = list(ws.sections)[:2]
+    ws.call("write", {"part": "keys", "section": first, "notes": "0 84 4 90", "loop_bars": 1})
+    said = ws.call("set_mode", {"part": "keys", "mode": "riff", "articulations": {}})
+    assert "keys plays in Riff (C3-C5)" in said and "of its notes are outside" in said
+    with pytest.raises(harness.Mistake, match="not one of the Riff mode's switches"):
+        ws.call("set_mode", {"part": "keys", "mode": "Riff", "articulations": {first: "palm mute"}})
+    with pytest.raises(harness.Mistake, match="not one of its modes"):
+        ws.call("set_mode", {"part": "keys", "mode": "Strummer"})
+    with pytest.raises(harness.Mistake, match="no modes Spinus knows of"):
+        ws.call("set_mode", {"part": "bass", "mode": "Normal"})
+    # Written in Riff: kept to its range.
+    assert "outside the range C3-C5" in ws.call("write", {"part": "keys", "section": second, "notes": "0 84 4 90"})
+    ws.call("set_mode", {"part": "keys", "mode": "Normal", "articulations": {first: "Palm Mute"}})
+    song = ws.song()
+    assert song["modes"] == {"keys": {"mode": "Normal", "articulations": {first: "palm mute"}}}
+    # The working copy keeps it, as a revision starts from it.
+    assert ws.copy().modes == ws.modes and ws.export()["modes"] == ws.modes
+
+
+def test_set_mode_in_a_chord_mode_names_patterns() -> None:
+    modes = [
+        {"name": "Normal", "low": 40, "high": 88, "first": True},
+        {
+            "name": "Strummer",
+            "low": 36,
+            "high": 59,
+            "chordKeys": True,
+            "patterns": [{"what": "play SEQ 1", "key": 60}, {"what": "play SEQ 2", "key": 61}],
+        },
+    ]
+    ws = harness.Workspace.start(harness.setup_of({**BRIEF, "modes": {"keys": modes}}), 5, "sketch")
+    assert "patterns: play SEQ 1, play SEQ 2" in ws.call("brief", {})
+    first = next(iter(ws.sections))
+    said = ws.call("set_mode", {"part": "keys", "mode": "Strummer", "articulations": {first: "play seq 2"}})
+    assert "plays the song's chords itself" in said and "Spinus writes its chord keys" in said
+    with pytest.raises(harness.Mistake, match="switches or patterns \\(play SEQ 1, play SEQ 2\\)"):
+        ws.call("set_mode", {"part": "keys", "mode": "Strummer", "articulations": {first: "palm mute"}})
+    ws.call("set_mode", {"part": "keys", "mode": "Strummer", "articulations": {first: "play seq 2"}})
+    assert ws.song()["modes"]["keys"] == {"mode": "Strummer", "articulations": {first: "play SEQ 2"}}

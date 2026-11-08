@@ -4,8 +4,9 @@ version = "0.1.0a1"
 description = "Spinus DAW's AI service: LLM connections, the assistant and its proposals"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"
-# Arch packages: python-httpx, python-keyring (the Spinus package depends on them).
-dependencies = ["httpx>=0.27", "keyring>=24"]
+# Arch packages: python-httpx, python-keyring, python-pypdf (the Spinus package depends on them; pypdf reads PDF
+# manuals for Learn this instrument).
+dependencies = ["httpx>=0.27", "keyring>=24", "pypdf>=6.20,<7"]
 
 [project.optional-dependencies]
 # Local embedding models for manual search. Arch: python-onnxruntime-cpu, python-numpy;

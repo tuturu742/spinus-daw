@@ -25,6 +25,34 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   same bars, and a transition placed twice adds no second clip.
 - Starting levels: one part that measures oddly quiet (a sub-heavy bass) no longer pulls every other fader down.
 
+### Track creator: Learn this instrument
+
+- **Strummer modes**: an instrument that plays chords from its chord keys (a guitar strummer) can now be used
+  for a part that plays chords. Spinus holds each chord of the song on the chord keys and presses one of the
+  instrument's pattern keys with it, picked by how loud each section is, or named by your AI connection.
+- **Export... and Import...** in Learn this instrument: share what Spinus learned of an instrument as a file.
+  An imported profile is a proposal you Apply, and the keys you marked stay yours. 3x Osc, Surge XT, OB-Xf and
+  Odin 2 come with a profile.
+- **Songs use the instrument's modes**: for an instrument you taught Spinus, each part of a written song plays
+  in one of its modes (the one whose "good for" words fit the part and genre, or the one your AI connection
+  picks), and the AI can switch articulations per section (palm mute in the verse, open in the chorus). Spinus
+  writes the switch keys as short notes at the start of each section, and the page lists the modes used.
+- **Read the manual** in Learn this instrument: add an instrument's manuals (PDF files or web pages, as many as
+  it has) and the AI proposes its modes, how to enter each, what each suits and what their keys do. Apply takes
+  it, keeping what you set; each manual remembers the instrument version it was read for. Needs AI.
+- **Ask the plugin** in Learn this instrument: Spinus reads the names an instrument gives its keys (a drum
+  machine's "Kick", a key switch's "Palm mute") and proposes them, switches as switches. Few instruments name
+  their keys; Spinus's Drum Machine names its pads.
+- **Listen to every key** in Learn this instrument: Spinus plays each key of a mode and listens, then proposes
+  which keys play, which switch, which do something else (a chord, another note) and which are silent. Apply
+  takes it; keys you marked yourself stay yours.
+- **Notes it plays** becomes **Learn this instrument...**, in the instrument menu and as **Keys...** beside Play
+  in Save this sound: a keyboard where you mark what each key does (plays, switch, special, unused), with a few
+  words for the switches ("palm mute"). Listen, Play and the songs play only on the keys that play, so a switch
+  key in the middle of an instrument's range is skipped too. An instrument can have several modes (normal,
+  strummer), each with its own keys, how to enter it and what it suits. What you set with Notes it plays carries
+  over.
+
 ### Track creator: songs lean less on the vocals
 
 - Songs with lyrics were nearly all vocals, even in genres that mostly aren't sung (drum and bass, dubstep). Each

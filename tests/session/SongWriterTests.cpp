@@ -224,7 +224,7 @@ TEST_CASE ("Song writer: a part keeps to the notes its instrument may play, move
 {
     const auto song = makeSong();
     // The bass's instrument switches with its keys below E2 (40): its notes 45, 41, 48 stay or move up an octave.
-    const auto kept = song::keepToRanges (song, { { "bass", NoteRanges::Range { 42, 60 } } });
+    const auto kept = song::keepToRanges (song, { { "bass", PlayableKeys::between (42, 60) } });
     auto pitches = [] (const juce::var& s, const char* part, const char* section)
     {
         std::vector<int> found;

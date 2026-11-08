@@ -408,14 +408,65 @@ and drums": those three), or empty. Then:
   (for example a plugin whose default sound is a rhythm guitar); in **Show sounds...**, right-click a preset
   and **Use as** gives that preset one. Your roles come first wherever roles are used (choosing sounds,
   parts from an instrument), are kept beside the sound index, and stay when the index is updated or deleted.
-- **Notes it plays.** Many sampled instruments (guitars and basses especially) use keys outside their playing
-  range as switches: a low key changes the guitar to palm mutes or slides instead of playing a note. In the
-  instrument menu, **Notes it plays** sets the lowest and the highest note the instrument may play (named as the
-  Piano roll names them, middle C being C5, with the MIDI number beside each, since instruments' manuals number
-  octaves differently: look up where your instrument's switches are). From then on **Listen**, **Play** in
-  [Save this sound](#save-this-sound), the sounds added to the project and the written song keep to those notes,
-  moving a note up or down by octaves (as few as it takes) when it falls outside. **Any note again** takes the
-  limit away. It is kept per instrument, beside the sound index, like your roles.
+- **Learn this instrument.** Many sampled instruments (guitars and basses especially) use some keys as switches:
+  a low key changes the guitar to palm mutes or slides instead of playing a note. In the instrument menu, **Learn
+  this instrument...** opens a keyboard of all 128 keys where you tell Spinus what each key does. Drag across keys
+  to select them, then mark them **Plays** (sounds as a note), **Switch** (changes the articulation or the mode),
+  **Special** (another job, such as a strummer's chord keys), **Unused** or **Not known**; for switch and
+  special keys, type what they do ("palm mute") before marking. Keys are named as the Piano roll names them,
+  middle C being C5; hover a key to see its MIDI number too (instruments' manuals number octaves differently),
+  what it does and where Spinus learned it. From then on **Listen**, **Play** in
+  [Save this sound](#save-this-sound), the sounds added to the project and the written song play only on the
+  keys marked Plays, moving a note up or down by octaves (as few as it takes) onto one. An instrument with no
+  keys marked Plays plays any note.
+
+  **Listen to every key** lets Spinus find out for you: it plays every key of the mode shown, one at a time (in
+  its separate helper program, a few minutes), and listens. A key that sounds at its own pitch plays; one that
+  sounds at another pitch or plays a chord is special; a silent key after which notes sound different is a switch
+  key; a silent one that changes nothing is unused. For a mode entered by a key, set that key under **How to enter
+  it** first: Spinus plays it before every key. What it heard is shown as a proposal: the keys that would change
+  get a dot of their new colour, and nothing changes until **Apply** (**Discard** drops it). Keys you marked
+  yourself stay as you set them. It listens to the sound the part has (or the instrument as it opens, from the
+  instrument menu); **Stop listening** keeps nothing. Then **Save**.
+
+  **Ask the plugin** reads the names the instrument gives its keys itself, in a few seconds: a drum machine's
+  "Kick" and "Snare", a sampled instrument's key switches ("Palm mute"). A key the instrument calls a key switch
+  (or whose name says so, such as "KS Legato" or "Articulation 2") is proposed as a switch with that name; any
+  other named key as one that plays, with its name. Few instruments name their keys (most commercial sampled
+  instruments don't), so it often says the instrument names none; Listen to every key works on any instrument.
+  What it says is a proposal like a listening's: **Apply** or **Discard**, and keys you marked stay yours.
+  Spinus's own Drum Machine names its pads by their sounds.
+
+  **Read the manual** has the AI read the instrument's manuals and propose what they say: its modes (a guitar's
+  normal and strummer modes), how to enter each (a button, or the key that switches to it), what each suits,
+  whether it plays chords, and what the keys of each mode do. Add manuals on the **Manuals** row: type or paste
+  a web page's address and press **Add**, or **Choose file...** for a PDF (or a page saved as a file) on this
+  computer. Add as many as you have, official or not, one per mode if that is how they come; a manual behind a
+  login or a paywall can be downloaded and added as a file. Then press **Read the manual**. What it says is a
+  proposal: the keys that would change get a dot, and **Apply** adds the modes it names, fills in what a mode
+  doesn't say yet and marks the keys, leaving everything you set yourself as it is (**Discard** drops it).
+  Manuals number octaves differently (middle C is C3 in many, C4 in others; Spinus calls it C5); when a manual
+  doesn't say, Spinus moves its keys by octaves to fit what it heard with Listen to every key, so listening
+  first helps. Each manual is noted with the instrument's version it was read for; after the instrument is
+  updated, the list says it may be out of date, so you can read it again. Read the manual needs the AI turned
+  on (Options > AI) and an AI connection; the manuals' text goes only to the AI you chose, and Spinus keeps
+  only what they say about the keys (where the manuals are, not their text).
+
+  An instrument can have several **modes** (a sampled guitar's normal and strummer modes): **Add mode**, name
+  it, and say how to enter it (in words, or the key that switches to it), what it is good for ("strummed rhythm,
+  country and folk") and whether it plays chords. Each mode has its own keyboard. When Spinus writes a song, it
+  picks a mode for each part (see [Write a song](#write-a-song)). Nothing is kept until **Save**; **Forget this instrument**
+  removes what Spinus knew of it. It is kept per instrument, beside the sound index, like your roles.
+
+  **Export...** saves what Spinus knows of the instrument as a file you can share (only facts about its keys
+  and modes, and the manuals that are web pages; never the manuals' text). **Import...** reads such a file as
+  a proposal, like a manual's: Apply takes it, and the keys you marked yourself stay yours. Imported keys say
+  "from an imported profile" when you hover them. Spinus's own synth (3x Osc) and the free synths it gets
+  (Surge XT, OB-Xf, Odin 2) come with a profile already: every key plays, with a few words on what they suit.
+  Your own changes to it win, and **Forget this instrument** brings the original back. Notes it
+  plays, set in an earlier version, becomes the first mode's playing keys.
+
+  ![Learn this instrument](images/learn-instrument.png)
 - **Preset files.** Many instruments keep their presets as files in a folder of their own that Spinus can't
   list, so only their default sound is measured. If the instrument's preset files are its own saved settings
   (Ample Sound's guitars and basses are, for example: `Documents/Ample Sound/AMH/Presets` for Metal
@@ -531,8 +582,9 @@ in **Other sound...** under **Your saved sounds**, for any part. This is the qui
 instrument's presets when Spinus can't list them itself (or, when its preset files are its settings, use them
 directly: see **Preset files** under [Sounds for each part](#sounds-for-each-part)).
 
-**Notes: any** (beside **Play**) sets the notes the instrument may play, the same as **Notes it plays** in the
-instrument menu: Play keeps to them, so a phrase doesn't hit keys that switch what the instrument plays.
+**Keys: any...** (beside **Play**) opens [Learn this instrument](#sounds-for-each-part), the same as in the
+instrument menu: once saved, Play keeps to the keys that play, so a phrase doesn't hit keys that switch what the
+instrument plays.
 4. Spinus keeps it as **your saved sound**, listens to it like any preset (in the separate helper program,
    a few seconds; longer for a big instrument) and chooses it for the part. **Listen** then plays it.
 
@@ -568,6 +620,26 @@ patterns you can edit like any other. Apply it to hear it.
    page lists the levels. With reference songs and **Effects and mix**, the level toward your songs is
    used instead. It is **one undo step**: Ctrl+Z takes it all away. After that,
    **Redo part...** and **Apply** change only that part or section (one more undo step each).
+
+**Instruments with modes and switches.** For an instrument you taught Spinus in
+[Learn this instrument](#sounds-for-each-part), each part plays in one of its modes, with its notes on that
+mode's playing keys. Spinus's own rules pick the mode whose "good for" words best match the part and the genre
+(a funk rhythm guitar gets a mode good for "funk riffs"); the first mode when none matches. Your AI connection
+sees the modes and their switches, picks one per part and may switch articulations per section (palm mute in
+the verse, open in the chorus). Spinus then writes the switch keys itself, as short notes at the start of each
+section the part plays in, so the song plays the same on any computer. A mode entered by a key gets that key
+the same way. The page lists the instruments' modes ("Instruments: Rhythm guitar: Normal mode; palm mute,
+open."). Modes entered only by a button in the plugin aren't used yet.
+
+**Strummer modes.** Some instruments play the chords themselves: you hold a chord on their **chord keys** and
+press a **pattern** (or strum) key, and they strum it in their own rhythm. Mark those keys in Learn this
+instrument as **Special**, with words that say what they are: "chord keys" for the chord zone (an octave or
+more), and "pattern", "strum" or "sequence" for the keys that play it (Read the manual does this for you). For a
+part that plays chords (a rhythm guitar, the chords part), Spinus can then pick that mode: it holds each of the
+song's chords on the chord keys and presses a pattern key with each chord, a busier one where the song is
+louder. Your AI connection can name the pattern for each section. The instrument must recognise the chord you
+hold (often called a detect mode): if its chord keys pick stored chords instead, switch it to recognising them
+in its window, then save that sound with **Save this sound**.
 4. **Writing again replaces the song.** When the project has a song the Track creator wrote, Apply asks
    "Replace Song 1? It will be overwritten (Ctrl+Z brings it back)": **Replace** takes the old song out
    (its channels, patterns, Playlist tracks and markers; the Parts step's channels stay) and puts the new
