@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/FileDialog.h"
 #include "session/AnalysisLibrary.h"
 #include "session/InstrumentProfiles.h"
 #include "session/ManualReading.h"
@@ -190,7 +191,7 @@ private:
     std::optional<Listening> listening;
     ai::AiService* service = nullptr;
     juce::String name;
-    std::unique_ptr<juce::FileChooser> chooser;
+    std::unique_ptr<core::FileDialog> chooser;
     std::unique_ptr<BackgroundTask> task;
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
     std::shared_ptr<std::atomic<bool>> stopping = std::make_shared<std::atomic<bool>> (false);

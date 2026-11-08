@@ -1025,10 +1025,10 @@ void LearnInstrumentWindow::ask()
 
 void LearnInstrumentWindow::chooseManual()
 {
-    chooser =
-        std::make_unique<juce::FileChooser> ("A manual for " + name, juce::File(), "*.pdf;*.html;*.htm;*.txt;*.md");
+    chooser = std::make_unique<core::FileDialog> ("A manual for " + name, juce::File(), "*.pdf;*.html;*.htm;*.txt;*.md",
+                                                  this);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                          [this, a = alive] (const juce::FileChooser& fc)
+                          [this, a = alive] (const core::FileDialog& fc)
                           {
                               if (! *a || fc.getResult() == juce::File())
                                   return;
