@@ -919,18 +919,21 @@ TEST_CASE ("Learn this instrument: the plugin's own key names, read in the helpe
     const auto synth = keyNamesInHelper (helper(), testSynth(), {}, {}, {}, problem);
     INFO (problem);
     REQUIRE (synth.has_value());
-    CHECK ((*synth)[12].job == Job::switches);
-    CHECK ((*synth)[12].what == "KS Soft");
-    CHECK ((*synth)[12].source == InstrumentProfiles::Source::plugin);
-    CHECK ((*synth)[13].job == Job::switches);
-    CHECK ((*synth)[60].job == Job::unknown);
-    CHECK (std::count_if (synth->begin(), synth->end(), [] (const auto& k) { return k.job != Job::unknown; }) == 2);
+    const auto& synthKeys = synth.value();
+    CHECK (synthKeys[12].job == Job::switches);
+    CHECK (synthKeys[12].what == "KS Soft");
+    CHECK (synthKeys[12].source == InstrumentProfiles::Source::plugin);
+    CHECK (synthKeys[13].job == Job::switches);
+    CHECK (synthKeys[60].job == Job::unknown);
+    CHECK (std::count_if (synthKeys.begin(), synthKeys.end(), [] (const auto& k) { return k.job != Job::unknown; }) ==
+           2);
 
     // The organ names none: asked, and nothing to say.
     const auto organ =
         keyNamesInHelper (helper(), testSynth ("test-synth.clap", "Spinus Test Organ"), {}, {}, {}, problem);
     REQUIRE (organ.has_value());
-    CHECK (std::all_of (organ->begin(), organ->end(), [] (const auto& k) { return k.job == Job::unknown; }));
+    const auto& organKeys = organ.value();
+    CHECK (std::all_of (organKeys.begin(), organKeys.end(), [] (const auto& k) { return k.job == Job::unknown; }));
 
     // Spinus's Drum Machine names its pads' keys by their sounds (its Synth Kit).
     SoundSource drums;
@@ -942,9 +945,10 @@ TEST_CASE ("Learn this instrument: the plugin's own key names, read in the helpe
     const auto pads = keyNamesInHelper (helper(), drums, {}, {}, {}, problem);
     INFO (problem);
     REQUIRE (pads.has_value());
-    CHECK ((*pads)[60].job == Job::plays);
-    CHECK ((*pads)[60].what.isNotEmpty());
-    CHECK (std::count_if (pads->begin(), pads->end(), [] (const auto& k) { return k.job == Job::plays; }) >= 8);
+    const auto& padsKeys = pads.value();
+    CHECK (padsKeys[60].job == Job::plays);
+    CHECK (padsKeys[60].what.isNotEmpty());
+    CHECK (std::count_if (padsKeys.begin(), padsKeys.end(), [] (const auto& k) { return k.job == Job::plays; }) >= 8);
 }
 
 TEST_CASE ("Sounds per part: an instrument that loads its sounds late is played once it sounds", "[sounds][helper]")
