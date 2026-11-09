@@ -24,6 +24,7 @@
 #include "session/TextLocale.h"
 #include "plugins/SandboxList.h"
 #include "plugins/sandbox/SandboxPluginFormat.h"
+#include "plugins/HostLibraries.h"
 #include "plugins/PluginCatalog.h"
 #include "plugins/PluginDownloads.h"
 #include "plugins/windows/PluginDialogs.h"
@@ -33,7 +34,9 @@
 #include "ai/ProjectContext.h"
 #include "ui/About.h"
 #include "ui/AiSettingsDialog.h"
+#include "ui/ExportDialog.h"
 #include "ui/Manual.h"
+#include "project/ProjectFiles.h"
 #include "session/ProjectDocument.h"
 #include "ui/ChannelRack.h"
 #include "ui/Logo.h"
@@ -82,6 +85,9 @@ public:
 
     void initialise (const juce::String& commandLine) override
     {
+        // In the Flatpak, LV2 plugins from the plugin extensions and the computer, before any LV2 host reads the
+        // path: the scanner and the plugin host had it, so such plugins were listed but did not load here.
+        plugins::addPluginFoldersToLv2Path();
         session::ensureUtf8ForChildProcesses();
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         const auto unknown = cli::unknownOption (args);
@@ -270,6 +276,23 @@ public:
             return;
         }
 
+        // A project double-clicked in the file manager that another Spinus already has open: say so, rather than
+        // start a second, empty Spinus showing an error. (Bringing the other window forward would need the two
+        // programs to talk to each other.)
+        const auto projectToOpen = projectArgument (args);
+        if (projectToOpen != juce::File() && ProjectDocument::isOpenInSpinus (projectToOpen))
+        {
+            const auto name = project::projectName (project::projectFolderFor (projectToOpen));
+            core::Logs::info ("start", name + " is open in another Spinus: not opened twice");
+            juce::AlertWindow::showAsync (
+                juce::MessageBoxOptions::makeOptionsOk (
+                    juce::MessageBoxIconType::InfoIcon, "Already open",
+                    name + " is already open in another Spinus window. Switch to that window (Alt+Tab, or click it in "
+                           "the taskbar). This Spinus closes now."),
+                [] (int) { quit(); });
+            return;
+        }
+
         document = std::make_unique<ProjectDocument> (*session, getSettingsFolder());
         mainWindow = std::make_unique<MainWindow> (getApplicationName(), *session, *document,
                                                    getSettingsFolder().getChildFile ("main-window.txt"));
@@ -288,13 +311,8 @@ public:
         view.setWindowsPlugins (windows.get(), getHelperProgram ("spinus-plugin-scanner"));
 
         // `spinus "Song/Song.spn"` (or the folder) opens that project; otherwise offer crashed work, if any.
-        for (auto& arg : args)
-            if (! arg.startsWith ("-") &&
-                juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()).exists())
-            {
-                view.openProjectFile (juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()));
-                break;
-            }
+        if (projectToOpen != juce::File())
+            view.openProjectFile (projectToOpen);
         if (crashed)
             view.offerToRunSeparately (crashed->key, crashed->name, [v = &view] { v->offerRecovery(); });
         else
@@ -333,6 +351,7 @@ public:
         ui::AiSettingsDialog::closeWindow();
         ui::ManualWindow::closeWindow();
         ui::AboutSpinus::closeWindow();
+        ui::ExportDialog::closeWindow(); // cancels a running export
         windowIcons = nullptr;
         agentInterface = nullptr; // stops the live interface before what it reads goes
         mainWindow = nullptr;
@@ -371,6 +390,16 @@ public:
     }
 
 private:
+    /** `spinus "Song/Song.spn"` (or the folder): the project to open, if any. */
+    static juce::File projectArgument (const juce::StringArray& args)
+    {
+        for (auto& arg : args)
+            if (! arg.startsWith ("-") &&
+                juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()).exists())
+                return juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted());
+        return {};
+    }
+
     static bool isAgentCommandLine (const juce::String& commandLine)
     {
         const auto args = juce::StringArray::fromTokens (commandLine, true);
@@ -772,13 +801,14 @@ private:
         {
             if (aiService == nullptr || ! aiService->isEnabled())
                 return reply ({}, "The music tools need AI turned on in Spinus (Options > AI). Spinus's own tools "
-                                  "(song_summary, run_commands, command_help, list_devices, render) work without it.");
+                                  "(tools/list shows them) work without it.");
             auto* params = new juce::DynamicObject();
             params->setProperty ("tool", tool);
             params->setProperty ("arguments", arguments);
             params->setProperty ("context", context);
             aiService->call ("ai.v1.project.tool", juce::var (params), reply);
         };
+        host.musicToolsOn = [this] { return aiService != nullptr && aiService->isEnabled(); };
         return std::make_unique<ai::AgentInterface> (*session, getSettingsFolder(), std::move (host));
     }
 };

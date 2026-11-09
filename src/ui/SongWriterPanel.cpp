@@ -787,6 +787,25 @@ bool SongWriterPanel::applyNow (const juce::String& replace)
     return true;
 }
 
+void SongWriterPanel::forget()
+{
+    task = nullptr; // stops any measuring and waits for it
+    if (context.service != nullptr && job.isNotEmpty())
+        context.service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
+    *alive = false; // a job under way answers nobody
+    alive = std::make_shared<bool> (true);
+    session.getSamplePreview().stop();
+    job.clear();
+    busy = composing = stopRequested = rulesFinding = false;
+    song = juce::var();
+    whole = true;
+    redoneParts.clear();
+    redoneSections.clear();
+    applied = {};
+    status.setText ({}, juce::dontSendNotification);
+    updateButtons();
+}
+
 void SongWriterPanel::stop()
 {
     if (task != nullptr)

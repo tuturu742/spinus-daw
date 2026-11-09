@@ -5,6 +5,97 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Not released yet
 
+### Fixes
+
+- The Piano Roll no longer crashes on the first click on a new instrument: the pattern that click creates used to
+  reload the notes while the mouse was still down, taking away the note being placed. The velocity lane is safe
+  from the same problem now.
+- One click, one undo step: the first step, note, Swing or Triplet change in a new project, and a Playlist clip
+  placed below the last track, used to need two **Ctrl+Z** (the second taking away an empty pattern or empty
+  tracks).
+- Clicking a Channel Rack step no longer resets the release, pan, fine pitch and volume of the other notes.
+- Snap **None** in the Piano Roll: **Ctrl+U** chopped a note into thousands of one-tick notes (and could freeze the
+  window), and **Shift+Left** / **Shift+Right** moved notes one tick. Both use a sixteenth now, like the other note
+  tools.
+- With no note selected, the arrow keys and note tools still change every note, but no longer leave all of them
+  selected (as in FL Studio), so the next drag moves one note, not all.
+- The velocity lane can reach each note of a chord: selected notes come first, then the bar nearest the mouse.
+- The Piano Roll's buttons and lists no longer take the keys away from the notes: after choosing a tool or a snap,
+  **Delete**, **Ctrl+C** and the arrow keys work again without clicking the grid (which added a note).
+- The first Playlist click in a new project did nothing. It now makes **Pattern 1** and places it.
+- Playlist with a folded group: a selection box picked clips on the wrong (hidden) tracks, and **Ctrl+A** then
+  **Shift+arrows** did nothing. Clips folded away now move in time with the others and stay on their tracks.
+- The Playlist no longer crashes if an automation point is being dragged when its clip is undone.
+- Flatpak: LV2 plugins from Flathub's plugin packs (such as the SWH and TAP plugins) load again. They were listed
+  in the Browser but showed as Missing when added, with "Unable to locate plugin" in the log.
+- The tempo box no longer stays stuck over the tempo after a double-click: Escape, Enter or clicking elsewhere
+  closes it. A typed tempo above 999 or below 20 BPM is set to 999 or 20; text that is not a number changes
+  nothing.
+- Scrolling the mouse wheel over the tempo is one undo step per scroll, not one per notch.
+- Save as over another project (Replace) puts this project's audio files there: an audio file of the same name
+  from the old project no longer stays and plays in place of yours.
+- Pressing Play with no sound card open now says why nothing is heard, and where to choose one (Options › Audio
+  settings..., F10).
+- A crashed project opened from the file manager or the command line asks "Recover your work?" once, not twice.
+- When Spinus can't save, the message says why (no permission to write there, a file in the way, a full disk) and
+  what to do next.
+- Opening a project that another Spinus already has open (double-clicking its .spn file) says so and points to
+  that window, instead of starting a second, empty Spinus with an error.
+- **Ctrl+Y** redoes, as **Ctrl+Shift+Z** does.
+- An empty Channel Rack says how to add the first instrument.
+- In a key written with flats (C minor, F major, ...), the Piano Roll names notes and chords with flats: Eb5 and
+  Bb, not D#5 and A#.
+- Recording messages name the real menu item, Options › Audio settings....
+- Manual: Projects do show in the Browser (Known issues); `--no-audio`, `--snapshot`, `--version` and
+  `--self-test` are on the command-line page; Backspace deletes like Delete; what clicking the Playlist's ruler
+  does in pattern mode.
+- **Export no longer locks Spinus.** The Export audio window stays open beside your work: you can keep editing
+  and playing while it exports, as the manual said. Closing the window cancels the export.
+- **Exports are named after the project** and start in the project's folder; only a project you haven't saved yet
+  is called "Untitled" and starts in Music. MP3, Opus and AAC files get the project's name as their title.
+- **An empty song is caught before you pick a file name**, not after.
+- **The MP3 and AAC hints fit your system:** the Arch install command only on Linux, a plain sentence on
+  Windows and in the Flatpak (which has neither program).
+- **Mixer faders, pan and send knobs show their value** while you point at them or drag them, and the faders and
+  send knobs now go all the way down to silence (-inf dB) instead of stopping at -60 dB.
+- **"+ Send" no longer offers bad targets:** the insert the sound already plays into (usually the Master, where a
+  send only made it louder) and inserts that would make a feedback loop are greyed out, with the reason.
+- A mixer strip's right-click menu can no longer act on a strip that was deleted while the menu was open
+  (scrolled out of view), which could crash Spinus.
+- The manual now says that removing a mixer insert also removes the sends and sidechains to it and its automation
+  clips (all undoable in one step).
+- **Coding agents (the live interface):**
+  - **Two agents no longer knock each other off.** A second agent (another Claude Code window, or Cursor) used to
+    end the first one's session and reset **Undo the agent's changes**. Now each has its own session, the top bar
+    names them all, and the undo point stays at when the first one connected.
+  - **An agent's own undo_last no longer counts as your change**, so its next change isn't refused for it.
+  - **Opening another project or File › New while an agent is connected:** the agent is told before its next
+    change, and **Undo the agent's changes** starts from the new project instead of undoing the wrong steps.
+  - **Playing a section works past the last part** (a section marked before its parts are written, or bars
+    added at the end), and "Chorus 2" plays the second section named Chorus.
+  - **Render measures the part before the first marker too** ("Start"), and its numbers are short (-16.9, not
+    -16.899999999999999).
+  - **list_presets on the Drum Machine, Sampler or another Spinus device** says they have no presets and how to
+    change their sound, instead of "There is no device".
+  - **With AI off, the agent is told only about the tools it has**, and the ready-made requests say how to do
+    their job without the music tools. Turning AI on or off tells the agent's app that its tools changed. A
+    misspelled tool name gets the right message.
+  - **Tools explain their settings** to the agent (what each value means), and steps can use `"as"` labels as
+    scripts do. Tools that overwrite settings or routing (shape sound, send, duck, bus) are marked as such.
+  - **Safer:** the token comes from the system's secure random source, its settings file is private from the
+    start, only this computer's own addresses count as local, and the protocol version is agreed properly.
+  - **The Claude Code setup command adds `--scope user`**, so Spinus is there in every folder, not only the one
+    where you ran it. The manual says where Cursor's file goes, what Disconnect really does (to keep an agent
+    out, untick the option or make a new token), and what an agent can't do.
+- **The music harness's command-line MCP server** (`python -m spinus_ai.harness mcp`) answers bad input with an
+  error instead of stopping.
+
+### Track creator: remembered per project
+
+- A new project starts with an empty Track creator, like the Channel Rack and the Mixer. Each saved project keeps
+  its own reference songs, summary, description and parts, and opening it brings them back. Songs analyzed once
+  stay ready in every project.
+
 ### Track creator: songs that sound written, not generated
 
 - Songs with lyrics no longer get filler. Round 2's songs had long copied intros and outros (sometimes two of each)

@@ -127,6 +127,9 @@ public:
 
     int getNumRows() const { return (int)rows.size(); }
 
+    /** The hint shown while the project has no instruments (tests). */
+    const juce::Label& getEmptyMessage() const noexcept { return emptyMessage; }
+
     /** Applies pending updates now (tests). */
     void updateNow() { handleUpdateNowIfNeeded(); }
     int getPlayingStep() const noexcept { return playingStep; }
@@ -141,6 +144,8 @@ private:
 
     void rebuild();
     bool perform (const juce::String& command, const juce::var& parameters, bool joined = false);
+    /** Makes a one-bar pattern if there is none yet (its own undo step, for the caller to join to its edit). */
+    bool ensurePattern();
     const std::vector<model::Note>* notesOf (model::ChannelId) const;
     void showAddMenu();
     bool dropHighlight = false;
@@ -160,7 +165,7 @@ private:
     juce::Viewport viewport;
     juce::TextButton addButton, tripletButton;
     juce::Slider swingKnob;
-    juce::Label swingLabel;
+    juce::Label swingLabel, emptyMessage;
     juce::ComboBox groupFilter;
     juce::String shownGroup;
     void updateGroupFilter();

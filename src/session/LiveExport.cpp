@@ -43,6 +43,7 @@ void LiveExport::start()
     if (rate <= 0.0)
         return finish ({ false, false, "There is no sound card to play through: export without playing instead.", {} });
 
+    song = session.getSongInfo(); // the project may change while it plays; the thread reads this copy
     if (! file.getParentDirectory().createDirectory())
         return finish ({ false, false, "Cannot create the folder " + file.getParentDirectory().getFullPathName(), {} });
 
@@ -128,7 +129,7 @@ void LiveExport::run()
     writer.reset(); // closes the file
 
     if (! threadShouldExit() && writerError.isEmpty() && wavFile != file)
-        writerError = engine::ExportJob::encodeFile (wavFile, file, settings, session.getProject().settings);
+        writerError = engine::ExportJob::encodeFile (wavFile, file, settings, song);
     writerDone.store (true);
 }
 

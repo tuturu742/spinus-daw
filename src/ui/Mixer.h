@@ -66,6 +66,24 @@ public:
     bool setSend (model::InsertId, model::InsertId target, double levelDb, bool joined = false);
     bool removeSend (model::InsertId, model::InsertId target);
 
+    /** The bottom of the faders and send knobs: silence, shown as "-inf dB". */
+    static constexpr double silentDb = -100.0;
+    /** What a fader or send knob shows while hovered or dragged: "-3.5 dB", "+2.0 dB", "-inf dB" at the bottom. */
+    static juce::String volumeText (double db);
+    /** What a pan knob shows: "Centre", "30% L", "100% R". */
+    static juce::String panText (double pan);
+
+    /** An insert "+ Send" offers. */
+    struct SendTarget
+    {
+        model::InsertId insert;
+        juce::String text;    // "Master", "2 Reverb", with why when it is greyed out
+        bool allowed = false; // greyed out: the insert already plays into it, or it would make a loop
+    };
+    /** The inserts the insert can send to: all but itself and those it already sends to. The one it already
+        plays into (its output) and those that would make a feedback loop are there, greyed out. */
+    std::vector<SendTarget> getSendTargets (model::InsertId) const;
+
     /** Inserts with nothing routed into them and no effects (never the master). */
     std::vector<model::InsertId> findUnusedInserts() const;
 

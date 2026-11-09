@@ -18,7 +18,7 @@ class Session;
 
     - with audio tracks armed, each armed track records its own input (Channel::recordInput, mono or a
       stereo pair) into a take of its own, all at once and sample-aligned, as from a multi-input sound card;
-    - with none armed, the input chosen in Options › Audio is recorded into one take, which the caller
+    - with none armed, the input chosen in Options › Audio settings is recorded into one take, which the caller
       places (a new track, or the "Record into" track).
 
     Each take goes on the Playlist where it was played: the files' start is found by mapping the input's

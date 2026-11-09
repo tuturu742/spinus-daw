@@ -31,8 +31,11 @@ namespace spinus::ui
     WAV files are made in a temporary folder and deleted after each song. Once all are analyzed, the
     summary of what the songs share is shown in plain words and can be saved as a JSON file (the input of
     the Track creator's later steps). The list of songs, the last summary, the description and the parts
-    list (with their sounds) are remembered (track-creator.json beside the library); at the next start the songs whose
-   style is known are ready, and the others wait for Analyze again, so starting Spinus never starts the AI service.
+    list (with their sounds) are remembered per project (track-creator.json in the project's folder; an untitled
+    project's only while it is open, until Save As). A new project starts empty and an opened one brings back its
+    own; the songs whose style is known are ready, and the others wait for Analyze again, so opening a project never
+    starts the AI service. The current project's state is copied to track-creator.json beside the library, where
+    the AI service's reference_style reads it.
 
     Nothing here changes the project. It needs AI turned on, the analysis engine installed and the model
     files downloaded (unless the library already has what they would find); it says what is missing and
@@ -44,7 +47,10 @@ namespace spinus::ui
     AI nor the AI service.
 
     Message thread only (each song is read and decoded on a thread of its own). */
-class TrackCreator final : public Panel, public juce::FileDragAndDropTarget, private juce::AsyncUpdater
+class TrackCreator final : public Panel,
+                           public juce::FileDragAndDropTarget,
+                           private juce::AsyncUpdater,
+                           private juce::ChangeListener
 {
 public:
     TrackCreator (Session&, ai::AiService*);
@@ -117,8 +123,10 @@ public:
 
     /** The analysis library (none without the AI service). */
     AnalysisLibrary getLibrary() const;
-    /** Where the list of songs and the last summary are remembered. */
+    /** The copy of the current project's songs, summary and description that the AI service reads. */
     juce::File getListFile() const;
+    /** Where the project's songs, summary, description and parts are remembered (none while untitled). */
+    juce::File getProjectFile() const;
     /** Where a song's large files are made while it is analyzed (a temporary folder, deleted after). */
     juce::File getWorkFolder (const juce::String& digest) const;
 
@@ -228,6 +236,8 @@ private:
     juce::StringArray neededModels() const;
     Reference* currentReference();
     void remember() const;
+    void forget();
+    void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void recall();
     void showSoundSummary (const juce::String& after = {});
 
@@ -281,6 +291,8 @@ private:
         songTab { "4. Write a song" };
     std::unique_ptr<DescribeSongPanel> describer;
     juce::var described;       // the last description's summary
+    int projectLoads = 0;      // the session's, when this project came in
+    juce::File projectFolder;  // where its state is kept (none: untitled)
     void describeReferences(); // the songs' summary into the description, read
     Page page = Page::style;
     std::unique_ptr<PartSoundsPanel> partSounds;

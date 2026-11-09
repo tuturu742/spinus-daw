@@ -75,10 +75,13 @@ same song again, even under another name or in another project, and it is **Done
 once. A song you already took apart in the Analyzer starts from what the Analyzer found: its beat, key and
 stems are used as they are, which saves most of the time.
 
-**Your list is remembered.** Close Spinus and open the Track creator again: your songs are still there, the
-analyzed ones done, with the summary as it was, and so are your description and your
-[parts](#sounds-for-each-part) with their sounds. Songs that were not finished wait until you click
-**Analyze again** (Spinus doesn't start analyzing by itself when it starts).
+**Each project remembers its own.** The Track creator keeps your songs, the summary, your description and your
+[parts](#sounds-for-each-part) with their sounds in the project, so a new project starts with an empty Track
+creator and opening a saved project brings back what you did in it: the analyzed songs done, with the summary as
+it was. Songs that were not finished wait until you click **Analyze again** (Spinus doesn't start analyzing by
+itself). In a project you haven't saved yet, the Track creator remembers while the project is open; **Save As**
+keeps it with the project. A song you analyzed once is ready at once in any project: its analysis is kept in
+Spinus's [saved analyses](#saved-analyses), not in the project.
 
 ## Saved analyses
 
@@ -548,8 +551,8 @@ at the bottom says what the AI would add. Nothing is sent anywhere: all of this 
 These are a program's choices, made from measurements: treat them as a starting point and change them by
 ear.
 
-**Your parts are remembered.** Close Spinus and open the Track creator again: the parts are as you left them,
-with their roles and the sounds you chose. Reading a new description starts the list again, and the page
+**Your parts are remembered** with the project: open it again and the parts are as you left them, with their
+roles and the sounds you chose. Reading a new description starts the list again, and the page
 says so.
 
 ### Save this sound

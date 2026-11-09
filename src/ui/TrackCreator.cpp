@@ -292,6 +292,10 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
     describer->onShareChanged = [this] { remember(); }; // the read summary carries it (vocalShare)
     partSounds->resetParts();
     partSounds->onChanged = [this] { remember(); }; // the parts list is kept between runs
+    // Kept per project: New and Open bring another project's (see changeListenerCallback).
+    projectLoads = session.getProjectLoadCount();
+    projectFolder = session.getProjectFolder();
+    session.addChangeListener (this);
     addChildComponent (*describer);
     addAndMakeVisible (styleTab);
     addAndMakeVisible (describeTab);
@@ -315,6 +319,7 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
 
 TrackCreator::~TrackCreator()
 {
+    session.removeChangeListener (this);
     songWriter = nullptr; // stops its rendering, before its work folder goes
     partSounds = nullptr; // stops what it runs, before its work folder goes
     indexer = nullptr;    // stops the update (its helper is killed)
@@ -341,6 +346,53 @@ AnalysisLibrary TrackCreator::getLibrary() const
 juce::File TrackCreator::getListFile() const
 {
     return service != nullptr ? service->getFolder().getChildFile ("track-creator.json") : juce::File();
+}
+
+juce::File TrackCreator::getProjectFile() const
+{
+    return projectFolder != juce::File() ? projectFolder.getChildFile ("track-creator.json") : juce::File();
+}
+
+void TrackCreator::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    if (session.getProjectLoadCount() != projectLoads)
+    {
+        // Another project (New, Open): its own state, or none.
+        projectLoads = session.getProjectLoadCount();
+        projectFolder = session.getProjectFolder();
+        if (recalled)
+        {
+            forget();
+            recall();
+            remember(); // the AI service's copy follows
+        }
+    }
+    else if (session.getProjectFolder() != projectFolder)
+    {
+        // Save As: the state goes with the project to its new folder.
+        projectFolder = session.getProjectFolder();
+        remember();
+    }
+}
+
+void TrackCreator::forget()
+{
+    const juce::ScopedValueSetter<bool> quiet (recalling, true); // nothing is written while it empties
+    stopCurrent();
+    references.clear();
+    current = -1;
+    summary = juce::var();
+    summarized.clear();
+    summarizing = false;
+    described = juce::var();
+    describer->clear();
+    songWriter->forget();
+    partSounds->resetParts();
+    status.setText ({}, juce::dontSendNotification);
+    list.updateContent();
+    list.deselectAllRows();
+    showSummary();
+    updateButtons();
 }
 
 void TrackCreator::showLibrary()
@@ -590,8 +642,7 @@ void TrackCreator::visibilityChanged()
 
 void TrackCreator::remember() const
 {
-    const auto file = getListFile();
-    if (file == juce::File() || ! recalled || recalling)
+    if (! recalled || recalling)
         return;
     juce::Array<juce::var> songs;
     for (const auto& r : references)
@@ -599,26 +650,36 @@ void TrackCreator::remember() const
                              { "digest", r.digest },
                              { "size", r.size },
                              { "modified", r.modified } }));
-    file.getParentDirectory().createDirectory();
-    file.replaceWithText (juce::JSON::toString (object (
-                              { { "version", 1 },
-                                { "references", songs },
-                                { "summary", summary },
-                                { "summarized", summarized },
-                                { "description", describer != nullptr ? describer->getText() : juce::String() },
-                                { "lyrics", describer != nullptr ? describer->getLyrics() : juce::String() },
-                                { "noVocals", describer != nullptr && describer->hasNoVocals() },
-                                { "described", described },
-                                { "generated", describer != nullptr ? describer->getGenerated() : juce::String() },
-                                { "parts", partSounds != nullptr ? partSounds->getRemembered() : juce::var() } })) +
-                          "\n");
+    const auto state = object ({ { "version", 1 },
+                                 { "references", songs },
+                                 { "summary", summary },
+                                 { "summarized", summarized },
+                                 { "description", describer != nullptr ? describer->getText() : juce::String() },
+                                 { "lyrics", describer != nullptr ? describer->getLyrics() : juce::String() },
+                                 { "noVocals", describer != nullptr && describer->hasNoVocals() },
+                                 { "described", described },
+                                 { "generated", describer != nullptr ? describer->getGenerated() : juce::String() },
+                                 { "parts", partSounds != nullptr ? partSounds->getRemembered() : juce::var() } });
+    const auto text = juce::JSON::toString (state) + "\n";
+    // In the project's folder; a project that never used the Track creator gets no file.
+    const bool empty = references.empty() && ! summary.isObject() && ! described.isObject() &&
+                       state["description"].toString().isEmpty() && state["lyrics"].toString().isEmpty() &&
+                       state["parts"]["parts"].size() == 0;
+    if (const auto file = getProjectFile(); file != juce::File() && (! empty || file.existsAsFile()))
+        file.replaceWithText (text);
+    // The AI service's copy (reference_style): the open project's.
+    if (const auto file = getListFile(); file != juce::File())
+    {
+        file.getParentDirectory().createDirectory();
+        file.replaceWithText (text);
+    }
 }
 
 void TrackCreator::recall()
 {
     recalled = true;
     const juce::ScopedValueSetter<bool> quiet (recalling, true); // nothing is written while it comes back
-    const auto saved = juce::JSON::parse (getListFile());
+    const auto saved = juce::JSON::parse (getProjectFile());     // the open project's (untitled: none)
     const auto library = getLibrary();
     if (auto* songs = saved["references"].getArray())
         for (const auto& song : *songs)

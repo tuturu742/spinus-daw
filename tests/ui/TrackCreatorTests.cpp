@@ -382,6 +382,8 @@ TEST_CASE ("Track creator: the songs and the summary are remembered, without sta
     if (ai::AiService::findInstallation().python == juce::File())
         SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
     Analysis a;
+    a.t.root.getChildFile ("Song").createDirectory();
+    a.session.setProjectFolder (a.t.root.getChildFile ("Song")); // kept per project: a saved one
     a.service.setEnabled (true);
     REQUIRE (a.installEngine());
     a.placeModels();
@@ -418,6 +420,61 @@ TEST_CASE ("Track creator: the songs and the summary are remembered, without sta
     CHECK (next.getState() != ai::AiService::State::running);
     CHECK (next.getState() != ai::AiService::State::starting);
     CHECK (creator.getMethodsRun().isEmpty());
+}
+
+TEST_CASE ("Track creator: each project keeps its own description and parts; a new project starts empty",
+           "[ui][trackcreator]")
+{
+    Analysis a; // the AI service is never started
+    const auto first = a.t.root.getChildFile ("First"), second = a.t.root.getChildFile ("Second");
+    first.createDirectory();
+    a.session.setProjectFolder (first);
+    TrackCreator creator (a.session, &a.service);
+    creator.setSize (720, 720);
+    auto settle = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil (50); };
+    auto partsOf = [&creator] { return creator.getPartSounds().getRemembered()["parts"].size(); };
+    settle();
+
+    const auto text = juce::String ("A slow reggae song with an organ");
+    creator.getDescriber().setText (text);
+    REQUIRE (creator.getPartSounds().addPart ("bass")); // a change of the parts list: remembered
+    const auto firstFile = first.getChildFile ("track-creator.json");
+    REQUIRE (firstFile.existsAsFile());
+    CHECK (juce::JSON::parse (firstFile)["description"].toString() == text);
+    CHECK (creator.getListFile().loadFileAsString() == firstFile.loadFileAsString()); // the AI service's copy
+
+    // File > New: an empty Track creator, and the first project's state stays where it is.
+    a.session.setProjectFolder ({});
+    a.session.loadProject ({});
+    settle();
+    CHECK (creator.getDescriber().getText().isEmpty());
+    CHECK (partsOf() == 0);
+    CHECK (creator.getReferences().empty());
+    CHECK (creator.getProjectFile() == juce::File());
+    CHECK (juce::JSON::parse (firstFile)["description"].toString() == text);
+    CHECK (juce::JSON::parse (creator.getListFile())["description"].toString().isEmpty());
+
+    // Opening the first project again brings its state back.
+    a.session.setProjectFolder (first);
+    a.session.loadProject ({});
+    settle();
+    CHECK (creator.getDescriber().getText() == text);
+    CHECK (partsOf() == 1);
+
+    // Save As (which makes the folder first): the state goes with the project.
+    second.createDirectory();
+    a.session.setProjectFolder (second);
+    settle();
+    REQUIRE (second.getChildFile ("track-creator.json").existsAsFile());
+    CHECK (juce::JSON::parse (second.getChildFile ("track-creator.json"))["description"].toString() == text);
+
+    // A project that never used the Track creator gets no file.
+    const auto third = a.t.root.getChildFile ("Third");
+    third.createDirectory();
+    a.session.setProjectFolder (third);
+    a.session.loadProject ({});
+    settle();
+    CHECK_FALSE (third.getChildFile ("track-creator.json").exists());
 }
 
 TEST_CASE ("Track creator: a range says how much of a song with lyrics is sung, the genre's until the user moves it",
@@ -505,6 +562,8 @@ TEST_CASE ("Track creator: a song described in words is read, written from and r
     if (ai::AiService::findInstallation().python == juce::File())
         SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
     Analysis a;
+    a.t.root.getChildFile ("Song").createDirectory();
+    a.session.setProjectFolder (a.t.root.getChildFile ("Song")); // kept per project: a saved one
     const auto text = juce::String ("A slow, dark depressive black metal song in D minor at 72 BPM, with a piano");
     {
         TrackCreator creator (a.session, &a.service);

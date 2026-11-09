@@ -4,7 +4,8 @@
 
 The Channel Rack lists your channels: each one is an instrument. Next to each channel is its **step
 sequencer** for the current pattern (chosen in the top bar, or by clicking a pattern clip in the
-[Playlist](playlist.md)).
+[Playlist](playlist.md)). A new, empty project has no channels: the Channel Rack then says how to add
+the first one (**+ Add channel**, or drag an instrument in from the [Browser](browser.md)).
 
 | Part | What it does |
 |---|---|
@@ -47,7 +48,10 @@ mixer insert, volume, pan, colour and group. Its name stays too, unless it was t
 
 ## Good to know
 
-- If there is no pattern yet, your first step creates **Pattern 1** (one bar long).
+- If there is no pattern yet, your first step creates **Pattern 1** (one bar long). So do **Triplet steps**
+  and **Swing**. One **Ctrl+Z** takes back the step (or the change) and the new pattern together.
+- Clicking a step changes only that step: the velocity, release, pan, fine pitch and volume you gave the
+  other notes in the Piano Roll stay as they are.
 - Every change can be undone with **Ctrl+Z**.
 - Press **Space** in pattern mode to hear the pattern loop; the playing step is outlined.
 - A new channel gets its own mixer insert automatically.

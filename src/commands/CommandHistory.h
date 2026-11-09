@@ -32,6 +32,13 @@ public:
         one by one, undone together). False if there are fewer steps. */
     bool joinLastSteps (int count, const juce::String& description);
 
+    /** Joins every undo step made since the project was in `state` (an earlier getStateId()) into one step,
+        named and described as the newest of them, so later commands of the same gesture still join it
+        (performJoined). For an edit that first had to make what it edits (the pattern a first note goes in,
+        the tracks a clip goes on): one Ctrl+Z takes back both. False if `state` is not on the undo list;
+        true (and nothing changes) if fewer than two steps were made since. */
+    bool joinStepsSince (uint64_t state);
+
     bool canUndo() const noexcept { return ! undoStack.empty(); }
     bool canRedo() const noexcept { return ! redoStack.empty(); }
     bool undo();
@@ -48,6 +55,10 @@ public:
         returns to an earlier value when undo or redo returns to that state. A saved project compares
         it with the value at save time to know whether there are unsaved changes. */
     uint64_t getStateId() const noexcept { return undoIds.empty() ? baseStateId : undoIds.back(); }
+
+    /** The state each undo step leads to, oldest first (parallel to getUndoDescriptions()): who made a step can
+        be told by the state it led to (the live interface for agents knows its own steps so). */
+    const std::vector<uint64_t>& getUndoStateIds() const noexcept { return undoIds; }
 
     using Listener = std::function<void (const ChangeSet&)>;
 

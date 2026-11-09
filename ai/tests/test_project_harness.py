@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 from test_service import anthropic_reply, collect, make_service
 
 from spinus_ai import project_harness
 from spinus_ai.manual import Manual
-from spinus_ai.project_harness import ProjectHarness, db_to_volume, moved_text, pan_value, pitch_of
+from spinus_ai.project_harness import Mistake, ProjectHarness, db_to_volume, moved_text, pan_value, pitch_of
 from spinus_ai.project_tools import Snapshot, Tools
 from spinus_ai.service import load_commands
 
@@ -107,6 +108,16 @@ def test_the_song_is_read_with_its_sections_and_parts() -> None:
     assert parts["Bass"]["role"] == "bass" and parts["Bass"]["plays"] == "1-8"
     text, failed = h.call("read_part", {"part": "bass", "bars": "Chorus"})
     assert not failed and text.startswith("Bass, bars 5-8") and "0 33 2 102" in text
+
+
+def test_sections_of_the_same_name_are_told_apart_by_number() -> None:
+    project = song()
+    project["playlist"]["markers"].append({"id": 92, "at": 6 * BAR, "name": "Chorus"})
+    h = harness(project)
+    assert h.bar_range("Chorus") == (4 * BAR, 6 * BAR)
+    assert h.bar_range("chorus 2") == (6 * BAR, 8 * BAR)
+    with pytest.raises(Mistake, match="Chorus 2"):
+        h.bar_range("Bridge")
 
 
 def test_writing_a_part_replaces_its_notes_there_through_commands() -> None:
@@ -369,6 +380,12 @@ async def test_the_live_interface_gets_the_tools_and_each_calls_steps(tmp_path: 
     assert hints["song_overview"]["readOnlyHint"] and hints["check"]["readOnlyHint"]
     assert not hints["add_part"]["readOnlyHint"] and not hints["add_part"]["destructiveHint"]
     assert hints["write_part"]["destructiveHint"] and not hints["write_part"]["readOnlyHint"]
+    for overwrites in ("shape_sound", "send", "duck", "bus"):  # they change settings or routing already there
+        assert hints[overwrites]["destructiveHint"]
+    # Every property of every tool says what it is.
+    for t in listed["tools"]:
+        for name, prop in t["inputSchema"].get("properties", {}).items():
+            assert prop.get("description"), f"{t['name']}.{name}"
     classified = project_harness.READS + project_harness.ADDS + project_harness.REPLACES
     assert sorted(classified) == sorted(names)
     # The manual's search: how-to answers for agents, changing nothing.

@@ -44,6 +44,12 @@ juce::File projectFolderFor (const juce::File& chosen);
 /** True if the folder holds a project file. */
 inline bool isProjectFolder (const juce::File& folder) { return findProjectFile (folder).existsAsFile(); }
 
+/** Why a file could not be written or a folder made, as far as Spinus can tell, for an error message: ": the
+    folder ... is read-only for you", ": the disk is full", ": ... does not exist (a drive that was removed?)";
+    empty when it can't tell. */
+juce::String describeWriteProblem (const juce::File& target);
+
+/** Fails with the reason (describeWriteProblem) when the project cannot be written. */
 juce::Result saveProject (const juce::File& folder, const ProjectData&);
 juce::Result loadProject (const juce::File& folder, ProjectData& result);
 

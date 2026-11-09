@@ -1,6 +1,8 @@
 #include "ExportDialog.h"
 
 #include "Theme.h"
+#include "WindowStacking.h"
+#include "session/ProgramFolder.h"
 
 namespace spinus::ui
 {
@@ -24,10 +26,9 @@ ExportDialog::ExportDialog (Session& s) : session (s)
     rateLabel.setText ("Sample rate", juce::dontSendNotification);
 
     what.addItem ("The song (playlist)", songId);
-    auto* pattern = session.getProject().findPattern (session.getCurrentPattern());
-    what.addItem ("The current pattern" + (pattern != nullptr ? " (" + pattern->name + ")" : juce::String()),
-                  patternId);
-    what.setItemEnabled (patternId, pattern != nullptr);
+    what.addItem ("The current pattern", patternId);
+    updatePatternChoice();
+    const auto* pattern = session.getProject().findPattern (session.getCurrentPattern());
     // Export what Play plays: the playlist in song mode, the pattern in pattern mode (if the playlist is empty).
     const bool songIsEmpty = engine::ExportJob::getSongEnd (session.getProject()) <= 0;
     what.setSelectedId (pattern != nullptr && (session.getMode() == Session::Mode::pattern && songIsEmpty) ? patternId
@@ -53,12 +54,7 @@ ExportDialog::ExportDialog (Session& s) : session (s)
                         juce::dontSendNotification);
 
     status.setJustificationType (juce::Justification::topLeft);
-    juce::StringArray missing;
-    if (! mp3Available)
-        missing.add ("MP3 needs the 'lame' package (sudo pacman -S lame).");
-    if (! aacAvailable)
-        missing.add ("AAC needs the 'ffmpeg' package (sudo pacman -S ffmpeg).");
-    status.setText (missing.joinIntoString ("\n"), juce::dontSendNotification);
+    status.setText (getMissingEncoderText (mp3Available, aacAvailable, getSystem()), juce::dontSendNotification);
 
     exportButton.onClick = [this] { chooseFileAndExport(); };
     cancelButton.onClick = [this]
@@ -81,30 +77,124 @@ ExportDialog::ExportDialog (Session& s) : session (s)
     addChildComponent (progressBar);
 
     setSize (440, 290);
+    session.addChangeListener (this); // the current pattern can change while the window is open
 }
 
 ExportDialog::~ExportDialog()
 {
+    session.removeChangeListener (this);
     // Cancels a running export.
     job = nullptr;
     live = nullptr;
 }
 
+void ExportDialog::updatePatternChoice()
+{
+    const auto* pattern = session.getProject().findPattern (session.getCurrentPattern());
+    what.changeItemText (patternId,
+                         "The current pattern" + (pattern != nullptr ? " (" + pattern->name + ")" : juce::String()));
+    what.setItemEnabled (patternId, pattern != nullptr);
+    if (pattern == nullptr && what.getSelectedId() == patternId)
+        what.setSelectedId (songId, juce::dontSendNotification);
+}
+
+namespace
+{
+juce::Component::SafePointer<juce::DocumentWindow>& openWindow()
+{
+    static juce::Component::SafePointer<juce::DocumentWindow> window;
+    return window;
+}
+
+/** The dialog's window: not modal, so Spinus keeps working while it exports. Closing it cancels the export. */
+class Window final : public juce::DocumentWindow
+{
+public:
+    Window (ExportDialog* content, juce::Component* owner)
+        : DocumentWindow ("Export audio", juce::Colour (0xff1e2227), DocumentWindow::closeButton)
+    {
+        if (owner != nullptr)
+            if (auto* lf = dynamic_cast<SpinusLookAndFeel*> (&owner->getLookAndFeel()))
+            {
+                setBackgroundColour (lf->getTheme().get ("panel"));
+                content->setLookAndFeel (lf);
+            }
+        setUsingNativeTitleBar (true);
+        setContentOwned (content, true);
+        setResizable (false, false);
+        if (owner != nullptr)
+            centreAroundComponent (owner->getTopLevelComponent(), getWidth(), getHeight());
+        else
+            centreWithSize (getWidth(), getHeight());
+        setVisible (true);
+        if (owner != nullptr)
+            keepAboveOwner (*this, *owner->getTopLevelComponent());
+    }
+
+    ~Window() override
+    {
+        if (auto* content = getContentComponent())
+            content->setLookAndFeel (nullptr);
+        clearContentComponent();
+    }
+
+    void closeButtonPressed() override { delete this; }
+};
+} // namespace
+
 void ExportDialog::show (Session& session, juce::Component* centreAround)
 {
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (new ExportDialog (session));
-    options.dialogTitle = "Export audio";
-    options.componentToCentreAround = centreAround;
-    options.useNativeTitleBar = true;
-    options.resizable = false;
-    if (centreAround != nullptr)
-        if (auto* lf = dynamic_cast<SpinusLookAndFeel*> (&centreAround->getLookAndFeel()))
-        {
-            options.dialogBackgroundColour = lf->getTheme().get ("panel");
-            options.content->setLookAndFeel (lf);
-        }
-    options.launchAsync();
+    if (openWindow() == nullptr)
+        openWindow() = new Window (new ExportDialog (session), centreAround);
+    openWindow()->toFront (true);
+}
+
+ExportDialog* ExportDialog::getOpen()
+{
+    return openWindow() != nullptr ? dynamic_cast<ExportDialog*> (openWindow()->getContentComponent()) : nullptr;
+}
+
+void ExportDialog::closeWindow()
+{
+    if (auto* window = openWindow().getComponent())
+        delete window;
+}
+
+ExportDialog::System ExportDialog::getSystem()
+{
+#if JUCE_WINDOWS
+    return System::windows;
+#else
+    return isFlatpak() ? System::flatpak : System::linuxNative;
+#endif
+}
+
+juce::String ExportDialog::getMissingEncoderText (bool mp3, bool aac, System system)
+{
+    juce::StringArray missing;
+    switch (system)
+    {
+    case System::linuxNative:
+        if (! mp3)
+            missing.add ("MP3 needs the 'lame' program (on Arch Linux: sudo pacman -S lame).");
+        if (! aac)
+            missing.add ("AAC needs the 'ffmpeg' program (on Arch Linux: sudo pacman -S ffmpeg).");
+        break;
+    case System::flatpak:
+        if (! mp3 || ! aac)
+            missing.add (juce::String (! mp3 && ! aac ? "MP3 and AAC are"
+                                       : ! mp3        ? "MP3 is"
+                                                      : "AAC is") +
+                         " not available in the Flatpak version of Spinus. FLAC and Opus work.");
+        break;
+    case System::windows:
+        if (! mp3)
+            missing.add ("MP3 needs the LAME encoder (lame.exe) installed and on the PATH.");
+        if (! aac)
+            missing.add ("AAC needs FFmpeg (ffmpeg.exe) installed and on the PATH.");
+        break;
+    }
+    return missing.joinIntoString ("\n");
 }
 
 //==============================================================================
@@ -174,16 +264,42 @@ engine::ExportSettings ExportDialog::getSettings() const
     return s;
 }
 
+juce::File ExportDialog::getSuggestedFile() const
+{
+    const auto title = session.getSongInfo().title; // the project's name when the song has no title
+    const auto name = juce::File::createLegalFileName (title.isNotEmpty() ? title : "Untitled");
+    const auto projectFolder = session.getProjectFolder();
+    const auto folder =
+        projectFolder != juce::File()
+            ? projectFolder
+            : (lastFile != juce::File() ? lastFile.getParentDirectory()
+                                        : juce::File::getSpecialLocation (juce::File::userMusicDirectory));
+    return folder.getChildFile (name + engine::ExportSettings::extensionFor (getSettings().format));
+}
+
+juce::String ExportDialog::findProblem() const
+{
+    const auto settings = getSettings();
+    if (auto problem = engine::ExportJob::findProblem (session.getProject(), settings); problem.isNotEmpty())
+        return problem;
+    if (playAlong.getToggleState() && session.getEdit().engine.getDeviceManager().getSampleRate() <= 0.0)
+        return "There is no sound card to play through: export without playing instead.";
+    return {};
+}
+
 void ExportDialog::chooseFileAndExport()
 {
-    const auto& settings = session.getProject().settings;
-    const auto name = juce::File::createLegalFileName (settings.title.isNotEmpty() ? settings.title : "Untitled");
-    const auto extension = engine::ExportSettings::extensionFor (getSettings().format);
-    const auto start = lastFile != juce::File() ? lastFile.getParentDirectory()
-                                                : juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+    updatePatternChoice();
+    // Say what is wrong before asking for a file name.
+    if (const auto problem = findProblem(); problem.isNotEmpty())
+    {
+        status.setText (problem, juce::dontSendNotification);
+        showButton.setVisible (false);
+        return;
+    }
 
-    chooser = std::make_unique<core::FileDialog> ("Export audio as", start.getChildFile (name + extension),
-                                                  juce::String ("*") + extension);
+    const auto suggested = getSuggestedFile();
+    chooser = std::make_unique<core::FileDialog> ("Export audio as", suggested, "*" + suggested.getFileExtension());
     using Browser = juce::FileBrowserComponent;
     constexpr auto chooserFlags = (int)((unsigned)Browser::saveMode | (unsigned)Browser::canSelectFiles |
                                         (unsigned)Browser::warnAboutOverwriting);

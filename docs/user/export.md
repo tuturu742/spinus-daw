@@ -1,7 +1,12 @@
 # Exporting audio (Ctrl+R)
 
 **Ctrl+R** opens **Export audio**. Choose what to export and how, click **Export...**, and pick where to
-save. You can keep working while it exports; the dialog shows progress, with **Cancel**.
+save. The window shows progress, with **Cancel**, and doesn't lock Spinus: you can keep working, and play
+the song, while it exports. Closing the window (or quitting Spinus) cancels the export.
+
+Spinus suggests the project's name for the file, in the project's folder. A project you haven't saved yet
+is suggested as `Untitled`, in your Music folder. If there is nothing to export (the playlist is empty,
+or the pattern is), the window says so before asking for a file name.
 
 ![Export audio](images/export.png)
 
@@ -33,13 +38,16 @@ save. You can keep working while it exports; the dialog shows progress, with **C
 - Frozen channels and inserts ([Freeze](freeze.md)) are exported from their plugins, so the result is exact.
 - Sidechains keep working in stems: if a [Sidechain Ducker](ducker.md) on the bass follows the kick,
   the bass's stem still dips with every kick, but the kick itself is not in it.
-- The export sounds the same as playback: instruments and effects keep their current settings.
+- The export sounds the same as playback: instruments and effects keep their settings from when you
+  clicked **Export...**. Changes you make while it exports are not in the file (except with **Play while
+  exporting**, below).
 - If you cancel, or something fails, no half-written files are left behind.
-- **MP3** needs the `lame` package. If it is missing, the MP3 choices are greyed out; install it with
-  `sudo pacman -S lame`.
-- **AAC** needs the `ffmpeg` package in the same way (`sudo pacman -S ffmpeg`). FLAC and Opus need
-  nothing extra.
-- MP3, Opus and AAC files get the song's title and author.
+- **MP3** needs the `lame` program and **AAC** needs `ffmpeg`. If one is missing, its choices are greyed
+  out and the window says what to install. FLAC and Opus need nothing extra.
+  - On Arch Linux: `sudo pacman -S lame` for MP3, `sudo pacman -S ffmpeg` for AAC.
+  - On Windows: install LAME (`lame.exe`) or FFmpeg (`ffmpeg.exe`) so that it is on the PATH.
+  - The Flatpak version of Spinus has neither, so MP3 and AAC stay greyed out there: use FLAC or Opus.
+- MP3, Opus and AAC files get the project's name as their title tag.
 - When it is done, **Show in folder** opens the folder in your file manager.
 
 ## Play while exporting

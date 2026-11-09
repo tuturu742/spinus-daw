@@ -82,4 +82,4 @@ what happened, and attach the project if you can.
 
 - Projects saved by this version open in every later version of Spinus. A project saved by a newer
   version may not open in an older one.
-- Presets and projects don't show in the Browser yet.
+- Presets don't show in the Browser yet.

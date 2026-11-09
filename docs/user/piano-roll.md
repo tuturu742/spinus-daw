@@ -17,7 +17,7 @@ automatically.
 | Delete the selection | **Delete** (or **Backspace**). |
 | Copy, cut, paste | **Ctrl+C** copies the selected notes (all of them when none is selected), **Ctrl+X** cuts them. **Ctrl+V** pastes them at the same times into the channel shown now: choose another channel in the Channel Rack (or another pattern) to copy a part to another instrument. Pasting where they came from puts them right after instead. The pasted notes are selected, ready to move. |
 | Duplicate | **Ctrl+B** puts the selection (or all notes) again right after itself. |
-| Move with the keys | **Shift+Up** / **Shift+Down** move the selected notes (or all notes) a semitone, **Ctrl+Up** / **Ctrl+Down** an octave, **Shift+Left** / **Shift+Right** a snap step (a sixteenth with no snap). Each press is one undo step. |
+| Move with the keys | **Shift+Up** / **Shift+Down** move the selected notes (or all notes) a semitone, **Ctrl+Up** / **Ctrl+Down** an octave, **Shift+Left** / **Shift+Right** a snap step (a sixteenth with no snap). Each press is one undo step. With nothing selected, all notes move and none becomes selected, as in FL Studio, so the next drag still moves just one note. |
 | Place freely (no grid) | Hold **Alt** while dragging. |
 | Velocity, pan and more | Drag a bar in the lane at the bottom up or down (see below). Right-click a bar to reset it. |
 | Loop part of the pattern | Hold the right mouse button and drag across the timeline above the notes: pattern mode then plays only that part, over and over. The part is shaded across the notes too. Right-click the timeline to loop the whole pattern again (choosing another pattern does too). |
@@ -28,14 +28,19 @@ automatically.
 - Notes snap to the grid chosen beside the tools: **Step** (the default) follows the pattern's Channel
   Rack steps, sixteenths or, with **Triplet steps** on, sixteenth-note triplets. Or choose **Bar**,
   **Beat**, **1/8**, **1/16**, **1/32**, **1/8 triplet**, **1/16 triplet** or **None**. New notes take the
-  length of the last note you drew or resized.
+  length of the last note you drew or resized. With **None**, the note tools and **Shift+Left** /
+  **Shift+Right** use a sixteenth.
 - The selection is only a view: it does not change the song, and it stays through undo.
 - A pattern is as long as its notes, in whole bars of its time signature (at least one), as in FL Studio.
   The area after its end is shaded: placing, moving or painting a note there makes the pattern longer, to
   the end of that note's bar, and removing the notes from the last bars makes it shorter again (in the
   same undo step). A 3/4 pattern is three beats long, also on the Playlist.
-- Note names follow FL Studio: middle C is **C5**.
-- Every change is one undo step (**Ctrl+Z**).
+- Note names follow FL Studio: middle C is **C5**. When the scale highlight (or the song's key) is a key written
+  with flats, such as C minor or F major, notes and chords use flats: **Eb5** and **Bb** rather than **D#5** and **A#**.
+- Every change is one undo step (**Ctrl+Z**). The first note on a new instrument also makes the pattern it
+  goes in: one **Ctrl+Z** takes back both.
+- The buttons and lists at the top never take the keys away from the notes: after choosing a tool or a
+  snap, **Delete**, **Ctrl+C** and the arrow keys still work on the notes.
 - In pattern mode, press **Space** to hear the pattern; a line shows the playing position.
 
 ## Tools
@@ -72,7 +77,8 @@ Each paint stroke, cut or deletion is one undo step.
 ## Note tools
 
 **Tools** (at the top, beside the chord list) changes the selected notes, or all of them when none is
-selected, as one undo step. Each tool has a key, shown in the menu (FL Studio's, where it has one):
+selected, as one undo step. The changed notes stay selected if they were; with none selected, none is
+afterwards either. With snap set to **None**, the tools work in sixteenths. Each tool has a key, shown in the menu (FL Studio's, where it has one):
 
 | Tool | What it does |
 |---|---|
@@ -189,6 +195,9 @@ to choose what the bars show and change:
 | **Volume** | The note's level, without changing how hard it is played. | silent to full (up) |
 
 - Drag a bar to change one note. Each change is one undo step.
+- Notes that start together (a chord) have their bars in the same place: the click picks the one whose
+  bar top is nearest the mouse. Selected notes come first: select a note in the grid to be sure the lane
+  changes that one.
 - Right-click a bar to put it back to its starting value (velocity 78%, release 50%, pan centre, fine
   pitch 0, volume full).
 - **Velocity** changes whatever the instrument makes it change: usually loudness, sometimes

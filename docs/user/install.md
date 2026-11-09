@@ -137,7 +137,7 @@ Spinus brings its own Python for the AI features; nothing else needs installing.
 
 **Sound.** Spinus uses your sound card's **ASIO** driver when one is installed (most audio interfaces
 come with one; it gives the lowest delay). Otherwise it uses Windows's own sound (WASAPI). You can switch
-in Options › Audio (F10).
+in **Options › Audio settings...** (**F10**).
 
 **Plugins.** Spinus finds VST3, CLAP and VST2 plugins in the usual Windows folders
 (`C:\Program Files\Common Files\VST3`, `...\Common Files\CLAP`, and your VST2 folder). Windows plugins

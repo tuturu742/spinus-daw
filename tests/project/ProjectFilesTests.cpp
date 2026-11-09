@@ -123,6 +123,28 @@ TEST_CASE ("Loading reports what is wrong", "[project]")
     CHECK (error.contains ("not valid JSON"));
 }
 
+TEST_CASE ("Saving reports why it could not write", "[project]")
+{
+    TempFolder temp;
+    const auto file = temp.root.getChildFile ("notes.txt");
+    REQUIRE (file.replaceWithText ("a file where a folder should be"));
+    const auto error = saveProject (file.getChildFile ("Song"), { makeExample(), {} }).getErrorMessage();
+    INFO (error);
+    CHECK (error.contains ("Spinus could not create the folder"));
+    CHECK (error.contains (file.getFullPathName() + " is a file, not a folder"));
+
+#if ! JUCE_WINDOWS
+    const auto locked = temp.root.getChildFile ("Locked");
+    REQUIRE (locked.createDirectory());
+    REQUIRE (locked.setReadOnly (true));
+    if (! locked.hasWriteAccess())
+        CHECK (describeWriteProblem (locked.getChildFile ("Song")) ==
+               ": you have no permission to write in " + locked.getFullPathName());
+    locked.setReadOnly (false);
+#endif
+    CHECK (describeWriteProblem (temp.root.getChildFile ("Fine")).isEmpty());
+}
+
 TEST_CASE ("A renamed folder keeps its .spn file, and an older project.json becomes a .spn", "[project]")
 {
     TempFolder temp;

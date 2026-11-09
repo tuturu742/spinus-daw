@@ -228,16 +228,106 @@ TEST_CASE ("Transport commands and the tempo control", "[ui][session]")
     CHECK (session.isMetronomeOn());
 
     // A tempo edit is one undoable command.
-    TempoControl tempo;
-    tempo.onCommit = [&] (double bpm)
-    {
-        juce::String error;
-        ui.history.perform (commands::CommandRegistry::get().create (
-            "project.setTempo", juce::JSON::parse ("{\"bpm\": " + juce::String (bpm) + "}"), error));
-    };
+    auto& tempo = ui.view.getTempoControl();
     tempo.nudge (1.0);
     CHECK (juce::approximatelyEqual (ui.history.getProject().settings.tempoBpm, 121.0));
     CHECK (ui.history.getUndoDescriptions().size() == 1);
+}
+
+TEST_CASE ("Mouse wheel notches close together on the tempo are one undo step", "[ui][tempo]")
+{
+    Ui ui;
+    auto& tempo = ui.view.getTempoControl();
+    const juce::uint32 t = 100000;
+
+    // Three quick notches: one step, which undo takes back whole.
+    tempo.wheelStep (1.0, t);
+    tempo.wheelStep (1.0, t + 100);
+    tempo.wheelStep (1.0, t + 200);
+    CHECK (juce::approximatelyEqual (ui.history.getProject().settings.tempoBpm, 123.0));
+    CHECK (ui.history.getUndoDescriptions().size() == 1);
+
+    // A pause starts a new step.
+    tempo.wheelStep (-1.0, t + 200 + TempoControl::wheelGapMs + 1);
+    CHECK (ui.history.getUndoDescriptions().size() == 2);
+    REQUIRE (ui.history.undo());
+    REQUIRE (ui.history.undo());
+    CHECK (juce::approximatelyEqual (ui.history.getProject().settings.tempoBpm, 120.0));
+
+    // After an undo or another edit, a quick notch is still a step of its own: it never joins an older one.
+    tempo.setTempo (120.0);
+    tempo.wheelStep (1.0, t + 5000);
+    REQUIRE (ui.history.undo());
+    tempo.setTempo (120.0);
+    tempo.wheelStep (1.0, t + 5100);
+    CHECK (ui.history.getUndoDescriptions().size() == 1);
+    REQUIRE (ui.history.perform (make ("pattern.add", R"({"length": 3840})")).wasOk());
+    tempo.wheelStep (1.0, t + 5200);
+    CHECK (ui.history.getUndoDescriptions().size() == 3);
+
+    // A change that is not a wheel notch (a drag, a typed value) is a step of its own, even right after one.
+    tempo.nudge (1.0);
+    CHECK (ui.history.getUndoDescriptions().size() == 4);
+}
+
+TEST_CASE ("The tempo box closes however typing ends, and keeps values within 20-999", "[ui][tempo]")
+{
+    CHECK (TempoControl::parseTyped ("128") == 128.0);
+    CHECK (TempoControl::parseTyped (" 128,5 BPM") == 128.5);
+    CHECK (TempoControl::parseTyped ("5000") == TempoControl::maxBpm);
+    CHECK (TempoControl::parseTyped ("5") == TempoControl::minBpm);
+    CHECK (! TempoControl::parseTyped ("fast").has_value());
+    CHECK (! TempoControl::parseTyped ("").has_value());
+    CHECK (! TempoControl::parseTyped ("-").has_value());
+
+    Ui ui;
+    auto& tempo = ui.view.getTempoControl();
+    tempo.setSize (96, 24);
+    auto& editor = tempo.getEditor();
+
+    // Escape, or Enter with nothing changed (no text change at all): the box goes away, nothing changes.
+    editor.setVisible (true);
+    editor.showEditor();
+    REQUIRE (editor.isBeingEdited());
+    editor.hideEditor (true);
+    CHECK (! editor.isVisible());
+    CHECK (ui.history.getUndoDescriptions().isEmpty());
+
+    // A value too high is kept within the range.
+    editor.setVisible (true);
+    editor.showEditor();
+    REQUIRE (editor.getCurrentTextEditor() != nullptr);
+    editor.getCurrentTextEditor()->setText ("1500");
+    editor.hideEditor (false);
+    CHECK (! editor.isVisible());
+    CHECK (juce::approximatelyEqual (ui.history.getProject().settings.tempoBpm, TempoControl::maxBpm));
+
+    // Text that is no number changes nothing.
+    editor.setVisible (true);
+    editor.showEditor();
+    editor.getCurrentTextEditor()->setText ("fast");
+    editor.hideEditor (false);
+    CHECK (! editor.isVisible());
+    CHECK (ui.history.getUndoDescriptions().size() == 1);
+}
+
+TEST_CASE ("Play without a sound card says why nothing is heard", "[ui][session]")
+{
+    Ui ui; // no audio device opened
+    REQUIRE (invoke (ui.view, MainView::playStop));
+    CHECK (ui.session.isPlaying());
+    CHECK (ui.view.getHintBar().getText().contains ("no sound card is open"));
+    CHECK (ui.view.getHintBar().getText().contains ("F10"));
+    REQUIRE (invoke (ui.view, MainView::playStop));
+}
+
+TEST_CASE ("Ctrl+Y redoes, as Ctrl+Shift+Z does", "[ui][shortcuts]")
+{
+    Ui ui;
+    const auto keys = ui.view.getCommandManager().getKeyMappings()->getKeyPressesAssignedToCommand (MainView::redo);
+    CHECK (
+        keys.contains (juce::KeyPress ('z', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0)));
+    CHECK (keys.contains (juce::KeyPress ('y', juce::ModifierKeys::ctrlModifier, 0)));
 }
 
 TEST_CASE ("R arms recording, which switches to pattern mode", "[ui][recording]")

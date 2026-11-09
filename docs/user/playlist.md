@@ -7,7 +7,7 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 
 | Action | How |
 |---|---|
-| Place the current pattern | Click an empty spot. Keep the mouse down and drag to place it. |
+| Place the current pattern | Click an empty spot. Keep the mouse down and drag to place it. In a new project with no pattern yet, the first click makes **Pattern 1** (one bar long) and places it. |
 | Switch to a clip's pattern | Click a pattern clip (with any tool): its pattern becomes the current pattern, as in FL Studio. The pattern list in the top bar, the Channel Rack and the Piano Roll show it, and clicking an empty spot places it. The click still does what the tool does (move, resize, slice, select). In pattern mode, the new current pattern is what plays. Clicking an audio or automation clip leaves the current pattern as it is. |
 | Move a clip | Drag it, also onto another track. |
 | Change a clip's length | Drag its right edge. A shorter clip plays only the start of the pattern. |
@@ -26,7 +26,7 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 | Rename, colour or delete a track | Right-click its name. The track's name is drawn on its colour, and the track itself is faintly tinted with it. Deleting a track also removes its clips. |
 | Group tracks | Right-click a track › **Group with the track above** (see [Track groups](#track-groups)). |
 | Choose a take | **Alt+click** an audio clip that has other takes at the same time: it plays, they are muted there (see [Takes and comping](audio-tracks.md#takes-and-comping)). |
-| Move the song position | Click or drag in the ruler (song mode). |
+| Move the song position | Click or drag in the ruler. In pattern mode this moves the playhead too, but Play still starts the current pattern from its beginning: switch to song mode (**L**) to play the song from there. |
 | Markers | **Double-click** the ruler to put a marker there ("Marker 1"): a named point to see the song's parts. **Click** a marker to jump to it, **drag** it to move it, **right-click** it to rename or remove it. Its line shows faintly across the tracks. |
 | Loop part of the song | Hold the right mouse button and drag across the ruler: song mode then plays that part over and over (it starts there if the position is outside it). The part is shaded across the tracks too. Right-click the ruler to stop looping. |
 | Grid | The list next to the tools: bar, beat (the default), 1/2 or 1/4 beat, triplets, or no grid. Hold **Alt** while dragging to place freely. |
@@ -47,7 +47,8 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 - A clip is as long as its pattern (a 3/4 pattern makes a three-beat clip). When the pattern gets longer
   or shorter, its clips follow, except clips whose length you changed by hand.
 - Empty tracks below the last one are created the first time you place something on them.
-- Every change is one undo step (**Ctrl+Z**), however many clips it touches.
+- Every change is one undo step (**Ctrl+Z**), however many clips it touches, including the tracks (and the
+  first pattern) it had to create.
 
 ## Track groups
 
@@ -57,7 +58,8 @@ Put tracks that belong together (the drums, the synths) in a group, as in FL Stu
   for the next track and it joins the same group. Groups can hold groups.
 - Click the arrow next to a group's name to **fold** it: the tracks in it are hidden, and their clips show
   faintly on the group's row, so you can still see the song. The name says how many tracks are hidden.
-  Click again to unfold.
+  Click again to unfold. A selection box picks only clips on the rows you can see. Clips in a folded group
+  that are selected anyway (**Ctrl+A**) move in time with the others but stay on their own tracks.
 - **Muting** a group mutes everything in it (their lights turn grey). **Soloing** it (Ctrl+click its light)
   plays everything in it and silences the rest.
 - **Moving** a group (drag its name, or Move up / Move down) moves the tracks in it too. A track in a group

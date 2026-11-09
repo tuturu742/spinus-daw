@@ -64,7 +64,8 @@ juce::var describe (Session&, const juce::String& stockType);
 /** The presets device.loadPreset can load on the open project's devices, for --presets and the live interface's
     list_presets: [{device, name, presets: [{name, category}]}], for one device (when `device` is set) or every
     one that has presets; `find` keeps the presets whose name or category holds all its words. A device whose
-    plugin can't be loaded here has `problem`. */
+    plugin can't be loaded here has `problem`; one of Spinus's own devices other than 3x Osc, asked for by its id,
+    has none and a `note` saying how its sound changes instead. */
 juce::var presets (Session&, int device, const juce::String& find);
 
 /** The stock types --describe all covers: Spinus's own devices and the bundled ones installed here. */

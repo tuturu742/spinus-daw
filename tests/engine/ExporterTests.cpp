@@ -331,6 +331,99 @@ TEST_CASE ("The Export dialog exports and says where the files went", "[ui][expo
     CHECK (! dialog.getSettings().stems);
 }
 
+TEST_CASE ("The Export dialog says an empty song is empty before asking for a file name", "[ui][export]")
+{
+    EngineHost host ({ .openAudioDevice = false });
+    Session session (host.getEngine(), std::make_unique<test::TestDevices> (host.getEngine()));
+
+    // An empty project: nothing to export. The dialog says so instead of opening the save dialog.
+    ui::ExportDialog dialog (session);
+    CHECK (dialog.findProblem().contains ("playlist is empty"));
+    dialog.chooseFileAndExport();
+    CHECK (dialog.getStatusText().contains ("playlist is empty"));
+    CHECK (! dialog.isExporting());
+
+    // The same check as the export job's own.
+    auto song = makeSong();
+    CHECK (ExportJob::findProblem (song, {}).isEmpty());
+    ExportSettings pattern;
+    pattern.pattern = song.patterns[0].id;
+    CHECK (ExportJob::findProblem (song, pattern).isEmpty());
+    song.patterns[0].length = 0;
+    CHECK (ExportJob::findProblem (song, pattern).contains ("pattern"));
+    pattern.pattern = PatternId { 999 };
+    CHECK (ExportJob::findProblem (song, pattern).contains ("pattern"));
+
+    session.getHistory().reset (makeSong());
+    CHECK (dialog.findProblem().isEmpty());
+}
+
+TEST_CASE ("Exports are named after the project and start in its folder", "[ui][export]")
+{
+    EngineHost host ({ .openAudioDevice = false });
+    Session session (host.getEngine(), std::make_unique<test::TestDevices> (host.getEngine()));
+    session.getHistory().reset (makeSong());
+
+    // Untitled: "Untitled" in the Music folder, and no title tag.
+    {
+        ui::ExportDialog dialog (session);
+        dialog.setFormat (ExportSettings::Format::wav24);
+        CHECK (dialog.getSuggestedFile() ==
+               juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Untitled.wav"));
+        CHECK (session.getSongInfo().title.isEmpty());
+    }
+
+    // Saved: its name, in its folder; the title tag is its name too.
+    juce::TemporaryFile scratch;
+    const auto folder = scratch.getFile().getChildFile ("My Song");
+    REQUIRE (folder.createDirectory());
+    session.setProjectFolder (folder);
+    {
+        ui::ExportDialog dialog (session);
+        dialog.setFormat (ExportSettings::Format::flac);
+        CHECK (dialog.getSuggestedFile() == folder.getChildFile ("My Song.flac"));
+        CHECK (session.getSongInfo().title == "My Song");
+
+        // A title of its own (from the project file) wins.
+        auto project = makeSong();
+        project.settings.title = "Real Title";
+        project.settings.author = "Someone";
+        session.getHistory().reset (project);
+        CHECK (dialog.getSuggestedFile() == folder.getChildFile ("Real Title.flac"));
+        CHECK (session.getSongInfo().title == "Real Title");
+        CHECK (session.getSongInfo().author == "Someone");
+    }
+    session.setProjectFolder ({});
+    scratch.getFile().deleteRecursively();
+}
+
+TEST_CASE ("The missing MP3 and AAC hint fits the system", "[ui][export]")
+{
+    using System = ui::ExportDialog::System;
+    for (auto system : { System::linuxNative, System::flatpak, System::windows })
+        CHECK (ui::ExportDialog::getMissingEncoderText (true, true, system).isEmpty());
+
+    const auto onLinux = ui::ExportDialog::getMissingEncoderText (false, false, System::linuxNative);
+    CHECK (onLinux.contains ("sudo pacman -S lame"));
+    CHECK (onLinux.contains ("sudo pacman -S ffmpeg"));
+    CHECK (ui::ExportDialog::getMissingEncoderText (true, false, System::linuxNative).contains ("ffmpeg"));
+    CHECK (! ui::ExportDialog::getMissingEncoderText (true, false, System::linuxNative).contains ("lame"));
+
+    // No Linux commands where they would be wrong.
+    for (auto system : { System::flatpak, System::windows })
+        for (auto [mp3, aac] : { std::pair { false, false }, std::pair { false, true }, std::pair { true, false } })
+        {
+            const auto text = ui::ExportDialog::getMissingEncoderText (mp3, aac, system);
+            CHECK (text.isNotEmpty());
+            CHECK (! text.contains ("pacman"));
+            CHECK (! text.contains ("sudo"));
+            CHECK (text.contains ("MP3") == ! mp3);
+            CHECK (text.contains ("AAC") == ! aac);
+        }
+    CHECK (ui::ExportDialog::getMissingEncoderText (false, false, System::flatpak).contains ("Flatpak"));
+    CHECK (ui::ExportDialog::getMissingEncoderText (false, true, System::windows).contains ("lame.exe"));
+}
+
 TEST_CASE ("An export plays Spinus Tune's rendering of a tuned clip", "[engine][export]")
 {
     Fixture f;
