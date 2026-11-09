@@ -25,9 +25,11 @@ struct DeviceMeter
     bool hasResting = false;
 };
 
-/** Sits right after every instrument and effect. If the device produced NaN or
-    infinity in a block, the block is replaced by silence and the guard records it, so one broken
-    plugin cannot silence or damage the whole mix. The Engine Adapter reports tripped guards to the UI.
+/** Sits right after every instrument and effect. If the device produced NaN, infinity or a sample over
+    +40 dBFS in a block, the block is replaced by silence and the guard records it, so one broken
+    plugin cannot silence or damage the whole mix (or the listener's ears). The device then stays silent for
+    a moment and fades back in, so the end of a burst is not heard as a click. The Engine Adapter reports
+    tripped guards to the UI.
 
     Real-time safe: one pass over the block, no allocation, no locks; flags are atomics.
 */
@@ -63,12 +65,23 @@ public:
     bool takesMidiInput() override { return true; }
     bool producesAudioWhenNoAudioInput() override { return false; }
 
-    void initialise (const tracktion::PluginInitialisationInfo& info) override { sampleRate = info.sampleRate; }
+    void initialise (const tracktion::PluginInitialisationInfo& info) override
+    {
+        sampleRate = info.sampleRate;
+        heldSamples = 0;
+        fadeGain = 1.0f;
+    }
     void deinitialise() override {}
     void applyToBuffer (const tracktion::PluginRenderContext&) override;
     void restorePluginStateFromValueTree (const juce::ValueTree&) override {}
 
-    /** True if any sample in the range is NaN or infinite. */
+    /** Louder than any real sound: +40 dBFS, as the sound index counts invalid output. */
+    static constexpr float loudestValidSample = 100.0f;
+
+    /** How long a device stays silent after invalid output, and how long it then takes to fade back in. */
+    static constexpr double holdSeconds = 0.1, fadeInSeconds = 0.01;
+
+    /** True if any sample in the range is NaN, infinite or louder than loudestValidSample. */
     static bool containsInvalidSamples (const juce::AudioBuffer<float>&, int start, int numSamples) noexcept;
 
     /** Mean of the squared samples over all channels (0 for an empty range). */
@@ -76,11 +89,14 @@ public:
 
 private:
     void measureAfter (const juce::AudioBuffer<float>&, int start, int numSamples) noexcept;
+    void holdAndFadeIn (juce::AudioBuffer<float>&, int start, int numSamples) noexcept;
 
     std::atomic<int> silencedBlocks { 0 };
     std::shared_ptr<DeviceMeter> meter;
     bool probe = false;
     double sampleRate = 44100.0;
+    juce::int64 heldSamples = 0; // still to silence after invalid output (audio thread)
+    float fadeGain = 1.0f;       // < 1 while fading back in (audio thread)
 };
 
 } // namespace spinus::engine

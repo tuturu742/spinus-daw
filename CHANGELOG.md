@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A plugin that sends out a burst far louder than any real sound (Constant Signal Generator from the SWH pack
+  does as it starts) is muted for that moment instead of cracking through the speakers and pinning the mixer's
+  meters. The bar at the bottom of the window says which plugin it was.
 - The Piano Roll no longer crashes on the first click on a new instrument: the pattern that click creates used to
   reload the notes while the mouse was still down, taking away the note being placed. The velocity lane is safe
   from the same problem now.

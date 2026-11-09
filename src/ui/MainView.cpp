@@ -730,6 +730,15 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
                     plugin->windowState->closeWindowExplicitly();
                 showPluginFailure (id);
             }
+            // The guard after each device muted invalid output: said once per device, not on every block.
+            for (auto id : session.getAdapter().takeSilencedDevices())
+                if (warnedInvalidAudio.insert (id).second)
+                {
+                    const auto text = session.getDeviceTitle (id) +
+                                      " made invalid sound (broken or far too loud), so Spinus muted it then.";
+                    core::Logs::warning ("audio", text);
+                    hintBar.showMessage (text);
+                }
         });
     pluginWatch->startTimer (250);
 
