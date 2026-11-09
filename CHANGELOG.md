@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Deleting a channel deletes its mixer insert too, unless another channel or insert still uses it. It used to stay
+  behind in the Mixer. Ctrl+Z brings both back.
 - The Piano Roll no longer crashes on the first click on a new instrument: the pattern that click creates used to
   reload the notes while the mouse was still down, taking away the note being placed. The velocity lane is safe
   from the same problem now.

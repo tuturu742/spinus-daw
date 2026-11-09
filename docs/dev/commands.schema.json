@@ -152,7 +152,7 @@
       }
     },
     "channel.remove": {
-      "description": "Remove a channel, its notes in every pattern, and automation of it.",
+      "description": "Remove a channel, its notes in every pattern, and automation of it. Its mixer insert goes too when nothing else plays into it.",
       "parameters": {
         "type": "object",
         "properties": {
