@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -58,8 +60,8 @@ private:
 
     juce::AudioProcessorValueTreeState parameters;
     TuneEngine engine;
-    std::atomic<float>*key = nullptr, *scale = nullptr, *retune = nullptr, *humanize = nullptr, *formants = nullptr,
-    *range = nullptr, *mix = nullptr;
+    param::Live key = nullptr, scale = nullptr, retune = nullptr, humanize = nullptr, formants = nullptr,
+                range = nullptr, mix = nullptr;
     double preparedRate = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TuneProcessor)

@@ -65,10 +65,10 @@ EqProcessor::EqProcessor() : OwnEffect (pluginName, "SpinusEq", false, makeLayou
 {
     for (int b = 0; b < EqSettings::numBands; ++b)
     {
-        auto get = [&] (const char* part) { return parameters.getRawParameterValue (bandParameter (b, part)); };
+        auto get = [&] (const char* part) { return param::live (parameters, bandParameter (b, part)); };
         bandParameters[(size_t)b] = { get ("on"), get ("type"), get ("freq"), get ("gain"), get ("q"), get ("slope") };
     }
-    output = parameters.getRawParameterValue ("output");
+    output = param::live (parameters, "output");
 }
 
 EqSettings EqProcessor::getSettings() const noexcept

@@ -90,10 +90,10 @@ DrumMachineProcessor::DrumMachineProcessor()
     : juce::AudioPluginInstance (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "DrumMachineParameters", makeLayout())
 {
-    masterVolume = parameters.getRawParameterValue ("volume");
+    masterVolume = param::live (parameters, "volume");
     for (int pad = 0; pad < numPads; ++pad)
     {
-        auto get = [&] (const char* setting) { return parameters.getRawParameterValue (parameterId (setting, pad)); };
+        auto get = [&] (const char* setting) { return param::live (parameters, parameterId (setting, pad)); };
         padParameters[(size_t)pad] = { get ("volume"), get ("pan"),    get ("tune"),      get ("fine"),
                                        get ("attack"), get ("decay"),  get ("sustain"),   get ("release"),
                                        get ("filter"), get ("cutoff"), get ("resonance"), get ("velocity"),

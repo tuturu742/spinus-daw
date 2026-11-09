@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EqEngine.h"
+#include "dsp/LiveSetting.h"
 #include "dsp/OwnEffect.h"
 
 namespace spinus::dsp
@@ -37,13 +38,12 @@ public:
 private:
     struct BandParameters
     {
-        std::atomic<float>*on = nullptr, *type = nullptr, *frequency = nullptr, *gain = nullptr, *q = nullptr,
-        *slope = nullptr;
+        param::Live on = nullptr, type = nullptr, frequency = nullptr, gain = nullptr, q = nullptr, slope = nullptr;
     };
 
     EqEngine engine;
     std::array<BandParameters, EqSettings::numBands> bandParameters;
-    std::atomic<float>* output = nullptr;
+    param::Live output = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EqProcessor)
 };

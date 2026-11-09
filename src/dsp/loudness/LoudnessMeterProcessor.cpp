@@ -34,8 +34,8 @@ LoudnessMeterProcessor::LoudnessMeterProcessor()
                       return layout;
                   }())
 {
-    target = parameters.getRawParameterValue ("target");
-    resetOnPlay = parameters.getRawParameterValue ("reset_on_play");
+    target = param::live (parameters, "target");
+    resetOnPlay = param::live (parameters, "reset_on_play");
 }
 
 const LoudnessMeterProcessor::Target& LoudnessMeterProcessor::getTarget() const noexcept

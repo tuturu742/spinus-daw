@@ -195,7 +195,7 @@ ThreeOscProcessor::ThreeOscProcessor()
     : juce::AudioPluginInstance (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "ThreeOscParameters", makeLayout())
 {
-    auto get = [this] (const juce::String& id) { return parameters.getRawParameterValue (id); };
+    auto get = [this] (const juce::String& id) { return param::live (parameters, id); };
     for (int osc = 0; osc < 3; ++osc)
         oscillatorParameters[(size_t)osc] = { get (parameterId ("shape", osc)), get (parameterId ("coarse", osc)),
                                               get (parameterId ("fine", osc)),  get (parameterId ("level", osc)),

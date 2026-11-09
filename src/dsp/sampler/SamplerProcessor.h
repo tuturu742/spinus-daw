@@ -6,6 +6,8 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -90,8 +92,7 @@ private:
 
     struct ParameterPointers
     {
-        std::atomic<float>*gain, *attack, *decay, *sustain, *release, *filter, *cutoff, *resonance, *velocity, *coarse,
-            *fine, *oneShot;
+        param::Live gain, attack, decay, sustain, release, filter, cutoff, resonance, velocity, coarse, fine, oneShot;
     } p {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SamplerProcessor)

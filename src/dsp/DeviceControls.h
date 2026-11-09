@@ -14,8 +14,9 @@ inline const juce::Colour background { 0xff23272e }, panel { 0xff2c313a }, text 
 } // namespace look
 
 /** A labelled knob attached to a parameter; attach() can move it to another parameter (a Drum Machine
-    knob follows the selected pad). */
-class ParameterKnob final : public juce::Component
+    knob follows the selected pad). It also follows the host's automation, which sets the parameter without
+    telling the attachment. */
+class ParameterKnob final : public juce::Component, private juce::Timer
 {
 public:
     explicit ParameterKnob (const juce::String& label);
@@ -27,6 +28,9 @@ public:
     void resized() override;
 
 private:
+    void timerCallback() override;
+
+    juce::RangedAudioParameter* parameter = nullptr;
     juce::Slider slider;
     juce::Label label;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;

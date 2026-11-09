@@ -54,7 +54,7 @@ DelayProcessor::DelayProcessor()
                      return layout;
                  }())
 {
-    auto get = [this] (const char* id) { return parameters.getRawParameterValue (id); };
+    auto get = [this] (const char* id) { return param::live (parameters, id); };
     sync = get ("sync");
     note = get ("note");
     time = get ("time");

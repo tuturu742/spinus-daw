@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -49,8 +51,8 @@ public:
 private:
     juce::AudioProcessorValueTreeState parameters;
     StereoUtilityEngine engine;
-    std::atomic<float>*gain = nullptr, *pan = nullptr, *width = nullptr, *mono = nullptr, *invertLeft = nullptr,
-    *invertRight = nullptr;
+    param::Live gain = nullptr, pan = nullptr, width = nullptr, mono = nullptr, invertLeft = nullptr,
+                invertRight = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StereoUtilityProcessor)
 };
