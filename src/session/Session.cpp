@@ -74,6 +74,26 @@ Session::Session (te::Engine& engine, std::unique_ptr<engine::DeviceFactory> d)
     historyListener = history.addListener ([this] (const commands::ChangeSet& c) { projectChanged (c); });
     controlWatcher = std::make_unique<ControlWatcher> (*this);
     edit->getParameterChangeHandler().addListener (*controlWatcher);
+    // A setting dragged in a device's own window is one undo step, which puts back where the drag started.
+    adapter->onHandChange = [this] (model::DeviceId device, const juce::String& parameterId, float before, float after)
+    {
+        model::ParameterTarget moved;
+        moved.kind = model::ParameterTarget::Kind::deviceParameter;
+        moved.device = device;
+        moved.parameterId = parameterId;
+        lastMoved = moved; // what "Automate the last moved control" offers
+        auto* values = new juce::DynamicObject();
+        values->setProperty (parameterId, after);
+        auto* previous = new juce::DynamicObject();
+        previous->setProperty (parameterId, before);
+        auto* params = new juce::DynamicObject();
+        params->setProperty ("device", (int)device.value);
+        params->setProperty ("values", juce::var (values));
+        params->setProperty ("previous", juce::var (previous));
+        juce::String error;
+        if (auto command = commands::CommandRegistry::get().create ("device.setParameters", juce::var (params), error))
+            history.perform (std::move (command));
+    };
     commands::setPluginForText (this, [this] (const model::Device& device)
                                 { return pluginForText (edit->engine, *adapter, *devices, device); });
     commands::setPresetLoader (this, [this] (const model::Device& device, const juce::String& preset,

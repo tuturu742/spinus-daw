@@ -189,7 +189,17 @@ public:
     /** The Tracktion clips that play a launcher clip (tests). */
     std::vector<tracktion::Clip*> getLauncherClips (model::ClipId) const;
 
+    /** A setting changed by hand in a device's own window: one drag, from where it started to where it ended
+        (Spinus's parameter ID, values 0 to 1). Called on the message thread after the drag; the Session makes it
+        an undo step. Plugins that don't say when a drag starts and ends are not heard. */
+    std::function<void (model::DeviceId, const juce::String& parameterId, float before, float after)> onHandChange;
+
 private:
+    /** Hears a device's plugin say a drag of one of its settings started or ended (any thread). */
+    class GestureWatcher;
+    void watchGestures (model::DeviceId, tracktion::Plugin&);
+    void handEnded (model::DeviceId, int parameterIndex, float before, float after);
+
     /** Back to the Playlist: keeps the Launcher off until its clips have really stopped. */
     struct ReturnToPlaylist final : private juce::Timer
     {
@@ -279,9 +289,11 @@ private:
     tracktion::AudioTrack::Ptr unheardSink; // where unheard inserts play into
     tracktion::Plugin::Ptr masterMute;      // MutePlugin after the Master's effects
     std::map<model::DeviceId, tracktion::Plugin::Ptr> devicePlugins;
-    std::map<model::DeviceId, tracktion::Plugin::Ptr> guards; // AudioGuardPlugin right after each device
-    std::map<model::DeviceId, tracktion::Plugin::Ptr> probes; // AudioGuardPlugin (probe) right before each device
-    std::map<model::DeviceId, juce::MemoryBlock> savedStates; // not yet applied, or plugin missing
+    std::map<model::DeviceId, std::unique_ptr<GestureWatcher>> gestureWatchers;
+    std::shared_ptr<bool> alive = std::make_shared<bool> (true); // for messages posted from other threads
+    std::map<model::DeviceId, tracktion::Plugin::Ptr> guards;    // AudioGuardPlugin right after each device
+    std::map<model::DeviceId, tracktion::Plugin::Ptr> probes;    // AudioGuardPlugin (probe) right before each device
+    std::map<model::DeviceId, juce::MemoryBlock> savedStates;    // not yet applied, or plugin missing
     std::set<model::DeviceId> reportedFailures;
     // Settings set through commands, as last applied, and what each was before.
     std::map<model::DeviceId, std::map<juce::String, float>> appliedParameters;
