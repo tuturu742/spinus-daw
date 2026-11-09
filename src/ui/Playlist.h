@@ -101,6 +101,14 @@ public:
     std::function<void (model::ClipId)> onOpenAudioClip;
     /** Called when an automation clip is double-clicked: the Automation editor opens it. */
     std::function<void (model::ClipId)> onOpenAutomationClip;
+    /** An automation clip's menu item that shows what it moves: "Show Filter on Master", "Show 3 Drums in the
+        Mixer", "Show Bass in the Channel Rack"; empty for other clips, or when the target is gone. */
+    juce::String getShowTargetText (model::ClipId) const;
+    /** That menu item: selects the clip and calls onShowAutomationTarget with its target. */
+    bool showAutomationTarget (model::ClipId);
+    /** Opens the Mixer at the target's insert (and its effect's window) or the Channel Rack at its channel (and
+        its instrument's window). */
+    std::function<void (const model::ParameterTarget&)> onShowAutomationTarget;
     bool setLaneMuted (int row, bool muted);
     /** Markers on the ruler (each one undo step); jumpTo moves the song position. */
     bool addMarker (model::Ticks at, const juce::String& name = {});
@@ -231,6 +239,8 @@ private:
     void madeForNext (uint64_t stateBefore);
     bool performJoiningMade (std::unique_ptr<commands::Command>);
     std::vector<model::Clip> getSelectedClips() const;
+    /** Tells the Session the selected automation clips' targets (outlined in the Mixer and Channel Rack). */
+    void updateHighlight();
     bool placeCopies (std::vector<model::Clip>, const juce::String& description);
     /** Brings the file into the project (audio/ folder, FLAC when needed): its path there and its length. */
     bool importAudio (const juce::File&, juce::String& path, model::Ticks& ticks);

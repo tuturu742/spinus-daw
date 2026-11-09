@@ -16,8 +16,9 @@ juce::var object (std::initializer_list<std::pair<const char*, juce::var>> prope
     return juce::var (o);
 }
 
-// The most settings sent for one device: plugins can have thousands, and the model reads them all.
-constexpr int mostParameters = 96;
+// The most settings sent for one device. The model sees them only through the harness's tools (sound_settings
+// pages and searches them), but some plugins have tens of thousands, and every tool call sends them again.
+constexpr int mostParameters = 2000;
 } // namespace
 
 juce::var projectContext (Session& session, const ContextOptions& options)
@@ -44,6 +45,7 @@ juce::var projectContext (Session& session, const ContextOptions& options)
     // show now.
     auto* names = new juce::DynamicObject();
     auto* parameters = new juce::DynamicObject();
+    auto* counts = new juce::DynamicObject();
     const auto add = [&] (const model::Device& device)
     {
         const auto key = juce::String ((int)device.id.value);
@@ -51,15 +53,17 @@ juce::var projectContext (Session& session, const ContextOptions& options)
         if (! options.project)
             return;
         juce::Array<juce::var> list;
-        for (auto& [id, name] : session.getDeviceParameters (device.id))
+        const auto all = session.getDeviceParameterTexts (device.id);
+        for (auto& p : all)
         {
             if (list.size() >= mostParameters)
                 break;
-            list.add (object (
-                { { "id", id }, { "name", name }, { "text", session.getDeviceParameterValueText (device.id, id) } }));
+            list.add (object ({ { "id", p.id }, { "name", p.name }, { "text", p.text } }));
         }
         if (! list.isEmpty())
             parameters->setProperty (key, list);
+        if ((int)all.size() > list.size())
+            counts->setProperty (key, (int)all.size()); // only some were sent
     };
     for (auto& channel : project.channels)
         if (channel.instrument)
@@ -74,6 +78,7 @@ juce::var projectContext (Session& session, const ContextOptions& options)
         addEffects (insert);
     context->setProperty ("deviceNames", juce::var (names));
     context->setProperty ("deviceParameters", juce::var (parameters));
+    context->setProperty ("deviceParameterCounts", juce::var (counts));
 
     // What can be added: Spinus's devices, the free plugins and the installed plugins, each with the device
     // JSON the commands take (so a model never guesses an ID).

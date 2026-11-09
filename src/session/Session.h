@@ -203,6 +203,13 @@ public:
     /** A device parameter's current value as the plugin shows it ("1.20 kHz"), or empty. */
     juce::String getDeviceParameterValueText (model::DeviceId, const juce::String& parameterId) const;
 
+    struct ParameterText
+    {
+        juce::String id, name, text;
+    };
+    /** A device's automatable parameters with their current values as the plugin shows them, in one pass. */
+    std::vector<ParameterText> getDeviceParameterTexts (model::DeviceId) const;
+
     /** The choices of a device that picks its kind of sound by name (an effect's type: "Chorus", "Phaser"...):
         its settings that show only names and have at least three, at most `most` of them, as the setting's name
         and its choices. Read from a copy made for it once (then remembered); empty when it cannot be made. For
@@ -211,6 +218,38 @@ public:
 
     /** A device's window title: its name and where it is, e.g. "Hall Reverb - 4 Reverb". */
     juce::String getDeviceTitle (model::DeviceId) const;
+
+    /** Where an automation target is in the Mixer and the Channel Rack: the insert whose strip or effect it
+        moves, or the channel whose fader or instrument it moves (the other one invalid), and for a device's
+        control the device, its name ("Filter") and where it is ("Master", "3 Drums" as the Mixer numbers
+        inserts, or a channel's name). Nothing valid when the target is gone. */
+    struct TargetPlace
+    {
+        model::InsertId insert;
+        model::ChannelId channel;
+        model::DeviceId device;
+        juce::String deviceName, where;
+    };
+    TargetPlace findTargetPlace (const model::ParameterTarget&) const;
+    /** An automation target with where it is, for automation clips: "Filter (Master): Cutoff",
+        "3 Drums: Volume", "Bass: Pan". Falls back to describeTarget when it is gone. */
+    juce::String describeTargetPlace (const model::ParameterTarget&) const;
+
+    /** The automation targets the Mixer and the Channel Rack outline: those of the automation clips selected in
+        the Playlist and of the clip the Automation editor shows, each source setting its own. View state, not
+        saved and not a command; a change sends a change message. */
+    enum class HighlightSource
+    {
+        playlist,
+        automationEditor
+    };
+    void setHighlightedTargets (HighlightSource, std::vector<model::ParameterTarget>);
+    std::vector<model::ParameterTarget> getHighlightedTargets() const;
+    /** Whether a highlighted target is on this insert (its volume, pan or an effect), this channel (its volume,
+        pan or instrument), or is a control of this device. */
+    bool isInsertHighlighted (model::InsertId) const;
+    bool isChannelHighlighted (model::ChannelId) const;
+    bool isDeviceHighlighted (model::DeviceId) const;
 
     /** The song's title and author for exported files' tags: a saved project without a title of its own gets
         its name (the folder's) as the title. */
@@ -277,6 +316,7 @@ private:
     };
     std::unique_ptr<ControlWatcher> controlWatcher;
     std::optional<model::ParameterTarget> lastMoved;
+    std::map<HighlightSource, std::vector<model::ParameterTarget>> highlighted;
     std::set<model::DeviceId> devicesShown;
     model::PatternId currentPattern;
     model::ChannelId selectedChannel;

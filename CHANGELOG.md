@@ -9,6 +9,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - A knob turned in a plugin's own window can be undone: each drag is one **Ctrl+Z** step, which puts the knob
   back where it was. Before, Ctrl+Z skipped it and undid the change before it instead.
+- An agent could only see a plugin's first 80 or so settings, so on big plugins (Ample Guitar's amp section, for
+  one) it could not find what to change. It now pages through all of them or looks them up by name.
 - The Browser scrolls sideways when a name is longer than it is wide, so long sample, plugin and project names
   can be read in full instead of being cut off.
 - Deleting a channel deletes its mixer insert too, unless another channel or insert still uses it. It used to stay
@@ -98,6 +100,16 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
     out, untick the option or make a new token), and what an agent can't do.
 - **The music harness's command-line MCP server** (`python -m spinus_ai.harness mcp`) answers bad input with an
   error instead of stopping.
+
+### Automation clips: see what a clip moves
+
+- Click an automation clip on the Playlist (or open it in the Automation editor) and what it moves is outlined
+  in yellow: the effect's slot and its insert's strip in the Mixer, the strip for an insert's volume or pan, or
+  the channel in the Channel Rack for a channel's volume, pan or instrument. The outline goes when the clip is
+  no longer selected.
+- An automation clip's menu (**Shift+right-click**) has **Show ...**, for example **Show Filter on
+  Master**: it opens the Mixer at that insert, or the Channel Rack at that channel, and the device's window.
+- The clip's label names the device and where it is: **Filter (Master): Cutoff**, **3 Drums: Volume**.
 
 ### Track creator: remembered per project
 

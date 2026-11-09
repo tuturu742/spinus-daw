@@ -152,6 +152,7 @@ def schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required}
 
 
+MOST_SETTINGS = 80  # settings sound_settings shows in one answer
 PART = {"type": "string", "description": "The part (channel) by its name, as song_overview lists it"}
 BARS = {"type": "string", "description": "Bars, from 1: '9' or '9-16', or a section's name ('Chorus', 'Verse 2')"}
 NOTES = {
@@ -181,9 +182,16 @@ TOOLS = [
     ),
     Tool(
         "sound_settings",
-        "A part's instrument (or one of its insert's effects) and its settings with the values they show now.",
+        "A part's instrument (or one of its insert's effects) and its settings with the values they show now, "
+        f"{MOST_SETTINGS} at a time: 'find' keeps those whose name has all its words, 'start' pages on through a "
+        "plugin with many.",
         schema(
-            {"part": PART, "effect": {"type": "string", "description": "An effect on the part's insert, by name"}},
+            {
+                "part": PART,
+                "effect": {"type": "string", "description": "An effect on the part's insert, by name"},
+                "find": {"type": "string", "description": "Words the setting's name must have ('amp gain')"},
+                "start": {"type": "integer", "description": "The first setting to show, from 1 (default 1)"},
+            },
             ["part"],
         ),
     ),
@@ -440,6 +448,10 @@ class ProjectHarness:
             str(k): [p for p in v if isinstance(p, dict)]
             for k, v in (context.get("deviceParameters") or {}).items()
             if isinstance(v, list)
+        }
+        # Device ID -> how many settings it has, for those Spinus sent only some of.
+        self.parameter_counts: dict[str, int] = {
+            str(k): int(v) for k, v in (context.get("deviceParameterCounts") or {}).items() if isinstance(v, int)
         }
         self.measured: dict[str, Any] = dict(context.get("measured") or {})
         self.steps: list[dict[str, Any]] = []
@@ -981,18 +993,34 @@ class ProjectHarness:
                 return dict(device)
         raise Mistake(f"{channel.get('name')}'s insert has no effect '{effect}'")
 
-    def tool_sound_settings(self, part: str, effect: str = "") -> str:
+    def tool_sound_settings(self, part: str, effect: str = "", find: str = "", start: int = 1) -> str:
         device = self.device_of(part, effect)
-        listed = self.parameters.get(str(device.get("id")), [])
+        key = str(device.get("id"))
+        listed = self.parameters.get(key, [])
         if not listed:
             stored = device.get("parameters") or {}
             return json.dumps({"device": self.device_name(device), "settings": stored or "not known here"})
-        return json.dumps(
-            {
-                "device": self.device_name(device),
-                "settings": {str(p.get("name") or p.get("id")): p.get("text", "") for p in listed[:80]},
-            }
-        )
+        words = find.lower().split()
+        found = [p for p in listed if all(w in str(p.get("name") or p.get("id")).lower() for w in words)]
+        first = max(1, int(start))
+        shown = found[first - 1 : first - 1 + MOST_SETTINGS]
+        answer: dict[str, Any] = {
+            "device": self.device_name(device),
+            "settings": {str(p.get("name") or p.get("id")): p.get("text", "") for p in shown},
+        }
+        what = f"settings matching '{find}'" if words else "settings"
+        if shown:
+            answer["shown"] = f"{what} {first}-{first + len(shown) - 1} of {len(found)}"
+        else:
+            answer["shown"] = f"no {what}" + (f" from {first} (there are {len(found)})" if found else "")
+        if first - 1 + len(shown) < len(found):
+            answer["more"] = f"start={first + len(shown)} shows the next ones; find narrows them by name"
+        if key in self.parameter_counts and not words:
+            answer["note"] = (
+                f"the device has {self.parameter_counts[key]} settings; Spinus sent the first {len(listed)}. "
+                "set_sound still sets any of them by name"
+            )
+        return json.dumps(answer)
 
     def tool_write_part(self, part: str, bars: str, notes: str, loop_bars: int = 0, replace: bool = True) -> str:
         channel = self.part(part)
