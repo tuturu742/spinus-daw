@@ -16,6 +16,11 @@ namespace spinus
 class Session;
 }
 
+namespace spinus::engine
+{
+class ExportJob;
+}
+
 namespace spinus::ai
 {
 
@@ -191,6 +196,7 @@ private:
     int changes = 0;
     int undoMark = 0;     // undo steps there were when the first agent connected
     juce::var lastRender; // the last render's numbers, for the harness's check
+    std::vector<std::shared_ptr<std::unique_ptr<engine::ExportJob>>> renders; // running renders, ours to free
     juce::var harnessTools;
 
     std::mutex socketLock;

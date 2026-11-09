@@ -1582,20 +1582,28 @@ void AgentInterface::render (bool stems, const ToolReply& reply)
     for (auto& s : sectionsOf (project))
         marks.emplace_back (s.name, (double)s.start * secondsPerTick);
 
+    // The job is ours (freed with us if a render is still running); its callback only points back weakly.
     auto job = std::make_shared<std::unique_ptr<engine::ExportJob>>();
+    std::weak_ptr<std::unique_ptr<engine::ExportJob>> weakJob = job;
     auto stillAlive = alive;
     *job = session.createExportJob (
         scratch.getChildFile ("Mix.wav"), settings,
-        [this, reply, scratch, marks, job, stillAlive] (const engine::ExportJob::Result& result)
+        [this, reply, scratch, marks, weakJob, stillAlive] (const engine::ExportJob::Result& result)
         {
             struct Cleanup
             {
                 juce::File folder;
                 ~Cleanup() { folder.deleteRecursively(); }
             } cleanup { scratch };
-            juce::MessageManager::callAsync ([job] { job->reset(); });
             if (! *stillAlive)
                 return;
+            // Not freed here, inside its own callback: a moment later.
+            juce::MessageManager::callAsync (
+                [this, weakJob, stillAlive]
+                {
+                    if (*stillAlive)
+                        std::erase_if (renders, [&] (const auto& r) { return r == weakJob.lock(); });
+                });
             if (! result.ok || result.files.empty())
                 return reply (text ("The render failed: " + result.error, true));
             auto mix = cli::measureFile (result.files[0]);
@@ -1640,6 +1648,7 @@ void AgentInterface::render (bool stems, const ToolReply& reply)
         scratch.deleteRecursively();
         return reply (text ("Nothing to render: the song is empty.", true));
     }
+    renders.push_back (job);
     (*job)->start();
 }
 
