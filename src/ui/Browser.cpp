@@ -34,6 +34,11 @@ juce::Colour badgeColour (const juce::String& badge)
         return juce::Colour (0xffc95c5c);
     return juce::Colour (0xff808080);
 }
+
+int textWidth (const juce::String& text, float size, int style = juce::Font::plain)
+{
+    return juce::GlyphArrangement::getStringWidthInt (juce::Font (juce::FontOptions (size, style)), text);
+}
 } // namespace
 
 //==============================================================================
@@ -216,6 +221,10 @@ void Browser::rebuildRows()
                                       (int)i });
     }
 
+    int widest = 0;
+    for (const auto& r : rows)
+        widest = juce::jmax (widest, getRowContentWidth (r));
+    list.setMinimumContentWidth (widest); // wider than the dock: the list scrolls sideways
     list.updateContent();
     list.repaint();
 
@@ -672,6 +681,43 @@ void Browser::useRow (int row)
 }
 
 //==============================================================================
+int Browser::getRowContentWidth (const Row& r)
+{
+    // The same fonts and spaces as paintListBoxItem, with nothing cut short.
+    const auto noteWidth = [&r] (float size, int style = juce::Font::plain)
+    { return r.note.isEmpty() ? 0 : textWidth (r.note, size, style) + 8; };
+    constexpr int end = 8;
+
+    switch (r.kind)
+    {
+    case RowKind::section:
+    case RowKind::group:
+    {
+        const bool section = r.kind == RowKind::section;
+        return (section ? 6 : 16) + 14 + textWidth (r.text, section ? 13.0f : 12.0f, juce::Font::bold) +
+               (r.note.isEmpty() ? 0 : 96) + end;
+    }
+    case RowKind::project:
+        return (r.depth == 0 ? 18 : 30 + 12 * (r.depth - 1)) + 16 +
+               textWidth (r.text, 12.5f, r.key == "demo" ? juce::Font::bold : juce::Font::plain) +
+               noteWidth (10.5f, r.available ? juce::Font::plain : juce::Font::italic) + end;
+    case RowKind::device:
+    case RowKind::problem:
+        return 30 + textWidth (r.text, 12.5f) + noteWidth (10.5f) + (r.badge.isEmpty() ? 0 : 40) + end;
+    case RowKind::message:
+        return 30 + 12 * r.depth + textWidth (r.text, 11.5f, juce::Font::italic) + end;
+    case RowKind::folder:
+    case RowKind::projectFolder:
+        return 16 + 12 * r.depth + 14 + textWidth (r.text, 12.5f, r.depth == 0 ? juce::Font::bold : juce::Font::plain) +
+               noteWidth (10.5f) + end;
+    case RowKind::sample:
+        return 30 + 12 * r.depth + 14 + textWidth (r.text, 12.5f) + noteWidth (10.5f) + 38 + end;
+    case RowKind::action:
+        return 22 + textWidth (r.text, 12.0f) + end;
+    }
+    return 0;
+}
+
 void Browser::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool)
 {
     if (! juce::isPositiveAndBelow (row, (int)rows.size()))
