@@ -9,6 +9,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - A new automation clip goes where you are working: over the area selected in the Playlist's timeline if
   there is one, else four bars from the song position. Before, it always started at the beginning of the song.
+- Automation of Spinus's own devices (Filter, EQ, Delay, compressor and the rest, and the 3x Osc, Sampler and
+  Drum Machine) now changes their sound. Before, an automation clip moved the setting but the sound stayed where
+  the knob was last turned by hand, and the device's window did not move either until it was closed and opened
+  again. Its knobs now follow the automation while the song plays. Other plugins were not affected.
 - A knob turned in a plugin's own window can be undone: each drag is one **Ctrl+Z** step, which puts the knob
   back where it was. Before, Ctrl+Z skipped it and undid the change before it instead.
 - An agent's song summary (and `spinus --check`) now lists each Playlist lane's clips: where they start, how long

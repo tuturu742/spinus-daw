@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DelayEngine.h"
+#include "dsp/LiveSetting.h"
 #include "dsp/OwnEffect.h"
 
 namespace spinus::dsp
@@ -40,8 +41,8 @@ public:
 
 private:
     DelayEngine engine;
-    std::atomic<float>*sync = nullptr, *note = nullptr, *time = nullptr, *feedback = nullptr, *mode = nullptr,
-    *lowCut = nullptr, *highCut = nullptr, *width = nullptr, *mix = nullptr;
+    param::Live sync = nullptr, note = nullptr, time = nullptr, feedback = nullptr, mode = nullptr, lowCut = nullptr,
+                highCut = nullptr, width = nullptr, mix = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DelayProcessor)
 };

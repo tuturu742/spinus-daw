@@ -45,7 +45,7 @@ CompressorProcessor::CompressorProcessor()
                      return layout;
                  }())
 {
-    auto get = [this] (const char* id) { return parameters.getRawParameterValue (id); };
+    auto get = [this] (const char* id) { return param::live (parameters, id); };
     threshold = get ("threshold");
     ratio = get ("ratio");
     knee = get ("knee");
@@ -112,7 +112,7 @@ LimiterProcessor::LimiterProcessor()
                      return layout;
                  }())
 {
-    auto get = [this] (const char* id) { return parameters.getRawParameterValue (id); };
+    auto get = [this] (const char* id) { return param::live (parameters, id); };
     input = get ("input");
     ceiling = get ("ceiling");
     release = get ("release");
@@ -189,7 +189,7 @@ GateProcessor::GateProcessor()
                      return layout;
                  }())
 {
-    auto get = [this] (const char* id) { return parameters.getRawParameterValue (id); };
+    auto get = [this] (const char* id) { return param::live (parameters, id); };
     threshold = get ("threshold");
     hysteresis = get ("hysteresis");
     range = get ("range");

@@ -80,12 +80,12 @@ BeatSlicerProcessor::BeatSlicerProcessor()
     : juce::AudioPluginInstance (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "BeatSlicerParameters", makeLayout())
 {
-    gain = parameters.getRawParameterValue ("gain");
-    attack = parameters.getRawParameterValue ("attack");
-    release = parameters.getRawParameterValue ("release");
-    coarse = parameters.getRawParameterValue ("coarse");
-    fine = parameters.getRawParameterValue ("fine");
-    playToEnd = parameters.getRawParameterValue ("playToEnd");
+    gain = param::live (parameters, "gain");
+    attack = param::live (parameters, "attack");
+    release = param::live (parameters, "release");
+    coarse = param::live (parameters, "coarse");
+    fine = param::live (parameters, "fine");
+    playToEnd = param::live (parameters, "playToEnd");
     publish();
 }
 

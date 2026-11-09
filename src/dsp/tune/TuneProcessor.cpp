@@ -61,13 +61,13 @@ TuneProcessor::TuneProcessor()
                                      .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "TuneParameters", makeLayout())
 {
-    key = parameters.getRawParameterValue ("key");
-    scale = parameters.getRawParameterValue ("scale");
-    retune = parameters.getRawParameterValue ("retune");
-    humanize = parameters.getRawParameterValue ("humanize");
-    formants = parameters.getRawParameterValue ("formants");
-    range = parameters.getRawParameterValue ("range");
-    mix = parameters.getRawParameterValue ("mix");
+    key = param::live (parameters, "key");
+    scale = param::live (parameters, "scale");
+    retune = param::live (parameters, "retune");
+    humanize = param::live (parameters, "humanize");
+    formants = param::live (parameters, "formants");
+    range = param::live (parameters, "range");
+    mix = param::live (parameters, "mix");
     parameters.addParameterListener ("range", this);
     updateLatency();
 }

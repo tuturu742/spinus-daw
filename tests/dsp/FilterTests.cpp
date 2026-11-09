@@ -287,6 +287,50 @@ TEST_CASE ("The Filter on a mixer insert filters a channel", "[dsp][filter][audi
     CHECK (render() < open * 0.3f); // a saw at C5 loses most of its energy below 100 Hz
 }
 
+TEST_CASE ("The Filter follows a host's automation, and so does its window", "[dsp][filter]")
+{
+    // A host's automation (Tracktion's included) sets a parameter with setValue(), which tells no listener: the
+    // sound and the knobs must follow it all the same, not stay where the knob was last turned.
+    FilterProcessor filter;
+    set (filter, "cutoff", 20000.0f);
+    set (filter, "slope", 1.0f);
+    auto* cutoff = filter.getParameterState().getParameter ("cutoff");
+    std::unique_ptr<juce::AudioProcessorEditor> editor (filter.createEditorAndMakeActive());
+
+    cutoff->setValue (cutoff->convertTo0to1 (300.0f));
+    CHECK (filter.getSettings().cutoffHz == Catch::Approx (300.0f).epsilon (0.01));
+
+    filter.prepareToPlay (rate, block);
+    const auto input = sine (3000.0, 0.5);
+    juce::AudioBuffer<float> buffer (2, block);
+    juce::MidiBuffer midi;
+    std::vector<float> out;
+    for (size_t start = 0; start + (size_t)block <= input.size(); start += (size_t)block)
+    {
+        for (int c = 0; c < 2; ++c)
+            for (int i = 0; i < block; ++i)
+                buffer.setSample (c, i, input[start + (size_t)i]);
+        filter.processBlock (buffer, midi);
+        for (int i = 0; i < block; ++i)
+            out.push_back (buffer.getSample (0, i));
+    }
+    const auto gain = test::checks::rms (out, (int64_t)(0.25 * rate), (int64_t)out.size()) / (0.5f / std::sqrt (2.0f));
+    CHECK (decibels (gain) < -40.0f); // 24 dB a octave, over three octaves above 300 Hz
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    bool knobFollows = false;
+    std::function<void (juce::Component&)> look = [&] (juce::Component& c)
+    {
+        if (auto* slider = dynamic_cast<juce::Slider*> (&c))
+            knobFollows = knobFollows || std::abs (slider->getValue() - 300.0) < 1.0;
+        for (auto* child : c.getChildren())
+            look (*child);
+    };
+    look (*editor);
+    CHECK (knobFollows);
+    filter.editorBeingDeleted (editor.get());
+}
+
 TEST_CASE ("Filter window screenshot for the manual", "[.screenshot][filter]")
 {
     FilterProcessor filter;

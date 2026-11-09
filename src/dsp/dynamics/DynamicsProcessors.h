@@ -3,6 +3,7 @@
 #include "CompressorEngine.h"
 #include "GateEngine.h"
 #include "LimiterEngine.h"
+#include "dsp/LiveSetting.h"
 #include "dsp/OwnEffect.h"
 
 namespace spinus::dsp
@@ -32,8 +33,8 @@ public:
 
 private:
     CompressorEngine engine;
-    std::atomic<float>*threshold = nullptr, *ratio = nullptr, *attack = nullptr, *release = nullptr, *knee = nullptr,
-    *makeup = nullptr, *autoMakeup = nullptr, *mix = nullptr, *detector = nullptr, *sidechain = nullptr;
+    param::Live threshold = nullptr, ratio = nullptr, attack = nullptr, release = nullptr, knee = nullptr,
+                makeup = nullptr, autoMakeup = nullptr, mix = nullptr, detector = nullptr, sidechain = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompressorProcessor)
 };
@@ -71,8 +72,7 @@ private:
 
     LimiterEngine engine;
     double preparedRate = 0.0;
-    std::atomic<float>*input = nullptr, *ceiling = nullptr, *release = nullptr, *lookahead = nullptr,
-    *truePeak = nullptr;
+    param::Live input = nullptr, ceiling = nullptr, release = nullptr, lookahead = nullptr, truePeak = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LimiterProcessor)
 };
@@ -100,8 +100,8 @@ public:
 
 private:
     GateEngine engine;
-    std::atomic<float>*threshold = nullptr, *hysteresis = nullptr, *range = nullptr, *attack = nullptr, *hold = nullptr,
-    *release = nullptr, *sidechain = nullptr;
+    param::Live threshold = nullptr, hysteresis = nullptr, range = nullptr, attack = nullptr, hold = nullptr,
+                release = nullptr, sidechain = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateProcessor)
 };
