@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- An agent's song summary (and `spinus --check`) now lists each Playlist lane's clips: where they start, how long
+  they are and what they play. Before, it only counted them, so an agent could not move clips between lanes.
 - Deleting a channel deletes its mixer insert too, unless another channel or insert still uses it. It used to stay
   behind in the Mixer. Ctrl+Z brings both back.
 - A plugin that sends out a burst far louder than any real sound (Constant Signal Generator from the SWH pack
