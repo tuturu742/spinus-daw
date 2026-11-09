@@ -114,6 +114,13 @@ public:
         g.setColour (theme.get ("border"));
         g.fillRect (getLocalBounds().removeFromBottom (1));
 
+        // What the selected automation clip moves (the channel's volume, pan or instrument): outlined.
+        if (rack.session.isChannelHighlighted (id))
+        {
+            g.setColour (theme.get ("accent"));
+            g.drawRoundedRectangle (getLocalBounds().withTrimmedBottom (1).reduced (2, 1).toFloat(), 4.0f, 2.0f);
+        }
+
         // Mute light.
         const auto light = juce::Rectangle<float> (8.0f, (float)rowHeight / 2.0f - 5.0f, 10.0f, 10.0f);
         g.setColour (muted ? theme.get ("textDim").withAlpha (0.3f) : juce::Colour (0xff6ccf6a));

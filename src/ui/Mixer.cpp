@@ -320,6 +320,12 @@ public:
             g.setColour (theme.get ("accent"));
             g.drawRect (getLocalBounds().reduced (1, 0), 1);
         }
+        // What the selected automation clip moves (its volume, pan or one of its effects): a wider outline.
+        if (mixer.isStripHighlighted (id))
+        {
+            g.setColour (theme.get ("accent"));
+            g.drawRoundedRectangle (getLocalBounds().reduced (2, 1).toFloat(), 3.0f, 2.0f);
+        }
 
         g.setColour (onHeader.withAlpha (0.7f));
         g.setFont (juce::FontOptions (11.0f));
@@ -729,6 +735,11 @@ public:
             const bool filled = slot < (int)effects.size();
             g.setColour (slot == dragTarget ? theme.get ("accentAlt") : theme.get ("panel"));
             g.fillRoundedRectangle (box, 3.0f);
+            if (filled && mixer.session.isDeviceHighlighted (effects[(size_t)slot].device.id))
+            {
+                g.setColour (theme.get ("accent")); // the selected automation clip moves this effect
+                g.drawRoundedRectangle (box.reduced (1.0f), 3.0f, 1.5f);
+            }
 
             g.setColour (theme.get ("textDim"));
             g.drawText (juce::String (slot + 1), box.removeFromLeft (20.0f), juce::Justification::centred);
@@ -1045,6 +1056,16 @@ void Mixer::handleAsyncUpdate()
 }
 
 int Mixer::getNumShownSlots() const { return details->getNumSlots(); }
+
+bool Mixer::isStripHighlighted (model::InsertId id) const { return session.isInsertHighlighted (id); }
+
+bool Mixer::isEffectHighlighted (model::DeviceId id) const
+{
+    const auto* insert = session.getProject().findInsert (selected);
+    return insert != nullptr && session.isDeviceHighlighted (id) &&
+           std::any_of (insert->effects.begin(), insert->effects.end(),
+                        [id] (auto& slot) { return slot.device.id == id; });
+}
 
 void Mixer::layoutDetails()
 {

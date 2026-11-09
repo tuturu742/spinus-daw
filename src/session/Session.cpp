@@ -754,6 +754,138 @@ juce::String Session::getDeviceTitle (model::DeviceId id) const
     return {};
 }
 
+Session::TargetPlace Session::findTargetPlace (const model::ParameterTarget& target) const
+{
+    using K = model::ParameterTarget::Kind;
+    const auto& p = getProject();
+    TargetPlace place;
+
+    auto insertName = [&p] (model::InsertId id)
+    {
+        if (id == model::masterInsertId)
+            return juce::String ("Master");
+        for (size_t i = 0; i < p.mixer.inserts.size(); ++i)
+            if (p.mixer.inserts[i].id == id)
+                return juce::String ((int)i + 1) + " " + p.mixer.inserts[i].name;
+        return juce::String();
+    };
+
+    switch (target.kind)
+    {
+    case K::channelVolume:
+    case K::channelPan:
+        if (auto* c = p.findChannel (target.channel))
+        {
+            place.channel = c->id;
+            place.where = c->name;
+        }
+        break;
+    case K::insertVolume:
+    case K::insertPan:
+        if (p.findInsert (target.insert) != nullptr)
+        {
+            place.insert = target.insert;
+            place.where = insertName (target.insert);
+        }
+        break;
+    case K::deviceParameter:
+        for (auto& channel : p.channels)
+            if (channel.instrument && channel.instrument->id == target.device)
+            {
+                place.channel = channel.id;
+                place.device = target.device;
+                place.deviceName = model::getDeviceDisplayName (*channel.instrument);
+                place.where = channel.name;
+                return place;
+            }
+        {
+            auto search = [&] (const model::Insert& insert)
+            {
+                for (auto& slot : insert.effects)
+                    if (slot.device.id == target.device)
+                    {
+                        place.insert = insert.id;
+                        place.device = target.device;
+                        place.deviceName = model::getDeviceDisplayName (slot.device);
+                        place.where = insertName (insert.id);
+                        return true;
+                    }
+                return false;
+            };
+            if (! search (p.mixer.master))
+                for (auto& insert : p.mixer.inserts)
+                    if (search (insert))
+                        break;
+            break;
+        }
+    }
+    return place;
+}
+
+juce::String Session::describeTargetPlace (const model::ParameterTarget& target) const
+{
+    using K = model::ParameterTarget::Kind;
+    const auto place = findTargetPlace (target);
+    if (place.where.isEmpty())
+        return describeTarget (target);
+
+    switch (target.kind)
+    {
+    case K::channelVolume:
+    case K::insertVolume:
+        return place.where + ": Volume";
+    case K::channelPan:
+    case K::insertPan:
+        return place.where + ": Pan";
+    case K::deviceParameter:
+        break;
+    }
+    auto name = target.parameterId;
+    if (auto* parameter = adapter->findParameter (target))
+        name = parameter->getParameterName();
+    return place.deviceName + " (" + place.where + "): " + name;
+}
+
+void Session::setHighlightedTargets (HighlightSource source, std::vector<model::ParameterTarget> targets)
+{
+    auto& current = highlighted[source];
+    if (current == targets)
+        return;
+    current = std::move (targets);
+    sendChangeMessage();
+}
+
+std::vector<model::ParameterTarget> Session::getHighlightedTargets() const
+{
+    std::vector<model::ParameterTarget> all;
+    for (auto& [_, targets] : highlighted)
+        for (auto& target : targets)
+            if (std::find (all.begin(), all.end(), target) == all.end())
+                all.push_back (target);
+    return all;
+}
+
+bool Session::isInsertHighlighted (model::InsertId id) const
+{
+    const auto targets = getHighlightedTargets();
+    return id.isValid() &&
+           std::any_of (targets.begin(), targets.end(), [&] (auto& t) { return findTargetPlace (t).insert == id; });
+}
+
+bool Session::isChannelHighlighted (model::ChannelId id) const
+{
+    const auto targets = getHighlightedTargets();
+    return id.isValid() &&
+           std::any_of (targets.begin(), targets.end(), [&] (auto& t) { return findTargetPlace (t).channel == id; });
+}
+
+bool Session::isDeviceHighlighted (model::DeviceId id) const
+{
+    const auto targets = getHighlightedTargets();
+    return id.isValid() &&
+           std::any_of (targets.begin(), targets.end(), [&] (auto& t) { return findTargetPlace (t).device == id; });
+}
+
 bool Session::isMetronomeOn() const { return edit->clickTrackEnabled.get(); }
 
 void Session::setMetronome (bool on)
