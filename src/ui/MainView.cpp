@@ -589,6 +589,7 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
         auto playlist = std::make_unique<Playlist> (session);
         playlist->onOpenAudioClip = [this] (model::ClipId clip) { openInSpinusTune (clip); };
         playlist->onOpenAutomationClip = [this] (model::ClipId clip) { openAutomationClip (clip); };
+        playlist->onShowAutomationTarget = [this] (const model::ParameterTarget& t) { showAutomationTarget (t); };
         playlist->onProblem = [this] (const juce::String& text) { hintBar.showMessage (text); };
         workspace.addPanel (std::move (playlist));
     }
@@ -1351,6 +1352,43 @@ bool MainView::moveAudioTrackToRack (model::ChannelId track, const juce::File& f
                          " is now a Sampler channel in the Channel Rack, and its audio track is gone from the "
                          "Playlist (Ctrl+Z twice brings the track back)");
     return true;
+}
+
+void MainView::showAutomationTarget (const model::ParameterTarget& target)
+{
+    const auto place = session.findTargetPlace (target);
+    if (place.insert.isValid())
+    {
+        if (auto* mixer = dynamic_cast<Mixer*> (workspace.getPanel ("mixer")))
+        {
+            workspace.showPanel ("mixer");
+            mixer->selectInsert (place.insert);
+            const auto& inserts = session.getProject().mixer.inserts;
+            const auto index =
+                std::find_if (inserts.begin(), inserts.end(), [&] (auto& i) { return i.id == place.insert; }) -
+                inserts.begin();
+            mixer->scrollToStrip (place.insert == model::masterInsertId ? 0 : (int)index + 1);
+            if (place.device.isValid())
+                mixer->showEffectWindow (place.device);
+        }
+    }
+    else if (const auto* channel = session.getProject().findChannel (place.channel))
+    {
+        session.setSelectedChannel (channel->id);
+        if (channel->audioTrack)
+            workspace.showPanel ("audioTracks");
+        else if (auto* rack = dynamic_cast<ChannelRack*> (workspace.getPanel ("channelRack")))
+        {
+            workspace.showPanel ("channelRack");
+            if (rack->getShownGroup() != ChannelRack::allGroups && rack->getShownGroup() != channel->group &&
+                ! (rack->getShownGroup() == ChannelRack::noGroup && channel->group.isEmpty()))
+                rack->showGroup (ChannelRack::allGroups); // its group is filtered out
+        }
+        if (place.device.isValid() && ! session.showDeviceWindow (place.device))
+            hintBar.showMessage ("The window of " + place.deviceName +
+                                 " cannot be opened (its plugin is missing or "
+                                 "has no window).");
+    }
 }
 
 void MainView::openAutomationClip (model::ClipId clip)

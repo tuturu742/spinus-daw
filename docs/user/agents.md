@@ -69,6 +69,10 @@ ready-made requests. Each starts the agent on a common job, with steps that work
 | **Check and fix the mix** | A goal, if you have one | Measures, fixes one thing at a time, measures again, tells you the numbers before and after |
 | **Shape a sound** | The part, and how it should sound | Changes its settings, a preset or adds an effect |
 
+A plugin with hundreds of settings (a sampled guitar, a big synth) is read 80 settings at a time: the agent pages
+through them or looks them up by name ("amp gain"), so it reaches every section of the plugin, not only the
+first.
+
 ## Tools that only look
 
 Each tool tells the agent's client what it does: **only looks** (the song's summary, a part's notes, a sound's

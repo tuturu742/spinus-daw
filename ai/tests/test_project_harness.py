@@ -319,6 +319,31 @@ def test_shaping_a_sound_moves_its_settings_as_they_show() -> None:
     assert "didn't send" in h.call("shape_sound", {"part": "Pad", "words": ["darker"]})[0]
 
 
+def test_a_plugin_with_many_settings_is_read_in_pages_and_by_name() -> None:
+    eq = [{"id": f"eq{i}", "name": f"EQ Band {i}", "text": "0 dB"} for i in range(1, 251)]
+    amp = [{"id": f"amp{i}", "name": f"Amp {n}", "text": "5"} for i, n in enumerate(["Gain", "Bass", "Treble"])]
+    h = harness(deviceParameters={"31": [*eq, *amp]}, deviceParameterCounts={"31": 900})
+
+    first = json.loads(h.call("sound_settings", {"part": "Bass"})[0])
+    assert len(first["settings"]) == project_harness.MOST_SETTINGS
+    assert first["shown"] == "settings 1-80 of 253" and "start=81" in first["more"]
+    assert "900 settings" in first["note"] and "first 253" in first["note"]
+
+    last = json.loads(h.call("sound_settings", {"part": "Bass", "start": 241})[0])
+    assert list(last["settings"])[-3:] == ["Amp Gain", "Amp Bass", "Amp Treble"]
+    assert last["shown"] == "settings 241-253 of 253" and "more" not in last
+
+    amp_only = json.loads(h.call("sound_settings", {"part": "Bass", "find": "amp"})[0])
+    assert amp_only["settings"] == {"Amp Gain": "5", "Amp Bass": "5", "Amp Treble": "5"}
+    assert amp_only["shown"] == "settings matching 'amp' 1-3 of 3" and "note" not in amp_only
+    assert json.loads(h.call("sound_settings", {"part": "Bass", "find": "band 250"})[0])["settings"] == {
+        "EQ Band 250": "0 dB"
+    }
+    assert json.loads(h.call("sound_settings", {"part": "Bass", "find": "reverb"})[0])["shown"] == (
+        "no settings matching 'reverb'"
+    )
+
+
 def test_the_checks_find_masking_and_a_missing_limiter() -> None:
     issues = harness().call("check", {})[0]
     assert "Keys and Pad, Verse: both held in the same register" in issues

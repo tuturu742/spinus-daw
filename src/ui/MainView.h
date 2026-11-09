@@ -341,6 +341,10 @@ public:
 public:
     /** Shows an automation clip in the Automation editor (and the Playlist behind it). */
     void openAutomationClip (model::ClipId);
+    /** Shows what an automation target moves (the automation clip menu's "Show ..."): the Mixer with its insert
+        selected, or the Channel Rack (Audio tracks for an audio track) with its channel selected, and the device's
+        own window for a device's control. */
+    void showAutomationTarget (const model::ParameterTarget&);
 
     /** Adds audio files as new audio tracks: each on the Playlist at the song's start, below the clips
         there. `fromRack`: they were dropped on the Channel Rack and are too long for a Sampler. */

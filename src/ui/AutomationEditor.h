@@ -153,6 +153,11 @@ private:
     model::Ticks snap = model::ticksPerQuarterNote / 4;
     double pixelsPerBeat = 48.0, scrollTicks = 0.0, playheadTicks = -1.0;
 
+    /** The clip's target is outlined in the Mixer and the Channel Rack while the editor is shown. */
+    class ShownWatcher;
+    std::unique_ptr<ShownWatcher> shownWatcher;
+    void updateHighlight();
+
     std::unique_ptr<Canvas> canvas;
     std::unique_ptr<Ruler> ruler;
     std::unique_ptr<Axis> axis;

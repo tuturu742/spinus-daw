@@ -167,6 +167,25 @@ the time and value there.
 1/4 beat). With two or more points selected, it fills the time between the first and the last selected
 point, between their lowest and highest values; otherwise it fills the whole clip from 0 to 100%.
 
+### What a clip moves
+
+An automation clip's label says what it moves and where that is: **Filter (Master): Cutoff** is the
+Cutoff of the Filter on the Master, **3 Drums: Volume** the volume of mixer insert 3, **Bass: Pan** the
+pan of the Bass channel.
+
+Click an automation clip to select it, and what it moves is outlined in yellow:
+
+- in the **Mixer**, the strip of the insert (for its volume, its pan or one of its effects), and the effect's
+  slot while that insert is selected;
+- in the **Channel Rack**, the channel (for its volume, its pan or its instrument).
+
+Select several clips to see all their targets. The clip shown in the Automation editor stays outlined while
+the editor is open. The outline goes when the clip is no longer selected.
+
+**Shift+right-click** an automation clip for **Show ...**, for example **Show Filter on Master**: it
+opens the Mixer with that insert selected, or the Channel Rack with that channel selected, and opens the
+device's own window when the clip moves one of its settings.
+
 **On the Playlist itself** you can still drag a clip's points up, down and sideways (hold **Alt** to place
 off the grid) and right-click a point to remove it. Move, resize and delete the clip as other clips
 (right-click away from the points deletes it).

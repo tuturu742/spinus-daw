@@ -743,18 +743,58 @@ AutomationEditor::AutomationEditor (Session& s)
 
     session.addChangeListener (this);
     historyListener = session.getHistory().addListener ([this] (const commands::ChangeSet&) { triggerAsyncUpdate(); });
+    shownWatcher = std::make_unique<ShownWatcher> (*this);
     reload();
     startTimerHz (30);
 }
 
 AutomationEditor::~AutomationEditor()
 {
+    shownWatcher = nullptr;
+    session.setHighlightedTargets (Session::HighlightSource::automationEditor, {});
     cancelPendingUpdate();
     session.getHistory().removeListener (historyListener);
     session.removeChangeListener (this);
 }
 
 //==============================================================================
+/** Notices the editor (or the frame or window it is in) being shown or hidden. */
+class AutomationEditor::ShownWatcher final : public juce::ComponentMovementWatcher
+{
+public:
+    explicit ShownWatcher (AutomationEditor& e) : juce::ComponentMovementWatcher (&e), editor (e) {}
+
+    void componentVisibilityChanged (juce::Component& c) override
+    {
+        juce::ComponentMovementWatcher::componentVisibilityChanged (c);
+        editor.updateHighlight();
+    }
+    void componentParentHierarchyChanged (juce::Component& c) override
+    {
+        juce::ComponentMovementWatcher::componentParentHierarchyChanged (c);
+        editor.updateHighlight();
+    }
+    using juce::ComponentMovementWatcher::componentMovedOrResized;
+    void componentMovedOrResized (bool, bool) override {}
+    void componentPeerChanged() override {}
+    void componentVisibilityChanged() override {}
+
+private:
+    AutomationEditor& editor;
+};
+
+void AutomationEditor::updateHighlight()
+{
+    // Shown: the editor and every component it is in are visible (a closed panel's frame is hidden).
+    bool shown = true;
+    for (auto* c = (juce::Component*)this; c != nullptr && shown; c = c->getParentComponent())
+        shown = c->isVisible();
+    const auto* automation = shown ? findAutomation() : nullptr;
+    session.setHighlightedTargets (Session::HighlightSource::automationEditor,
+                                   automation != nullptr ? std::vector { automation->target }
+                                                         : std::vector<model::ParameterTarget>());
+}
+
 const model::Clip* AutomationEditor::findClip() const
 {
     const auto* clip = session.getProject().findClip (clipId);
@@ -795,8 +835,9 @@ void AutomationEditor::reload()
         selection.clear();
     points = std::move (fresh);
 
-    title.setText (automation != nullptr ? session.describeTarget (automation->target) : juce::String(),
+    title.setText (automation != nullptr ? session.describeTargetPlace (automation->target) : juce::String(),
                    juce::dontSendNotification);
+    updateHighlight();
     emptyMessage.setVisible (automation == nullptr);
     updateStatus();
     updateScrollBars();
