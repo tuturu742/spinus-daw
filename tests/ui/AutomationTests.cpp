@@ -120,7 +120,8 @@ TEST_CASE ("A new automation clip covers the Playlist's selected area, or starts
     CHECK (clipOf (atPosition).length == 4 * 3840);
 
     // A selected area (the song loop region): the clip fits it, and its line ends at its end.
-    f.session->setLoopRegion (Session::Mode::song, Session::LoopRegion { 8 * 3840, 10 * 3840 });
+    f.session->setLoopRegion (Session::Mode::song,
+                              Session::LoopRegion { 8 * model::Ticks { 3840 }, 10 * model::Ticks { 3840 } });
     const auto inArea = f.session->createAutomationClip (f.insertVolume());
     REQUIRE (inArea.isValid());
     CHECK (clipOf (inArea).start == 8 * 3840);
