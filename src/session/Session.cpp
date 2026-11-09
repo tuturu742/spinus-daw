@@ -696,6 +696,17 @@ juce::String Session::getDeviceParameterValueText (model::DeviceId id, const juc
     return {};
 }
 
+std::vector<Session::ParameterText> Session::getDeviceParameterTexts (model::DeviceId id) const
+{
+    std::vector<ParameterText> result;
+    if (auto* plugin = adapter->getDevicePlugin (id))
+        for (int i = 0; i < plugin->getNumAutomatableParameters(); ++i)
+            if (auto parameter = plugin->getAutomatableParameter (i))
+                result.push_back ({ parameter->paramID, parameter->getParameterName(),
+                                    parameter->getCurrentValueAsStringWithLabel().trim() });
+    return result;
+}
+
 std::vector<std::pair<juce::String, juce::StringArray>> Session::getDeviceChoices (const model::Device& device,
                                                                                    int most)
 {
