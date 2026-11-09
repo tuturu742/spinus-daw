@@ -46,12 +46,12 @@ StereoUtilityProcessor::StereoUtilityProcessor()
                                      .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "StereoUtilityParameters", makeLayout())
 {
-    gain = parameters.getRawParameterValue ("gain");
-    pan = parameters.getRawParameterValue ("pan");
-    width = parameters.getRawParameterValue ("width");
-    mono = parameters.getRawParameterValue ("mono");
-    invertLeft = parameters.getRawParameterValue ("invert_left");
-    invertRight = parameters.getRawParameterValue ("invert_right");
+    gain = param::live (parameters, "gain");
+    pan = param::live (parameters, "pan");
+    width = param::live (parameters, "width");
+    mono = param::live (parameters, "mono");
+    invertLeft = param::live (parameters, "invert_left");
+    invertRight = param::live (parameters, "invert_right");
 }
 
 StereoUtilitySettings StereoUtilityProcessor::getSettings() const noexcept

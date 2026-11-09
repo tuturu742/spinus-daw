@@ -29,6 +29,17 @@ void ParameterKnob::attach (juce::AudioProcessorValueTreeState& state, const juc
 {
     attachment = nullptr;
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, parameterId, slider);
+    parameter = state.getParameter (parameterId);
+    startTimerHz (30);
+}
+
+void ParameterKnob::timerCallback()
+{
+    if (parameter == nullptr || slider.isMouseButtonDown())
+        return;
+    const auto now = (double)parameter->convertFrom0to1 (parameter->getValue());
+    if (! juce::approximatelyEqual (slider.getValue(), now))
+        slider.setValue (now, juce::dontSendNotification);
 }
 
 void ParameterKnob::resized()

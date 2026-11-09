@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -50,7 +52,7 @@ public:
 private:
     juce::AudioProcessorValueTreeState parameters;
     DuckerEngine engine;
-    std::atomic<float>*trigger = nullptr, *amount = nullptr, *release = nullptr, *curve = nullptr;
+    param::Live trigger = nullptr, amount = nullptr, release = nullptr, curve = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DuckerProcessor)
 };
