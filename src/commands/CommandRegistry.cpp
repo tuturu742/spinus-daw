@@ -465,6 +465,65 @@ private:
 //==============================================================================
 // channel.*
 
+std::vector<Insert*> allInserts (Project& p)
+{
+    std::vector<Insert*> r { &p.mixer.master };
+    for (auto& i : p.mixer.inserts)
+        r.push_back (&i);
+    return r;
+}
+
+/** Removes an insert (not the master). Everything that fed it goes to master instead; sends and sidechains from
+    it disappear (FL behaviour), and so does automation of it or its effects. */
+void eraseInsert (Project& p, InsertId insert)
+{
+    const auto i = indexOf (p.mixer.inserts, insert);
+    if (i < 0 || insert == masterInsertId)
+        return;
+
+    const auto removed = p.mixer.inserts[(size_t)i];
+    p.mixer.inserts.erase (p.mixer.inserts.begin() + i);
+
+    for (auto& c : p.channels)
+        if (c.targetInsert == insert)
+            c.targetInsert = masterInsertId;
+
+    for (auto* other : allInserts (p))
+    {
+        if (other->output == insert)
+            other->output = masterInsertId;
+        std::erase_if (other->sends, [&] (auto& s) { return s.target == insert; });
+        std::erase (other->sidechainSources, insert);
+    }
+
+    std::set<DeviceId> devices;
+    for (auto& slot : removed.effects)
+        devices.insert (slot.device.id);
+
+    std::erase_if (p.playlist.clips,
+                   [&] (const Clip& clip)
+                   {
+                       auto* a = std::get_if<AutomationClip> (&clip.content);
+                       return a != nullptr && (a->target.insert == insert || devices.contains (a->target.device));
+                   });
+}
+
+/** True if anything but the channels plays into the insert or takes its sound: another insert routed or sent
+    to it, or a sidechain from it. */
+bool isInsertUsedByOtherInserts (Project& p, InsertId insert)
+{
+    for (auto* other : allInserts (p))
+    {
+        if (other->id == insert)
+            continue;
+        if (other->output == insert ||
+            std::ranges::find (other->sidechainSources, insert) != other->sidechainSources.end() ||
+            std::ranges::any_of (other->sends, [&] (auto& s) { return s.target == insert; }))
+            return true;
+    }
+    return false;
+}
+
 class AddChannel final : public SnapshotCommand
 {
 public:
@@ -563,11 +622,19 @@ protected:
             return juce::Result::fail ("channel " + juce::String (channel.value) + " does not exist");
 
         removedName = p.channels[(size_t)i].name;
+        const auto target = p.channels[(size_t)i].targetInsert;
         std::optional<DeviceId> device;
         if (auto& instrument = p.channels[(size_t)i].instrument)
             device = instrument->id;
 
         p.channels.erase (p.channels.begin() + i);
+
+        // Its insert goes too when it was the channel's alone (as each new channel gets one): no other channel
+        // plays into it and no other insert routes, sends or sidechains to it. A shared bus stays.
+        if (target != masterInsertId && p.findInsert (target) != nullptr &&
+            std::ranges::none_of (p.channels, [&] (const Channel& c) { return c.targetInsert == target; }) &&
+            ! isInsertUsedByOtherInserts (p, target))
+            eraseInsert (p, target);
 
         for (auto& pattern : p.patterns)
             pattern.notes.erase (channel);
@@ -1017,46 +1084,12 @@ protected:
         if (i < 0)
             return juce::Result::fail ("insert " + juce::String (insert.value) + " does not exist");
 
-        const auto removed = p.mixer.inserts[(size_t)i];
-        removedName = removed.name;
-        p.mixer.inserts.erase (p.mixer.inserts.begin() + i);
-
-        // Everything that fed it goes to master instead; sends and sidechains from it disappear (FL behaviour).
-        for (auto& c : p.channels)
-            if (c.targetInsert == insert)
-                c.targetInsert = masterInsertId;
-
-        for (auto* other : allInserts (p))
-        {
-            if (other->output == insert)
-                other->output = masterInsertId;
-            std::erase_if (other->sends, [&] (auto& s) { return s.target == insert; });
-            std::erase (other->sidechainSources, insert);
-        }
-
-        std::set<DeviceId> devices;
-        for (auto& slot : removed.effects)
-            devices.insert (slot.device.id);
-
-        std::erase_if (p.playlist.clips,
-                       [&] (const Clip& clip)
-                       {
-                           auto* a = std::get_if<AutomationClip> (&clip.content);
-                           return a != nullptr && (a->target.insert == insert || devices.contains (a->target.device));
-                       });
-
+        removedName = p.mixer.inserts[(size_t)i].name;
+        eraseInsert (p, insert);
         return juce::Result::ok();
     }
 
 private:
-    static std::vector<Insert*> allInserts (Project& p)
-    {
-        std::vector<Insert*> r { &p.mixer.master };
-        for (auto& i : p.mixer.inserts)
-            r.push_back (&i);
-        return r;
-    }
-
     InsertId insert;
     juce::String removedName;
 };
@@ -3397,7 +3430,9 @@ void addChannelCommands (std::vector<CommandInfo>& list)
             return std::make_unique<AddChannel> (p.json, name, device, insert, index, audioTrack);
         }));
 
-    list.push_back (info ("channel.remove", "Remove a channel, its notes in every pattern, and automation of it.",
+    list.push_back (info ("channel.remove",
+                          "Remove a channel, its notes in every pattern, and automation of it. Its mixer insert goes "
+                          "too when nothing else plays into it.",
                           ParameterSchema().id ("channel", "Channel ID"),
                           [] (Params& p) -> std::unique_ptr<Command>
                           {

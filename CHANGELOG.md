@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Deleting a channel deletes its mixer insert too, unless another channel or insert still uses it. It used to stay
+  behind in the Mixer. Ctrl+Z brings both back.
 - A plugin that sends out a burst far louder than any real sound (Constant Signal Generator from the SWH pack
   does as it starts) is muted for that moment instead of cracking through the speakers and pinning the mixer's
   meters. The bar at the bottom of the window says which plugin it was.

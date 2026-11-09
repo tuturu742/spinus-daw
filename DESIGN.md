@@ -203,7 +203,7 @@ spinus-daw/
   - Automation clip: a curve targeting any automatable parameter.
 - **Mixer** (dynamic): Master plus any number of inserts.
   - Inserts are created on demand. A new project starts with Master only; the mixer always shows one empty "+" strip at the end.
-  - Adding a channel creates and routes it to a new insert automatically (setting: "Auto-create insert for new channels", on by default). The user can also route several channels into one insert.
+  - Adding a channel creates and routes it to a new insert automatically (setting: "Auto-create insert for new channels", on by default). The user can also route several channels into one insert. Removing a channel removes its insert in the same step (effects and automation of it included) when nothing else uses it: no other channel plays into it, and no other insert outputs, sends or sidechains to it; a shared bus stays (owner report 2026-11-09: the insert used to stay behind).
   - Each insert has a stable internal ID; its display number and position can be reordered freely without breaking routing, automation or sends.
   - "Remove unused inserts" command cleans up inserts with no inputs and no effects.
   - No hard limit; the UI stays usable with at least 500 inserts (virtualized strip rendering).

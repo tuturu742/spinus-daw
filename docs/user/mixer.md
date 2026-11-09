@@ -6,6 +6,8 @@ The Mixer is where your channels' sound is balanced, processed with effects and 
 Every channel plays into a **mixer insert**; inserts play into the **Master**, which you hear.
 
 - A new channel gets its own insert automatically. A new project has only the Master.
+- Deleting a channel deletes its insert too, unless something else still uses it: another channel playing into
+  it, or another insert sending or routed to it. Ctrl+Z brings both back.
 - There is no fixed number of inserts: click the **+** strip at the end to add one.
 
 ## Strips

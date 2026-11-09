@@ -375,12 +375,13 @@ juce::Array<juce::var> removeSongSteps (const model::Project& project, const juc
         if (fed && ! other && ! played && ! inserts.contains (bus.id))
             buses.insert (bus.id);
     }
-    for (const auto& id : channels)
-        add ("channel.remove", object ({ { "channel", (int)id.value } }));
+    // Inserts first: a channel removed while its insert is its own takes the insert along.
     for (const auto& id : inserts)
         add ("insert.remove", object ({ { "insert", (int)id.value } }));
     for (const auto& id : buses)
         add ("insert.remove", object ({ { "insert", (int)id.value } }));
+    for (const auto& id : channels)
+        add ("channel.remove", object ({ { "channel", (int)id.value } }));
     for (const auto& id : patterns)
         add ("pattern.remove", object ({ { "pattern", (int)id.value } }));
 

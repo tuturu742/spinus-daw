@@ -242,6 +242,59 @@ TEST_CASE ("Removing a channel removes its notes and automation; undo brings the
     CHECK (restored == project);
 }
 
+TEST_CASE ("Removing a channel takes its own mixer insert along, but not one something else uses", "[commands]")
+{
+    Project project;
+    CommandHistory history (project);
+    auto add = [&] (const juce::String& json)
+    {
+        auto command = make ("channel.add", json);
+        auto* added = command.get();
+        REQUIRE (history.perform (std::move (command)).wasOk());
+        return added->getResult();
+    };
+    auto remove = [&] (const juce::var& made)
+    {
+        REQUIRE (
+            history.perform (make ("channel.remove", R"({"channel": )" + made["channel"].toString() + "}")).wasOk());
+    };
+    auto insertOf = [] (const juce::var& made) { return InsertId { (uint32_t)(int)made["insert"] }; };
+
+    // A new channel's insert, with an effect on it: both go, and one Ctrl+Z brings both back.
+    const auto lead = add (R"({"name": "Lead"})");
+    REQUIRE (history
+                 .perform (make ("insert.addEffect", R"({"insert": )" + lead["insert"].toString() +
+                                                         R"(, "device": {"kind": "stock", "stockType": "spinus.eq"}})"))
+                 .wasOk());
+    const auto before = history.getProject();
+    remove (lead);
+    CHECK (history.getProject().findInsert (insertOf (lead)) == nullptr);
+    CHECK (history.getUndoDescriptions().strings.getLast() == "Remove channel 'Lead'");
+    REQUIRE (history.undo());
+    CHECK (history.getProject() == before);
+
+    // Two channels in one insert: removing one keeps it for the other.
+    const auto kick = add (R"({"name": "Kick"})");
+    const auto snare = add (R"({"name": "Snare", "insert": )" + kick["insert"].toString() + "}");
+    remove (kick);
+    CHECK (history.getProject().findInsert (insertOf (kick)) != nullptr);
+    remove (snare);
+    CHECK (history.getProject().findInsert (insertOf (kick)) == nullptr);
+
+    // An insert another insert sends to (a bus) stays; so does the master.
+    const auto pad = add (R"({"name": "Pad"})");
+    const auto bass = add (R"({"name": "Bass"})");
+    REQUIRE (history
+                 .perform (make ("insert.setSend", R"({"insert": )" + bass["insert"].toString() + R"(, "target": )" +
+                                                       pad["insert"].toString() + R"(, "levelDb": -6})"))
+                 .wasOk());
+    remove (pad);
+    CHECK (history.getProject().findInsert (insertOf (pad)) != nullptr);
+    const auto direct = add (R"({"name": "Direct", "insert": "master"})");
+    remove (direct);
+    CHECK (history.getProject().mixer.master.id == masterInsertId);
+}
+
 TEST_CASE ("Replacing an instrument keeps the channel and its notes; undo brings the old one back", "[commands]")
 {
     auto project = makeExample();
@@ -665,26 +718,27 @@ TEST_CASE ("Automation clips: new lanes, sorted points, refusals", "[commands]")
 TEST_CASE ("An insert's effects can take a channel's notes; removing the channel stops it", "[commands]")
 {
     CommandHistory history (makeExample());
-    REQUIRE (history.perform (make ("insert.setNotesFrom", R"({"insert": 6, "channel": 9})")).wasOk());
-    CHECK (history.getProject().findInsert (InsertId { bass })->notesFrom == ChannelId { synth });
+    // The Drums insert (the kick's, so it stays when the Surge channel goes) takes the Surge channel's notes.
+    REQUIRE (history.perform (make ("insert.setNotesFrom", R"({"insert": 2, "channel": 9})")).wasOk());
+    CHECK (history.getProject().findInsert (InsertId { drums })->notesFrom == ChannelId { synth });
 
     // Saved in the project.
     Project loaded;
     REQUIRE (fromJsonText (toJsonText (history.getProject()), loaded).wasOk());
-    CHECK (loaded.findInsert (InsertId { bass })->notesFrom == ChannelId { synth });
+    CHECK (loaded.findInsert (InsertId { drums })->notesFrom == ChannelId { synth });
     CHECK (! toJsonText (makeExample()).contains ("notesFrom"));
 
     CHECK (history.perform (make ("insert.setNotesFrom", R"({"insert": 1, "channel": 9})")).failed()); // master
-    CHECK (history.perform (make ("insert.setNotesFrom", R"({"insert": 6, "channel": 99})")).failed());
+    CHECK (history.perform (make ("insert.setNotesFrom", R"({"insert": 2, "channel": 99})")).failed());
 
     REQUIRE (history.perform (make ("channel.remove", R"({"channel": 9})")).wasOk());
-    CHECK (! history.getProject().findInsert (InsertId { bass })->notesFrom);
+    CHECK (! history.getProject().findInsert (InsertId { drums })->notesFrom);
     CHECK (validate (history.getProject()).isEmpty());
     history.undo();
-    CHECK (history.getProject().findInsert (InsertId { bass })->notesFrom == ChannelId { synth });
+    CHECK (history.getProject().findInsert (InsertId { drums })->notesFrom == ChannelId { synth });
 
-    REQUIRE (history.perform (make ("insert.setNotesFrom", R"({"insert": 6})")).wasOk());
-    CHECK (! history.getProject().findInsert (InsertId { bass })->notesFrom);
+    REQUIRE (history.perform (make ("insert.setNotesFrom", R"({"insert": 2})")).wasOk());
+    CHECK (! history.getProject().findInsert (InsertId { drums })->notesFrom);
 }
 
 TEST_CASE ("Spinus Tune notes: kept in order, saved, and overlapping ones refused", "[commands]")
