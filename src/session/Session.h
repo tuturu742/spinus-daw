@@ -203,6 +203,13 @@ public:
     /** A device parameter's current value as the plugin shows it ("1.20 kHz"), or empty. */
     juce::String getDeviceParameterValueText (model::DeviceId, const juce::String& parameterId) const;
 
+    struct ParameterText
+    {
+        juce::String id, name, text;
+    };
+    /** A device's automatable parameters with their current values as the plugin shows them, in one pass. */
+    std::vector<ParameterText> getDeviceParameterTexts (model::DeviceId) const;
+
     /** The choices of a device that picks its kind of sound by name (an effect's type: "Chorus", "Phaser"...):
         its settings that show only names and have at least three, at most `most` of them, as the setting's name
         and its choices. Read from a copy made for it once (then remembered); empty when it cannot be made. For
