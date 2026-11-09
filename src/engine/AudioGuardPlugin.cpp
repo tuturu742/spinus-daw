@@ -26,16 +26,19 @@ bool AudioGuardPlugin::containsInvalidSamples (const juce::AudioBuffer<float>& b
                                                int numSamples) noexcept
 {
     // x * 0 is 0 for every finite x and NaN for NaN or infinity, so one sum covers both cases without
-    // a branch per sample (the loop vectorises).
-    float sum = 0.0f;
+    // a branch per sample; the loudest sample covers the rest (the loop vectorises).
+    float sum = 0.0f, peak = 0.0f;
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
     {
         const auto* data = buffer.getReadPointer (ch, start);
         for (int i = 0; i < numSamples; ++i)
+        {
             sum += data[i] * 0.0f;
+            peak = std::max (peak, std::abs (data[i]));
+        }
     }
 
-    return ! std::isfinite (sum);
+    return ! std::isfinite (sum) || peak > loudestValidSample;
 }
 
 float AudioGuardPlugin::meanSquare (const juce::AudioBuffer<float>& buffer, int start, int numSamples) noexcept
@@ -72,10 +75,35 @@ void AudioGuardPlugin::applyToBuffer (const te::PluginRenderContext& fc)
     {
         fc.destBuffer->clear (fc.bufferStartSample, fc.bufferNumSamples);
         silencedBlocks.fetch_add (1, std::memory_order_relaxed);
+        heldSamples = (juce::int64)(holdSeconds * sampleRate);
+        fadeGain = 0.0f;
+    }
+    else
+    {
+        holdAndFadeIn (*fc.destBuffer, fc.bufferStartSample, fc.bufferNumSamples);
     }
 
     if (meter != nullptr)
         measureAfter (*fc.destBuffer, fc.bufferStartSample, fc.bufferNumSamples);
+}
+
+void AudioGuardPlugin::holdAndFadeIn (juce::AudioBuffer<float>& buffer, int start, int numSamples) noexcept
+{
+    if (fadeGain >= 1.0f)
+        return;
+
+    // Silent while held, then a straight fade back in, sample by sample (blocks may be any size).
+    const auto step = (float)(1.0 / juce::jmax (1.0, fadeInSeconds * sampleRate));
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float gain = 0.0f;
+        if (heldSamples > 0)
+            --heldSamples;
+        else
+            gain = fadeGain = juce::jmin (1.0f, fadeGain + step);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.getWritePointer (ch, start)[i] *= gain;
+    }
 }
 
 void AudioGuardPlugin::measureAfter (const juce::AudioBuffer<float>& buffer, int start, int numSamples) noexcept

@@ -57,6 +57,16 @@ every project.
 Not yet supported in a separate process: sidechain inputs, MIDI a plugin sends out, and more than eight
 channels. Plugins needing those run inside Spinus.
 
+## When a plugin makes invalid sound
+
+Spinus checks every plugin's sound as it plays. If a plugin sends out broken numbers or something far
+louder than any real sound (over +40 dB above full scale: a bug in the plugin), Spinus mutes it for that
+moment, so you don't hear a loud crack and the rest of the song keeps playing. It fades back in a tenth of
+a second after the plugin behaves again. The bar at the bottom of the window says which plugin it was,
+once per session.
+
+A plugin that does this all the time stays silent. Remove it, or tell its makers.
+
 ## Plugin windows
 
 Double-click a channel's name in the Channel Rack, or an effect in the Mixer, to open its window.
