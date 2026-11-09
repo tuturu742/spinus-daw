@@ -6,6 +6,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -133,8 +135,8 @@ private:
     juce::AbstractFifo auditionFifo { 64 };
     std::array<std::pair<int, int>, 64> auditionEvents {};
 
-    std::atomic<float>*gain = nullptr, *attack = nullptr, *release = nullptr, *coarse = nullptr, *fine = nullptr,
-    *playToEnd = nullptr;
+    param::Live gain = nullptr, attack = nullptr, release = nullptr, coarse = nullptr, fine = nullptr,
+                playToEnd = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BeatSlicerProcessor)
 };

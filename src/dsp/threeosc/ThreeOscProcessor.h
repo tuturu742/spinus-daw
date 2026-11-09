@@ -5,6 +5,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -77,12 +79,12 @@ private:
 
     struct OscillatorParameters
     {
-        std::atomic<float>*shape, *coarse, *fine, *level, *pan, *phase;
+        param::Live shape, coarse, fine, level, pan, phase;
     };
     std::array<OscillatorParameters, 3> oscillatorParameters {};
-    std::atomic<float>*attack = nullptr, *decay = nullptr, *sustain = nullptr, *release = nullptr, *filter = nullptr,
-    *cutoff = nullptr, *resonance = nullptr, *envelopeAmount = nullptr, *gain = nullptr, *velocity = nullptr,
-    *voices = nullptr, *glide = nullptr;
+    param::Live attack = nullptr, decay = nullptr, sustain = nullptr, release = nullptr, filter = nullptr,
+                cutoff = nullptr, resonance = nullptr, envelopeAmount = nullptr, gain = nullptr, velocity = nullptr,
+                voices = nullptr, glide = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreeOscProcessor)
 };

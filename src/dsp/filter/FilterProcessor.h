@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -55,9 +57,9 @@ private:
     juce::AudioProcessorValueTreeState parameters;
     FilterEngine engine;
 
-    std::atomic<float>*type = nullptr, *slope = nullptr, *cutoff = nullptr, *resonance = nullptr, *lfoAmount = nullptr,
-    *lfoShape = nullptr, *lfoSync = nullptr, *lfoRate = nullptr, *lfoLength = nullptr, *envelopeAmount = nullptr,
-    *envelopeAttack = nullptr, *envelopeRelease = nullptr, *mix = nullptr, *gain = nullptr;
+    param::Live type = nullptr, slope = nullptr, cutoff = nullptr, resonance = nullptr, lfoAmount = nullptr,
+                lfoShape = nullptr, lfoSync = nullptr, lfoRate = nullptr, lfoLength = nullptr, envelopeAmount = nullptr,
+                envelopeAttack = nullptr, envelopeRelease = nullptr, mix = nullptr, gain = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FilterProcessor)
 };

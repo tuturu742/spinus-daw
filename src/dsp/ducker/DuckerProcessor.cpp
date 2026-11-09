@@ -43,10 +43,10 @@ DuckerProcessor::DuckerProcessor()
                                      .withInput ("Sidechain", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "DuckerParameters", makeLayout())
 {
-    trigger = parameters.getRawParameterValue ("trigger");
-    amount = parameters.getRawParameterValue ("amount");
-    release = parameters.getRawParameterValue ("release");
-    curve = parameters.getRawParameterValue ("curve");
+    trigger = param::live (parameters, "trigger");
+    amount = param::live (parameters, "amount");
+    release = param::live (parameters, "release");
+    curve = param::live (parameters, "curve");
 }
 
 DuckerSettings DuckerProcessor::getSettings() const noexcept

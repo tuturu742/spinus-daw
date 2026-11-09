@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -59,7 +61,7 @@ public:
 private:
     juce::AudioProcessorValueTreeState parameters;
     LoudnessEngine engine;
-    std::atomic<float>*target = nullptr, *resetOnPlay = nullptr;
+    param::Live target = nullptr, resetOnPlay = nullptr;
     bool wasPlaying = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LoudnessMeterProcessor)

@@ -70,7 +70,7 @@ FilterProcessor::FilterProcessor()
                                      .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "FilterParameters", makeLayout())
 {
-    auto get = [this] (const juce::String& id) { return parameters.getRawParameterValue (id); };
+    auto get = [this] (const juce::String& id) { return param::live (parameters, id); };
     type = get ("type");
     slope = get ("slope");
     cutoff = get ("cutoff");

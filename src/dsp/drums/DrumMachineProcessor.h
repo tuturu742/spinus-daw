@@ -7,6 +7,8 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/LiveSetting.h"
+
 namespace spinus::dsp
 {
 
@@ -122,13 +124,13 @@ private:
 
     struct PadParameters
     {
-        std::atomic<float>*volume, *pan, *tune, *fine, *attack, *decay, *sustain, *release, *filter, *cutoff,
-            *resonance, *velocity, *oneShot;
+        param::Live volume, pan, tune, fine, attack, decay, sustain, release, filter, cutoff, resonance, velocity,
+            oneShot;
     };
 
     juce::AudioProcessorValueTreeState parameters;
     std::array<PadParameters, numPads> padParameters {};
-    std::atomic<float>* masterVolume = nullptr;
+    param::Live masterVolume = nullptr;
     std::array<Pad, numPads> pads;
 
     SamplerEngine engine;

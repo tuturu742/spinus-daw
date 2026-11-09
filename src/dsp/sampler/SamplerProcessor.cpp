@@ -86,7 +86,7 @@ SamplerProcessor::SamplerProcessor()
     : juce::AudioPluginInstance (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "SamplerParameters", makeLayout())
 {
-    auto get = [this] (const char* id) { return parameters.getRawParameterValue (id); };
+    auto get = [this] (const char* id) { return param::live (parameters, id); };
     p = { get ("gain"),   get ("attack"),    get ("decay"),    get ("sustain"), get ("release"), get ("filter"),
           get ("cutoff"), get ("resonance"), get ("velocity"), get ("coarse"),  get ("fine"),    get ("oneShot") };
     publish ({});
