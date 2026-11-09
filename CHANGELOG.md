@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- The Browser scrolls sideways when a name is longer than it is wide, so long sample, plugin and project names
+  can be read in full instead of being cut off.
 - Deleting a channel deletes its mixer insert too, unless another channel or insert still uses it. It used to stay
   behind in the Mixer. Ctrl+Z brings both back.
 - A plugin that sends out a burst far louder than any real sound (Constant Signal Generator from the SWH pack

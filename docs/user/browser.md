@@ -4,7 +4,8 @@
 
 The Browser is on the left of the main window. Show or hide it with **F8** or the **Browser**
 button. Drag the thin bar on its right edge to make it wider or narrower (up to half the window); Spinus
-remembers the width with the window layout. It lists your projects, your samples and everything you can play or put on a mixer insert:
+remembers the width with the window layout. When a name is longer than the Browser is wide, a scroll bar
+appears along the bottom of the list: drag it (or swipe sideways on a touchpad) to read the name in full. It lists your projects, your samples and everything you can play or put on a mixer insert:
 
 | Section | What is in it |
 |---|---|
