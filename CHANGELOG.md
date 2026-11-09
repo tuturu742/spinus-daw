@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- An agent's song summary (and `spinus --check`) now lists each Playlist lane's clips: where they start, how long
+  they are and what they play. Before, it only counted them, so an agent could not move clips between lanes.
 - An agent could only see a plugin's first 80 or so settings, so on big plugins (Ample Guitar's amp section, for
   one) it could not find what to change. It now pages through all of them or looks them up by name.
 - The Browser scrolls sideways when a name is longer than it is wide, so long sample, plugin and project names

@@ -145,6 +145,20 @@ TEST_CASE ("Command line: check sums up the project, and names what is missing",
     CHECK (summary["channels"][0]["instrument"]["kit"].toString() == "Spinus Synth Kit");
     CHECK ((int)summary["clips"]["pattern"] == 2);
     CHECK (summary["markers"][0]["name"].toString() == "Intro");
+    // Each lane lists its clips, with what they play: the audio clip is on the "Audio" lane.
+    int listed = 0;
+    for (auto& lane : *summary["lanes"].getArray())
+        for (auto& clip : *lane["clips"].getArray())
+        {
+            ++listed;
+            CHECK ((int)clip["clip"] > 0);
+            CHECK ((double)clip["bar"] >= 1.0);
+            if (clip.hasProperty ("audio"))
+                CHECK (lane["name"].toString() == "Audio");
+            else
+                CHECK (clip.hasProperty ("pattern"));
+        }
+    CHECK (listed == 3);
     bool sidechained = false;
     for (auto& insert : *summary["inserts"].getArray())
         sidechained = sidechained || insert["sidechainFrom"].size() == 1;
