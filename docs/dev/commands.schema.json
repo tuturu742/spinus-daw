@@ -766,7 +766,7 @@
       }
     },
     "device.setParameters": {
-      "description": "Change settings of an instrument or effect, by the parameter ID automation uses (a Spinus device's own; for other plugins the position: 0, 1...). 'text': settings as the device shows them, \"35%\", \"220 ms\", \"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, milliseconds for times, hertz for frequencies); for any plugin, read by what it shows over its range. 'values': numbers from 0 to 1 over each setting's whole range, for any device.",
+      "description": "Change settings of an instrument or effect, by the parameter ID automation uses (a Spinus device's own; for other plugins the position: 0, 1...). 'text': settings as the device shows them, \"35%\", \"220 ms\", \"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, milliseconds for times, hertz for frequencies); for any plugin, read by what it shows over its range. 'values': numbers from 0 to 1 over each setting's whole range, for any device. 'previous' (with 'values'): what those settings were before, for a change already made in the device's own window, so undo puts it back.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -792,6 +792,15 @@
               "type": "string"
             },
             "description": "Parameter ID or setting name to its value as the device shows it (\"35%\", \"220 ms\", \"1.5 s\", \"-6 dB\", \"1.2 kHz\", \"4:1\", \"30% L\", \"Low pass\"); any plugin's too"
+          },
+          "previous": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "description": "Parameter ID to the value, 0 to 1, it had before this change (a change already made in the device's window); undo puts it back"
           }
         },
         "required": [

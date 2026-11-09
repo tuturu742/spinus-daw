@@ -1523,9 +1523,10 @@ class SetParameters : public JsonCommand
 {
 public:
     SetParameters (juce::var p, DeviceId d, std::map<juce::String, float> v,
-                   juce::String commandName = "device.setParameters", std::map<juce::String, juce::String> t = {})
+                   juce::String commandName = "device.setParameters", std::map<juce::String, juce::String> t = {},
+                   std::map<juce::String, float> before = {})
         : JsonCommand (std::move (commandName), std::move (p)), device (d), values (std::move (v)),
-          texts (std::move (t))
+          texts (std::move (t)), previous (std::move (before))
     {
     }
 
@@ -1551,7 +1552,9 @@ public:
         old.clear();
         for (auto& [parameter, value] : values)
         {
-            if (auto it = d->parameters.find (parameter); it != d->parameters.end())
+            if (auto given = previous.find (parameter); given != previous.end())
+                old[parameter] = given->second; // already heard: the plugin had this before
+            else if (auto it = d->parameters.find (parameter); it != d->parameters.end())
                 old[parameter] = it->second;
             else
                 old[parameter] = std::nullopt;
@@ -1696,6 +1699,7 @@ protected:
     DeviceId device;
     std::map<juce::String, float> values;
     std::map<juce::String, juce::String> texts;
+    std::map<juce::String, float> previous; // the values undo puts back, when given
     std::map<juce::String, std::optional<float>> old;
     juce::String name;
 };
@@ -3738,7 +3742,8 @@ void addEffectCommands (std::vector<CommandInfo>& list)
         "other plugins the position: 0, 1...). 'text': settings as the device shows them, \"35%\", \"220 ms\", "
         "\"-6 dB\", \"1.2 kHz\", \"High pass\" (by ID or name; a plain number is in the units shown, "
         "milliseconds for times, hertz for frequencies); for any plugin, read by what it shows over its range. "
-        "'values': numbers from 0 to 1 over each setting's whole range, for any device.",
+        "'values': numbers from 0 to 1 over each setting's whole range, for any device. 'previous' (with 'values'): "
+        "what those settings were before, for a change already made in the device's own window, so undo puts it back.",
         ParameterSchema()
             .id ("device", "The instrument's or effect's device ID")
             .custom ("values", "Parameter ID to value, 0 to 1 over the setting's whole range", false,
@@ -3752,10 +3757,18 @@ void addEffectCommands (std::vector<CommandInfo>& list)
                      false,
                      schemaObject ({ { "type", "object" },
                                      { "minProperties", 1 },
-                                     { "additionalProperties", schemaObject ({ { "type", "string" } }) } })),
+                                     { "additionalProperties", schemaObject ({ { "type", "string" } }) } }))
+            .custom (
+                "previous",
+                "Parameter ID to the value, 0 to 1, it had before this change (a change already made in the "
+                "device's window); undo puts it back",
+                false,
+                schemaObject ({ { "type", "object" },
+                                { "additionalProperties",
+                                  schemaObject ({ { "type", "number" }, { "minimum", 0 }, { "maximum", 1 } }) } })),
         [] (Params& p) -> std::unique_ptr<Command>
         {
-            p.allowOnly ({ "device", "values", "text" });
+            p.allowOnly ({ "device", "values", "text", "previous" });
             const auto device = p.id<DeviceId> ("device");
             std::map<juce::String, float> values;
             if (auto* o = p.json["values"].getDynamicObject())
@@ -3782,8 +3795,20 @@ void addEffectCommands (std::vector<CommandInfo>& list)
                 p.errors.add ("'text' must be an object");
             if (values.empty() && texts.empty())
                 p.errors.add ("'values' or 'text' needs at least one setting");
+            std::map<juce::String, float> previous;
+            if (auto* o = p.json["previous"].getDynamicObject())
+                for (auto& property : o->getProperties())
+                {
+                    const auto v = property.value;
+                    if (! (v.isDouble() || v.isInt() || v.isInt64()) || (double)v < 0.0 || (double)v > 1.0 ||
+                        ! values.contains (property.name.toString()))
+                        p.errors.add ("'previous' must map IDs given in 'values' to numbers from 0 to 1");
+                    previous[property.name.toString()] = (float)(double)v;
+                }
+            else if (p.has ("previous"))
+                p.errors.add ("'previous' must be an object");
             return std::make_unique<SetParameters> (p.json, device, std::move (values), "device.setParameters",
-                                                    std::move (texts));
+                                                    std::move (texts), std::move (previous));
         }));
 
     list.push_back (info (

@@ -65,7 +65,111 @@ EngineAdapter::EngineAdapter (te::Edit& e, DeviceFactory& f) : edit (e), devices
         edit.deleteTrack (t);
 }
 
-EngineAdapter::~EngineAdapter() = default;
+//==============================================================================
+class EngineAdapter::GestureWatcher final : private juce::AudioProcessorListener
+{
+public:
+    GestureWatcher (EngineAdapter& a, DeviceId d, juce::AudioProcessor& p) : adapter (a), device (d), instance (&p)
+    {
+        instance->addListener (this);
+    }
+
+    ~GestureWatcher() override
+    {
+        // Only from the instance it was added to: a plugin made again (reloaded) has a new one, and the old one
+        // went with its listener list.
+        if (isWatching (instance))
+            instance->removeListener (this);
+    }
+
+    bool isWatching (const juce::AudioProcessor* p) const
+    {
+        auto plugin = adapter.getDevicePlugin (device);
+        auto* external = dynamic_cast<te::ExternalPlugin*> (plugin);
+        return external != nullptr && external->getAudioPluginInstance() == p && p == instance;
+    }
+
+    juce::AudioProcessor* getInstance() const noexcept { return instance; }
+
+private:
+    void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
+    void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+
+    void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor* p, int index) override
+    {
+        if (auto* parameter = parameterAt (p, index))
+        {
+            const juce::SpinLock::ScopedLockType lock (startLock);
+            started[index] = parameter->getValue();
+        }
+    }
+
+    void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor* p, int index) override
+    {
+        auto* parameter = parameterAt (p, index);
+        if (parameter == nullptr)
+            return;
+        float before = 0.0f;
+        {
+            const juce::SpinLock::ScopedLockType lock (startLock);
+            auto it = started.find (index);
+            if (it == started.end())
+                return;
+            before = it->second;
+            started.erase (it);
+        }
+        const auto after = parameter->getValue();
+        if (juce::approximatelyEqual (before, after))
+            return;
+        // Plugins may end a drag on their own threads: the undo step is made on the message thread.
+        juce::MessageManager::callAsync (
+            [token = std::weak_ptr<bool> (adapter.alive), a = &adapter, d = device, index, before, after]
+            {
+                if (token.lock() != nullptr)
+                    a->handEnded (d, index, before, after);
+            });
+    }
+
+    juce::AudioProcessorParameter* parameterAt (juce::AudioProcessor* p, int index) const
+    {
+        if (p != instance)
+            return nullptr;
+        const auto& parameters = p->getParameters();
+        return juce::isPositiveAndBelow (index, parameters.size()) ? parameters[index] : nullptr;
+    }
+
+    EngineAdapter& adapter;
+    DeviceId device;
+    juce::AudioProcessor* instance;
+    juce::SpinLock startLock;
+    std::map<int, float> started; // parameter index -> value when its drag started
+};
+
+EngineAdapter::~EngineAdapter() { gestureWatchers.clear(); }
+
+void EngineAdapter::watchGestures (DeviceId id, te::Plugin& plugin)
+{
+    auto* external = dynamic_cast<te::ExternalPlugin*> (&plugin);
+    auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
+    auto& watcher = gestureWatchers[id];
+    if (watcher != nullptr && watcher->getInstance() == instance)
+        return;
+    watcher = nullptr;
+    if (instance != nullptr)
+        watcher = std::make_unique<GestureWatcher> (*this, id, *instance);
+}
+
+void EngineAdapter::handEnded (DeviceId id, int index, float before, float after)
+{
+    auto* external = dynamic_cast<te::ExternalPlugin*> (getDevicePlugin (id));
+    auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
+    if (instance == nullptr || ! juce::isPositiveAndBelow (index, instance->getParameters().size()) || ! onHandChange)
+        return;
+    const auto parameterId = getParameterId (*instance->getParameters()[index]);
+    // What the project holds is what the plugin plays now: a command applying it again changes nothing.
+    appliedParameters[id][parameterId] = after;
+    onHandChange (id, parameterId, before, after);
+}
 
 //==============================================================================
 te::AudioTrack& EngineAdapter::createTrack (const juce::String& name)
@@ -562,6 +666,7 @@ te::Plugin::Ptr EngineAdapter::ensureDevice (const Device& device)
 
     applyPresetState (*plugin, device);
     applyParameters (*plugin, device);
+    watchGestures (device.id, *plugin);
     return plugin;
 }
 
@@ -765,6 +870,7 @@ void EngineAdapter::dropDevice (DeviceId id)
     {
         // Keep the state: if an undo brings the device back, it returns with its settings.
         savedStates[id] = stateOf (*it->second);
+        gestureWatchers.erase (id);
         appliedParameters.erase (id); // a device brought back gets its command settings again
         it->second->deleteFromParent();
         devicePlugins.erase (it);

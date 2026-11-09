@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A knob turned in a plugin's own window can be undone: each drag is one **Ctrl+Z** step, which puts the knob
+  back where it was. Before, Ctrl+Z skipped it and undid the change before it instead.
 - The Browser scrolls sideways when a name is longer than it is wide, so long sample, plugin and project names
   can be read in full instead of being cut off.
 - Deleting a channel deletes its mixer insert too, unless another channel or insert still uses it. It used to stay

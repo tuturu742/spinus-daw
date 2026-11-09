@@ -83,6 +83,75 @@ TEST_CASE ("Settings set by command reach the plugin; undo gives back what it ha
     CHECK (juce::approximatelyEqual (again->getValue(), 0.4f));
 }
 
+TEST_CASE ("A setting dragged in a device's own window is one undo step", "[session][engine]")
+{
+    EngineHost host { { .openAudioDevice = false } };
+    auto devices = std::make_unique<engine::DefaultDeviceFactory>();
+    engine::registerBundledDevices (*devices, host.getEngine(), {});
+    Session session (host.getEngine(), std::move (devices));
+    auto& history = session.getHistory();
+
+    auto add = make ("insert.addEffect", R"({"insert": 1, "device": {"kind": "stock", "stockType": "spinus.filter"}})");
+    auto* raw = add.get();
+    REQUIRE (history.perform (std::move (add)).wasOk());
+    const model::DeviceId filter { (uint32_t)(int)raw->getResult()["device"] };
+    auto* cutoff = parameterOf (session, filter, "cutoff");
+    REQUIRE (cutoff != nullptr);
+    const auto start = cutoff->getValue();
+    const auto steps = history.getUndoDescriptions().size();
+
+    // One drag, as a plugin's window reports it: many values between its start and its end.
+    auto drag = [&] (std::initializer_list<float> values)
+    {
+        cutoff->beginChangeGesture();
+        for (auto v : values)
+            cutoff->setValueNotifyingHost (v);
+        cutoff->endChangeGesture();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    };
+    drag ({ 0.4f, 0.3f, 0.2f });
+    REQUIRE (history.getUndoDescriptions().size() == steps + 1);
+    CHECK (history.getUndoDescriptions().strings.getLast() == "Change a setting of 'Filter'");
+    CHECK (juce::approximatelyEqual (cutoff->getValue(), 0.2f));
+    CHECK (juce::approximatelyEqual (session.getProject().mixer.master.effects.back().device.parameters.at ("cutoff"),
+                                     0.2f));
+
+    REQUIRE (history.undo());
+    CHECK (juce::approximatelyEqual (cutoff->getValue(), start)); // where the drag started
+    REQUIRE (history.redo());
+    CHECK (juce::approximatelyEqual (cutoff->getValue(), 0.2f));
+
+    // A second drag undoes back to the first one's end, not further.
+    drag ({ 0.7f });
+    REQUIRE (history.getUndoDescriptions().size() == steps + 2);
+    REQUIRE (history.undo());
+    CHECK (juce::approximatelyEqual (cutoff->getValue(), 0.2f));
+
+    // A drag that ends where it started, or a value set without a drag, is no step.
+    REQUIRE (history.redo());
+    drag ({ 0.5f, 0.7f });
+    cutoff->setValueNotifyingHost (0.6f);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    CHECK (history.getUndoDescriptions().size() == steps + 2);
+
+    // Commands setting the plugin make no steps of their own.
+    REQUIRE (history
+                 .perform (make ("device.setParameters",
+                                 R"({"device": )" + juce::String (filter.value) + R"(, "values": {"cutoff": 0.1}})"))
+                 .wasOk());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    CHECK (history.getUndoDescriptions().size() == steps + 3);
+}
+
+TEST_CASE ("device.setParameters' previous values are what undo puts back", "[session][commands]")
+{
+    juce::String error;
+    CHECK (commands::CommandRegistry::get().create (
+               "device.setParameters",
+               juce::JSON::parse (R"({"device": 1, "values": {"a": 0.5}, "previous": {"b": 0.1}})"), error) == nullptr);
+    CHECK (error.contains ("previous"));
+}
+
 namespace
 {
 std::unique_ptr<engine::DefaultDeviceFactory> makeDevices (te::Engine& engine, std::vector<juce::File> folders = {})
