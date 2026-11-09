@@ -170,6 +170,30 @@ TEST_CASE ("The browser groups, folds and searches", "[ui][browser]")
     CHECK (texts (browser, Browser::RowKind::device) == juce::StringArray { "Old Delay [VST2]" });
 }
 
+TEST_CASE ("A narrow browser scrolls sideways to show long names in full", "[ui][browser]")
+{
+    Fixture f;
+    Browser browser (f.session);
+    browser.setSize (140, 600);
+
+    int widest = 0;
+    for (const auto& r : browser.getRows())
+        widest = juce::jmax (widest, Browser::getRowContentWidth (r));
+    CHECK (widest > 140);
+    CHECK (browser.getListContentWidth() == widest); // the rows are as wide as the widest, past the dock's edge
+
+    // A long name is measured in full, and more indent makes a row wider.
+    Browser::Row sample { Browser::RowKind::sample, "a very long sample name that never fits.wav", "WAV" };
+    const auto shallow = Browser::getRowContentWidth (sample);
+    sample.depth = 3;
+    CHECK (Browser::getRowContentWidth (sample) == shallow + 36);
+    CHECK (shallow > 250);
+
+    browser.setSize (1000, 600); // wide enough: no sideways scrolling, the rows fill the list
+    CHECK (browser.getListContentWidth() < 1000);
+    CHECK (browser.getListContentWidth() > widest);
+}
+
 TEST_CASE ("Using a browser entry adds a channel or an effect", "[ui][browser]")
 {
     Fixture f;

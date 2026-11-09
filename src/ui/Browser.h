@@ -131,6 +131,9 @@ public:
     };
 
     const std::vector<Row>& getRows() const noexcept { return rows; }
+    /** How wide a row is drawn in full; the list scrolls sideways to the widest. */
+    static int getRowContentWidth (const Row&);
+    int getListContentWidth() const noexcept { return list.getViewport()->getViewedComponent()->getWidth(); }
     void toggleOpen (const juce::String& key);
     void useRow (int row);
     juce::String getStatusText() const { return status.getText(); }
