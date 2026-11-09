@@ -604,16 +604,27 @@ model::ClipId Session::createAutomationClip (const model::ParameterTarget& targe
     const auto value = juce::jlimit (0.0f, 1.0f, parameter->getCurrentNormalisedValue());
     const auto bar = getProject().settings.timeSignature.barTicks();
 
+    // Over the Playlist's selected area when there is one; else four bars from where the song position is.
+    model::Ticks start = 0, length = bar * 4;
+    if (songLoop && songLoop->end > songLoop->start)
+    {
+        start = songLoop->start;
+        length = songLoop->end - songLoop->start;
+    }
+    else if (mode == Mode::song)
+        start = juce::jmax<model::Ticks> (
+            0, (model::Ticks)std::floor (engine::timeToTicks (*edit, edit->getTransport().getPosition())));
+
     auto json = model::targetToJson (target);
 
     juce::Array<juce::var> points;
-    for (auto time : { (model::Ticks)0, bar * 4 })
+    for (auto time : { (model::Ticks)0, length })
         points.add (model::pointToJson ({ time, value, 0.0f }));
 
     auto* params = new juce::DynamicObject();
     params->setProperty ("laneName", describeTarget (target));
-    params->setProperty ("start", 0);
-    params->setProperty ("length", (juce::int64)(bar * 4));
+    params->setProperty ("start", (juce::int64)start);
+    params->setProperty ("length", (juce::int64)length);
     params->setProperty ("target", json);
     params->setProperty ("points", points);
 

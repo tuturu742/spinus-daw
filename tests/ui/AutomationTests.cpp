@@ -3,6 +3,7 @@
 #include "AudioChecks.h"
 #include "RealtimeRunner.h"
 #include "commands/CommandRegistry.h"
+#include "engine/Beats.h"
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
 #include "ui/ChannelRack.h"
@@ -102,6 +103,29 @@ TEST_CASE ("Create automation clip: a flat line at the current value, on a new l
     unknown.device = f.lead().instrument.value_or (model::Device {}).id;
     unknown.parameterId = "no-such-parameter";
     CHECK (! f.session->createAutomationClip (unknown).isValid());
+}
+
+TEST_CASE ("A new automation clip covers the Playlist's selected area, or starts at the song position",
+           "[ui][automation]")
+{
+    Fixture f;
+    f.session->setMode (Session::Mode::song);
+    auto clipOf = [&] (model::ClipId id) { return *f.session->getProject().findClip (id); };
+
+    // No selected area: four bars from where the song position is.
+    f.session->getEdit().getTransport().setPosition (engine::ticksToTime (f.session->getEdit(), 3.0 * 3840));
+    const auto atPosition = f.session->createAutomationClip (f.insertVolume());
+    REQUIRE (atPosition.isValid());
+    CHECK (clipOf (atPosition).start == 3 * 3840);
+    CHECK (clipOf (atPosition).length == 4 * 3840);
+
+    // A selected area (the song loop region): the clip fits it, and its line ends at its end.
+    f.session->setLoopRegion (Session::Mode::song, Session::LoopRegion { 8 * 3840, 10 * 3840 });
+    const auto inArea = f.session->createAutomationClip (f.insertVolume());
+    REQUIRE (inArea.isValid());
+    CHECK (clipOf (inArea).start == 8 * 3840);
+    CHECK (clipOf (inArea).length == 2 * 3840);
+    CHECK (f.automationOf (inArea).points.back().time == 2 * 3840);
 }
 
 TEST_CASE ("Automation holds its value between clips, and reaches device parameters", "[ui][automation]")
