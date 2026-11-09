@@ -13,6 +13,8 @@
 #include "ai/AiService.h"
 #include "session/ProjectDocument.h"
 
+#include <set>
+
 namespace spinus::ui
 {
 
@@ -304,6 +306,7 @@ private:
 
     MessageBoxHandler messageBox;
     std::unique_ptr<juce::TimedCallback> pluginWatch; // plugins in their own process that stopped working
+    std::set<model::DeviceId> warnedInvalidAudio;     // devices whose invalid output the hint bar has told of
     /** Keeps the windows' layout for the next start while Spinus runs, not only when it closes: a Spinus that
         is ended (or hangs) still comes back with the windows as they were. */
     std::unique_ptr<juce::TimedCallback> layoutKeeper;
