@@ -1033,11 +1033,13 @@ juce::var AgentInterface::nativeTools() const
     const auto noInput = schema ({});
     juce::Array<juce::var> deviceTypes { "instrument", "effect" };
     juce::Array<juce::var> tools;
-    tools.add (tool ("song_summary",
-                     "The open project as Spinus sees it: tempo, key, length, channels (instruments, kits), mixer "
-                     "inserts (effects, sends, sidechains), patterns, Playlist lanes, clips and markers, and what is "
-                     "missing on this computer.",
-                     noInput, Does::reads));
+    tools.add (
+        tool ("song_summary",
+              "The open project as Spinus sees it: tempo, key, length, channels (instruments, kits), mixer "
+              "inserts (effects, sends, sidechains), patterns, Playlist lanes with their clips (each clip's id, bar, "
+              "length and what it plays; clip.set moves one to another lane), markers, and what is "
+              "missing on this computer.",
+              noInput, Does::reads));
     const auto step =
         object ({ { "type", "object" },
                   { "properties",

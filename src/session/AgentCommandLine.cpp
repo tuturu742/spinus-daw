@@ -473,9 +473,38 @@ juce::var summarize (Session& session, const juce::File& projectFolder)
                                 { "notes", notes } }));
     }
 
+    // Each lane with its clips, in order (where they are and what they play), so an agent can move them (clip.set).
+    std::map<model::LaneId, juce::Array<juce::var>> clipsOn;
+    auto sorted = p.playlist.clips;
+    std::stable_sort (sorted.begin(), sorted.end(), [] (auto& a, auto& b) { return a.start < b.start; });
+    for (auto& clip : sorted)
+    {
+        auto summary = object ({ { "clip", (int)clip.id.value },
+                                 { "bar", 1.0 + (double)clip.start / (double)barTicks },
+                                 { "bars", (double)clip.length / (double)barTicks } });
+        auto* o = summary.getDynamicObject();
+        if (const auto* pattern = std::get_if<model::PatternClip> (&clip.content))
+        {
+            o->setProperty ("pattern", (int)pattern->pattern.value);
+            if (const auto* found = p.findPattern (pattern->pattern))
+                o->setProperty ("name", found->name);
+        }
+        else if (const auto* audio = std::get_if<model::AudioClip> (&clip.content))
+        {
+            o->setProperty ("audio", audio->file);
+            o->setProperty ("channel", (int)audio->channel.value);
+        }
+        else if (const auto* automation = std::get_if<model::AutomationClip> (&clip.content))
+            o->setProperty ("automation", model::targetToJson (automation->target));
+        clipsOn[clip.lane].add (summary);
+    }
+
     juce::Array<juce::var> lanes;
     for (auto& lane : p.playlist.lanes)
-        lanes.add (object ({ { "lane", (int)lane.id.value }, { "name", lane.name }, { "muted", lane.muted } }));
+        lanes.add (object ({ { "lane", (int)lane.id.value },
+                             { "name", lane.name },
+                             { "muted", lane.muted },
+                             { "clips", clipsOn[lane.id] } }));
 
     int patternClips = 0, audioClips = 0, automationClips = 0;
     const auto audioFolder = projectFolder == juce::File() ? juce::File() : projectFolder.getChildFile ("audio");

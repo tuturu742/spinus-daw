@@ -153,7 +153,9 @@ A pan's text is `"30% L"`, `"20% R"` or `"C"` (the middle). As `value`, a pan is
 
 `spinus --check <project>` prints the project's tempo, key, length in bars and seconds, its channels
 (instrument, the Drum Machine's kit, how many samples a Sampler has), its inserts (effects, sends, where a
-sidechain comes from), its patterns (bars, how many notes), lanes, clips and markers. Under `problems`
+sidechain comes from), its patterns (bars, how many notes), lanes with their clips (each clip's number, the bar it starts on, its
+length in bars and what it plays: a pattern, an audio file or automation), how many clips of each kind, and
+markers. Under `problems`
 it lists what is missing here: a plugin that isn't installed, an audio file that isn't there. It ends with
 code 0 when nothing is missing, 3 when something is, and 1 when the project doesn't open.
 
