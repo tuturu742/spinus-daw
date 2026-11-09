@@ -54,6 +54,8 @@ public:
     bool addEffect (model::InsertId, const juce::String& stockType, std::optional<int> slot = {});
     bool addEffect (model::InsertId, const model::Device&, std::optional<int> slot = {});
     bool removeEffect (model::DeviceId);
+    /** Puts another effect in this one's slot (FL's Replace); one undo step. */
+    bool replaceEffect (model::DeviceId, const model::Device& with);
     /** The same effect with the same settings on another insert, after its last effect (one undo step). */
     bool copyEffect (model::DeviceId, model::InsertId to);
     bool moveEffect (model::DeviceId, model::InsertId, int slot);

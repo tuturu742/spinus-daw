@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Right-click an effect in the Mixer › **Replace effect** puts another effect in its slot, as Replace
+  instrument does in the Channel Rack. Its place and dry/wet stay; one Ctrl+Z brings the old one back.
 - A knob turned in a plugin's own window can be undone: each drag is one **Ctrl+Z** step, which puts the knob
   back where it was. Before, Ctrl+Z skipped it and undid the change before it instead.
 - An agent's song summary (and `spinus --check`) now lists each Playlist lane's clips: where they start, how long

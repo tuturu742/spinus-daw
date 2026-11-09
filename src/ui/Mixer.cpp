@@ -971,6 +971,16 @@ private:
                       [this, id = device.id, slot] { mixer.moveEffect (id, mixer.getSelectedInsert(), slot + 1); });
         menu.addSubMenu ("Move to insert", moveTo);
         menu.addSubMenu ("Copy to insert (with its settings)", copyTo);
+        // FL's Replace: the same effects as the slot's "Add effect" menu.
+        juce::PopupMenu replace;
+        addDeviceItems (
+            replace, mixer.session.getDeviceList(), false,
+            [safe = juce::Component::SafePointer<Details> (this), id = device.id] (const plugins::DeviceList::Entry& e)
+            {
+                if (safe != nullptr)
+                    safe->mixer.replaceEffect (id, e.device);
+            });
+        menu.addSubMenu ("Replace effect", replace);
         menu.addSeparator();
         menu.addSubMenu ("Create automation clip", makeAutomateParameterMenu (mixer, mixer.session, device.id));
         if (device.kind == model::Device::Kind::plugin && mixer.session.getSandboxList() != nullptr)
@@ -1422,6 +1432,12 @@ void Mixer::itemDropped (const SourceDetails& source)
 bool Mixer::removeEffect (model::DeviceId id)
 {
     return perform ("insert.removeEffect", object ({ { "device", idValue (id) } }));
+}
+
+bool Mixer::replaceEffect (model::DeviceId id, const model::Device& with)
+{
+    return perform ("insert.replaceEffect",
+                    object ({ { "device", idValue (id) }, { "effect", model::deviceToJson (with) } }));
 }
 
 bool Mixer::moveEffect (model::DeviceId id, model::InsertId to, int slot)

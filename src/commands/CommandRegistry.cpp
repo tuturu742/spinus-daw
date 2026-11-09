@@ -1471,6 +1471,53 @@ private:
     juce::String removedName;
 };
 
+class ReplaceEffect final : public SnapshotCommand
+{
+public:
+    ReplaceEffect (juce::var p, DeviceId d, Device replacement)
+        : SnapshotCommand ("insert.replaceEffect", std::move (p)), device (d), effect (std::move (replacement))
+    {
+    }
+
+    juce::String getDescription() const override
+    {
+        return "Replace effect " + quoted (oldName) + " with " + quoted (effectName (effect));
+    }
+    juce::var getResult() const override { return resultWith ({ { "device", deviceId.value } }); }
+
+protected:
+    juce::Result apply (Project& p) override
+    {
+        auto [insert, slot] = findEffect (p, device);
+        if (insert == nullptr)
+            return juce::Result::fail ("no effect with device " + juce::String (device.value));
+
+        if (! deviceId) // first perform allocates the ID; redo reuses it
+            deviceId = p.allocateId<DeviceId>();
+
+        // Its slot and dry/wet stay; its settings and their automation go with it (the new one has others).
+        auto& old = insert->effects[(size_t)slot];
+        oldName = effectName (old.device);
+        old.device = effect;
+        old.device.id = deviceId;
+
+        std::erase_if (p.playlist.clips,
+                       [&] (const Clip& clip)
+                       {
+                           auto* a = std::get_if<AutomationClip> (&clip.content);
+                           return a != nullptr && a->target.kind == ParameterTarget::Kind::deviceParameter &&
+                                  a->target.device == device;
+                       });
+        return juce::Result::ok();
+    }
+
+private:
+    DeviceId device;
+    Device effect;
+    juce::String oldName;
+    DeviceId deviceId;
+};
+
 class MoveEffect final : public SnapshotCommand
 {
 public:
@@ -3709,6 +3756,23 @@ void addEffectCommands (std::vector<CommandInfo>& list)
                               if (auto i = p.number ("index", 0, std::numeric_limits<int>::max()))
                                   index = (int)*i;
                               return std::make_unique<AddEffect> (p.json, p.id<InsertId> ("insert"), device, index);
+                          }));
+
+    list.push_back (info ("insert.replaceEffect",
+                          "Replace an effect with another in the same slot (as channel.replaceInstrument does for "
+                          "instruments): its place and dry/wet stay; automation clips of the old effect's settings "
+                          "are removed. Result: the new effect's device ID.",
+                          ParameterSchema()
+                              .id ("device", "Device ID of the effect to replace")
+                              .custom ("effect", "The new effect device (without id)", true, deviceSchema()),
+                          [] (Params& p) -> std::unique_ptr<Command>
+                          {
+                              p.allowOnly ({ "device", "effect" });
+                              Device effect;
+                              if (auto d = p.get ("effect", true); ! d.isVoid())
+                                  if (auto e = deviceFromJson (d, effect); e.isNotEmpty())
+                                      p.errors.add ("effect: " + e);
+                              return std::make_unique<ReplaceEffect> (p.json, p.id<DeviceId> ("device"), effect);
                           }));
 
     list.push_back (info ("insert.removeEffect", "Remove an effect from its insert, with its automation.",
