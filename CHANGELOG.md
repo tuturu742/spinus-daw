@@ -97,6 +97,16 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **The music harness's command-line MCP server** (`python -m spinus_ai.harness mcp`) answers bad input with an
   error instead of stopping.
 
+### Automation clips: see what a clip moves
+
+- Click an automation clip on the Playlist (or open it in the Automation editor) and what it moves is outlined
+  in yellow: the effect's slot and its insert's strip in the Mixer, the strip for an insert's volume or pan, or
+  the channel in the Channel Rack for a channel's volume, pan or instrument. The outline goes when the clip is
+  no longer selected.
+- An automation clip's menu (**Shift+right-click**) has **Show ...**, for example **Show Filter on
+  Master**: it opens the Mixer at that insert, or the Channel Rack at that channel, and the device's window.
+- The clip's label names the device and where it is: **Filter (Master): Cutoff**, **3 Drums: Volume**.
+
 ### Track creator: remembered per project
 
 - A new project starts with an empty Track creator, like the Channel Rack and the Mixer. Each saved project keeps

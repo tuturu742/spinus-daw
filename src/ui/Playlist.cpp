@@ -235,7 +235,7 @@ public:
 
         g.setColour (juce::Colours::black.withAlpha (0.85f));
         g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-        g.drawText (playlist.session.describeTarget (automation.target), r.reduced (4.0f, 1.0f).withHeight (13.0f),
+        g.drawText (playlist.session.describeTargetPlace (automation.target), r.reduced (4.0f, 1.0f).withHeight (13.0f),
                     juce::Justification::topLeft, true);
     }
 
@@ -776,6 +776,17 @@ private:
         else if (const auto* audio = std::get_if<model::AudioClip> (&clip.content))
         {
             addAudioItems (menu, *audio, id);
+        }
+        else if (const auto show = playlist.getShowTargetText (id); show.isNotEmpty())
+        {
+            menu.addSectionHeader (
+                playlist.session.describeTargetPlace (std::get<model::AutomationClip> (clip.content).target));
+            menu.addItem (show,
+                          [safe, id]
+                          {
+                              if (safe != nullptr)
+                                  safe->showAutomationTarget (id);
+                          });
         }
         menu.addItem ("Delete clip",
                       [safe, id]
@@ -1364,6 +1375,7 @@ Playlist::Playlist (Session& s)
 
 Playlist::~Playlist()
 {
+    session.setHighlightedTargets (Session::HighlightSource::playlist, {});
     cancelPendingUpdate();
     session.getHistory().removeListener (historyListener);
     session.removeChangeListener (this);
@@ -1623,7 +1635,49 @@ void Playlist::setSelection (std::set<model::ClipId> s)
 {
     std::erase_if (s, [this] (model::ClipId id) { return session.getProject().findClip (id) == nullptr; });
     selection = std::move (s);
+    updateHighlight();
     lanes->repaint();
+}
+
+void Playlist::updateHighlight()
+{
+    // The selected automation clips' targets are outlined in the Mixer and the Channel Rack.
+    std::vector<model::ParameterTarget> targets;
+    for (auto id : selection)
+        if (const auto* clip = session.getProject().findClip (id))
+            if (const auto* automation = std::get_if<model::AutomationClip> (&clip->content))
+                if (std::find (targets.begin(), targets.end(), automation->target) == targets.end())
+                    targets.push_back (automation->target);
+    session.setHighlightedTargets (Session::HighlightSource::playlist, std::move (targets));
+}
+
+juce::String Playlist::getShowTargetText (model::ClipId id) const
+{
+    const auto* clip = session.getProject().findClip (id);
+    const auto* automation = clip != nullptr ? std::get_if<model::AutomationClip> (&clip->content) : nullptr;
+    if (automation == nullptr)
+        return {};
+    const auto place = session.findTargetPlace (automation->target);
+    if (place.where.isEmpty())
+        return {};
+    if (place.device.isValid())
+        return "Show " + place.deviceName + " on " + place.where;
+    if (place.insert.isValid())
+        return "Show " + place.where + " in the Mixer";
+    const auto* channel = session.getProject().findChannel (place.channel);
+    return "Show " + place.where +
+           (channel != nullptr && channel->audioTrack ? " in Audio tracks" : " in the Channel Rack");
+}
+
+bool Playlist::showAutomationTarget (model::ClipId id)
+{
+    const auto* clip = session.getProject().findClip (id);
+    const auto* automation = clip != nullptr ? std::get_if<model::AutomationClip> (&clip->content) : nullptr;
+    if (automation == nullptr || getShowTargetText (id).isEmpty() || ! onShowAutomationTarget)
+        return false;
+    setSelection ({ id }); // its target stays outlined where it opens
+    onShowAutomationTarget (automation->target);
+    return true;
 }
 
 void Playlist::selectAll()
@@ -2264,6 +2318,7 @@ void Playlist::handleAsyncUpdate()
     if (std::any_of (selection.begin(), selection.end(),
                      [this] (model::ClipId id) { return session.getProject().findClip (id) == nullptr; }))
         setSelection (selection);
+    updateHighlight(); // a clip's target may have gone or come back (undo)
     updateScrollBars();
     repaint();
 }

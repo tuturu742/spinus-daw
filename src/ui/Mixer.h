@@ -90,6 +90,11 @@ public:
     void selectInsert (model::InsertId);
     model::InsertId getSelectedInsert() const noexcept { return selected; }
 
+    /** Outlined in the theme's accent: the strip whose volume, pan or effect the automation clip selected in the
+        Playlist (or shown in the Automation editor) moves, and that effect's slot while its insert is selected. */
+    bool isStripHighlighted (model::InsertId) const;
+    bool isEffectHighlighted (model::DeviceId) const;
+
     /** The message from the last refused edit, e.g. a feedback loop (empty after a success). */
     const juce::String& getLastError() const noexcept { return lastError; }
 

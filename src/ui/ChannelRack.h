@@ -114,6 +114,9 @@ public:
     bool routeGroupToBus (const juce::String& group);
     const juce::String& getShownGroup() const noexcept { return shownGroup; }
     int getNumShownChannels() const noexcept { return (int)rows.size(); }
+    /** Outlined in the theme's accent: the channel whose volume, pan or instrument the automation clip selected
+        in the Playlist (or shown in the Automation editor) moves. */
+    bool isChannelHighlighted (model::ChannelId id) const { return session.isChannelHighlighted (id); }
     bool removeChannel (model::ChannelId);
 
     /** Freezes or unfreezes the channel (model/Freeze.h). */

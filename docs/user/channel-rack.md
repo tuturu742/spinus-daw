@@ -54,6 +54,8 @@ mixer insert, volume, pan, colour and group. Its name stays too, unless it was t
   other notes in the Piano Roll stay as they are.
 - Every change can be undone with **Ctrl+Z**.
 - Press **Space** in pattern mode to hear the pattern loop; the playing step is outlined.
+- A channel outlined in yellow is what the automation clip selected in the Playlist moves (its volume, pan or
+  an instrument setting; see [What a clip moves](playlist.md#what-a-clip-moves)).
 - A new channel gets its own mixer insert automatically.
 
 ![A channel with steps, and one with Piano Roll notes](images/channel-rack-notes.png)
