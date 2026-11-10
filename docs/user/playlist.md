@@ -130,8 +130,9 @@ moved: ...**.
 In those menus every setting shows its current value next to its name, for example **Cutoff (1.20
 kHz)**, which helps to tell the plugin's settings apart.
 
-The clip appears on a new Playlist track named after the setting, four bars long, as a flat line at the
-setting's current value. The **Automation editor** opens to show it. A flat line changes nothing yet:
+The clip appears on a new Playlist track named after the setting, as a flat line at the setting's current
+value. If an area of the Playlist is selected (right-drag in the timeline above the tracks), the clip fills
+exactly that area. If not, it is four bars long and starts where the song position is (the playhead line). The **Automation editor** opens to show it. A flat line changes nothing yet:
 shape it first.
 
 A clip moves its setting only while it plays. Before, between and after a setting's clips, the setting is
