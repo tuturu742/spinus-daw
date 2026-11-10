@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A save that failed (a full disk, a folder you may not write in) could leave the project half saved: the
+  plugins' settings from the new save next to the song from the old one. Now nothing on disk changes unless
+  the whole save succeeds. The message also says why when the project's folder is read-only.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ
