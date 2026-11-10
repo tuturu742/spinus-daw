@@ -128,6 +128,27 @@ TEST_CASE ("Effect slots: add, reorder, bypass, move to another insert, remove",
     CHECK (f.insert (a).effects.empty());
 }
 
+TEST_CASE ("Replace effect puts another effect in the same slot, as one undo step", "[ui][mixer]")
+{
+    MixerFixture f;
+    REQUIRE (f.mixer.addInsert());
+    const auto a = f.project().mixer.inserts[0].id;
+    REQUIRE (f.mixer.addEffect (a, compressor));
+    REQUIRE (f.mixer.addEffect (a, reverb));
+    const auto compressorId = f.insert (a).effects[0].device.id;
+
+    model::Device filter;
+    filter.kind = model::Device::Kind::stock;
+    filter.stockType = "spinus.filter";
+    REQUIRE (f.mixer.replaceEffect (compressorId, filter));
+    REQUIRE (f.insert (a).effects.size() == 2);
+    CHECK (f.insert (a).effects[0].device.stockType == "spinus.filter");
+    CHECK (f.insert (a).effects[1].device.stockType == reverb);
+
+    f.session.getHistory().undo();
+    CHECK (f.insert (a).effects[0].device.id == compressorId);
+}
+
 TEST_CASE ("An insert takes any number of effects; the slot list grows", "[ui][mixer]")
 {
     MixerFixture f;

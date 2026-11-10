@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Right-click an effect in the Mixer › **Replace effect** puts another effect in its slot, as Replace
+  instrument does in the Channel Rack. Its place and dry/wet stay; one Ctrl+Z brings the old one back.
 - Automation of Spinus's own devices (Filter, EQ, Delay, compressor and the rest, and the 3x Osc, Sampler and
   Drum Machine) now changes their sound. Before, an automation clip moved the setting but the sound stayed where
   the knob was last turned by hand, and the device's window did not move either until it was closed and opened

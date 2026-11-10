@@ -188,6 +188,7 @@ RESULT_FIELDS: dict[str, tuple[str, ...]] = {
     "channel.replaceInstrument": ("channel", "device"),
     "insert.add": ("insert",),
     "insert.addEffect": ("device",),
+    "insert.replaceEffect": ("device",),
     "insert.addBus": ("insert",),
     "pattern.add": ("pattern",),
     "pattern.clone": ("pattern",),

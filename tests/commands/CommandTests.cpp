@@ -73,6 +73,7 @@ const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
         { "insert.addEffect",
           R"({"insert": 6, "device": {"kind": "stock", "stockType": "bundled.lsp.compressor-stereo"}, "index": 0})" },
         { "insert.removeEffect", R"({"device": 3})" },
+        { "insert.replaceEffect", R"({"device": 5, "effect": {"kind": "stock", "stockType": "spinus.filter"}})" },
         { "insert.moveEffect", R"({"device": 3, "insert": 6, "index": 0})" },
         { "insert.setEffect", R"({"device": 5, "bypassed": true})" },
         { "device.setParameters", R"({"device": 3, "values": {"ratio": 0.5}})" },
@@ -461,6 +462,45 @@ TEST_CASE ("Effects: any number per insert, move between inserts, removal takes 
     }
 
     CHECK (history.perform (make ("insert.removeEffect", R"({"device": 5})")).getErrorMessage().contains ("no effect"));
+
+    // Replacing keeps the slot and its dry/wet; the old effect's automation goes; undo brings it all back.
+    {
+        auto& slots = history.getProject().findInsert (InsertId { reverb })->effects;
+        REQUIRE (slots.size() == 1);
+        REQUIRE (slots[0].device.id == DeviceId { 3 });
+    }
+    REQUIRE (history
+                 .perform (make ("clip.addAutomation",
+                                 R"({"lane": 13, "start": 0, "length": 960,
+                                     "target": {"kind": "deviceParameter", "device": 3, "parameterId": "ratio"},
+                                     "points": [{"time": 0, "value": 0.5}]})"))
+                 .wasOk());
+    auto replace =
+        make ("insert.replaceEffect", R"({"device": 3, "effect": {"kind": "stock", "stockType": "spinus.filter"}})");
+    auto* replaceRaw = replace.get();
+    REQUIRE (history.perform (std::move (replace)).wasOk());
+    {
+        const auto& p = history.getProject();
+        const auto& slots = p.findInsert (InsertId { reverb })->effects;
+        REQUIRE (slots.size() == 1);
+        CHECK (slots[0].device.stockType == "spinus.filter");
+        CHECK (slots[0].device.id.value == (uint32_t)(int)replaceRaw->getResult()["device"]);
+        CHECK (history.getUndoDescriptions().strings.getLast().startsWith ("Replace effect"));
+        CHECK (std::none_of (p.playlist.clips.begin(), p.playlist.clips.end(),
+                             [] (auto& c) { return std::holds_alternative<AutomationClip> (c.content); }));
+    }
+    history.undo();
+    {
+        const auto& p = history.getProject();
+        CHECK (p.findInsert (InsertId { reverb })->effects[0].device.id == DeviceId { 3 });
+        CHECK (std::any_of (p.playlist.clips.begin(), p.playlist.clips.end(),
+                            [] (auto& c) { return std::holds_alternative<AutomationClip> (c.content); }));
+    }
+    CHECK (history
+               .perform (make ("insert.replaceEffect",
+                               R"({"device": 99, "effect": {"kind": "stock", "stockType": "spinus.filter"}})"))
+               .getErrorMessage()
+               .contains ("no effect"));
     CHECK (history.perform (make ("insert.setEffect", R"({"device": 8, "bypassed": true})")).failed()); // instrument
 
     REQUIRE (history.perform (make ("insert.setEffect", R"({"device": 3, "bypassed": true})")).wasOk());
