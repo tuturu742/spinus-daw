@@ -6,8 +6,12 @@
 #include "RealtimeRunner.h"
 #include "commands/CommandHistory.h"
 #include "commands/CommandRegistry.h"
+#include "engine/BundledDevices.h"
 #include "engine/EngineAdapter.h"
 #include "engine/EngineHost.h"
+#include "plugins/SandboxList.h"
+#include "plugins/clap/ClapPluginFormat.h"
+#include "session/Session.h"
 
 #include <random>
 
@@ -648,4 +652,107 @@ TEST_CASE ("Muting the master silences the output after its effects, whatever it
 
     runner.stop();
     edit->getTransport().stop (false, true);
+}
+
+TEST_CASE ("Notes taken away, moved or cut short while they play stop sounding", "[engine][audio][notes]")
+{
+    // 3x Osc, and a plugin (the test synth) inside Spinus and in its own process: every kind of instrument.
+    const auto synthFile = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("test-synth.clap");
+    for (int kind = 0; kind < 3; ++kind)
+    {
+        INFO ((kind == 0 ? "3x Osc" : kind == 1 ? "test synth" : "test synth in its own process"));
+        const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile ("spinus-held-notes-" + juce::Uuid().toString());
+        root.createDirectory();
+        EngineHost host ({ .openAudioDevice = false, .pluginHost = juce::File (SPINUS_PLUGIN_HOST) });
+        plugins::ClapPluginFormat clap;
+        juce::OwnedArray<juce::PluginDescription> found;
+        clap.findAllTypesForFile (found, synthFile.getFullPathName());
+        for (auto* d : found)
+            if (d->name == "Spinus Test Synth")
+                host.getEngine().getPluginManager().knownPluginList.addType (*d);
+        plugins::SandboxList list { root.getChildFile ("run-separately.json") };
+        if (kind == 2)
+            list.set (plugins::SandboxList::keyOf ("CLAP", synthFile.getFullPathName()), true, "Spinus Test Synth");
+        auto devices = std::make_unique<DefaultDeviceFactory>();
+        registerSpinusDevices (*devices, host.getEngine());
+        devices->setRunSeparately (
+            [&list] (const juce::PluginDescription& d)
+            { return list.contains (plugins::SandboxList::keyOf (d.pluginFormatName, d.fileOrIdentifier)); });
+        auto session = std::make_unique<Session> (host.getEngine(), std::move (devices));
+        session->setSandboxList (&list);
+
+        auto run = [&] (const juce::String& name, const juce::String& json)
+        {
+            juce::String error;
+            auto command = CommandRegistry::get().create (name, juce::JSON::parse (json), error);
+            INFO (name << ": " << error);
+            REQUIRE (command != nullptr);
+            auto* raw = command.get();
+            REQUIRE (session->getHistory().perform (std::move (command)).wasOk());
+            return raw->getResult();
+        };
+        const auto instrument =
+            kind == 0
+                ? juce::String (R"({"kind": "stock", "stockType": "spinus.3x-osc"})")
+                : R"({"kind": "plugin", "plugin": {"format": "CLAP", "name": "Spinus Test Synth", "manufacturer": "Spinus tests", "fileOrIdentifier": )" +
+                      juce::JSON::toString (synthFile.getFullPathName()) + "}}";
+        const auto channel = run ("channel.add", R"({"name": "Keys", "instrument": )" + instrument + "}")["channel"];
+        const auto pattern = run ("pattern.add", R"({"name": "P", "length": 7680})")["pattern"];
+        const auto lane = run ("lane.add", "{}")["lane"];
+        const auto clip = run ("clip.addPattern", R"({"lane": )" + lane.toString() + R"(, "pattern": )" +
+                                                      pattern.toString() + R"(, "start": 0})")["clip"];
+        auto setNotes = [&] (const juce::String& notes)
+        {
+            run ("pattern.setNotes", R"({"pattern": )" + pattern.toString() + R"(, "channel": )" + channel.toString() +
+                                         R"(, "notes": [)" + notes + "]}");
+        };
+        const juce::String longNote = R"({"start": 0, "length": 7680, "pitch": 60, "velocity": 0.8})";
+        session->setMode (Session::Mode::song);
+
+        test::RealtimeRunner runner (host.getEngine(),
+                                     { .outputChannels = 2, .maxSeconds = 40.0, .paceInRealTime = true });
+        auto now = [&] { return runner.getSecondsProcessed(); };
+        auto level = [&] (double from, double to)
+        { return test::checks::rms (runner.getChannel (0), (int64_t)(from * 48000.0), (int64_t)(to * 48000.0)); };
+        runner.start();
+        runner.runUntil (0.2);
+
+        // Each edit, one second into a two-bar note: the note stops (its release is well under half a second).
+        auto trial = [&] (const char* what, const std::function<void()>& edit, const std::function<void()>& undo = {})
+        {
+            INFO (what);
+            setNotes (longNote);
+            runner.runUntil (now() + 0.2);
+            runner.betweenBlocks ([&] { session->play(); });
+            const auto start = now();
+            runner.runUntil (start + 1.0);
+            CHECK (level (start + 0.5, start + 0.9) > 0.01f);
+            edit();
+            runner.runUntil (now() + 0.8);
+            CHECK (level (now() - 0.3, now()) < 1.0e-4f);
+            session->stop();
+            if (undo)
+                undo();
+            runner.runUntil (now() + 0.3); // the edits reach the playback graph before the next play
+        };
+        trial ("deleted", [&] { setNotes ({}); });
+        trial ("cut short", [&] { setNotes (R"({"start": 0, "length": 480, "pitch": 60, "velocity": 0.8})"); });
+        trial (
+            "moved to another key",
+            [&]
+            {
+                setNotes (
+                    R"({"start": 0, "length": 480, "pitch": 60, "velocity": 0.8}, {"start": 3840, "length": 480, "pitch": 64, "velocity": 0.8})");
+            });
+        trial (
+            "its clip moved away", [&] { run ("clip.set", R"({"clip": )" + clip.toString() + R"(, "start": 15360})"); },
+            [&] { run ("clip.set", R"({"clip": )" + clip.toString() + R"(, "start": 0})"); });
+        trial ("its clip removed", [&] { run ("clip.remove", R"({"clip": )" + clip.toString() + "}"); });
+
+        // Another note on the same key keeps playing when one of two is taken away.
+        runner.stop();
+        session = nullptr;
+        root.deleteRecursively();
+    }
 }

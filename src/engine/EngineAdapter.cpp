@@ -1300,7 +1300,7 @@ void EngineAdapter::syncPatternClips (const Project& project, bool timingChanged
             continue;
         }
 
-        it->second->removeFromParent();
+        removeMidiClip (*it->second);
         it = midiClips.erase (it);
     }
 
@@ -1406,7 +1406,7 @@ void EngineAdapter::syncNoteSources (const Project& project, bool force)
             continue;
 
         for (auto& clip : source.clips)
-            clip->removeFromParent();
+            removeMidiClip (*clip);
         source.clips.clear();
         source.signature = signature;
 
@@ -1467,7 +1467,7 @@ void EngineAdapter::syncPreviewClips (const Project& project, bool force)
             continue;
         }
 
-        it->second->removeFromParent();
+        removeMidiClip (*it->second);
         it = previewClips.erase (it);
     }
 
@@ -1541,10 +1541,50 @@ bool EngineAdapter::addNotes (juce::ValueTree& sequence, const Clip& clip, const
     return anyExpression;
 }
 
+void EngineAdapter::removeMidiClip (te::MidiClip& clip)
+{
+    releaseSoundingNotes (clip);
+    clip.removeFromParent();
+}
+
+void EngineAdapter::releaseSoundingNotes (te::MidiClip& clip)
+{
+    auto& transport = edit.getTransport();
+    auto* track = dynamic_cast<te::AudioTrack*> (clip.getTrack());
+    if (track != nullptr && transport.isPlaying())
+    {
+        // The notes playing now (give or take a block or two: the audio thread is a little ahead or behind), on
+        // the channels the clip plays on. The note offs go to the instrument through the track's live input.
+        const auto now = transport.getPosition();
+        const auto margin = te::TimeDuration::fromSeconds (0.05);
+        std::set<int> pitches;
+        for (auto* n : clip.getSequence().getNotes())
+        {
+            const auto start = clip.getTimeOfContentBeat (n->getStartBeat());
+            const auto end = clip.getTimeOfContentBeat (n->getEndBeat());
+            if (start <= now + margin && end >= now - margin)
+                pitches.insert (n->getNoteNumber());
+        }
+        const auto channels = clip.getMPEMode()
+                                  ? juce::Range<int> (2, 16)
+                                  : juce::Range<int>::withStartAndLength (clip.getMidiChannel().getChannelNumber(), 1);
+        for (auto pitch : pitches)
+            for (auto channel = channels.getStart(); channel < channels.getEnd(); ++channel)
+                track->injectLiveMidiMessage (juce::MidiMessage::noteOff (channel, pitch), {});
+    }
+}
+
 void EngineAdapter::writeMidiClip (te::MidiClip& midiClip, const Clip& clip, const PatternClip& pc,
                                    const std::vector<Note>& notes, const Pattern& pattern, bool muted, bool expressive)
 {
-    midiClip.setPosition ({ { toTime (clip.start), toTime (clip.start + clip.length) }, te::TimeDuration() });
+    // Played in beats (Tracktion's LoopingMidiNode), which releases the notes an edit takes away while they play;
+    // the default proxy in seconds (MidiNode) left them sounding until playback stopped.
+    midiClip.setUsesProxy (false);
+    // Moved: Tracktion no longer plays the clip where it was, so the notes it held there would sound on.
+    const te::ClipPosition position { { toTime (clip.start), toTime (clip.start + clip.length) }, te::TimeDuration() };
+    if (midiClip.getPosition().time != position.time)
+        releaseSoundingNotes (midiClip);
+    midiClip.setPosition (position);
     midiClip.setMuted (muted);
 
     // Emptied from the front: Tracktion looks for each note taken out from the start of its list.
@@ -1569,7 +1609,7 @@ void EngineAdapter::writeMidiClip (te::MidiClip::Ptr& slot, te::AudioTrack& trac
         return writeMidiClip (*slot, clip, pc, notes, pattern, muted, expressive);
 
     if (slot != nullptr)
-        slot->removeFromParent();
+        removeMidiClip (*slot);
     slot = nullptr;
 
     auto sequence = te::MidiList::createMidiList();
@@ -1587,6 +1627,7 @@ void EngineAdapter::writeMidiClip (te::MidiClip::Ptr& slot, te::AudioTrack& trac
     if (slot == nullptr)
         return;
 
+    slot->setUsesProxy (false); // see the other writeMidiClip
     slot->setMuted (muted);
     slot->setMPEMode (anyExpression);
 }

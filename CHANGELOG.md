@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- No more stuck notes when you edit while the song plays: deleting a note that is sounding, making it
+  shorter, moving or deleting its clip in the Playlist now stops it at once. Before, it kept sounding until
+  you stopped playback. This was the same for Spinus's own instruments and for plugins.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ

@@ -254,6 +254,11 @@ private:
     void writeMidiClip (tracktion::MidiClip::Ptr& slot, tracktion::AudioTrack& track, const model::Clip&,
                         const model::PatternClip&, const std::vector<model::Note>&, const model::Pattern&, bool muted,
                         bool expressive);
+    /** Takes a MIDI clip out of its track. While playing, its notes sounding now are released first: Tracktion
+        forgets a removed clip's held notes, which then sounded until playback stopped. */
+    void removeMidiClip (tracktion::MidiClip&);
+    /** While playing, sends note offs for the clip's notes sounding now (before it is moved or taken out). */
+    void releaseSoundingNotes (tracktion::MidiClip&);
     /** Adds the notes the clip shows to a SEQUENCE tree; true if any has per-note values. */
     bool addNotes (juce::ValueTree& sequence, const model::Clip&, const model::PatternClip&,
                    const std::vector<model::Note>&, const model::Pattern&, bool expressive) const;
