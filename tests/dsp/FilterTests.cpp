@@ -328,6 +328,28 @@ TEST_CASE ("The Filter follows a host's automation, and so does its window", "[d
     };
     look (*editor);
     CHECK (knobFollows);
+
+    // A choice (the slope) too: its box shows what the automation chose.
+    auto* slope = dynamic_cast<juce::AudioParameterChoice*> (filter.getParameterState().getParameter ("slope"));
+    REQUIRE (slope != nullptr);
+    const auto chosen = (slope->getIndex() + 1) % slope->choices.size();
+    auto boxShows = [&] (const juce::String& text)
+    {
+        bool shows = false;
+        std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+        {
+            if (auto* box = dynamic_cast<juce::ComboBox*> (&c))
+                shows = shows || box->getText() == text;
+            for (auto* child : c.getChildren())
+                find (*child);
+        };
+        find (*editor);
+        return shows;
+    };
+    REQUIRE (! boxShows (slope->choices[chosen]));
+    static_cast<juce::AudioProcessorParameter*> (slope)->setValue (slope->convertTo0to1 ((float)chosen));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    CHECK (boxShows (slope->choices[chosen]));
     filter.editorBeingDeleted (editor.get());
 }
 

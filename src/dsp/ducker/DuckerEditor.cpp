@@ -10,8 +10,7 @@ DuckerEditor::DuckerEditor (DuckerProcessor& p) : juce::AudioProcessorEditor (p)
 {
     auto& state = p.getParameterState();
     trigger.addItemList ({ "Sidechain", "Every beat", "Every half beat", "Every 2 beats" }, 1);
-    triggerAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (state, "trigger", trigger);
+    triggerAttachment = std::make_unique<ComboBoxAttachment> (state, "trigger", trigger);
     addAndMakeVisible (trigger);
 
     amount = std::make_unique<ParameterKnob> (state, "amount", "Amount");

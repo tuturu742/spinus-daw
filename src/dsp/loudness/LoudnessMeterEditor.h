@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 namespace spinus::dsp
 {
 
@@ -32,8 +34,8 @@ private:
     juce::ComboBox target;
     juce::ToggleButton resetOnPlay { "Start again on Play" };
     juce::TextButton reset { "Reset" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> targetAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> resetOnPlayAttachment;
+    std::unique_ptr<ComboBoxAttachment> targetAttachment;
+    std::unique_ptr<ButtonAttachment> resetOnPlayAttachment;
 
     juce::Rectangle<int> readings, graph, verdict;
     float momentary = LoudnessEngine::silence, shortTerm = LoudnessEngine::silence,

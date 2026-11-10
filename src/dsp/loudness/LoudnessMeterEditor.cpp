@@ -23,15 +23,13 @@ LoudnessMeterEditor::LoudnessMeterEditor (LoudnessMeterProcessor& p) : juce::Aud
     for (auto& t : LoudnessMeterProcessor::getTargets())
         target.addItem (t.name, id++);
     target.setTooltip ("What the song is aimed at: the loudness it should have, and the highest peak");
-    targetAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (state, "target", target);
+    targetAttachment = std::make_unique<ComboBoxAttachment> (state, "target", target);
     addAndMakeVisible (target);
 
     resetOnPlay.setColour (juce::ToggleButton::textColourId, look::text);
     resetOnPlay.setColour (juce::ToggleButton::tickColourId, look::accent);
     resetOnPlay.setTooltip ("Measure the song again from where playback starts, each time you press Play");
-    resetOnPlayAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, "reset_on_play", resetOnPlay);
+    resetOnPlayAttachment = std::make_unique<ButtonAttachment> (state, "reset_on_play", resetOnPlay);
     addAndMakeVisible (resetOnPlay);
 
     reset.setTooltip ("Start measuring again now");

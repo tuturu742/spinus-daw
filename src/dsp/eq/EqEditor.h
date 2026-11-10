@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+
+#include "dsp/DeviceControls.h"
 #include <juce_dsp/juce_dsp.h>
 
 #include "EqEngine.h"
@@ -67,8 +69,8 @@ private:
     juce::ToggleButton onButton { "On" };
     juce::ComboBox type, slope;
     std::unique_ptr<ParameterKnob> frequency, gain, q, output;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> onAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> typeAttachment, slopeAttachment;
+    std::unique_ptr<ButtonAttachment> onAttachment;
+    std::unique_ptr<ComboBoxAttachment> typeAttachment, slopeAttachment;
 
     juce::dsp::FFT fft { fftOrder };
     juce::dsp::WindowingFunction<float> window { (size_t)fftSize, juce::dsp::WindowingFunction<float>::hann };

@@ -220,10 +220,8 @@ SamplerEditor::SamplerEditor (SamplerProcessor& p) : juce::AudioProcessorEditor 
     }
 
     filter.addItemList ({ "Filter off", "Low pass", "High pass", "Band pass" }, 1);
-    filterAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (state, "filter", filter);
-    oneShotAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, "oneShot", oneShot);
+    filterAttachment = std::make_unique<ComboBoxAttachment> (state, "filter", filter);
+    oneShotAttachment = std::make_unique<ButtonAttachment> (state, "oneShot", oneShot);
     addAndMakeVisible (filter);
     addAndMakeVisible (oneShot);
 

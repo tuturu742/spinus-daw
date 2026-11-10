@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 #include <array>
 
 namespace spinus::dsp
@@ -63,8 +65,8 @@ private:
     std::vector<std::unique_ptr<ParameterKnob>> knobs;
     std::vector<std::unique_ptr<juce::ComboBox>> choices;
     std::vector<std::unique_ptr<juce::ToggleButton>> toggles;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> choiceAttachments;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> toggleAttachments;
+    std::vector<std::unique_ptr<ComboBoxAttachment>> choiceAttachments;
+    std::vector<std::unique_ptr<ButtonAttachment>> toggleAttachments;
 };
 
 /** The Compressor's window: the transfer curve with the level now on it, the gain reduction over the last

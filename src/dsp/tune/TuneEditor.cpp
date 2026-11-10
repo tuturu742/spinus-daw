@@ -24,8 +24,7 @@ TuneEditor::TuneEditor (TuneProcessor& p) : juce::AudioProcessorEditor (p), proc
         auto* parameter = dynamic_cast<juce::AudioParameterChoice*> (state.getParameter (id));
         jassert (parameter != nullptr);
         box.addItemList (parameter->choices, 1);
-        comboAttachments.push_back (
-            std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (state, id, box));
+        comboAttachments.push_back (std::make_unique<ComboBoxAttachment> (state, id, box));
         label.setText (text, juce::dontSendNotification);
         label.setColour (juce::Label::textColourId, look::dim);
         label.setJustificationType (juce::Justification::centredLeft);

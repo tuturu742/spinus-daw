@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 namespace spinus::dsp
 {
 
@@ -36,13 +38,13 @@ private:
     {
         juce::ComboBox shape;
         std::vector<std::unique_ptr<ParameterKnob>> knobs;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> shapeAttachment;
+        std::unique_ptr<ComboBoxAttachment> shapeAttachment;
     };
 
     std::array<Row, 3> rows;
     std::vector<std::unique_ptr<ParameterKnob>> envelope, filterKnobs, master;
     juce::ComboBox filter, voices;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> filterAttachment, voicesAttachment;
+    std::unique_ptr<ComboBoxAttachment> filterAttachment, voicesAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreeOscEditor)
 };

@@ -47,8 +47,8 @@ ThreeOscEditor::ThreeOscEditor (ThreeOscProcessor& p) : juce::AudioProcessorEdit
     {
         auto& row = rows[(size_t)osc];
         row.shape.addItemList ({ "Sine", "Triangle", "Saw", "Square", "Noise" }, 1);
-        row.shapeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-            state, ThreeOscProcessor::parameterId ("shape", osc), row.shape);
+        row.shapeAttachment =
+            std::make_unique<ComboBoxAttachment> (state, ThreeOscProcessor::parameterId ("shape", osc), row.shape);
         addAndMakeVisible (row.shape);
 
         for (auto [id, name] :
@@ -79,13 +79,11 @@ ThreeOscEditor::ThreeOscEditor (ThreeOscProcessor& p) : juce::AudioProcessorEdit
 
     voices.addItemList ({ "Poly", "Mono (slides)" }, 1);
     voices.setTooltip ("Mono: one note at a time; a note played while another is held slides to it (Glide)");
-    voicesAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (state, "voices", voices);
+    voicesAttachment = std::make_unique<ComboBoxAttachment> (state, "voices", voices);
     addAndMakeVisible (voices);
 
     filter.addItemList ({ "Filter off", "Low pass", "High pass", "Band pass" }, 1);
-    filterAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (state, "filter", filter);
+    filterAttachment = std::make_unique<ComboBoxAttachment> (state, "filter", filter);
     addAndMakeVisible (filter);
 
     setResizable (true, true);

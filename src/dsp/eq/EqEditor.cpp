@@ -91,12 +91,10 @@ void EqEditor::attachToBand()
     onAttachment.reset();
     typeAttachment.reset();
     slopeAttachment.reset();
-    onAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
-        state, EqProcessor::bandParameter (selected, "on"), onButton);
-    typeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-        state, EqProcessor::bandParameter (selected, "type"), type);
-    slopeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-        state, EqProcessor::bandParameter (selected, "slope"), slope);
+    onAttachment = std::make_unique<ButtonAttachment> (state, EqProcessor::bandParameter (selected, "on"), onButton);
+    typeAttachment = std::make_unique<ComboBoxAttachment> (state, EqProcessor::bandParameter (selected, "type"), type);
+    slopeAttachment =
+        std::make_unique<ComboBoxAttachment> (state, EqProcessor::bandParameter (selected, "slope"), slope);
     frequency->attach (state, EqProcessor::bandParameter (selected, "freq"));
     gain->attach (state, EqProcessor::bandParameter (selected, "gain"));
     q->attach (state, EqProcessor::bandParameter (selected, "q"));

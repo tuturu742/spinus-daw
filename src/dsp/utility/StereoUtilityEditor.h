@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 namespace spinus::dsp
 {
 
@@ -25,7 +27,7 @@ private:
     StereoUtilityProcessor& processor;
     std::unique_ptr<ParameterKnob> gain, pan, width;
     juce::ToggleButton mono { "Mono" }, invertLeft { "Invert left" }, invertRight { "Invert right" };
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
+    std::vector<std::unique_ptr<ButtonAttachment>> buttonAttachments;
     juce::Rectangle<int> meters;
     std::array<float, 2> shownPeaks {};
     float shownCorrelation = 1.0f;
