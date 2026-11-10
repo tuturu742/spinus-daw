@@ -20,8 +20,7 @@ StereoUtilityEditor::StereoUtilityEditor (StereoUtilityProcessor& p) : juce::Aud
     {
         button->setColour (juce::ToggleButton::textColourId, look::text);
         button->setColour (juce::ToggleButton::tickColourId, look::accent);
-        buttonAttachments.push_back (
-            std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, id, *button));
+        buttonAttachments.push_back (std::make_unique<ButtonAttachment> (state, id, *button));
         addAndMakeVisible (*button);
     }
 

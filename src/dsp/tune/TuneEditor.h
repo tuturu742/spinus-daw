@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 namespace spinus::dsp
 {
 
@@ -27,7 +29,7 @@ private:
 
     TuneProcessor& processor;
     juce::ComboBox key, scale, formants, range;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
+    std::vector<std::unique_ptr<ComboBoxAttachment>> comboAttachments;
     std::unique_ptr<ParameterKnob> retune, humanize, mix;
     juce::Label keyLabel, scaleLabel, formantsLabel, rangeLabel;
     juce::Rectangle<int> display, keyboard;

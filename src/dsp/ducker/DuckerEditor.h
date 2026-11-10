@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 namespace spinus::dsp
 {
 
@@ -27,7 +29,7 @@ private:
 
     DuckerProcessor& processor;
     juce::ComboBox trigger;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> triggerAttachment;
+    std::unique_ptr<ComboBoxAttachment> triggerAttachment;
     std::unique_ptr<ParameterKnob> amount, release, curve;
     juce::Rectangle<int> display, meter, statusArea;
     float shownGain = 1.0f;

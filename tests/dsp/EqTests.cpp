@@ -378,3 +378,32 @@ TEST_CASE ("EQ CPU cost with eight bands at 48 kHz with 128 samples in stereo", 
     const auto seconds = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - start);
     std::cout << "EQ: " << seconds / 5.0 * 100.0 << " % of one core\n";
 }
+
+TEST_CASE ("The EQ window's band switch follows a host's automation", "[dsp][eq]")
+{
+    // A host's automation sets a parameter with setValue(), which tells no listener: the switch must follow it.
+    EqProcessor eq;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (eq.createEditorAndMakeActive());
+    auto* on = eq.getParameterState().getParameter (EqProcessor::bandParameter (2, "on")); // the band it opens on
+    REQUIRE (on != nullptr);
+    auto switchedOn = [&]
+    {
+        int count = 0;
+        std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+        {
+            if (auto* button = dynamic_cast<juce::Button*> (&c); button != nullptr && button->getToggleState())
+                ++count;
+            for (auto* child : c.getChildren())
+                find (*child);
+        };
+        find (*editor);
+        return count;
+    };
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    const auto before = switchedOn();
+    const bool wasOn = on->getValue() >= 0.5f;
+    on->setValue (wasOn ? 0.0f : 1.0f);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    CHECK (switchedOn() == before + (wasOn ? -1 : 1));
+    eq.editorBeingDeleted (editor.get());
+}

@@ -170,10 +170,10 @@ void DrumMachineEditor::attachToPad()
         knobs[i]->attach (state, DrumMachineProcessor::parameterId (knobIds[(int)i], selectedPad));
     filterAttachment = nullptr;
     oneShotAttachment = nullptr;
-    filterAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-        state, DrumMachineProcessor::parameterId ("filter", selectedPad), filter);
-    oneShotAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
-        state, DrumMachineProcessor::parameterId ("oneShot", selectedPad), oneShot);
+    filterAttachment =
+        std::make_unique<ComboBoxAttachment> (state, DrumMachineProcessor::parameterId ("filter", selectedPad), filter);
+    oneShotAttachment =
+        std::make_unique<ButtonAttachment> (state, DrumMachineProcessor::parameterId ("oneShot", selectedPad), oneShot);
 }
 
 void DrumMachineEditor::refresh()

@@ -36,4 +36,30 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
 };
 
+/** JUCE's ComboBoxAttachment, and the box also follows the host's automation (see ParameterKnob). */
+class ComboBoxAttachment final : public juce::AudioProcessorValueTreeState::ComboBoxAttachment, private juce::Timer
+{
+public:
+    ComboBoxAttachment (juce::AudioProcessorValueTreeState&, const juce::String& parameterId, juce::ComboBox&);
+
+private:
+    void timerCallback() override;
+
+    juce::ComboBox& box;
+    juce::RangedAudioParameter* parameter;
+};
+
+/** JUCE's ButtonAttachment, and the button also follows the host's automation (see ParameterKnob). */
+class ButtonAttachment final : public juce::AudioProcessorValueTreeState::ButtonAttachment, private juce::Timer
+{
+public:
+    ButtonAttachment (juce::AudioProcessorValueTreeState&, const juce::String& parameterId, juce::Button&);
+
+private:
+    void timerCallback() override;
+
+    juce::Button& button;
+    juce::RangedAudioParameter* parameter;
+};
+
 } // namespace spinus::dsp

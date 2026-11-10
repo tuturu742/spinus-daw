@@ -53,8 +53,7 @@ void DynamicsEditorBase::addChoice (const char* id)
     if (auto* parameter = dynamic_cast<juce::AudioParameterChoice*> (state.getParameter (id)))
         box->addItemList (parameter->choices, 1);
     box->setTooltip (state.getParameter (id)->getName (100));
-    choiceAttachments.push_back (
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (state, id, *box));
+    choiceAttachments.push_back (std::make_unique<ComboBoxAttachment> (state, id, *box));
     addAndMakeVisible (*box);
     choices.push_back (std::move (box));
 }
@@ -64,8 +63,7 @@ void DynamicsEditorBase::addToggle (const char* id, const char* label)
     auto button = std::make_unique<juce::ToggleButton> (label);
     button->setColour (juce::ToggleButton::textColourId, look::text);
     button->setColour (juce::ToggleButton::tickColourId, look::accent);
-    toggleAttachments.push_back (
-        std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, id, *button));
+    toggleAttachments.push_back (std::make_unique<ButtonAttachment> (state, id, *button));
     addAndMakeVisible (*button);
     toggles.push_back (std::move (button));
 }

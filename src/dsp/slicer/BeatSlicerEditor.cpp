@@ -288,8 +288,7 @@ BeatSlicerEditor::BeatSlicerEditor (BeatSlicerProcessor& p) : juce::AudioProcess
         addAndMakeVisible (*knobs.back());
     }
     playToEnd.setColour (juce::ToggleButton::textColourId, look::text);
-    playToEndAttachment =
-        std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, "playToEnd", playToEnd);
+    playToEndAttachment = std::make_unique<ButtonAttachment> (state, "playToEnd", playToEnd);
     addAndMakeVisible (playToEnd);
 
     slicer.addChangeListener (this);

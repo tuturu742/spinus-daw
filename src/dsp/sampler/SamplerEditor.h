@@ -3,6 +3,8 @@
 #include "core/FileDialog.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 namespace spinus::dsp
 {
 
@@ -47,8 +49,8 @@ private:
     std::vector<std::unique_ptr<ParameterKnob>> knobs;
     juce::ComboBox filter;
     juce::ToggleButton oneShot { "One shot" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> filterAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> oneShotAttachment;
+    std::unique_ptr<ComboBoxAttachment> filterAttachment;
+    std::unique_ptr<ButtonAttachment> oneShotAttachment;
     std::unique_ptr<core::FileDialog> chooser;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SamplerEditor)

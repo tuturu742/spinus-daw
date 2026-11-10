@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DeviceControls.h"
+
 namespace spinus::dsp
 {
 
@@ -23,7 +25,7 @@ private:
     void timerCallback() override;
     juce::Rectangle<int> getDisplayArea() const;
 
-    using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    using ComboAttachment = ComboBoxAttachment;
 
     FilterProcessor& processor;
     juce::ComboBox type, slope, lfoShape, lfoSync;
