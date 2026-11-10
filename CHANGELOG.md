@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A new automation clip goes where you are working: over the area selected in the Playlist's timeline if
+  there is one, else four bars from the song position. Before, it always started at the beginning of the song.
 - Right-click an effect in the Mixer › **Replace effect** puts another effect in its slot, as Replace
   instrument does in the Channel Rack. Its place and dry/wet stay; one Ctrl+Z brings the old one back.
 - Automation of Spinus's own devices (Filter, EQ, Delay, compressor and the rest, and the 3x Osc, Sampler and

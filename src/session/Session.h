@@ -165,9 +165,10 @@ public:
     bool isDeviceWindowShowing (model::DeviceId) const;
     void closeDeviceWindow (model::DeviceId);
 
-    /** Adds an automation clip for the target on a new Playlist lane (FL: "Create automation clip"): four
-        bars long from the song's start, flat at the parameter's current value. Returns the clip, or an
-        invalid ID if the target cannot be automated. */
+    /** Adds an automation clip for the target on a new Playlist lane (FL: "Create automation clip"), flat at
+        the parameter's current value: over the song mode loop region (the area selected in the Playlist's
+        timeline) when there is one, else four bars from the song position (from the start in pattern mode).
+        Returns the clip, or an invalid ID if the target cannot be automated. */
     model::ClipId createAutomationClip (const model::ParameterTarget&);
 
     /** The control the user moved last (FL: "last tweaked"), for "Create automation clip for the last moved
