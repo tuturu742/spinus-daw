@@ -89,6 +89,10 @@ modules:
     post-install:
       - mkdir -p /app/extensions/Plugins
       - install -Dm644 LICENSE THIRD_PARTY.md -t /app/share/doc/spinus
+      # Flatpak shows the desktop only a file type named after the app, with the app's renamed icon;
+      # without this, .spn projects open as text instead of in Spinus.
+      - cd /app/share/mime/packages && sed 's/"spinus"/"io.github.tuturu742.spinus"/' spinus.xml > io.github.tuturu742.spinus.xml
+      - rm /app/share/mime/packages/spinus.xml
     sources:
       - type: dir
         path: ../..

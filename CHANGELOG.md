@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
+  took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ
   band's switch, a Sampler's one shot and the rest) now move with automation too, as the knobs do.
 - An automated setting can be turned by hand before its first automation clip and after its last one.
