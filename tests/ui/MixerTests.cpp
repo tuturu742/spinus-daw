@@ -94,6 +94,74 @@ TEST_CASE ("A fader drag is heard as it moves and is one undo step", "[ui][mixer
     CHECK (f.insert (id).solo);
 }
 
+TEST_CASE ("A mouse drag on a strip's fader or pan knob, however many moves, is one undo step", "[ui][mixer]")
+{
+    MixerFixture f;
+    REQUIRE (f.mixer.addInsert());
+    f.mixer.updateNow();
+    const auto id = f.project().mixer.inserts[0].id;
+
+    auto find = [&] (const juce::String& help)
+    {
+        juce::Slider* found = nullptr;
+        std::function<void (juce::Component&)> look = [&] (juce::Component& c)
+        {
+            if (auto* s = dynamic_cast<juce::Slider*> (&c); s != nullptr && s->getHelpText().startsWith (help))
+                found = s;
+            for (auto* child : c.getChildren())
+                look (*child);
+        };
+        look (f.mixer);
+        return found;
+    };
+
+    auto drag = [&] (const juce::String& help, juce::Point<float> by, int moves)
+    {
+        auto& slider = *find (help);
+        const auto from = slider.getLocalBounds().getCentre().toFloat();
+        auto event = [&] (juce::Point<float> p, juce::ModifierKeys mods, bool dragged)
+        {
+            return juce::MouseEvent (
+                juce::Desktop::getInstance().getMainMouseSource(), p, mods, juce::MouseInputSource::defaultPressure,
+                juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, &slider, &slider,
+                juce::Time::getCurrentTime(), from, juce::Time::getCurrentTime(), 1, dragged);
+        };
+        const juce::ModifierKeys button (juce::ModifierKeys::leftButtonModifier);
+        slider.mouseDown (event (from, button, false));
+        for (int i = 1; i <= moves; ++i)
+        {
+            slider.mouseDrag (event (from + by * ((float)i / (float)moves), button, true));
+            f.mixer.updateNow();              // the model changed under the drag, as the Mixer's timer finds
+            REQUIRE (find (help) == &slider); // the same control stays while it is dragged
+        }
+        slider.mouseUp (event (from + by, {}, true));
+        f.mixer.updateNow();
+    };
+
+    for (auto [help, by] : { std::pair { juce::String ("Insert volume"), juce::Point<float> (0.0f, 60.0f) },
+                             std::pair { juce::String ("Insert pan"), juce::Point<float> (0.0f, -60.0f) } })
+    {
+        INFO (help);
+        auto* slider = find (help);
+        REQUIRE (slider != nullptr);
+        const auto before = f.project();
+        const auto steps = f.session.getHistory().getUndoDescriptions().size();
+
+        drag (help, by, 100);
+        CHECK (! (f.project() == before)); // it moved
+        CHECK (f.session.getHistory().getUndoDescriptions().size() == steps + 1);
+
+        // A second drag of the same control is a step of its own.
+        drag (help, by * 0.5f, 20);
+        CHECK (f.session.getHistory().getUndoDescriptions().size() == steps + 2);
+
+        REQUIRE (f.session.getHistory().undo());
+        REQUIRE (f.session.getHistory().undo());
+        CHECK (f.project() == before);
+    }
+}
+
 TEST_CASE ("Effect slots: add, reorder, bypass, move to another insert, remove", "[ui][mixer]")
 {
     MixerFixture f;
