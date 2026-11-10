@@ -55,5 +55,9 @@ start it, or when you open that project again:
 - **Discard** keeps the last version you saved. For a saved project the autosave copies stay in its
   `.autosave` folder. For a project you never saved, Discard deletes them.
 
+If a project file is damaged (for example cut off by a crash while it was saved), Spinus says so when you
+open it, and where the project's newest autosave is. Spinus can't open that autosave for you yet; see
+[Known issues](known-issues.md#projects).
+
 A project can be open in only one Spinus window at a time; Spinus tells you if it is already open
 elsewhere.

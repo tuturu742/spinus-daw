@@ -109,8 +109,22 @@ juce::Result readModelAndStates (const juce::File& folder, ProjectData& result)
                                    folder.getFullPathName());
 
     ProjectData data;
-    if (auto r = model::fromJsonText (file.loadFileAsString(), data.project); r.failed())
-        return juce::Result::fail (file.getFullPathName() + ": " + r.getErrorMessage());
+    const auto text = file.loadFileAsString(); // stops at a zero byte: a file of zeros reads as empty
+    juce::String problem;
+    if (text.trim().isEmpty())
+        problem = "the file is empty. It was cut off, for example by a crash or a full disk while it was saved.";
+    else if (auto r = model::fromJsonText (text, data.project); r.failed())
+        problem = r.getErrorMessage();
+
+    if (problem.isNotEmpty())
+    {
+        auto message = file.getFullPathName() + ": " + problem;
+        // The work is not all gone: say where the autosaves are (only a project folder has them).
+        if (const auto autosaves = Autosaves (folder).list(); ! autosaves.isEmpty())
+            message << "\n\nAutosaved copies of this project are kept in its hidden .autosave folder; the newest is "
+                    << autosaves.getFirst().getFullPathName() << ".";
+        return juce::Result::fail (message);
+    }
 
     for (auto& stateFile : folder.getChildFile (statesFolder).findChildFiles (juce::File::findFiles, false, "*.bin"))
     {
