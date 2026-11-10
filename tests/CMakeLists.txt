@@ -104,6 +104,7 @@ add_executable (spinus_tests
     ui/SamplesBrowserTests.cpp
     ui/AutomationEditorTests.cpp
     ui/AutomationTests.cpp
+    ui/AutomationEdgeTests.cpp
     ui/AutomationTargetTests.cpp
     ui/BrowserTests.cpp
     ui/ChannelRackTests.cpp

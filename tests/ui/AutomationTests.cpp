@@ -210,6 +210,60 @@ TEST_CASE ("A clip that starts later leaves the setting at its knob until then",
     CHECK (std::abs (at (40.0) - knob) < 0.01f);
 }
 
+TEST_CASE ("Muting, deleting or redoing away an automation clip gives the setting back to its knob",
+           "[ui][automation][audio]")
+{
+    Fixture f;
+    f.session->setMode (Session::Mode::song);
+    model::ParameterTarget cutoff;
+    cutoff.kind = Kind::deviceParameter;
+    cutoff.device = f.lead().instrument.value_or (model::Device {}).id;
+    cutoff.parameterId = "cutoff";
+    REQUIRE (f.perform ("device.setParameters", "{\"device\": " + juce::String ((int)cutoff.device.value) +
+                                                    ", \"values\": {\"cutoff\": 0.3}}"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100); // the plugin tells Tracktion
+    const auto id = f.session->createAutomationClip (cutoff);
+    REQUIRE (id.isValid());
+    const auto clip = juce::String ((int)id.value);
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + clip + ", \"length\": 15360}"));
+    REQUIRE (f.perform ("clip.setPoints", "{\"clip\": " + clip + ", \"points\": [{\"time\": 0, \"value\": 0.9}]}"));
+    auto* parameter = f.session->getAdapter().findParameter (cutoff);
+    REQUIRE (parameter != nullptr);
+    auto near = [] (float a, float b) { return std::abs (a - b) < 0.01f; };
+
+    // Playing in the clip: the setting follows it.
+    test::RealtimeRunner runner (f.host.getEngine(), { .outputChannels = 2, .maxSeconds = 6.0 });
+    runner.start();
+    f.session->play();
+    auto run = [&]
+    {
+        runner.runUntil (runner.getSecondsProcessed() + 0.3);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        return parameter->getCurrentNormalisedValue();
+    };
+    CHECK (near (run(), 0.9f));
+
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + clip + ", \"muted\": true}"));
+    CHECK (near (run(), 0.3f)); // where the knob was left, not where the clip left it
+    REQUIRE (f.session->getHistory().undo());
+    CHECK (near (run(), 0.9f));
+
+    REQUIRE (f.perform ("clip.remove", "{\"clip\": " + clip + "}"));
+    CHECK (near (run(), 0.3f));
+    REQUIRE (f.session->getHistory().undo());
+    CHECK (near (run(), 0.9f));
+    REQUIRE (f.session->getHistory().redo());
+    CHECK (near (run(), 0.3f));
+
+    // Pattern mode plays no automation: the knob's value.
+    REQUIRE (f.session->getHistory().undo());
+    CHECK (near (run(), 0.9f));
+    f.session->setMode (Session::Mode::pattern);
+    CHECK (near (run(), 0.3f));
+    f.session->stop();
+    runner.stop();
+}
+
 TEST_CASE ("An automated insert volume fades the sound in", "[ui][automation][audio]")
 {
     Fixture f;

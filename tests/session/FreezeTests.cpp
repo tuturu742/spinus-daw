@@ -479,3 +479,57 @@ TEST_CASE ("A frozen channel whose plugin is missing here keeps playing live and
     CHECK (status.message.contains ("Dragonfly Hall Reverb"));
     CHECK (f.session.getAdapter().getDevicePlugin (DeviceId { 8 }) != nullptr); // the kick still plays
 }
+
+TEST_CASE ("A frozen channel plays its instrument's automation; unfrozen, the clip moves the instrument again",
+           "[freeze][automation]")
+{
+    Fixture f;
+    Song song;
+    // The lead's own low pass cutoff: its knob (set by hand) in the first bar, a dark clip in the second.
+    for (auto& c : song.project.channels)
+        if (c.id == song.lead)
+        {
+            c.instrument->parameters["filter"] = 1.0f / 3.0f; // low pass
+            c.instrument->parameters["cutoff"] = 0.9f;
+        }
+    const auto withoutClip = song.project;
+    AutomationClip dark;
+    dark.target = { ParameterTarget::Kind::deviceParameter, {}, {}, song.leadSynth, "cutoff" };
+    dark.points = { { 0, 0.05f, 0.0f } };
+    Lane lane { song.project.allocateId<LaneId>(), "Lead cutoff" };
+    song.project.playlist.lanes.push_back (lane);
+    song.project.playlist.clips.push_back (
+        { song.project.allocateId<ClipId>(), lane.id, 4 * ticksPerQuarterNote, 4 * ticksPerQuarterNote, false, dark });
+
+    f.session.getHistory().reset (withoutClip);
+    const auto plain = f.render();
+    f.session.getHistory().reset (song.project);
+    const auto live = f.render();
+    // The clip changes the second bar only (one bar is 2 seconds).
+    const auto sr = f.session.getEdit().engine.getDeviceManager().getSampleRate();
+    auto part = [sr] (const juce::AudioBuffer<float>& audio, double from, double to)
+    {
+        juce::AudioBuffer<float> b (audio.getNumChannels(), (int)((to - from) * sr));
+        for (int ch = 0; ch < audio.getNumChannels(); ++ch)
+            b.copyFrom (ch, 0, audio, ch, (int)(from * sr), b.getNumSamples());
+        return b;
+    };
+    CHECK (compare (part (plain, 0.0, 1.9), part (live, 0.0, 1.9)).first < 0.001f);
+    CHECK (compare (part (plain, 2.1, 3.9), part (live, 2.1, 3.9)).first > 0.01f);
+
+    f.perform ("channel.freeze", "{\"channel\": " + juce::String (song.lead.value) + "}");
+    f.waitForFreeze();
+    REQUIRE (f.session.getFreezer().getStatus (song.lead).state == Freezer::State::frozen);
+    const auto frozen = f.render();
+    // The same, but for the moment of the jump into the clip, which may come a block apart (a few ms).
+    CHECK (compare (part (live, 0.0, 1.95), part (frozen, 0.0, 1.95)).first < 0.001f);
+    CHECK (compare (part (live, 2.05, 4.9), part (frozen, 2.05, 4.9)).first < 0.001f);
+
+    f.perform ("channel.freeze", "{\"channel\": " + juce::String (song.lead.value) + ", \"frozen\": false}");
+    auto* cutoff = f.session.getAdapter().findParameter (dark.target);
+    REQUIRE (cutoff != nullptr);
+    CHECK (cutoff->getCurve().getNumPoints() > 0);
+    const auto unfrozen = f.render();
+    CHECK (compare (live, unfrozen).first < 0.001f);
+    CHECK (compare (part (plain, 2.1, 3.9), part (unfrozen, 2.1, 3.9)).first > 0.01f);
+}
