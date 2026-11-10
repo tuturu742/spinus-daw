@@ -135,6 +135,10 @@ value. If an area of the Playlist is selected (right-drag in the timeline above 
 exactly that area. If not, it is four bars long and starts where the song position is (the playhead line). The **Automation editor** opens to show it. A flat line changes nothing yet:
 shape it first.
 
+Before a setting's first clip and after its last one, the setting is where you leave its knob, and you can
+turn it as usual. Between two clips it holds the value the first one ended on, as in FL Studio. While you hold a knob in a plugin's window, the knob
+wins even during a clip; let go and the clip takes over again.
+
 ### The Automation editor
 
 Double-click an automation clip on the Playlist to edit it in the **Automation editor** (also in

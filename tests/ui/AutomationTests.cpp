@@ -88,14 +88,15 @@ TEST_CASE ("Create automation clip: a flat line at the current value, on a new l
     // The engine follows it in song mode only.
     f.session->setMode (Session::Mode::pattern);
     CHECK (parameter->getCurve().getNumPoints() == 0);
+    // Its two points, then back to the knob after it.
     f.session->setMode (Session::Mode::song);
-    CHECK (parameter->getCurve().getNumPoints() == 2);
+    CHECK (parameter->getCurve().getNumPoints() == 3);
 
     // A muted lane, or a muted clip, does nothing.
     REQUIRE (f.playlist->setLaneMuted ((int)lanes, true));
     CHECK (parameter->getCurve().getNumPoints() == 0);
     REQUIRE (f.session->getHistory().undo());
-    CHECK (parameter->getCurve().getNumPoints() == 2);
+    CHECK (parameter->getCurve().getNumPoints() == 3);
 
     // Nothing to automate: no clip.
     model::ParameterTarget unknown;
@@ -129,7 +130,7 @@ TEST_CASE ("A new automation clip covers the Playlist's selected area, or starts
     CHECK (f.automationOf (inArea).points.back().time == 2 * 3840);
 }
 
-TEST_CASE ("Automation holds its value between clips, and reaches device parameters", "[ui][automation]")
+TEST_CASE ("Automation holds its value between clips; before and after them the knob counts", "[ui][automation]")
 {
     Fixture f;
     f.session->setMode (Session::Mode::song);
@@ -147,7 +148,8 @@ TEST_CASE ("Automation holds its value between clips, and reaches device paramet
     REQUIRE (first.isValid());
     CHECK (f.session->getProject().playlist.lanes.back().name == "3x Osc Cutoff");
 
-    // Two clips on that lane: 0.2 -> 0.8 in bar 1, then 0.5 from bar 3. Between them it holds 0.8.
+    // Two clips on that lane: 0.2 -> 0.8 in bar 1, then 0.5 in bar 3. Between them it holds 0.8; after them:
+    // the knob's value.
     const auto lane = f.session->getProject().findClip (first)->lane;
     REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)first.value) + ", \"length\": 3840}"));
     REQUIRE (f.perform ("clip.setPoints",
@@ -167,10 +169,45 @@ TEST_CASE ("Automation holds its value between clips, and reaches device paramet
         const auto time = f.session->getEdit().tempoSequence.toTime (te::BeatPosition::fromBeats (beats));
         return parameter->valueRange.convertTo0to1 (curve.getValueAt (time, 0.0f));
     };
+    const auto knob = parameter->valueRange.convertTo0to1 (parameter->getCurrentExplicitValue());
+    REQUIRE (std::abs (knob - 0.8f) > 0.05f);
+    REQUIRE (std::abs (knob - 0.5f) > 0.05f);
     CHECK (std::abs (at (0.0) - 0.2f) < 0.01f);
     CHECK (std::abs (at (2.0) - 0.5f) < 0.02f);  // halfway up the first ramp
+    CHECK (std::abs (at (3.99) - 0.8f) < 0.01f); // the end of the first clip
     CHECK (std::abs (at (6.0) - 0.8f) < 0.01f);  // held between the clips
-    CHECK (std::abs (at (12.0) - 0.5f) < 0.01f); // the second clip
+    CHECK (std::abs (at (10.0) - 0.5f) < 0.01f); // the second clip
+    CHECK (std::abs (at (16.0) - knob) < 0.01f); // after it: the knob
+
+    // Turning the knob moves the value after the clips, not in or between them.
+    parameter->setParameter (parameter->valueRange.convertFrom0to1 (0.1f), juce::sendNotification);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    CHECK (std::abs (at (6.0) - 0.8f) < 0.01f);
+    CHECK (std::abs (at (16.0) - 0.1f) < 0.01f);
+    CHECK (std::abs (at (10.0) - 0.5f) < 0.01f);
+}
+
+TEST_CASE ("A clip that starts later leaves the setting at its knob until then", "[ui][automation]")
+{
+    Fixture f;
+    f.session->setMode (Session::Mode::song);
+    auto* parameter = f.session->getAdapter().findParameter (f.insertVolume());
+    REQUIRE (parameter != nullptr);
+    const auto knob = parameter->getCurrentNormalisedValue();
+    const auto id = f.session->createAutomationClip (f.insertVolume());
+    REQUIRE (id.isValid());
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)id.value) + ", \"start\": 7680}"));
+    REQUIRE (f.perform ("clip.setPoints", "{\"clip\": " + juce::String ((int)id.value) +
+                                              ", \"points\": [{\"time\": 0, \"value\": 0.1}]}"));
+    auto at = [&] (double beats)
+    {
+        const auto time = f.session->getEdit().tempoSequence.toTime (te::BeatPosition::fromBeats (beats));
+        return parameter->valueRange.convertTo0to1 (parameter->getCurve().getValueAt (time, 0.0f));
+    };
+    CHECK (std::abs (at (0.0) - knob) < 0.01f);
+    CHECK (std::abs (at (7.9) - knob) < 0.01f);
+    CHECK (std::abs (at (9.0) - 0.1f) < 0.01f);
+    CHECK (std::abs (at (40.0) - knob) < 0.01f);
 }
 
 TEST_CASE ("An automated insert volume fades the sound in", "[ui][automation][audio]")
@@ -389,4 +426,53 @@ TEST_CASE ("Undo during an automation point drag ends the drag safely", "[ui][au
     lanes->mouseDrag (event (at.translated (0.0f, -8.0f), button, true));
     lanes->mouseUp (event (at.translated (0.0f, -8.0f), {}, true));
     CHECK (project.findClip (id) == nullptr);
+}
+
+TEST_CASE ("A hand on an automated knob wins until it lets go; where it left the knob counts", "[ui][automation]")
+{
+    Fixture f;
+    f.session->setMode (Session::Mode::song);
+    const auto device = f.lead().instrument.value_or (model::Device {}).id;
+    model::ParameterTarget cutoff;
+    cutoff.kind = Kind::deviceParameter;
+    cutoff.device = device;
+    cutoff.parameterId = "cutoff";
+    const auto id = f.session->createAutomationClip (cutoff);
+    REQUIRE (id.isValid());
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)id.value) + ", \"start\": 7680}"));
+    REQUIRE (f.perform ("clip.setPoints", "{\"clip\": " + juce::String ((int)id.value) +
+                                              ", \"points\": [{\"time\": 0, \"value\": 0.9}]}"));
+
+    auto* parameter = f.session->getAdapter().findParameter (cutoff);
+    REQUIRE (parameter != nullptr);
+    auto* external = dynamic_cast<te::ExternalPlugin*> (f.session->getAdapter().getDevicePlugin (device));
+    REQUIRE (external != nullptr);
+    juce::AudioProcessorParameter* own = nullptr;
+    for (auto* p : external->getAudioPluginInstance()->getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (p);
+            withId && withId->paramID == "cutoff")
+            own = p;
+    REQUIRE (own != nullptr);
+    auto& curve = parameter->getCurve();
+    auto at = [&] (double beats)
+    {
+        const auto time = f.session->getEdit().tempoSequence.toTime (te::BeatPosition::fromBeats (beats));
+        return parameter->valueRange.convertTo0to1 (curve.getValueAt (time, 0.0f));
+    };
+    auto settle = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil (100); };
+
+    own->beginChangeGesture();
+    settle();
+    CHECK (curve.bypass.get());
+    own->setValueNotifyingHost (0.2f);
+    settle();
+    own->endChangeGesture();
+    settle();
+    CHECK (! curve.bypass.get());
+    CHECK (std::abs (at (0.0) - 0.2f) < 0.01f); // before the clip: where the hand left it
+    CHECK (std::abs (at (9.0) - 0.9f) < 0.01f); // the clip
+    // One undo step, which the project keeps.
+    const auto& parameters = f.session->getProject().findDevice (device)->parameters;
+    REQUIRE (parameters.contains ("cutoff"));
+    CHECK (std::abs (parameters.at ("cutoff") - 0.2f) < 0.01f);
 }

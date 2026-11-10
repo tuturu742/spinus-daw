@@ -99,8 +99,16 @@ private:
     {
         if (auto* parameter = parameterAt (p, index))
         {
-            const juce::SpinLock::ScopedLockType lock (startLock);
-            started[index] = parameter->getValue();
+            {
+                const juce::SpinLock::ScopedLockType lock (startLock);
+                started[index] = parameter->getValue();
+            }
+            juce::MessageManager::callAsync (
+                [token = std::weak_ptr<bool> (adapter.alive), a = &adapter, d = device, index]
+                {
+                    if (token.lock() != nullptr)
+                        a->holdByHand (d, index, true);
+                });
         }
     }
 
@@ -119,14 +127,15 @@ private:
             started.erase (it);
         }
         const auto after = parameter->getValue();
-        if (juce::approximatelyEqual (before, after))
-            return;
         // Plugins may end a drag on their own threads: the undo step is made on the message thread.
         juce::MessageManager::callAsync (
             [token = std::weak_ptr<bool> (adapter.alive), a = &adapter, d = device, index, before, after]
             {
-                if (token.lock() != nullptr)
+                if (token.lock() == nullptr)
+                    return;
+                if (! juce::approximatelyEqual (before, after))
                     a->handEnded (d, index, before, after);
+                a->holdByHand (d, index, false);
             });
     }
 
@@ -423,10 +432,12 @@ te::AutomatableParameter* EngineAdapter::findParameter (const ParameterTarget& t
 void EngineAdapter::syncAutomation (const Project& project)
 {
     // Rebuilt from the model after every change: automation curves are small. Each automated
-    // parameter gets one curve made from all its clips (FL: the value holds between clips).
-    for (auto& parameter : automatedParameters)
-        parameter->getCurve().clear (nullptr);
-    automatedParameters.clear();
+    // parameter gets one curve made from all its clips; between them the value holds (as in FL). Before the first
+    // and after the last, the curve holds the knob's own value, so a setting can still be turned by hand there.
+    for (auto& a : automated)
+        a.parameter->getCurve().clear (nullptr);
+    automated.clear();
+    knobFollower.follow (*this);
 
     if (playMode == PlayMode::pattern)
         return; // the playlist is silent in pattern mode, its automation too
@@ -446,31 +457,90 @@ void EngineAdapter::syncAutomation (const Project& project)
     for (auto& [parameter, clips] : clipsOf)
     {
         std::sort (clips.begin(), clips.end(), [] (auto* a, auto* b) { return a->start < b->start; });
-        auto& curve = parameter->getCurve();
-        const auto& range = parameter->valueRange;
-        std::optional<float> held;
-
+        Automated a { parameter, {}, 0.0f };
         for (auto* clip : clips)
         {
-            const auto& points = std::get<AutomationClip> (clip->content).points;
-            // Hold the previous clip's last value up to this clip's start.
-            if (held && clip->start > 0)
-                curve.addPoint (toTime (clip->start - 1), range.convertFrom0to1 (*held), 0.0f, nullptr);
-
-            for (auto& point : points)
+            Automated::Span span { clip->start, clip->length, {} };
+            for (auto& point : std::get<AutomationClip> (clip->content).points)
                 if (point.time <= clip->length)
-                    curve.addPoint (toTime (clip->start + point.time), range.convertFrom0to1 (point.value),
-                                    juce::jlimit (-1.0f, 1.0f, point.curve), nullptr);
-
-            for (auto it = points.rbegin(); it != points.rend(); ++it)
-                if (it->time <= clip->length)
-                {
-                    held = it->value;
-                    break;
-                }
+                    span.points.push_back (point);
+            if (! span.points.empty())
+                a.clips.push_back (std::move (span));
         }
-        automatedParameters.push_back (parameter);
+        if (a.clips.empty())
+            continue;
+        writeCurve (a);
+        automated.push_back (std::move (a));
     }
+    knobFollower.follow (*this);
+}
+
+void EngineAdapter::writeCurve (Automated& a) const
+{
+    auto& curve = a.parameter->getCurve();
+    const auto& range = a.parameter->valueRange;
+    a.knob = a.parameter->getCurrentExplicitValue(); // what was set by hand or command, never by automation
+    curve.clear (nullptr);
+
+    std::optional<Ticks> heldTo; // the end of the clips so far
+    float held = 0.0f;           // the last value of the clips so far
+    for (auto& clip : a.clips)
+    {
+        if (! heldTo && clip.start > 0)
+            curve.addPoint (toTime (clip.start - 1), a.knob, 0.0f, nullptr); // the knob up to the first clip
+        else if (heldTo && *heldTo < clip.start)
+            curve.addPoint (toTime (clip.start - 1), held, 0.0f, nullptr); // FL: between clips the value holds
+        for (auto& point : clip.points)
+            curve.addPoint (toTime (clip.start + point.time), range.convertFrom0to1 (point.value),
+                            juce::jlimit (-1.0f, 1.0f, point.curve), nullptr);
+        // A clip holds its last value to its end.
+        if (clip.points.back().time < clip.length)
+            curve.addPoint (toTime (clip.start + clip.length), range.convertFrom0to1 (clip.points.back().value), 0.0f,
+                            nullptr);
+        if (! heldTo || clip.start + clip.length >= *heldTo)
+            held = range.convertFrom0to1 (clip.points.back().value);
+        heldTo = std::max (heldTo.value_or (0), clip.start + clip.length);
+    }
+    if (heldTo)
+        curve.addPoint (toTime (*heldTo + 1), a.knob, 0.0f, nullptr); // the knob after the last clip
+}
+
+void EngineAdapter::KnobFollower::follow (EngineAdapter& a)
+{
+    adapter = &a;
+    if (a.automated.empty())
+        stopTimer();
+    else if (! isTimerRunning())
+        startTimerHz (30);
+}
+
+void EngineAdapter::KnobFollower::timerCallback()
+{
+    for (auto& a : adapter->automated)
+        if (! juce::approximatelyEqual (a.parameter->getCurrentExplicitValue(), a.knob))
+            adapter->writeCurve (a);
+}
+
+void EngineAdapter::holdByHand (DeviceId id, int index, bool held)
+{
+    auto* plugin = getDevicePlugin (id);
+    auto* external = dynamic_cast<te::ExternalPlugin*> (plugin);
+    auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
+    if (instance == nullptr || ! juce::isPositiveAndBelow (index, instance->getParameters().size()))
+        return;
+    auto* own = instance->getParameters()[index];
+    auto parameter = plugin->getAutomatableParameterByID (getParameterId (*own));
+    auto it = std::find_if (automated.begin(), automated.end(),
+                            [&] (const Automated& a) { return a.parameter == parameter; });
+    if (it == automated.end())
+        return;
+    if (! held)
+    {
+        // Where the hand left it is the knob's value now (the plugin's own word for it may still be on its way).
+        parameter->setParameter (parameter->valueRange.convertFrom0to1 (own->getValue()), juce::dontSendNotification);
+        writeCurve (*it);
+    }
+    parameter->getCurve().bypass.setValue (held, nullptr);
 }
 
 te::TimePosition EngineAdapter::toTime (Ticks ticks) const { return ticksToTime (edit, (double)ticks); }
