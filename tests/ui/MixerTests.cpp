@@ -128,6 +128,53 @@ TEST_CASE ("Effect slots: add, reorder, bypass, move to another insert, remove",
     CHECK (f.insert (a).effects.empty());
 }
 
+TEST_CASE ("An effect moved to the Master or to an insert before its own keeps playing, with its automation",
+           "[ui][mixer][automation]")
+{
+    MixerFixture f;
+    f.session.setMode (Session::Mode::song);
+    REQUIRE (f.mixer.addInsert());
+    REQUIRE (f.mixer.addInsert());
+    const auto a = f.project().mixer.inserts[0].id;
+    const auto b = f.project().mixer.inserts[1].id;
+    REQUIRE (f.mixer.addEffect (b, "spinus.filter"));
+    const auto filter = f.insert (b).effects[0].device.id;
+    auto* plugin = f.session.getAdapter().getDevicePlugin (filter);
+    REQUIRE (plugin != nullptr);
+
+    // Its cutoff automated.
+    model::ParameterTarget cutoff;
+    cutoff.kind = model::ParameterTarget::Kind::deviceParameter;
+    cutoff.device = filter;
+    cutoff.parameterId = "cutoff";
+    REQUIRE (f.session.createAutomationClip (cutoff).isValid());
+    auto automated = [&]
+    {
+        auto* parameter = f.session.getAdapter().findParameter (cutoff);
+        return parameter != nullptr && parameter->getCurve().getNumPoints() > 0;
+    };
+    REQUIRE (automated());
+
+    // To an insert earlier in the Mixer: the same plugin, now there.
+    REQUIRE (f.mixer.moveEffect (filter, a, 0));
+    CHECK (f.session.getAdapter().getDevicePlugin (filter) == plugin);
+    CHECK (automated());
+
+    // To the Master.
+    REQUIRE (f.mixer.moveEffect (filter, model::masterInsertId, 0));
+    CHECK (f.session.getAdapter().getDevicePlugin (filter) == plugin);
+    CHECK (f.session.getEdit().getMasterPluginList().indexOf (plugin) >= 0);
+    CHECK (automated());
+
+    // And back, and undone.
+    REQUIRE (f.mixer.moveEffect (filter, b, 0));
+    CHECK (f.session.getAdapter().getDevicePlugin (filter) == plugin);
+    REQUIRE (f.session.getHistory().undo());
+    CHECK (f.session.getAdapter().getDevicePlugin (filter) == plugin);
+    CHECK (f.session.getEdit().getMasterPluginList().indexOf (plugin) >= 0);
+    CHECK (automated());
+}
+
 TEST_CASE ("Replace effect puts another effect in the same slot, as one undo step", "[ui][mixer]")
 {
     MixerFixture f;

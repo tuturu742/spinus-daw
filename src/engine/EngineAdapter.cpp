@@ -989,16 +989,33 @@ void EngineAdapter::syncInserts (const Project& project)
         syncInsert (insert, project);
 }
 
-void EngineAdapter::syncInsert (const Insert& insert, const Project&)
+void EngineAdapter::syncInsert (const Insert& insert, const Project& project)
 {
-    // Devices that left this insert, or changed identity in place, are dropped first.
+    // Devices that left this insert, or changed identity in place, are dropped first. One moved to another insert
+    // stays: that insert places it (it may have done so already, the Master and earlier inserts being synced
+    // first).
+    auto movedElsewhere = [&] (const Device& device)
+    {
+        for (const auto* other : { &project.mixer.master })
+            if (other->id != insert.id)
+                for (auto& slot : other->effects)
+                    if (slot.device.id == device.id)
+                        return sameIdentity (slot.device, device);
+        for (auto& other : project.mixer.inserts)
+            if (other.id != insert.id)
+                for (auto& slot : other.effects)
+                    if (slot.device.id == device.id)
+                        return sameIdentity (slot.device, device);
+        return false;
+    };
     if (applied != nullptr)
         if (auto* old = applied->findInsert (insert.id))
             for (auto& oldSlot : old->effects)
             {
                 auto now = std::find_if (insert.effects.begin(), insert.effects.end(),
                                          [&] (auto& s) { return s.device.id == oldSlot.device.id; });
-                if (now == insert.effects.end() || ! sameIdentity (now->device, oldSlot.device))
+                if (now == insert.effects.end() ? ! movedElsewhere (oldSlot.device)
+                                                : ! sameIdentity (now->device, oldSlot.device))
                     dropDevice (oldSlot.device.id);
             }
 
