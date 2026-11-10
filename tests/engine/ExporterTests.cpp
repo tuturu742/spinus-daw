@@ -397,6 +397,35 @@ TEST_CASE ("Exports are named after the project and start in its folder", "[ui][
     scratch.getFile().deleteRecursively();
 }
 
+TEST_CASE ("The Export dialog asks before replacing files the save dialog didn't ask about", "[ui][export]")
+{
+    EngineHost host ({ .openAudioDevice = false });
+    Session session (host.getEngine(), std::make_unique<test::TestDevices> (host.getEngine()));
+    session.getHistory().reset (makeSong());
+    juce::TemporaryFile scratch;
+    const auto folder = scratch.getFile();
+    REQUIRE (folder.createDirectory());
+
+    ui::ExportDialog dialog (session);
+    dialog.setFormat (ExportSettings::Format::flac);
+    CHECK (dialog.getFilesToReplace (folder.getChildFile ("Song.flac")).empty()); // nothing there yet
+
+    // The file chosen is the save dialog's own question; the same name with the format's extension is not.
+    REQUIRE (folder.getChildFile ("Song.flac").create().wasOk());
+    CHECK (dialog.getFilesToReplace (folder.getChildFile ("Song.flac")).empty());
+    CHECK (dialog.getFilesToReplace (folder.getChildFile ("Song")) ==
+           std::vector { folder.getChildFile ("Song.flac") });
+
+    // Stems from an earlier export.
+    dialog.setStems (true);
+    REQUIRE (folder.getChildFile ("Song stems/02 Pad.flac").create().wasOk());
+    CHECK (dialog.getFilesToReplace (folder.getChildFile ("Song.flac")) ==
+           std::vector { folder.getChildFile ("Song stems/02 Pad.flac") });
+    dialog.setStems (false);
+    CHECK (dialog.getFilesToReplace (folder.getChildFile ("Song.flac")).empty());
+    folder.deleteRecursively();
+}
+
 TEST_CASE ("The missing MP3 and AAC hint fits the system", "[ui][export]")
 {
     using System = ui::ExportDialog::System;

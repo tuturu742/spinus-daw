@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Exporting again over an earlier export asks before replacing its stems, or the file with the format's
+  ending when you typed the name without one ("Song" saved as `Song.wav`). Before, only the exact file name you
+  picked was asked about, and the rest was replaced without a word.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ

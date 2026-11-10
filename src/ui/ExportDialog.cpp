@@ -306,9 +306,53 @@ void ExportDialog::chooseFileAndExport()
     chooser->launchAsync (chooserFlags,
                           [safe = juce::Component::SafePointer<ExportDialog> (this)] (const core::FileDialog& fc)
                           {
-                              if (safe != nullptr && fc.getResult() != juce::File())
+                              if (safe == nullptr || fc.getResult() == juce::File())
+                                  return;
+                              if (const auto replaced = safe->getFilesToReplace (fc.getResult()); ! replaced.empty())
+                                  safe->askToReplace (fc.getResult(), replaced);
+                              else
                                   safe->startExport (fc.getResult());
                           });
+}
+
+std::vector<juce::File> ExportDialog::getFilesToReplace (const juce::File& destination) const
+{
+    auto settings = getSettings();
+    std::vector<juce::File> planned;
+    if (playAlong.getToggleState())
+        planned.push_back (destination.withFileExtension (engine::ExportSettings::extensionFor (settings.format)));
+    else
+        planned = session.createExportJob (destination, settings, {})->getPlannedFiles();
+
+    std::vector<juce::File> existing;
+    for (auto& file : planned)
+        if (file != destination && file.exists())
+            existing.push_back (file);
+    return existing;
+}
+
+void ExportDialog::askToReplace (const juce::File& destination, const std::vector<juce::File>& files)
+{
+    juce::String text;
+    if (files.size() == 1)
+        text = files.front().getFileName() + " is already there. Replace it?";
+    else
+    {
+        text = "These " + juce::String ((int)files.size()) + " files are already there:\n";
+        for (size_t i = 0; i < files.size() && i < 6; ++i)
+            text << "\n" << files[i].getFileName();
+        if (files.size() > 6)
+            text << "\n...";
+        text << "\n\nReplace them?";
+    }
+    juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOkCancel (juce::MessageBoxIconType::QuestionIcon,
+                                                                                "Replace files?", text, "Replace",
+                                                                                "Cancel", this),
+                                  [safe = juce::Component::SafePointer<ExportDialog> (this), destination] (int result)
+                                  {
+                                      if (safe != nullptr && result == 1)
+                                          safe->startExport (destination);
+                                  });
 }
 
 void ExportDialog::startExport (const juce::File& destination)
