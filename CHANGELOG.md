@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Opening a damaged project file (cut off by a crash or a full disk while it was saved) now says so in plain
+  words, for example "the file is empty", instead of "project.json is not a JSON object", and says where the
+  project's newest autosave is.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ

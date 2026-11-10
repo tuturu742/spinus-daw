@@ -83,3 +83,9 @@ what happened, and attach the project if you can.
 - Projects saved by this version open in every later version of Spinus. A project saved by a newer
   version may not open in an older one.
 - Presets don't show in the Browser yet.
+- **A damaged project file can't be recovered from its autosaves inside Spinus yet.** Spinus offers an
+  autosave after a crash, but not when the project file itself is damaged. Opening the autosave's
+  `project.spn` directly brings back the song and the plugins' settings, but its audio clips show
+  **Missing** (the autosave has no `audio` folder of its own). To recover by hand: close Spinus, copy the
+  newest autosave's `project.spn` over the project's own `.spn` file (keep the project's file name) and its
+  `plugin-states` folder over the project's, then open the project.
