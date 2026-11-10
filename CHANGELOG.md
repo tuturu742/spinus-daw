@@ -15,6 +15,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   Before, the clips held it for the whole song: their first value before them and their last value after
   them, and a knob turned there jumped back. Between two clips the value still holds, as in FL Studio.
   Holding a knob in a plugin's window takes over even during a clip, until you let go.
+- Automation clips now play exactly the line the Playlist draws. Before, a clip made shorter jumped back to
+  its last point inside instead of stopping where its line was; a clip whose first point was not at its start
+  slid there from the knob's value instead of starting flat; and two clips for the same setting that overlapped
+  mixed their points into a zigzag. Now the clip that starts later plays until it ends, then the other goes on.
 - A new automation clip goes where you are working: over the area selected in the Playlist's timeline if
   there is one, else four bars from the song position. Before, it always started at the beginning of the song.
 - Right-click an effect in the Mixer › **Replace effect** puts another effect in its slot, as Replace
