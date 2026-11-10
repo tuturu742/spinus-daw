@@ -719,6 +719,67 @@
         "additionalProperties": false
       }
     },
+    "insert.replaceEffect": {
+      "description": "Replace an effect with another in the same slot (as channel.replaceInstrument does for instruments): its place and dry/wet stay; automation clips of the old effect's settings are removed. Result: the new effect's device ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Device ID of the effect to replace"
+          },
+          "effect": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "stock",
+                  "plugin"
+                ],
+                "description": "\"stock\": Spinus's own or a bundled device, by stockType; \"plugin\": a plugin installed on this computer"
+              },
+              "stockType": {
+                "type": "string",
+                "description": "For kind \"stock\": e.g. \"spinus.3x-osc\", \"spinus.drum-machine\", \"spinus.eq\", \"bundled.dragonfly.hall\" (spinus --describe all lists them)"
+              },
+              "plugin": {
+                "type": "object",
+                "description": "For kind \"plugin\": the plugin as Spinus's plugin list names it (a saved project shows it)",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "description": "\"VST3\", \"CLAP\", \"LV2\" or \"VST\""
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "manufacturer": {
+                    "type": "string"
+                  },
+                  "fileOrIdentifier": {
+                    "type": "string",
+                    "description": "The plugin's file, or its identifier (LV2's URI)"
+                  },
+                  "uniqueId": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "description": "The new effect device (without id)"
+          }
+        },
+        "required": [
+          "device",
+          "effect"
+        ],
+        "additionalProperties": false
+      }
+    },
     "insert.removeEffect": {
       "description": "Remove an effect from its insert, with its automation.",
       "parameters": {
