@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- An automated setting can be turned by hand outside its automation clips. Before, the clip held it for the
+  whole song: its first value before the clip and its last value after it, and a knob turned there jumped
+  back. Now a clip moves the setting only while it plays; elsewhere the setting is where you leave its knob.
+  Holding a knob in a plugin's window takes over even during a clip, until you let go.
 - Right-click an effect in the Mixer › **Replace effect** puts another effect in its slot, as Replace
   instrument does in the Channel Rack. Its place and dry/wet stay; one Ctrl+Z brings the old one back.
 - Automation of Spinus's own devices (Filter, EQ, Delay, compressor and the rest, and the 3x Osc, Sampler and

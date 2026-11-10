@@ -134,6 +134,10 @@ The clip appears on a new Playlist track named after the setting, four bars long
 setting's current value. The **Automation editor** opens to show it. A flat line changes nothing yet:
 shape it first.
 
+A clip moves its setting only while it plays. Before, between and after a setting's clips, the setting is
+where you leave its knob, and you can turn it as usual. While you hold a knob in a plugin's window, the knob
+wins even during a clip; let go and the clip takes over again.
+
 ### The Automation editor
 
 Double-click an automation clip on the Playlist to edit it in the **Automation editor** (also in

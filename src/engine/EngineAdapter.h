@@ -199,6 +199,8 @@ private:
     class GestureWatcher;
     void watchGestures (model::DeviceId, tracktion::Plugin&);
     void handEnded (model::DeviceId, int parameterIndex, float before, float after);
+    /** A hand on an automated setting's knob turns its automation off until it lets go (as a touch would). */
+    void holdByHand (model::DeviceId, int parameterIndex, bool held);
 
     /** Back to the Playlist: keeps the Launcher off until its clips have really stopped. */
     struct ReturnToPlaylist final : private juce::Timer
@@ -307,7 +309,31 @@ private:
     std::map<ClipKey, tracktion::Clip::Ptr> launcherClips; // launcher clip and channel -> clip in a slot
     std::map<model::ClipId, int> launcherSlots;            // each launcher clip's slot index
     std::set<model::ClipId> missingAudioClips;
-    std::vector<tracktion::AutomatableParameter::Ptr> automatedParameters; // whose curves the adapter wrote
+    /** An automated setting: its clips, and its knob's own value, which the curve holds outside them. */
+    struct Automated
+    {
+        struct Span
+        {
+            model::Ticks start = 0, length = 0;
+            std::vector<model::AutomationPoint> points; // within the clip only
+        };
+        tracktion::AutomatableParameter::Ptr parameter;
+        std::vector<Span> clips; // by start
+        float knob = 0.0f;       // as the curve holds it
+    };
+    void writeCurve (Automated&) const;
+
+    /** Keeps each automated setting's curve holding its knob's value outside the clips, as the knob is turned. */
+    struct KnobFollower final : private juce::Timer
+    {
+        void follow (EngineAdapter&);
+
+    private:
+        void timerCallback() override;
+        EngineAdapter* adapter = nullptr;
+    };
+    std::vector<Automated> automated; // whose curves the adapter wrote
+    KnobFollower knobFollower;
     juce::File audioFolder;
     bool audioFolderChanged = false;
 
