@@ -130,7 +130,7 @@ TEST_CASE ("A new automation clip covers the Playlist's selected area, or starts
     CHECK (f.automationOf (inArea).points.back().time == 2 * 3840);
 }
 
-TEST_CASE ("Automation reaches device parameters; outside its clips the knob counts", "[ui][automation]")
+TEST_CASE ("Automation holds its value between clips; before and after them the knob counts", "[ui][automation]")
 {
     Fixture f;
     f.session->setMode (Session::Mode::song);
@@ -148,7 +148,8 @@ TEST_CASE ("Automation reaches device parameters; outside its clips the knob cou
     REQUIRE (first.isValid());
     CHECK (f.session->getProject().playlist.lanes.back().name == "3x Osc Cutoff");
 
-    // Two clips on that lane: 0.2 -> 0.8 in bar 1, then 0.5 in bar 3. Outside them: the knob's value.
+    // Two clips on that lane: 0.2 -> 0.8 in bar 1, then 0.5 in bar 3. Between them it holds 0.8; after them:
+    // the knob's value.
     const auto lane = f.session->getProject().findClip (first)->lane;
     REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)first.value) + ", \"length\": 3840}"));
     REQUIRE (f.perform ("clip.setPoints",
@@ -174,14 +175,14 @@ TEST_CASE ("Automation reaches device parameters; outside its clips the knob cou
     CHECK (std::abs (at (0.0) - 0.2f) < 0.01f);
     CHECK (std::abs (at (2.0) - 0.5f) < 0.02f);  // halfway up the first ramp
     CHECK (std::abs (at (3.99) - 0.8f) < 0.01f); // the end of the first clip
-    CHECK (std::abs (at (6.0) - knob) < 0.01f);  // between the clips: the knob
+    CHECK (std::abs (at (6.0) - 0.8f) < 0.01f);  // held between the clips
     CHECK (std::abs (at (10.0) - 0.5f) < 0.01f); // the second clip
     CHECK (std::abs (at (16.0) - knob) < 0.01f); // after it: the knob
 
-    // Turning the knob moves the value outside the clips, not in them.
+    // Turning the knob moves the value after the clips, not in or between them.
     parameter->setParameter (parameter->valueRange.convertFrom0to1 (0.1f), juce::sendNotification);
     juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
-    CHECK (std::abs (at (6.0) - 0.1f) < 0.01f);
+    CHECK (std::abs (at (6.0) - 0.8f) < 0.01f);
     CHECK (std::abs (at (16.0) - 0.1f) < 0.01f);
     CHECK (std::abs (at (10.0) - 0.5f) < 0.01f);
 }

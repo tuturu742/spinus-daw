@@ -432,8 +432,8 @@ te::AutomatableParameter* EngineAdapter::findParameter (const ParameterTarget& t
 void EngineAdapter::syncAutomation (const Project& project)
 {
     // Rebuilt from the model after every change: automation curves are small. Each automated
-    // parameter gets one curve made from all its clips. Outside them the curve holds the knob's own value, so a
-    // setting can still be turned by hand before, between and after its clips.
+    // parameter gets one curve made from all its clips; between them the value holds (as in FL). Before the first
+    // and after the last, the curve holds the knob's own value, so a setting can still be turned by hand there.
     for (auto& a : automated)
         a.parameter->getCurve().clear (nullptr);
     automated.clear();
@@ -483,16 +483,13 @@ void EngineAdapter::writeCurve (Automated& a) const
     curve.clear (nullptr);
 
     std::optional<Ticks> heldTo; // the end of the clips so far
+    float held = 0.0f;           // the last value of the clips so far
     for (auto& clip : a.clips)
     {
         if (! heldTo && clip.start > 0)
             curve.addPoint (toTime (clip.start - 1), a.knob, 0.0f, nullptr); // the knob up to the first clip
-        else if (heldTo && *heldTo + 1 < clip.start)
-        {
-            // Back to the knob between two clips.
-            curve.addPoint (toTime (*heldTo + 1), a.knob, 0.0f, nullptr);
-            curve.addPoint (toTime (clip.start - 1), a.knob, 0.0f, nullptr);
-        }
+        else if (heldTo && *heldTo < clip.start)
+            curve.addPoint (toTime (clip.start - 1), held, 0.0f, nullptr); // FL: between clips the value holds
         for (auto& point : clip.points)
             curve.addPoint (toTime (clip.start + point.time), range.convertFrom0to1 (point.value),
                             juce::jlimit (-1.0f, 1.0f, point.curve), nullptr);
@@ -500,6 +497,8 @@ void EngineAdapter::writeCurve (Automated& a) const
         if (clip.points.back().time < clip.length)
             curve.addPoint (toTime (clip.start + clip.length), range.convertFrom0to1 (clip.points.back().value), 0.0f,
                             nullptr);
+        if (! heldTo || clip.start + clip.length >= *heldTo)
+            held = range.convertFrom0to1 (clip.points.back().value);
         heldTo = std::max (heldTo.value_or (0), clip.start + clip.length);
     }
     if (heldTo)

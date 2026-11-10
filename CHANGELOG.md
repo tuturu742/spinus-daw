@@ -7,9 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
-- An automated setting can be turned by hand outside its automation clips. Before, the clip held it for the
-  whole song: its first value before the clip and its last value after it, and a knob turned there jumped
-  back. Now a clip moves the setting only while it plays; elsewhere the setting is where you leave its knob.
+- An automated setting can be turned by hand before its first automation clip and after its last one.
+  Before, the clips held it for the whole song: their first value before them and their last value after
+  them, and a knob turned there jumped back. Between two clips the value still holds, as in FL Studio.
   Holding a knob in a plugin's window takes over even during a clip, until you let go.
 - A new automation clip goes where you are working: over the area selected in the Playlist's timeline if
   there is one, else four bars from the song position. Before, it always started at the beginning of the song.
