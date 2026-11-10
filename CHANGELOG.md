@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Exports no longer cut off reverbs and echoes at the end of the song. Before, the file always ended two
+  seconds after the last clip, even when a long echo or reverb was still ringing. Now the export goes on until
+  the sound has died away (at least two seconds, at most 15), and the stems stay as long as the main file.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ

@@ -226,6 +226,7 @@ void ExportDialog::setExportPattern (bool on)
 engine::ExportSettings ExportDialog::getSettings() const
 {
     engine::ExportSettings s;
+    s.maxTailSeconds = engine::ExportSettings::ringOutSeconds; // reverbs and echoes ring out
     switch (format.getSelectedId())
     {
     case wav16Id:

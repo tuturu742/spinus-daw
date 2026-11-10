@@ -40,8 +40,14 @@ struct ExportSettings
     /** Where audio clips with relative paths are (a saved project's audio/ folder). */
     juce::File audioFolder;
 
-    /** Time after the end for reverbs and releases to ring out. */
+    /** Time after the end for reverbs, echoes and releases to ring out: tailSeconds. With a longer
+        maxTailSeconds (the Export dialog's exports), at least tailSeconds and on while anything still sounds, up to
+        maxTailSeconds (an echo that never dies away, or an instrument that drones on, stops there): the files
+        then end shortly after the last sound. */
     double tailSeconds = 2.0;
+    double maxTailSeconds = 0.0;
+    /** The longest tail the Export dialog lets ring out. */
+    static constexpr double ringOutSeconds = 15.0;
 
     /** Inserts in the mix that play only to feed sidechains (see EngineAdapter::setUnheardInserts). */
     std::set<model::InsertId> unheardInserts;
@@ -146,6 +152,7 @@ private:
         juce::File renderTo; // where the render writes: the file, a WAV to encode it from, or a scratch file
         std::set<model::InsertId> unheard; // playing only to feed sidechains
         std::vector<Stem> stems;
+        juce::int64 shortestSamples = 0; // the song and the shortest tail: the files are at least this long
     };
 
     void renderStep();
@@ -153,8 +160,12 @@ private:
     void startRender();
     /** Places a StemCapturePlugin on each stem's insert and opens its file; an error, or empty. */
     juce::String prepareStems (Step&, tracktion::TimeRange);
-    /** On the render thread, after the render: closes the stems' files and encodes what needs it. */
+    /** On the render thread, after the render: closes the stems' files, cuts the tail where the sound has died
+        away, and encodes what needs it. */
     juce::String finishFiles (Step&);
+    /** Cuts the step's WAVs (the mix and its stems) to the same length: once the last of them falls silent,
+        between the shortest and the longest tail. Render thread. */
+    juce::String trimTail (Step&);
     void stepFinished (const juce::String& error);
     void finish (const Result&);
     /** Deletes the step's scratch files (the WAVs encoded from). */
@@ -169,6 +180,7 @@ private:
     std::vector<Step> steps;
     std::vector<juce::File> plannedFiles;
     size_t current = 0;
+    juce::int64 firstStepSamples = 0; // the first render's length after trimTail: the later ones are as long
     bool running = false, cancelRequested = false;
     double startedMs = 0.0;
 
