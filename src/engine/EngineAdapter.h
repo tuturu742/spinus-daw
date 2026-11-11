@@ -305,6 +305,7 @@ private:
     std::map<model::DeviceId, tracktion::Plugin::Ptr> guards;    // AudioGuardPlugin right after each device
     std::map<model::DeviceId, tracktion::Plugin::Ptr> probes;    // AudioGuardPlugin (probe) right before each device
     std::map<model::DeviceId, juce::MemoryBlock> savedStates;    // not yet applied, or plugin missing
+    std::set<model::DeviceId> statesFromSave; // of savedStates, those given by setSavedDeviceStates (a save's)
     std::set<model::DeviceId> reportedFailures;
     // Settings set through commands, as last applied, and what each was before.
     std::map<model::DeviceId, std::map<juce::String, float>> appliedParameters;

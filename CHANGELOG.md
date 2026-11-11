@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A preset picked in a plugin's own window could be partly undone when you opened the project again: settings
+  you had set earlier with Spinus's knobs (or the assistant, or a Spinus preset) went back to Spinus's values.
+  The same happened in exports. Now what you picked in the plugin's window is kept.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's
