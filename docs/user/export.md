@@ -18,7 +18,9 @@ or the pattern is), the window says so before asking for a file name.
 | Stems | Also export **one file per mixer insert**, for mixing elsewhere or sharing parts. |
 | Play while exporting | Hear the song while it is exported (see below). |
 
-- Two seconds are added at the end so reverbs and long notes can ring out.
+- After the end of the song, the export keeps going while reverbs, echoes and long notes ring out: at
+  least two seconds, and until the sound has died away, at most 15 seconds (an echo that never fades, or
+  an instrument that keeps droning, stops there). The file ends a moment after the last sound.
 - Stems go in a folder next to the main file: exporting `My song.wav` also writes
   `My song stems/01 Drums.wav`, `My song stems/02 Bass.wav` and so on, numbered like the mixer.
 - A stem is the insert's own output, with its effects and fader: what that insert plays into the

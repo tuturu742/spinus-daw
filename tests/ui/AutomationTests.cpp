@@ -6,6 +6,8 @@
 #include "engine/Beats.h"
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
+#include "model/Automation.h"
+#include "model/ModelJson.h"
 #include "ui/ChannelRack.h"
 #include "ui/Mixer.h"
 #include "ui/Playlist.h"
@@ -208,6 +210,60 @@ TEST_CASE ("A clip that starts later leaves the setting at its knob until then",
     CHECK (std::abs (at (7.9) - knob) < 0.01f);
     CHECK (std::abs (at (9.0) - 0.1f) < 0.01f);
     CHECK (std::abs (at (40.0) - knob) < 0.01f);
+}
+
+TEST_CASE ("Muting, deleting or redoing away an automation clip gives the setting back to its knob",
+           "[ui][automation][audio]")
+{
+    Fixture f;
+    f.session->setMode (Session::Mode::song);
+    model::ParameterTarget cutoff;
+    cutoff.kind = Kind::deviceParameter;
+    cutoff.device = f.lead().instrument.value_or (model::Device {}).id;
+    cutoff.parameterId = "cutoff";
+    REQUIRE (f.perform ("device.setParameters", "{\"device\": " + juce::String ((int)cutoff.device.value) +
+                                                    ", \"values\": {\"cutoff\": 0.3}}"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100); // the plugin tells Tracktion
+    const auto id = f.session->createAutomationClip (cutoff);
+    REQUIRE (id.isValid());
+    const auto clip = juce::String ((int)id.value);
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + clip + ", \"length\": 15360}"));
+    REQUIRE (f.perform ("clip.setPoints", "{\"clip\": " + clip + ", \"points\": [{\"time\": 0, \"value\": 0.9}]}"));
+    auto* parameter = f.session->getAdapter().findParameter (cutoff);
+    REQUIRE (parameter != nullptr);
+    auto near = [] (float a, float b) { return std::abs (a - b) < 0.01f; };
+
+    // Playing in the clip: the setting follows it.
+    test::RealtimeRunner runner (f.host.getEngine(), { .outputChannels = 2, .maxSeconds = 6.0 });
+    runner.start();
+    f.session->play();
+    auto run = [&]
+    {
+        runner.runUntil (runner.getSecondsProcessed() + 0.3);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        return parameter->getCurrentNormalisedValue();
+    };
+    CHECK (near (run(), 0.9f));
+
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + clip + ", \"muted\": true}"));
+    CHECK (near (run(), 0.3f)); // where the knob was left, not where the clip left it
+    REQUIRE (f.session->getHistory().undo());
+    CHECK (near (run(), 0.9f));
+
+    REQUIRE (f.perform ("clip.remove", "{\"clip\": " + clip + "}"));
+    CHECK (near (run(), 0.3f));
+    REQUIRE (f.session->getHistory().undo());
+    CHECK (near (run(), 0.9f));
+    REQUIRE (f.session->getHistory().redo());
+    CHECK (near (run(), 0.3f));
+
+    // Pattern mode plays no automation: the knob's value.
+    REQUIRE (f.session->getHistory().undo());
+    CHECK (near (run(), 0.9f));
+    f.session->setMode (Session::Mode::pattern);
+    CHECK (near (run(), 0.3f));
+    f.session->stop();
+    runner.stop();
 }
 
 TEST_CASE ("An automated insert volume fades the sound in", "[ui][automation][audio]")
@@ -475,4 +531,105 @@ TEST_CASE ("A hand on an automated knob wins until it lets go; where it left the
     const auto& parameters = f.session->getProject().findDevice (device)->parameters;
     REQUIRE (parameters.contains ("cutoff"));
     CHECK (std::abs (parameters.at ("cutoff") - 0.2f) < 0.01f);
+}
+
+namespace
+{
+/** 3x Osc's cutoff on the lead, and its automation's value (0..1) at a time, as the engine plays it. */
+struct CutoffCurve
+{
+    explicit CutoffCurve (Fixture& f) : fixture (f)
+    {
+        target.kind = Kind::deviceParameter;
+        target.device = f.lead().instrument.value_or (model::Device {}).id;
+        target.parameterId = "cutoff";
+    }
+
+    model::ClipId add (model::Ticks start, model::Ticks length, const juce::String& points)
+    {
+        const juce::String json = "{\"start\": " + juce::String (start) + ", \"length\": " + juce::String (length) +
+                                  ", \"target\": " + juce::JSON::toString (model::targetToJson (target), true) +
+                                  ", \"points\": " + points + "}";
+        juce::String error;
+        auto command = commands::CommandRegistry::get().create ("clip.addAutomation", juce::JSON::parse (json), error);
+        INFO (error);
+        REQUIRE (command != nullptr);
+        auto* raw = command.get();
+        REQUIRE (fixture.session->getHistory().perform (std::move (command)).wasOk());
+        return model::ClipId { (uint32_t)(int)raw->getResult()["clip"] };
+    }
+
+    float at (double beats) const
+    {
+        auto* p = fixture.session->getAdapter().findParameter (target);
+        REQUIRE (p != nullptr);
+        const auto time = fixture.session->getEdit().tempoSequence.toTime (te::BeatPosition::fromBeats (beats));
+        return p->valueRange.convertTo0to1 (p->getCurve().getValueAt (time, p->getCurrentExplicitValue()));
+    }
+
+    float knob() const
+    {
+        auto* p = fixture.session->getAdapter().findParameter (target);
+        REQUIRE (p != nullptr);
+        return p->valueRange.convertTo0to1 (p->getCurrentExplicitValue());
+    }
+
+    Fixture& fixture;
+    model::ParameterTarget target;
+};
+
+bool near (float a, float b, float tolerance = 0.01f) { return std::abs (a - b) < tolerance; }
+} // namespace
+
+TEST_CASE ("Two clips for one setting overlap: the one that starts later plays until it ends", "[ui][automation]")
+{
+    Fixture f;
+    f.session->setMode (Session::Mode::song);
+    CutoffCurve cutoff (f);
+    // A ramp from 0 to 1 over 4 bars, and a flat 0.5 over its second bar (on a lane of its own).
+    cutoff.add (0, 15360, R"([{"time": 0, "value": 0}, {"time": 15360, "value": 1}])");
+    cutoff.add (3840, 3840, R"([{"time": 0, "value": 0.5}])");
+
+    CHECK (near (cutoff.at (2.0), 2.0f / 16.0f)); // the ramp, untouched by the later clip's points
+    CHECK (near (cutoff.at (4.5), 0.5f));         // the later clip, all through its bar
+    CHECK (near (cutoff.at (7.9), 0.5f));
+    CHECK (near (cutoff.at (10.0), 10.0f / 16.0f)); // then the ramp again, where its line is by then
+    CHECK (near (cutoff.at (15.9), 15.9f / 16.0f, 0.02f));
+    CHECK (near (cutoff.at (20.0), cutoff.knob()));
+}
+
+TEST_CASE ("An automation clip plays its line as the Playlist draws it: flat before its first point, cut at its end",
+           "[ui][automation]")
+{
+    Fixture f;
+    f.session->setMode (Session::Mode::song);
+    CutoffCurve cutoff (f);
+    const auto knob = cutoff.knob();
+
+    SECTION ("A first point later in the clip: its value from the clip's start")
+    {
+        REQUIRE (! near (knob, 0.7f, 0.05f));
+        cutoff.add (3840, 3840, R"([{"time": 1920, "value": 0.7}])");
+        CHECK (near (cutoff.at (3.0), knob));
+        CHECK (near (cutoff.at (4.5), 0.7f));
+        CHECK (near (cutoff.at (6.5), 0.7f));
+        CHECK (near (cutoff.at (9.0), knob));
+    }
+    SECTION ("Made shorter: it stops where its line is at the new end")
+    {
+        // 0 -> 1 over a bar, then cut to half a bar: up to 0.5, not flat at 0 (its last point left inside).
+        const auto id = cutoff.add (0, 3840, R"([{"time": 0, "value": 0}, {"time": 3840, "value": 1}])");
+        REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)id.value) + ", \"length\": 1920}"));
+        CHECK (near (cutoff.at (1.0), 0.25f));
+        CHECK (near (cutoff.at (1.95), 0.4875f, 0.02f));
+        const auto& points = f.automationOf (id).points;
+        CHECK (near (model::automationValueAt (points, 960.0), cutoff.at (1.0)));
+        CHECK (near (cutoff.at (8.0), knob));
+
+        // Made longer again: the line comes back, and its last value holds to the end.
+        REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)id.value) + ", \"length\": 7680}"));
+        CHECK (near (cutoff.at (2.0), 0.5f));
+        CHECK (near (cutoff.at (6.0), 1.0f));
+        CHECK (near (cutoff.at (9.0), knob));
+    }
 }

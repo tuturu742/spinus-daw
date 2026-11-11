@@ -1,4 +1,5 @@
 #include "Mixer.h"
+#include "MainView.h"
 #include "ColourMenu.h"
 #include "SliderDrag.h"
 
@@ -1436,8 +1437,23 @@ bool Mixer::removeEffect (model::DeviceId id)
 
 bool Mixer::replaceEffect (model::DeviceId id, const model::Device& with)
 {
-    return perform ("insert.replaceEffect",
-                    object ({ { "device", idValue (id) }, { "effect", model::deviceToJson (with) } }));
+    // Automation of the old effect's settings goes with it: say so (as Replace instrument does).
+    int removed = 0;
+    for (const auto& clip : session.getProject().playlist.clips)
+        if (auto* a = std::get_if<model::AutomationClip> (&clip.content);
+            a != nullptr && a->target.kind == model::ParameterTarget::Kind::deviceParameter && a->target.device == id)
+            ++removed;
+
+    if (! perform ("insert.replaceEffect",
+                   object ({ { "device", idValue (id) }, { "effect", model::deviceToJson (with) } })))
+        return false;
+
+    if (removed > 0)
+        if (auto* view = findParentComponentOfClass<MainView>())
+            view->getHintBar().showMessage (
+                "Removed " + juce::String (removed) + (removed == 1 ? " automation clip" : " automation clips") +
+                " of the old effect's settings (the new one has other settings). Undo brings them back.");
+    return true;
 }
 
 bool Mixer::moveEffect (model::DeviceId id, model::InsertId to, int slot)

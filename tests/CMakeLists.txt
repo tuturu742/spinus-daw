@@ -57,11 +57,14 @@ add_executable (spinus_tests
     plugins/SurgePresetsTests.cpp
     plugins/PluginScannerTests.cpp
     project/ProjectFilesTests.cpp
+    project/ProjectEdgeCaseTests.cpp
     session/FreezeTests.cpp
     session/IdeaTests.cpp
     session/DemoSongTests.cpp
     session/ProblemReportTests.cpp
     session/ProjectDocumentTests.cpp
+    session/UndoEveryCommandTests.cpp
+    session/AutosaveAudioTests.cpp
     session/ProjectListTests.cpp
     session/MidiRecorderTests.cpp
     session/SessionTests.cpp
@@ -104,6 +107,7 @@ add_executable (spinus_tests
     ui/SamplesBrowserTests.cpp
     ui/AutomationEditorTests.cpp
     ui/AutomationTests.cpp
+    ui/AutomationEdgeTests.cpp
     ui/AutomationTargetTests.cpp
     ui/BrowserTests.cpp
     ui/ChannelRackTests.cpp

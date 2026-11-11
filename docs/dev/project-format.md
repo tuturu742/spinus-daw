@@ -17,8 +17,10 @@ the format cannot change by accident.
 | `.autosave/<YYYYMMDD-HHMMSS-mmm>/` | the newest 10 autosaves (`project.spn` + `plugin-states/`) |
 | `.session.lock` | exists while Spinus has the project open; names the process (`pid N`). Left behind by a crash: the process is gone |
 
-Saving is crash-safe: each file is written to a temporary file and renamed into place, plugin states
-before the `.spn` file, stale state files last. Code: `src/project/ProjectFiles.*`.
+Saving is crash-safe and all or nothing: every file is first written to a temporary file beside it; only
+when all of them are written are they renamed into place, plugin states before the `.spn` file, and stale
+state files removed last. A save that fails (a full disk, a read-only folder) replaces nothing. Code:
+`src/project/ProjectFiles.*`.
 
 ## Rules
 

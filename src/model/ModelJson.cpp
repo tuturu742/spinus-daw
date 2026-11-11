@@ -583,7 +583,7 @@ juce::String toJsonText (const Project& p)
 juce::Result fromJson (const juce::var& input, Project& result)
 {
     if (! input.isObject())
-        return juce::Result::fail ("project.json is not a JSON object");
+        return juce::Result::fail ("the project file is damaged (not a JSON object)");
 
     auto json = input;
     if (auto migrated = migrateToCurrent (json); migrated.failed())
@@ -775,7 +775,7 @@ juce::Result fromJsonText (const juce::String& text, Project& result)
 {
     juce::var json;
     if (auto parsed = juce::JSON::parse (text, json); parsed.failed())
-        return juce::Result::fail ("project.json is not valid JSON: " + parsed.getErrorMessage());
+        return juce::Result::fail ("the project file is damaged (not valid JSON): " + parsed.getErrorMessage());
 
     return fromJson (json, result);
 }

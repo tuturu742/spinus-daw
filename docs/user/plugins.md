@@ -78,5 +78,6 @@ Double-click a channel's name in the Channel Rack, or an effect in the Mixer, to
 - Removing the instrument or effect closes its window. Reordering effects keeps it open.
 - Turning a knob or moving a slider in the window is one undo step: **Ctrl+Z** puts it back where it was
   before you grabbed it. This works when the plugin says when you start and stop dragging, which almost all
-  do; picking a preset in the plugin's own browser is not an undo step.
+  do (VST3 and CLAP plugins and Spinus's own devices); picking a preset in the plugin's own browser is not an
+  undo step. While you hold a knob that has automation, your hand wins over the automation until you let go.
 - The title says what it is and where: for example, "Hall Reverb - 4 Reverb".

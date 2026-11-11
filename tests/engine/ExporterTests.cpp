@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "commands/CommandRegistry.h"
@@ -5,6 +6,7 @@
 #include "RealtimeRunner.h"
 #include "TestDevices.h"
 #include "engine/EngineHost.h"
+#include "engine/BundledDevices.h"
 #include "engine/DeviceFactory.h"
 #include "engine/Exporter.h"
 #include "engine/OutputCapturePlugin.h"
@@ -310,6 +312,7 @@ TEST_CASE ("The Export dialog exports and says where the files went", "[ui][expo
     dialog.setFormat (ExportSettings::Format::wav16);
     dialog.setStems (true);
     CHECK (dialog.getSettings().format == ExportSettings::Format::wav16);
+    CHECK (dialog.getSettings().maxTailSeconds == Catch::Approx (ExportSettings::ringOutSeconds)); // tails ring out
     CHECK (! dialog.getSettings().pattern.has_value());
 
     dialog.startExport (folder.getFile().getChildFile ("My song.wav"));
@@ -1131,4 +1134,106 @@ TEST_CASE ("An export deletes the plugins closed before it first, not while it r
     const auto destroyedBefore = destroyed();
     exportSong ("third.wav", [&] { CHECK (destroyed() == destroyedBefore + 1); }); // deleted before it renders
     CHECK (destroyedWhileProcessing() == before);
+}
+
+TEST_CASE ("The export's tail lasts until echoes and reverbs have died away, and no longer", "[engine][export]")
+{
+    EngineHost host ({ .openAudioDevice = false });
+    auto devices = std::make_unique<DefaultDeviceFactory>();
+    registerSpinusDevices (*devices, host.getEngine());
+    Session session (host.getEngine(), std::move (devices));
+    auto run = [&] (const juce::String& name, const juce::String& json)
+    {
+        juce::String error;
+        auto command = commands::CommandRegistry::get().create (name, juce::JSON::parse (json), error);
+        INFO (name << ": " << error);
+        REQUIRE (command != nullptr);
+        auto* raw = command.get();
+        REQUIRE (session.getHistory().perform (std::move (command)).wasOk());
+        return raw->getResult();
+    };
+    const auto made =
+        run ("channel.add", R"({"name": "Keys", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}})");
+    const auto pattern = run ("pattern.add", R"({"name": "P", "length": 3840})")["pattern"];
+    auto setNotes = [&] (const juce::String& notes)
+    {
+        run ("pattern.setNotes", R"({"pattern": )" + pattern.toString() + R"(, "channel": )" +
+                                     made["channel"].toString() + R"(, "notes": [)" + notes + "]}");
+    };
+    // A short note at the very end of a one-bar song (2 s), into long echoes: about 2 dB quieter each.
+    setNotes (R"({"start": 3360, "length": 480, "pitch": 60, "velocity": 0.8})");
+    const auto lane = run ("lane.add", "{}")["lane"];
+    run ("clip.addPattern",
+         R"({"lane": )" + lane.toString() + R"(, "pattern": )" + pattern.toString() + R"(, "start": 0})");
+    const auto delay =
+        run ("insert.addEffect", R"({"insert": )" + made["insert"].toString() +
+                                     R"(, "device": {"kind": "stock", "stockType": "spinus.delay"}})")["device"];
+    run ("device.setParameters",
+         R"({"device": )" + delay.toString() + R"(, "values": {"feedback": 0.85, "mix": 0.5}})");
+    session.setMode (Session::Mode::song);
+
+    juce::TemporaryFile scratch;
+    const auto& folder = scratch.getFile();
+    REQUIRE (folder.createDirectory());
+    auto exportSong = [&] (const juce::String& name, bool stems)
+    {
+        ExportSettings settings;
+        settings.format = ExportSettings::Format::wav32Float;
+        settings.maxTailSeconds = ExportSettings::ringOutSeconds; // as the Export dialog asks
+        settings.stems = stems;
+        std::optional<ExportJob::Result> result;
+        auto job = session.createExportJob (folder.getChildFile (name), settings,
+                                            [&] (const ExportJob::Result& r) { result = r; });
+        job->start();
+        for (int i = 0; i < 1200 && ! result; ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        REQUIRE (result.has_value());
+        INFO (result->error);
+        REQUIRE (result->ok);
+        return result->files;
+    };
+    struct Sound
+    {
+        double seconds = 0, lastSound = 0;
+        float endRms = 0;
+    };
+    auto measure = [] (const juce::File& file)
+    {
+        std::unique_ptr<juce::AudioFormatReader> reader (
+            juce::WavAudioFormat().createReaderFor (new juce::FileInputStream (file), true));
+        REQUIRE (reader != nullptr);
+        juce::AudioBuffer<float> audio (2, (int)reader->lengthInSamples);
+        reader->read (&audio, 0, audio.getNumSamples(), 0, true, true);
+        Sound s;
+        s.seconds = audio.getNumSamples() / reader->sampleRate;
+        const auto last = (int)(0.25 * reader->sampleRate);
+        s.endRms = audio.getRMSLevel (0, audio.getNumSamples() - last, last);
+        for (int i = audio.getNumSamples(); --i >= 0;)
+            if (std::abs (audio.getSample (0, i)) > 1.0e-4f || std::abs (audio.getSample (1, i)) > 1.0e-4f)
+            {
+                s.lastSound = i / reader->sampleRate;
+                break;
+            }
+        return s;
+    };
+
+    // Not cut off: the echoes ring out (well past the old fixed two seconds); the file ends soon after them.
+    auto files = exportSong ("Echoes", true);
+    REQUIRE (files.size() == 2);
+    const auto mix = measure (files[0]), stem = measure (files[1]);
+    INFO ("length " << mix.seconds << " s, last sound at " << mix.lastSound << " s");
+    CHECK (mix.endRms < 1.0e-4f);
+    CHECK (mix.seconds > 2.0 + 4.0);
+    CHECK (mix.seconds - mix.lastSound < 0.5);
+    CHECK (stem.seconds == Catch::Approx (mix.seconds)); // the stems are as long as the mix
+
+    // An echo that never dies away stops 15 s after the song.
+    run ("device.setParameters", R"({"device": )" + delay.toString() + R"(, "values": {"feedback": 1.0, "mix": 0.5}})");
+    CHECK (measure (exportSong ("Endless", false)[0]).seconds == Catch::Approx (2.0 + 15.0).margin (0.01));
+
+    // A song ending in silence keeps the two seconds after it.
+    run ("insert.removeEffect", R"({"device": )" + delay.toString() + "}");
+    setNotes (R"({"start": 0, "length": 240, "pitch": 60, "velocity": 0.8})");
+    CHECK (measure (exportSong ("Plain", false)[0]).seconds == Catch::Approx (2.0 + 2.0).margin (0.01));
+    folder.deleteRecursively();
 }

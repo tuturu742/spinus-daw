@@ -173,8 +173,10 @@ TEST_CASE ("An open window stays open when its effect is reordered", "[ui][plugi
     REQUIRE (f.mixer.moveEffect (second, a, 0));
     CHECK (f.session.isDeviceWindowShowing (second));
 
-    // Moving to another insert recreates the plugin (with its settings); its window closes with it.
+    // Moving to another insert keeps the same plugin playing there, so its window stays open too.
     REQUIRE (f.mixer.moveEffect (second, b, 0));
+    CHECK (f.session.isDeviceWindowShowing (second));
+    f.session.closeDeviceWindow (second);
     CHECK (! f.session.isDeviceWindowShowing (second));
 }
 
