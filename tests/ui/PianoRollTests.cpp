@@ -4,6 +4,7 @@
 #include "engine/EngineHost.h"
 #include "ui/ChannelRack.h"
 #include "model/Chords.h"
+#include "model/ModelJson.h"
 #include "model/NoteTools.h"
 #include "ui/PianoRoll.h"
 
@@ -871,6 +872,76 @@ TEST_CASE ("The first note on a new instrument survives the pattern it creates",
     const auto* pattern = r.session.getProject().findPattern (r.session.getCurrentPattern());
     REQUIRE (pattern != nullptr);
     CHECK (pattern->notes.at (r.session.getSelectedChannel()).size() == 1);
+}
+
+TEST_CASE ("An agent's change arriving mid-drag survives the drag, or the drag is refused clearly",
+           "[ui][pianoroll][agents]")
+{
+    // An agent (MCP) changes the notes with pattern.setNotes while the user still holds a note: both changes are
+    // kept; if the agent removed the held note, the drag is not applied (it would bring the note back) and the roll
+    // says why.
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Keys"));
+    REQUIRE (r.roll.addNote (60, 0, 240, 0.8f));
+    r.roll.scrollToPitch (66);
+    Mouse mouse (r.roll);
+    const auto button = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+    auto agentSets = [&r] (const std::vector<model::Note>& notes)
+    {
+        juce::Array<juce::var> list;
+        for (auto& n : notes)
+            list.add (model::noteToJson (n));
+        juce::String error;
+        auto* params = new juce::DynamicObject();
+        params->setProperty ("pattern", (int)r.session.getCurrentPattern().value);
+        params->setProperty ("channel", (int)r.session.getSelectedChannel().value);
+        params->setProperty ("notes", list);
+        auto command = commands::CommandRegistry::get().create ("pattern.setNotes", juce::var (params), error);
+        REQUIRE (command != nullptr);
+        REQUIRE (r.session.getHistory().perform (std::move (command)).wasOk());
+    };
+    auto modelPitches = [&r]
+    {
+        std::vector<int> pitches;
+        if (const auto* pattern = r.session.getProject().findPattern (r.session.getCurrentPattern()))
+            for (auto& n : pattern->notes.at (r.session.getSelectedChannel()))
+                pitches.push_back (n.pitch);
+        std::sort (pitches.begin(), pitches.end());
+        return pitches;
+    };
+
+    // The agent adds a note (its list has the held note where it was, and a new one): the drag moves the held
+    // note, and the agent's note stays.
+    {
+        const auto from = mouse.at (0, 60), to = mouse.at (0, 62);
+        mouse.grid->mouseDown (mouse.event (from, button, from, false));
+        mouse.grid->mouseDrag (mouse.event (to, button, from, true));
+        agentSets ({ { 0, 240, 60, 0.8f, 0.5f, 0.0f, 0.0f, {} }, { 960, 240, 72, 0.7f, 0.5f, 0.0f, 0.0f, {} } });
+        r.roll.handleUpdateNowIfNeeded(); // arrives mid-gesture
+        mouse.grid->mouseUp (mouse.event (to, {}, from, true));
+        r.roll.handleUpdateNowIfNeeded();
+        CHECK (modelPitches() == std::vector<int> { 62, 72 });
+        CHECK (pitchesOf (r.roll.getNotes()) == std::vector<int> { 62, 72 });
+        CHECK (r.roll.getLastProblem().isEmpty());
+        // The drag is its own undo step, after the agent's.
+        r.session.getHistory().undo();
+        CHECK (modelPitches() == std::vector<int> { 60, 72 });
+        r.session.getHistory().redo();
+    }
+
+    // The agent removes the held note: the drag is refused, the agent's notes stay, and the roll says why.
+    {
+        const auto from = mouse.at (0, 62), to = mouse.at (0, 65);
+        mouse.grid->mouseDown (mouse.event (from, button, from, false));
+        mouse.grid->mouseDrag (mouse.event (to, button, from, true));
+        agentSets ({ { 960, 240, 72, 0.7f, 0.5f, 0.0f, 0.0f, {} }, { 960, 240, 76, 0.7f, 0.5f, 0.0f, 0.0f, {} } });
+        r.roll.handleUpdateNowIfNeeded();
+        mouse.grid->mouseUp (mouse.event (to, {}, from, true));
+        r.roll.handleUpdateNowIfNeeded();
+        CHECK (modelPitches() == std::vector<int> { 72, 76 });
+        CHECK (pitchesOf (r.roll.getNotes()) == std::vector<int> { 72, 76 });
+        CHECK (r.roll.getLastProblem().contains ("changed while you were editing"));
+    }
 }
 
 TEST_CASE ("A note placed or dragged sounds while the mouse is down", "[ui][pianoroll]")

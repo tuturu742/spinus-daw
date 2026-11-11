@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A change from a coding agent that arrived while you were dragging a note in the Piano Roll was lost when you
+  let go: the drag put back the notes as they were before the agent's change. Now both changes stay. If the agent
+  removed the note you were holding, your drag isn't made, and the hint bar says why.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's
