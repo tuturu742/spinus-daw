@@ -303,17 +303,14 @@ void Session::loadProject (project::ProjectData data)
     for (auto& insert : data.project.mixer.inserts)
         for (auto& slot : insert.effects)
             where[slot.device.id] = insert.name;
-    int created = 0;
+    std::set<model::DeviceId> reported; // a missing plugin is tried again at each sync: report it once
     const int total = (int)where.size();
-    adapter->onCreatingDevice = [this, &where, &created, total] (const model::Device& device)
+    adapter->onCreatingDevice = [this, &where, &reported, total] (const model::Device& device)
     {
-        if (onLoadProgress)
-        {
-            const auto it = where.find (device.id);
-            onLoadProgress (created, total,
-                            model::getDeviceDisplayName (device) + (it != where.end() ? " on " + it->second : ""));
-        }
-        ++created;
+        const auto it = where.find (device.id);
+        if (! onLoadProgress || it == where.end() || ! reported.insert (device.id).second)
+            return;
+        onLoadProgress ((int)reported.size() - 1, total, model::getDeviceDisplayName (device) + " on " + it->second);
     };
     const juce::ScopeGuard stopReporting { [this] { adapter->onCreatingDevice = nullptr; } };
 
