@@ -1145,11 +1145,11 @@ bool MainView::openProjectFile (const juce::File& file)
         }
 
     loadingOverlay.start (folder.getFileName());
-    auto opened = document->open (file);
+    const auto opened = document->open (file);
     loadingOverlay.finish();
-    if (auto r = opened; r.failed())
+    if (opened.failed())
     {
-        showProblem ("Could not open the project", r.getErrorMessage());
+        showProblem ("Could not open the project", opened.getErrorMessage());
         return false;
     }
 
@@ -1780,10 +1780,10 @@ void MainView::askToRecover (const ProjectDocument::Recovery& recovery, const st
                         return;
                     }
                     safe->loadingOverlay.start (recovery.untitled ? juce::String ("the autosave") : recovery.name);
-                    auto recovered = safe->document->recover (recovery);
+                    const auto recovered = safe->document->recover (recovery);
                     safe->loadingOverlay.finish();
-                    if (auto r = recovered; r.failed())
-                        safe->showProblem ("Could not recover the project", r.getErrorMessage());
+                    if (recovered.failed())
+                        safe->showProblem ("Could not recover the project", recovered.getErrorMessage());
                     else
                         safe->hintBar.showMessage ("Recovered " + safe->document->getName() +
                                                    " from the autosave. Save to keep it.");
