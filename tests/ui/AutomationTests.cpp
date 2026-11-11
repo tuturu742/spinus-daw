@@ -533,7 +533,7 @@ TEST_CASE ("Two clips for one setting overlap: the one that starts later plays u
     f.session->setMode (Session::Mode::song);
     CutoffCurve cutoff (f);
     // A ramp from 0 to 1 over 4 bars, and a flat 0.5 over its second bar (on a lane of its own).
-    cutoff.add (0, 4 * 3840, R"([{"time": 0, "value": 0}, {"time": 15360, "value": 1}])");
+    cutoff.add (0, 15360, R"([{"time": 0, "value": 0}, {"time": 15360, "value": 1}])");
     cutoff.add (3840, 3840, R"([{"time": 0, "value": 0.5}])");
 
     CHECK (near (cutoff.at (2.0), 2.0f / 16.0f)); // the ramp, untouched by the later clip's points
