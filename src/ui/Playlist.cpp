@@ -114,35 +114,42 @@ public:
         const auto colour = channel != nullptr ? juce::Colour (channel->colour) : juce::Colour (0xff5c8dd6);
         const auto file = playlist.session.resolveAudioFile (audio.file);
         const bool missing = ! file.existsAsFile();
+        // A missing file: red, as missing plugins are, with a flat line where the waveform would be.
+        const auto fill = missing ? themeOf (*this).get ("danger") : colour;
 
-        g.setColour ((missing ? juce::Colour (0xff8a3030) : colour).withAlpha (ghost ? 0.4f : muted ? 0.3f : 0.75f));
+        g.setColour (fill.withAlpha (ghost ? 0.4f : muted ? 0.3f : 0.75f));
         g.fillRoundedRectangle (r, 3.0f);
-        g.setColour (colour.darker (0.6f));
+        g.setColour (fill.darker (0.6f));
         g.drawRoundedRectangle (r, 3.0f, 1.0f);
 
         const auto name = file.getFileNameWithoutExtension().isNotEmpty() ? file.getFileNameWithoutExtension()
                                                                           : juce::String ("Audio");
-        if (! missing)
-            if (auto* thumbnail = playlist.getThumbnail (file);
-                thumbnail != nullptr && thumbnail->getTotalLength() > 0.0)
-            {
-                // The part of the file the clip plays: from its offset, for its length, at its speed; a reversed
-                // clip plays the file from the end, so it is drawn mirrored.
-                const auto secondsPerTick = 60.0 / (project.settings.tempoBpm * (double)model::ticksPerQuarterNote);
-                const auto speed = model::getPlaybackSpeed (audio);
-                const auto fileLength = thumbnail->getTotalLength();
-                auto fileStart = (double)audio.offset * secondsPerTick * speed;
-                auto fileEnd = fileStart + (double)clip.length * secondsPerTick * speed;
-                if (audio.reversed)
-                    std::tie (fileStart, fileEnd) = std::pair { fileLength - fileEnd, fileLength - fileStart };
-                const auto area = r.reduced (1.0f, 14.0f).withTrimmedBottom (-12.0f);
-                juce::Graphics::ScopedSaveState state (g);
-                if (audio.reversed)
-                    g.addTransform (juce::AffineTransform::scale (-1.0f, 1.0f, area.getCentreX(), 0.0f));
-                g.setColour (juce::Colours::black.withAlpha (0.6f));
-                thumbnail->drawChannels (g, area.toNearestInt(), fileStart, fileEnd,
-                                         juce::Decibels::decibelsToGain (audio.gainDb));
-            }
+        if (missing)
+        {
+            const auto area = r.reduced (1.0f, 14.0f).withTrimmedBottom (-12.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.6f));
+            g.fillRect (area.getX(), std::round (area.getCentreY()) - 1.0f, area.getWidth(), 2.0f);
+        }
+        else if (auto* thumbnail = playlist.getThumbnail (file);
+                 thumbnail != nullptr && thumbnail->getTotalLength() > 0.0)
+        {
+            // The part of the file the clip plays: from its offset, for its length, at its speed; a reversed
+            // clip plays the file from the end, so it is drawn mirrored.
+            const auto secondsPerTick = 60.0 / (project.settings.tempoBpm * (double)model::ticksPerQuarterNote);
+            const auto speed = model::getPlaybackSpeed (audio);
+            const auto fileLength = thumbnail->getTotalLength();
+            auto fileStart = (double)audio.offset * secondsPerTick * speed;
+            auto fileEnd = fileStart + (double)clip.length * secondsPerTick * speed;
+            if (audio.reversed)
+                std::tie (fileStart, fileEnd) = std::pair { fileLength - fileEnd, fileLength - fileStart };
+            const auto area = r.reduced (1.0f, 14.0f).withTrimmedBottom (-12.0f);
+            juce::Graphics::ScopedSaveState state (g);
+            if (audio.reversed)
+                g.addTransform (juce::AffineTransform::scale (-1.0f, 1.0f, area.getCentreX(), 0.0f));
+            g.setColour (juce::Colours::black.withAlpha (0.6f));
+            thumbnail->drawChannels (g, area.toNearestInt(), fileStart, fileEnd,
+                                     juce::Decibels::decibelsToGain (audio.gainDb));
+        }
 
         // What is changed, after the name: "Vocal  <<  +5  x2".
         juce::StringArray changes;
@@ -1389,6 +1396,13 @@ int Playlist::getNumRows() const
 }
 
 //==============================================================================
+bool Playlist::isAudioFileMissing (model::ClipId id) const
+{
+    const auto* clip = session.getProject().findClip (id);
+    const auto* audio = clip != nullptr ? std::get_if<model::AudioClip> (&clip->content) : nullptr;
+    return audio != nullptr && ! session.resolveAudioFile (audio->file).existsAsFile();
+}
+
 juce::AudioThumbnail* Playlist::getThumbnail (const juce::File& file)
 {
     auto& thumbnail = thumbnails[file.getFullPathName()];
