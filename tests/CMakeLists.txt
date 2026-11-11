@@ -37,6 +37,7 @@ add_executable (spinus_tests
     engine/LauncherTests.cpp
     engine/SandboxEngineTests.cpp
     engine/ExporterTests.cpp
+    engine/EdgeCaseTests.cpp
     engine/TuneRenderTests.cpp
     engine/LiveInstrumentTests.cpp
     engine/EngineHostTests.cpp
