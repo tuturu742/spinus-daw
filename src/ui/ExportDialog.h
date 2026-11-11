@@ -40,7 +40,12 @@ public:
     /** Why the export cannot start (an empty playlist, no sound card to play along), or nothing. */
     juce::String findProblem() const;
 
-    /** Asks for the file and exports; says what is wrong instead when the export cannot start. */
+    /** The files exporting to `destination` would write over that the save dialog has not asked about: the
+        stems, and the main file when it gets another extension than the one typed ("Song" becomes "Song.wav"). */
+    std::vector<juce::File> getFilesToReplace (const juce::File& destination) const;
+
+    /** Asks for the file and exports; says what is wrong instead when the export cannot start. Asks before
+        writing over files the save dialog did not ask about (getFilesToReplace). */
     void chooseFileAndExport();
     void startExport (const juce::File& destination);
     bool isExporting() const { return (job != nullptr && job->isRunning()) || (live != nullptr && live->isRunning()); }
@@ -67,6 +72,7 @@ private:
     /** "The current pattern (name)", greyed out when there is none. */
     void updatePatternChoice();
     void finished (const engine::ExportJob::Result&);
+    void askToReplace (const juce::File& destination, const std::vector<juce::File>& files);
     void updateEnablement();
 
     Session& session;

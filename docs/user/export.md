@@ -44,6 +44,8 @@ or the pattern is), the window says so before asking for a file name.
   clicked **Export...**. Changes you make while it exports are not in the file (except with **Play while
   exporting**, below).
 - If you cancel, or something fails, no half-written files are left behind.
+- If files of an earlier export are in the way (its stems, or the file with the format's ending when you
+  typed the name without one), Spinus asks before replacing them.
 - **MP3** needs the `lame` program and **AAC** needs `ffmpeg`. If one is missing, its choices are greyed
   out and the window says what to install. FLAC and Opus need nothing extra.
   - On Arch Linux: `sudo pacman -S lame` for MP3, `sudo pacman -S ffmpeg` for AAC.

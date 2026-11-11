@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Exporting again over an earlier export asks before replacing its stems, or the file with the format's
+  ending when you typed the name without one ("Song" saved as `Song.wav`). Before, only the exact file name you
+  picked was asked about, and the rest was replaced without a word.
 - Exports no longer cut off reverbs and echoes at the end of the song. Before, the file always ended two
   seconds after the last clip, even when a long echo or reverb was still ringing. Now the export goes on until
   the sound has died away (at least two seconds, at most 15), and the stems stay as long as the main file.
