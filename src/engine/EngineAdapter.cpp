@@ -989,16 +989,17 @@ void EngineAdapter::syncInserts (const Project& project)
         syncInsert (insert, project);
 }
 
-void EngineAdapter::syncInsert (const Insert& insert, const Project&)
+void EngineAdapter::syncInsert (const Insert& insert, const Project& project)
 {
-    // Devices that left this insert, or changed identity in place, are dropped first.
+    // Devices that left the project, or changed identity in place, are dropped first. An effect moved to another
+    // insert is kept: syncing that insert moves it there, or has already (the master and the inserts before this
+    // one are synced first), so dropping it here would take it out of the insert it now plays on.
     if (applied != nullptr)
         if (auto* old = applied->findInsert (insert.id))
             for (auto& oldSlot : old->effects)
             {
-                auto now = std::find_if (insert.effects.begin(), insert.effects.end(),
-                                         [&] (auto& s) { return s.device.id == oldSlot.device.id; });
-                if (now == insert.effects.end() || ! sameIdentity (now->device, oldSlot.device))
+                const auto* now = project.findDevice (oldSlot.device.id);
+                if (now == nullptr || ! sameIdentity (*now, oldSlot.device))
                     dropDevice (oldSlot.device.id);
             }
 

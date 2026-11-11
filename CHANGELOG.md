@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- An effect moved in the Mixer to the Master or to an insert further left went silent and showed as
+  **Missing** until the next change to the song. The same happened when **Ctrl+Z** took back moving an effect to
+  an insert further right. It now plays in its new slot at once, as the same plugin with its settings.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ
