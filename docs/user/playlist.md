@@ -139,6 +139,12 @@ Before a setting's first clip and after its last one, the setting is where you l
 turn it as usual. Between two clips it holds the value the first one ended on, as in FL Studio. While you hold a knob in a plugin's window, the knob
 wins even during a clip; let go and the clip takes over again.
 
+A clip plays its line just as it is drawn: flat at its first point's value from the clip's start, and flat at
+its last point's value to its end. Make a clip shorter and it stops where its line is at the new end; make it
+longer again and the rest of the line comes back. If two clips for the same setting overlap (on different
+tracks), the one that starts later plays until it ends; then the other one goes on from where its line is by
+then.
+
 ### The Automation editor
 
 Double-click an automation clip on the Playlist to edit it in the **Automation editor** (also in
