@@ -16,6 +16,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - An effect moved in the Mixer to the Master or to an insert further left went silent and showed as
   **Missing** until the next change to the song. The same happened when **Ctrl+Z** took back moving an effect to
   an insert further right. It now plays in its new slot at once, as the same plugin with its settings.
+- A save that failed (a full disk, a folder you may not write in) could leave the project half saved: the
+  plugins' settings from the new save next to the song from the old one. Now nothing on disk changes unless
+  the whole save succeeds. The message also says why when the project's folder is read-only.
+- Opening a damaged project file (cut off by a crash or a full disk while it was saved) now says so in plain
+  words, for example "the file is empty", instead of "project.json is not a JSON object", and says where the
+  project's newest autosave is.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ

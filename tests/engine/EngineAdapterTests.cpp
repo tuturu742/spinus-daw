@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "../commands/ExampleCalls.h"
 #include "../model/ExampleProject.h"
 #include "TestDevices.h"
 #include "AudioChecks.h"
@@ -220,6 +221,34 @@ TEST_CASE ("Incremental syncs match a fresh build after random edits and undo", 
     }
 
     CHECK (adapter.describe() == f.describeFresh (makeExample()));
+}
+
+TEST_CASE ("Every command: after do, undo and redo the engine plays what a fresh build of the project would",
+           "[engine][commands]")
+{
+    Fixture f;
+    for (auto& [name, params] : test::exampleCalls())
+    {
+        INFO (name << " " << params);
+        auto edit = f.newEdit();
+        EngineAdapter adapter (*edit, f.factory);
+        CommandHistory history (test::exampleProjectFor (name));
+        history.addListener ([&] (const ChangeSet&) { adapter.sync (history.getProject()); });
+        adapter.sync (history.getProject());
+
+        const auto result = history.perform (make (name, params));
+        INFO (result.getErrorMessage());
+        REQUIRE (result.wasOk());
+        CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+        for (int round = 0; round < 2; ++round)
+        {
+            INFO ("round " << round);
+            REQUIRE (history.undo());
+            CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+            REQUIRE (history.redo());
+            CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+        }
+    }
 }
 
 TEST_CASE ("The master plays every effect on it, beyond the first", "[engine]")

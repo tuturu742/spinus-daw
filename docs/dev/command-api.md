@@ -23,7 +23,7 @@ from the registry; a test fails when it is out of date.
    (add/remove; undo restores whole sections), or a targeted undo for frequent edits (knobs, notes).
 2. Register it with a one-sentence summary and a `ParameterSchema`. Reject unknown parameters with
    `allowOnly`.
-3. Add an example call to `exampleCalls()` in `tests/commands/CommandTests.cpp` (the generic test checks
+3. Add an example call to `exampleCalls()` in `tests/commands/ExampleCalls.h` (the generic test checks
    perform, exact undo and redo) plus tests for its special cases.
 4. Regenerate the schema: `SPINUS_WRITE_COMMAND_SCHEMA=1 ./build/release/tests/spinus_tests "[commands]"`.
 5. If users can trigger it, document the feature in `docs/user/`.
