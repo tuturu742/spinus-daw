@@ -118,6 +118,15 @@ AiSettingsDialog::AiSettingsDialog (ai::AiService& s) : service (s)
                               "well: for now the Analyzer and the Track creator in the View menu. Turning this off "
                               "closes them.",
                               juce::dontSendNotification);
+    timeLimitLabel.setText ("Wait for an answer:", juce::dontSendNotification);
+    timeLimitBox.setTooltip ("How long Spinus waits for the AI service before it stops and says there was no "
+                             "answer. Raise it if a slow model or a slow connection needs more time.");
+    showTimeLimit();
+    timeLimitBox.onChange = [this]
+    {
+        if (const auto id = timeLimitBox.getSelectedId(); id != 0)
+            setTimeLimit (id < 0 ? 0 : id);
+    };
     experimentalNote.setJustificationType (juce::Justification::topLeft);
     experimentalNote.setFont (juce::FontOptions (13.0f));
     explanation.setText (
@@ -182,13 +191,11 @@ AiSettingsDialog::AiSettingsDialog (ai::AiService& s) : service (s)
     cancelButton.onClick = [this] { showAddForm (false); };
 
     for (auto* c : std::initializer_list<juce::Component*> {
-             &onOff,         &experimentalToggle, &experimentalNote, &explanation,
-             &status,        &connectionsLabel,   &modelLabel,       &usage,
-             &list,          &addButton,          &testButton,       &removeButton,
-             &localButton,   &useButton,          &patternsButton,   &modelBox,
-             &providerBox,   &nameField,          &keyField,         &urlField,
-             &providerLabel, &nameLabel,          &keyLabel,         &urlLabel,
-             &saveButton,    &cancelButton })
+             &onOff,       &experimentalToggle, &experimentalNote, &explanation, &timeLimitLabel, &timeLimitBox,
+             &status,      &connectionsLabel,   &modelLabel,       &usage,       &list,           &addButton,
+             &testButton,  &removeButton,       &localButton,      &useButton,   &patternsButton, &modelBox,
+             &providerBox, &nameField,          &keyField,         &urlField,    &providerLabel,  &nameLabel,
+             &keyLabel,    &urlLabel,           &saveButton,       &cancelButton })
         addChildComponent (c);
 
     modelListModel = std::make_unique<ModelList> (*this);
@@ -265,7 +272,7 @@ AiSettingsDialog::AiSettingsDialog (ai::AiService& s) : service (s)
         });
 
     stateListener = service.addStateListener ([this] { updateVisibility(); });
-    setSize (680, 640);
+    setSize (680, 670);
     updateVisibility();
     refresh();
 }
@@ -321,6 +328,34 @@ void AiSettingsDialog::setShowExperimental (bool show)
 {
     service.setShowExperimentalFeatures (show);
     experimentalToggle.setToggleState (show, juce::dontSendNotification);
+}
+
+void AiSettingsDialog::setTimeLimit (int seconds)
+{
+    service.setTimeLimit (seconds);
+    showTimeLimit();
+}
+
+void AiSettingsDialog::showTimeLimit()
+{
+    // The ids are the seconds (-1: no limit, as an id can't be 0); a limit set elsewhere gets its own entry.
+    const auto current = service.getTimeLimit();
+    timeLimitBox.clear (juce::dontSendNotification);
+    bool listed = current == 0;
+    for (const auto seconds : { 60, 180, 300, 600, 1800 })
+    {
+        if (current > 0 && current < seconds && ! listed)
+        {
+            timeLimitBox.addItem (ai::AiService::describeTimeLimit (current), current);
+            listed = true;
+        }
+        timeLimitBox.addItem (ai::AiService::describeTimeLimit (seconds), seconds);
+        listed = listed || current == seconds;
+    }
+    if (! listed)
+        timeLimitBox.addItem (ai::AiService::describeTimeLimit (current), current);
+    timeLimitBox.addItem ("No limit", -1);
+    timeLimitBox.setSelectedId (current == 0 ? -1 : current, juce::dontSendNotification);
 }
 
 void AiSettingsDialog::refresh()
@@ -709,6 +744,8 @@ void AiSettingsDialog::updateVisibility()
                                                              &useButton, &patternsButton, &usage })
         c->setVisible (on && ! formVisible && ! subPage);
     manualSearchButton.setVisible (on && ! formVisible && ! subPage);
+    timeLimitLabel.setVisible (on && ! formVisible && ! subPage);
+    timeLimitBox.setVisible (timeLimitLabel.isVisible());
     engineButton.setVisible (on && ! formVisible && ! subPage);
     // The live interface works with AI off too (Spinus's own tools), so its button is always there.
     agentsButton.setVisible (! formVisible && ! subPage && agentInterfaceShown() != nullptr);
@@ -777,7 +814,8 @@ void AiSettingsDialog::paint (juce::Graphics& g)
 {
     const auto& theme = themeOf (*this);
     g.fillAll (theme.get ("panel"));
-    for (auto* l : { &explanation, &connectionsLabel, &modelLabel, &providerLabel, &nameLabel, &keyLabel, &urlLabel })
+    for (auto* l : { &explanation, &connectionsLabel, &modelLabel, &providerLabel, &nameLabel, &keyLabel, &urlLabel,
+                     &timeLimitLabel })
         l->setColour (juce::Label::textColourId, theme.get ("text"));
     for (auto* l : std::initializer_list<juce::Label*> { &status, &usage, &experimentalNote })
         l->setColour (juce::Label::textColourId, theme.get ("textDim"));
@@ -845,6 +883,13 @@ void AiSettingsDialog::resized()
         experimentalNote.setBounds (area.removeFromBottom (36));
         experimentalToggle.setBounds (area.removeFromBottom (24));
         area.removeFromBottom (8);
+    }
+    if (timeLimitBox.isVisible())
+    {
+        auto row = area.removeFromBottom (26);
+        timeLimitLabel.setBounds (row.removeFromLeft (140));
+        timeLimitBox.setBounds (row.removeFromLeft (140).reduced (0, 1));
+        area.removeFromBottom (6);
     }
 
     if (formVisible)

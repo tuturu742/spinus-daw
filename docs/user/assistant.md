@@ -23,6 +23,13 @@ may change, be slow or not work well. For now that is the [Analyzer](analyzer.md
 **View › Track creator (experimental)** appear at once, untick it and they close. Spinus remembers the
 choice.
 
+**Wait for an answer** (just above it) is how long Spinus waits when the AI service says nothing: 3 minutes at
+first. After that the assistant, **Generate**, **Record idea** and the other AI features stop waiting and say
+"No answer from the AI service for 3 minutes. Try again, or raise the time limit in Options > AI." The time
+counts from the last thing the service said, so a long job that keeps showing progress (a model download, a
+song analysis) is not cut off. Pick a longer time if a slow model or a slow connection needs it, or **No
+limit** to wait for ever (**Stop** still ends a wait at once). Spinus remembers the choice.
+
 ## Connections
 
 Click **Add...**, choose a provider, and **Save and test**. You can add several and switch between them.
@@ -128,8 +135,9 @@ its left edge to make it wider or narrower. Select text in an answer with the mo
 
 The answer appears as it is written; the line under the conversation says what the assistant is doing
 ("Looking at the project", "Searching the manual"). **Stop** ends an answer early, at once, also when the AI
-service doesn't answer at all; you can ask again right away. If the AI service stops (crashes) while it answers,
-the conversation says so, with the service's last words; your next question starts it again.
+service doesn't answer at all; you can ask again right away. If it says nothing for 3 minutes, the assistant
+stops waiting by itself and says so (see **Wait for an answer** above). If the AI service stops (crashes) while
+it answers, the conversation says so, with the service's last words; your next question starts it again.
 
 The buttons above the conversation say what the assistant sees: the **project**, the selected
 **channel**, the current **pattern** and the **insert** selected in the Mixer. Click one to leave it out

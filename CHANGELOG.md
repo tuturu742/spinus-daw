@@ -11,6 +11,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   the service stopped, with its last words, and you can ask again. The same for the other AI features that work
   in the background (Generate, Record idea, model downloads). **Stop** now frees the assistant at once, also when
   the service doesn't answer at all; before, it did nothing until the service answered.
+- When the AI service says nothing for 3 minutes, the assistant, Generate, Record idea and the other AI
+  features stop waiting and say so: "No answer from the AI service for 3 minutes. Try again, or raise the time
+  limit in Options > AI." Before, they could wait forever. The time is set in **Options › AI › Wait for an
+  answer** (1 to 30 minutes, or no limit); a job that keeps showing progress is not cut off.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's
