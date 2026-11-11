@@ -10,6 +10,21 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - No more stuck notes when you edit while the song plays: deleting a note that is sounding, making it
   shorter, moving or deleting its clip in the Playlist now stops it at once. Before, it kept sounding until
   you stopped playback. This was the same for Spinus's own instruments and for plugins.
+- Opening a damaged project file (cut off by a crash or a full disk while it was saved) now says so in plain
+  words, for example "the file is empty", instead of "project.json is not a JSON object", and says where the
+  project's newest autosave is.
+- A save that failed (a full disk, a folder you may not write in) could leave the project half saved: the
+  plugins' settings from the new save next to the song from the old one. Now nothing on disk changes unless
+  the whole save succeeds. The message also says why when the project's folder is read-only.
+- An effect moved in the Mixer to the Master or to an insert further left went silent and showed as
+  **Missing** until the next change to the song. The same happened when **Ctrl+Z** took back moving an effect to
+  an insert further right. It now plays in its new slot at once, as the same plugin with its settings.
+- A save that failed (a full disk, a folder you may not write in) could leave the project half saved: the
+  plugins' settings from the new save next to the song from the old one. Now nothing on disk changes unless
+  the whole save succeeds. The message also says why when the project's folder is read-only.
+- Opening a damaged project file (cut off by a crash or a full disk while it was saved) now says so in plain
+  words, for example "the file is empty", instead of "project.json is not a JSON object", and says where the
+  project's newest autosave is.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ
@@ -18,6 +33,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   Before, the clips held it for the whole song: their first value before them and their last value after
   them, and a knob turned there jumped back. Between two clips the value still holds, as in FL Studio.
   Holding a knob in a plugin's window takes over even during a clip, until you let go.
+- Automation clips now play exactly the line the Playlist draws. Before, a clip made shorter jumped back to
+  its last point inside instead of stopping where its line was; a clip whose first point was not at its start
+  slid there from the knob's value instead of starting flat; and two clips for the same setting that overlapped
+  mixed their points into a zigzag. Now the clip that starts later plays until it ends, then the other goes on.
 - A new automation clip goes where you are working: over the area selected in the Playlist's timeline if
   there is one, else four bars from the song position. Before, it always started at the beginning of the song.
 - Right-click an effect in the Mixer › **Replace effect** puts another effect in its slot, as Replace
@@ -28,6 +47,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   again. Its knobs now follow the automation while the song plays. Other plugins were not affected.
 - A knob turned in a plugin's own window can be undone: each drag is one **Ctrl+Z** step, which puts the knob
   back where it was. Before, Ctrl+Z skipped it and undid the change before it instead.
+- The same now works in CLAP plugins (Surge XT, LSP, Dragonfly Reverb, Six Sines, OB-Xf and others Spinus
+  loads as CLAP): a knob dragged in their window is one Ctrl+Z step, and holding a knob that has automation
+  takes over from the automation until you let go. Before, Spinus did not hear when such a drag started and
+  ended, so neither worked.
 - An agent's song summary (and `spinus --check`) now lists each Playlist lane's clips: where they start, how long
   they are and what they play. Before, it only counted them, so an agent could not move clips between lanes.
 - An agent could only see a plugin's first 80 or so settings, so on big plugins (Ample Guitar's amp section, for

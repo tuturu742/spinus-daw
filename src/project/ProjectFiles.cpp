@@ -25,30 +25,50 @@ const char* const cacheFolder = "cache";
 const char* const autosaveFolder = ".autosave";
 const char* const lockName = ".session.lock";
 
-/** Writes via a temporary file and an atomic rename, so the target is never half-written. */
-juce::Result writeAtomically (const juce::File& target, const void* data, size_t size)
+/** Files written beside their targets, put in place together once all of them are written: a save that fails
+    (a full disk, a folder that is read-only) leaves every target as it was. */
+class PendingFiles
 {
-    if (! target.getParentDirectory().createDirectory())
-        return juce::Result::fail ("Spinus could not create the folder " +
-                                   target.getParentDirectory().getFullPathName() +
-                                   describeWriteProblem (target.getParentDirectory()));
-
-    juce::TemporaryFile temp (target, juce::TemporaryFile::useHiddenFile);
+public:
+    /** Writes `data` to a temporary file next to `target`. */
+    juce::Result write (const juce::File& target, const void* data, size_t size)
     {
-        juce::FileOutputStream out (temp.getFile());
-        if (out.failedToOpen() || ! out.write (data, size))
-            return juce::Result::fail ("Spinus could not write " + target.getFullPathName() +
-                                       describeWriteProblem (target));
-        out.flush();
-        if (out.getStatus().failed())
-            return out.getStatus();
+        if (! target.getParentDirectory().createDirectory())
+            return juce::Result::fail ("Spinus could not create the folder " +
+                                       target.getParentDirectory().getFullPathName() +
+                                       describeWriteProblem (target.getParentDirectory()));
+
+        auto temp = std::make_unique<juce::TemporaryFile> (target, juce::TemporaryFile::useHiddenFile);
+        {
+            juce::FileOutputStream out (temp->getFile());
+            bool written = ! out.failedToOpen() && out.write (data, size);
+            if (written)
+            {
+                out.flush();
+                written = out.getStatus().wasOk();
+            }
+            if (! written)
+                return juce::Result::fail ("Spinus could not write " + target.getFullPathName() +
+                                           describeWriteProblem (target));
+        }
+        files.emplace_back (std::move (temp));
+        return juce::Result::ok();
     }
 
-    return temp.overwriteTargetFileWithTemporary()
-               ? juce::Result::ok()
-               : juce::Result::fail ("Spinus could not replace " + target.getFullPathName() +
-                                     describeWriteProblem (target));
-}
+    /** Renames every file into place, in the order written. */
+    juce::Result commit()
+    {
+        for (auto& temp : files)
+            if (! temp->overwriteTargetFileWithTemporary())
+                return juce::Result::fail ("Spinus could not replace " + temp->getTargetFile().getFullPathName() +
+                                           describeWriteProblem (temp->getTargetFile()));
+        files.clear();
+        return juce::Result::ok();
+    }
+
+private:
+    std::vector<std::unique_ptr<juce::TemporaryFile>> files; // deleted unless committed
+};
 
 juce::String stateFileName (model::DeviceId id) { return juce::String (id.value) + ".bin"; }
 
@@ -57,13 +77,19 @@ juce::Result writeModelAndStates (const juce::File& folder, const juce::File& mo
 {
     const auto states = folder.getChildFile (statesFolder);
 
+    // Everything is written first, then put in place: plugin states before the .spn file, so the folder holds a
+    // loadable project at every moment, and nothing is replaced if anything could not be written.
+    PendingFiles pending;
     for (auto& [id, block] : data.deviceStates)
-        if (auto r = writeAtomically (states.getChildFile (stateFileName (id)), block.getData(), block.getSize());
+        if (auto r = pending.write (states.getChildFile (stateFileName (id)), block.getData(), block.getSize());
             r.failed())
             return r;
 
     const auto json = model::toJsonText (data.project) + "\n";
-    if (auto r = writeAtomically (modelFile, json.toRawUTF8(), json.getNumBytesAsUTF8()); r.failed())
+    if (auto r = pending.write (modelFile, json.toRawUTF8(), json.getNumBytesAsUTF8()); r.failed())
+        return r;
+
+    if (auto r = pending.commit(); r.failed())
         return r;
 
     if (removeStaleStates)
@@ -83,8 +109,22 @@ juce::Result readModelAndStates (const juce::File& folder, ProjectData& result)
                                    folder.getFullPathName());
 
     ProjectData data;
-    if (auto r = model::fromJsonText (file.loadFileAsString(), data.project); r.failed())
-        return juce::Result::fail (file.getFullPathName() + ": " + r.getErrorMessage());
+    const auto text = file.loadFileAsString(); // stops at a zero byte: a file of zeros reads as empty
+    juce::String problem;
+    if (text.trim().isEmpty())
+        problem = "the file is empty. It was cut off, for example by a crash or a full disk while it was saved.";
+    else if (auto r = model::fromJsonText (text, data.project); r.failed())
+        problem = r.getErrorMessage();
+
+    if (problem.isNotEmpty())
+    {
+        auto message = file.getFullPathName() + ": " + problem;
+        // The work is not all gone: say where the autosaves are (only a project folder has them).
+        if (const auto autosaves = Autosaves (folder).list(); ! autosaves.isEmpty())
+            message << "\n\nAutosaved copies of this project are kept in its hidden .autosave folder; the newest is "
+                    << autosaves.getFirst().getFullPathName() << ".";
+        return juce::Result::fail (message);
+    }
 
     for (auto& stateFile : folder.getChildFile (statesFolder).findChildFiles (juce::File::findFiles, false, "*.bin"))
     {
@@ -112,6 +152,9 @@ juce::String describeWriteProblem (const juce::File& target)
 
     if (existing != target && existing.existsAsFile())
         return ": " + existing.getFullPathName() + " is a file, not a folder";
+    // A file is saved as a new file beside it, renamed over it: that needs the folder writable, not the file.
+    if (existing == target && target.existsAsFile() && ! target.getParentDirectory().hasWriteAccess())
+        return ": you have no permission to write in " + target.getParentDirectory().getFullPathName();
     if (! existing.hasWriteAccess())
         return existing == target && target.existsAsFile()
                    ? ": the file is read-only"

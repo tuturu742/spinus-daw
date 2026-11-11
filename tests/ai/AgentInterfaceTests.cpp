@@ -219,6 +219,35 @@ TEST_CASE ("An agent connects, changes the song at once, and its changes are und
     CHECK (f.request ("POST", Fixture::rpc ("tools/list"), sessionId).status == 404);
 }
 
+TEST_CASE ("An agent's run_commands that changes many things is one undo step", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto sessionId = f.connect();
+    const auto before = f.session.getProject();
+    const auto steps = f.session.getHistory().getUndoDescriptions().size();
+
+    juce::Array<juce::var> commands;
+    commands.add (object ({ { "command", "project.setTempo" }, { "parameters", object ({ { "bpm", 96 } }) } }));
+    commands.add (object ({ { "command", "pattern.add" }, { "parameters", object ({ { "name", "Verse" } }) } }));
+    commands.add (object ({ { "command", "insert.add" }, { "parameters", object ({ { "name", "Keys" } }) } }));
+    commands.add (object ({ { "command", "lane.add" }, { "parameters", object ({ { "name", "Keys" } }) } }));
+    commands.add (
+        object ({ { "command", "marker.add" }, { "parameters", object ({ { "at", 3840 }, { "name", "Drop" } }) } }));
+    const auto result =
+        f.call (sessionId, "run_commands", object ({ { "summary", "Set up a verse" }, { "steps", commands } }));
+    INFO (juce::JSON::toString (result));
+    REQUIRE_FALSE ((bool)result["isError"]);
+    CHECK (f.session.getProject().patterns.size() == before.patterns.size() + 1);
+    CHECK (f.session.getProject().playlist.markers.size() == 1);
+    CHECK (f.session.getHistory().getUndoDescriptions().size() == steps + 1);
+
+    REQUIRE (f.session.getHistory().undo());
+    auto undone = f.session.getProject();
+    undone.nextId = before.nextId; // IDs are never given back
+    CHECK (undone == before);
+}
+
 TEST_CASE ("An agent's steps can't reach files outside the project and the sample folders", "[ai][agents]")
 {
     Fixture f;

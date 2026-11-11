@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "../commands/ExampleCalls.h"
 #include "../model/ExampleProject.h"
 #include "TestDevices.h"
 #include "AudioChecks.h"
@@ -226,6 +227,34 @@ TEST_CASE ("Incremental syncs match a fresh build after random edits and undo", 
     CHECK (adapter.describe() == f.describeFresh (makeExample()));
 }
 
+TEST_CASE ("Every command: after do, undo and redo the engine plays what a fresh build of the project would",
+           "[engine][commands]")
+{
+    Fixture f;
+    for (auto& [name, params] : test::exampleCalls())
+    {
+        INFO (name << " " << params);
+        auto edit = f.newEdit();
+        EngineAdapter adapter (*edit, f.factory);
+        CommandHistory history (test::exampleProjectFor (name));
+        history.addListener ([&] (const ChangeSet&) { adapter.sync (history.getProject()); });
+        adapter.sync (history.getProject());
+
+        const auto result = history.perform (make (name, params));
+        INFO (result.getErrorMessage());
+        REQUIRE (result.wasOk());
+        CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+        for (int round = 0; round < 2; ++round)
+        {
+            INFO ("round " << round);
+            REQUIRE (history.undo());
+            CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+            REQUIRE (history.redo());
+            CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+        }
+    }
+}
+
 TEST_CASE ("The master plays every effect on it, beyond the first", "[engine]")
 {
     // Tracktion allows 4 plugins on the master by default; Spinus's own around each device and the master's
@@ -313,6 +342,56 @@ TEST_CASE ("Effects are added, reordered and moved in place; undoing a removal r
     CHECK (adapter.getInsertTrack (model::InsertId { 6 })->pluginList.indexOf (moved) >= 0);
     CHECK (juce::approximatelyEqual (moved->getAutomatableParameter (0)->getCurrentValue(), value));
     CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+}
+
+TEST_CASE ("An effect moved to the master or an earlier insert plays there, and undo and redo move it back and forth",
+           "[engine]")
+{
+    // The adapter syncs the master first, then the inserts in order: an effect moving to one synced earlier was put
+    // there and then dropped as having left its old insert, so it was silent (and "Missing") until the next sync.
+    Fixture f;
+    auto edit = f.newEdit();
+    EngineAdapter adapter (*edit, f.factory);
+    CommandHistory history (makeExample());
+    history.addListener ([&] (const ChangeSet&) { adapter.sync (history.getProject()); });
+    adapter.sync (history.getProject());
+
+    auto* compressor = adapter.getDevicePlugin (model::DeviceId { 3 }); // on Drums (2)
+    REQUIRE (compressor != nullptr);
+    auto* parameter = compressor->getAutomatableParameter (0).get();
+    parameter->setParameter (0.123f, juce::sendNotificationSync);
+    const auto value = parameter->getCurrentValue();
+
+    auto placedOn = [&] (model::InsertId insert) -> bool
+    {
+        auto* plugin = adapter.getDevicePlugin (model::DeviceId { 3 });
+        if (plugin == nullptr)
+            return false;
+        auto& list =
+            insert == model::masterInsertId ? edit->getMasterPluginList() : adapter.getInsertTrack (insert)->pluginList;
+        return list.indexOf (plugin) >= 0;
+    };
+
+    // Bass (6) comes after Drums: moving there always worked. Undo moves it back to an earlier insert.
+    REQUIRE (history.perform (make ("insert.moveEffect", R"({"device": 3, "insert": 6, "index": 0})")).wasOk());
+    CHECK (placedOn (model::InsertId { 6 }));
+    REQUIRE (history.undo());
+    CHECK (placedOn (model::InsertId { 2 }));
+    const auto missing = adapter.getMissingDevices(); // the example's uninstalled reverb plugin only
+    CHECK (std::find (missing.begin(), missing.end(), model::DeviceId { 3 }) == missing.end());
+    CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+    REQUIRE (history.redo());
+    CHECK (placedOn (model::InsertId { 6 }));
+    CHECK (adapter.describe() == f.describeFresh (history.getProject())); // with Bass's sidechain from Drums
+
+    // To the master, which is synced before every insert.
+    REQUIRE (history.perform (make ("insert.moveEffect", R"({"device": 3, "insert": 1, "index": 0})")).wasOk());
+    CHECK (placedOn (model::masterInsertId));
+    CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+
+    // The same plugin all along, with its settings.
+    CHECK (adapter.getDevicePlugin (model::DeviceId { 3 }) == compressor);
+    CHECK (juce::approximatelyEqual (parameter->getCurrentValue(), value));
 }
 
 TEST_CASE ("Replacing a channel's instrument swaps the plugin on its track; undo brings back its settings", "[engine]")

@@ -6,6 +6,7 @@
 #include "AudioGuardPlugin.h"
 #include "MutePlugin.h"
 #include "ParameterIds.h"
+#include "model/Automation.h"
 
 #include "PluginCrashGuard.h"
 #include "plugins/SandboxList.h"
@@ -456,17 +457,11 @@ void EngineAdapter::syncAutomation (const Project& project)
 
     for (auto& [parameter, clips] : clipsOf)
     {
-        std::sort (clips.begin(), clips.end(), [] (auto* a, auto* b) { return a->start < b->start; });
+        // By start; of two that start together, the later one in the Playlist counts as the later.
+        std::stable_sort (clips.begin(), clips.end(), [] (auto* a, auto* b) { return a->start < b->start; });
         Automated a { parameter, {}, 0.0f };
         for (auto* clip : clips)
-        {
-            Automated::Span span { clip->start, clip->length, {} };
-            for (auto& point : std::get<AutomationClip> (clip->content).points)
-                if (point.time <= clip->length)
-                    span.points.push_back (point);
-            if (! span.points.empty())
-                a.clips.push_back (std::move (span));
-        }
+            a.clips.push_back ({ clip->start, clip->length, std::get<AutomationClip> (clip->content).points });
         if (a.clips.empty())
             continue;
         writeCurve (a);
@@ -482,27 +477,69 @@ void EngineAdapter::writeCurve (Automated& a) const
     a.knob = a.parameter->getCurrentExplicitValue(); // what was set by hand or command, never by automation
     curve.clear (nullptr);
 
-    std::optional<Ticks> heldTo; // the end of the clips so far
-    float held = 0.0f;           // the last value of the clips so far
+    // Which clip plays when. Where clips overlap, the one that starts later plays until it ends; then the one
+    // under it goes on from where its line is by then.
+    struct Piece
+    {
+        Ticks from, to;
+        const Automated::Span* clip;
+    };
+    std::vector<Ticks> edges;
     for (auto& clip : a.clips)
     {
-        if (! heldTo && clip.start > 0)
-            curve.addPoint (toTime (clip.start - 1), a.knob, 0.0f, nullptr); // the knob up to the first clip
-        else if (heldTo && *heldTo < clip.start)
-            curve.addPoint (toTime (clip.start - 1), held, 0.0f, nullptr); // FL: between clips the value holds
-        for (auto& point : clip.points)
-            curve.addPoint (toTime (clip.start + point.time), range.convertFrom0to1 (point.value),
-                            juce::jlimit (-1.0f, 1.0f, point.curve), nullptr);
-        // A clip holds its last value to its end.
-        if (clip.points.back().time < clip.length)
-            curve.addPoint (toTime (clip.start + clip.length), range.convertFrom0to1 (clip.points.back().value), 0.0f,
-                            nullptr);
-        if (! heldTo || clip.start + clip.length >= *heldTo)
-            held = range.convertFrom0to1 (clip.points.back().value);
-        heldTo = std::max (heldTo.value_or (0), clip.start + clip.length);
+        edges.push_back (clip.start);
+        edges.push_back (clip.start + clip.length);
     }
-    if (heldTo)
-        curve.addPoint (toTime (*heldTo + 1), a.knob, 0.0f, nullptr); // the knob after the last clip
+    std::sort (edges.begin(), edges.end());
+    edges.erase (std::unique (edges.begin(), edges.end()), edges.end());
+    std::vector<Piece> pieces;
+    for (size_t i = 0; i + 1 < edges.size(); ++i)
+    {
+        const Automated::Span* playing = nullptr;
+        for (auto& clip : a.clips) // by start: the last one that covers the edge started last
+            if (clip.start <= edges[i] && edges[i] < clip.start + clip.length)
+                playing = &clip;
+        if (playing == nullptr)
+            continue; // between clips
+        if (! pieces.empty() && pieces.back().clip == playing && pieces.back().to == edges[i])
+            pieces.back().to = edges[i + 1];
+        else
+            pieces.push_back ({ edges[i], edges[i + 1], playing });
+    }
+
+    // A clip's line, as the Playlist and the Automation editor draw it: flat before its first point and after
+    // its last, and through points past its end up to its end.
+    auto valueAt = [&range] (const Automated::Span& clip, Ticks time)
+    { return range.convertFrom0to1 (model::automationValueAt (clip.points, (double)(time - clip.start))); };
+
+    for (size_t i = 0; i < pieces.size(); ++i)
+    {
+        const auto& piece = pieces[i];
+        const auto& clip = *piece.clip;
+        if (i == 0 && piece.from > 0)
+            curve.addPoint (toTime (piece.from - 1), a.knob, 0.0f, nullptr); // the knob up to the first clip
+        else if (i > 0 && pieces[i - 1].to < piece.from - 1)
+            curve.addPoint (toTime (piece.from - 1), valueAt (*pieces[i - 1].clip, pieces[i - 1].to), 0.0f,
+                            nullptr); // FL: between clips the value holds
+
+        // Where the piece starts, with the bend of the clip's line there; then the clip's points inside it.
+        const auto from = piece.from - clip.start, to = piece.to - clip.start;
+        float bend = 0.0f;
+        for (auto& point : clip.points)
+            if (point.time <= from)
+                bend = point.curve;
+        curve.addPoint (toTime (piece.from), valueAt (clip, piece.from), juce::jlimit (-1.0f, 1.0f, bend), nullptr);
+        for (auto& point : clip.points)
+            if (point.time > from && point.time < to)
+                curve.addPoint (toTime (clip.start + point.time), range.convertFrom0to1 (point.value),
+                                juce::jlimit (-1.0f, 1.0f, point.curve), nullptr);
+        // Its end: just before the next piece if that follows at once.
+        const bool next = i + 1 < pieces.size() && pieces[i + 1].from == piece.to;
+        curve.addPoint (toTime (next ? piece.to - 1 : piece.to), valueAt (clip, next ? piece.to - 1 : piece.to), 0.0f,
+                        nullptr);
+    }
+    if (! pieces.empty())
+        curve.addPoint (toTime (pieces.back().to + 1), a.knob, 0.0f, nullptr); // the knob after the last clip
 }
 
 void EngineAdapter::KnobFollower::follow (EngineAdapter& a)
@@ -989,16 +1026,17 @@ void EngineAdapter::syncInserts (const Project& project)
         syncInsert (insert, project);
 }
 
-void EngineAdapter::syncInsert (const Insert& insert, const Project&)
+void EngineAdapter::syncInsert (const Insert& insert, const Project& project)
 {
-    // Devices that left this insert, or changed identity in place, are dropped first.
+    // Devices that left the project, or changed identity in place, are dropped first. An effect moved to another
+    // insert is kept: syncing that insert moves it there, or has already (the master and the inserts before this
+    // one are synced first), so dropping it here would take it out of the insert it now plays on.
     if (applied != nullptr)
         if (auto* old = applied->findInsert (insert.id))
             for (auto& oldSlot : old->effects)
             {
-                auto now = std::find_if (insert.effects.begin(), insert.effects.end(),
-                                         [&] (auto& s) { return s.device.id == oldSlot.device.id; });
-                if (now == insert.effects.end() || ! sameIdentity (now->device, oldSlot.device))
+                const auto* now = project.findDevice (oldSlot.device.id);
+                if (now == nullptr || ! sameIdentity (*now, oldSlot.device))
                     dropDevice (oldSlot.device.id);
             }
 

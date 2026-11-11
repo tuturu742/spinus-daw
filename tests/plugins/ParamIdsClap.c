@@ -1,7 +1,8 @@
 /* A test CLAP effect whose parameter IDs are not their positions, as in many real plugins (OB-Xf, Surge XT
    Effects): Spinus knows a plugin's settings by position (engine/ParameterIds.h), so device.setParameters and
    automation must not use these IDs. Some IDs are other settings' positions, so mixing the two up shows.
-   It passes its input through; its state is the settings' values, in list order. Never installed or shipped. */
+   It passes its input through; its state is the settings' values, in list order. Never installed or shipped.
+   Tests can also turn a setting as its window would (spinus_test_param_ids_hand). */
 
 #include <clap/clap.h>
 #include <math.h>
@@ -37,6 +38,59 @@ typedef struct
 } effect_t;
 
 static effect_t* self (const clap_plugin_t* p) { return (effect_t*) p->plugin_data; }
+
+/* A hand on a setting, as a plugin's window reports it: the next block sends it (step 1: the start of the drag
+   and a value, 2: a value, 3: the end of the drag) as output events, from the audio thread. Plain volatile, not
+   _Atomic, which MSVC's C compiler doesn't accept: a test sets these and then waits for the next blocks. */
+static volatile int hand_step = 0;
+static volatile int hand_position = 0;
+static volatile double hand_value = 0.0;
+
+CLAP_EXPORT void spinus_test_param_ids_hand (int position, double value, int step)
+{
+    hand_position = position;
+    hand_value = value;
+    hand_step = step;
+}
+
+static void send_hand (effect_t* s, const clap_output_events_t* out)
+{
+    const int step = hand_step;
+    if (step == 0 || out == NULL)
+        return;
+    hand_step = 0;
+    const int i = hand_position;
+    if (i < 0 || i >= PARAMS)
+        return;
+    if (step == 1 || step == 3)
+    {
+        clap_event_param_gesture_t g;
+        memset (&g, 0, sizeof (g));
+        g.header.size = sizeof (g);
+        g.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+        g.header.type = step == 1 ? CLAP_EVENT_PARAM_GESTURE_BEGIN : CLAP_EVENT_PARAM_GESTURE_END;
+        g.param_id = infos[i].id;
+        if (step == 3)
+        {
+            out->try_push (out, &g.header);
+            return;
+        }
+        out->try_push (out, &g.header);
+    }
+    s->values[i] = hand_value;
+    clap_event_param_value_t v;
+    memset (&v, 0, sizeof (v));
+    v.header.size = sizeof (v);
+    v.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+    v.header.type = CLAP_EVENT_PARAM_VALUE;
+    v.param_id = infos[i].id;
+    v.note_id = -1;
+    v.port_index = -1;
+    v.channel = -1;
+    v.key = -1;
+    v.value = hand_value;
+    out->try_push (out, &v.header);
+}
 
 static int index_of (clap_id id)
 {
@@ -176,6 +230,7 @@ static void on_main_thread (const clap_plugin_t* p) { (void) p; }
 static clap_process_status process (const clap_plugin_t* p, const clap_process_t* process)
 {
     apply_events (self (p), process->in_events);
+    send_hand (self (p), process->out_events);
     const clap_audio_buffer_t* in = &process->audio_inputs[0];
     const clap_audio_buffer_t* out = &process->audio_outputs[0];
     for (uint32_t c = 0; c < out->channel_count && c < in->channel_count; ++c)

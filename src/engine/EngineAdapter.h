@@ -320,7 +320,7 @@ private:
         struct Span
         {
             model::Ticks start = 0, length = 0;
-            std::vector<model::AutomationPoint> points; // within the clip only
+            std::vector<model::AutomationPoint> points; // all of them, in time order (some may be past its end)
         };
         tracktion::AutomatableParameter::Ptr parameter;
         std::vector<Span> clips; // by start
