@@ -320,7 +320,7 @@ TEST_CASE ("A plugin crashing in its own process: the window names it, the proje
     CHECK (std::abs (plugin->getAudioPluginInstance()->getParameters()[0]->getValue() - 0.5f) < 0.01f);
 }
 
-TEST_CASE ("A plugin crashing in its own process during an export: the export says which, and keeps no file",
+TEST_CASE ("A plugin crashing in its own process during an export: the file is made without it, and says which",
            "[engine][sandbox][export]")
 {
     Fixture f;
@@ -340,10 +340,13 @@ TEST_CASE ("A plugin crashing in its own process during an export: the export sa
     REQUIRE (result.has_value());
     const auto r = result.value_or (engine::ExportJob::Result {});
     INFO (r.error);
-    // Not a file that silently lacks the plugin's sound.
-    CHECK (! r.ok);
-    CHECK (r.error.startsWith ("Crash Test stopped working"));
-    CHECK (! file.existsAsFile());
+    INFO (r.warning);
+    // The file is made, but not silently: the result names the plugin and where it was.
+    CHECK (r.ok);
+    CHECK (file.existsAsFile());
+    CHECK (r.warning.startsWith ("Exported, but Crash Test on insert "));
+    CHECK (r.warning.contains ("missing from the file"));
+    CHECK (r.warning.endsWith ("Reload it and export again."));
 
     // Spinus goes on: the song plays (the live plugin was not touched), and the project still saves.
     CHECK (f.session->getAdapter().getStoppedDevices().empty());
@@ -359,5 +362,6 @@ TEST_CASE ("A plugin crashing in its own process during an export: the export sa
     job = nullptr;
     REQUIRE (result.has_value());
     CHECK (result.value_or (engine::ExportJob::Result {}).ok);
+    CHECK (result.value_or (engine::ExportJob::Result {}).warning.isEmpty());
     CHECK (file.existsAsFile());
 }
