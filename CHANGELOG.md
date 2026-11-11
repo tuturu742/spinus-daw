@@ -27,6 +27,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   project's newest autosave is.
 - In the Flatpak, double-clicking a project's `.spn` file opens it in Spinus; before, the desktop
   took it for a text file.
+- **Replace effect** in the Mixer now says when it removed automation clips of the old effect's settings, as
+  Replace instrument already did in the Channel Rack. Undo brings them back.
 - In the windows of Spinus's own devices, the drop-down menus and on/off switches (a Filter's slope, an EQ
   band's switch, a Sampler's one shot and the rest) now move with automation too, as the knobs do.
 - An automated setting can be turned by hand before its first automation clip and after its last one.
