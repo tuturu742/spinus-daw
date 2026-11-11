@@ -126,6 +126,39 @@ TEST_CASE ("Loading reports what is wrong", "[project]")
     CHECK (error.contains ("not valid JSON"));
 }
 
+TEST_CASE ("A damaged project file says it is damaged, and where its newest autosave is", "[project]")
+{
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    requireOk (saveProject (folder, exampleData()));
+    const auto file = folder.getChildFile ("Song.spn");
+    ProjectData loaded;
+
+    // Cut off while saving: empty, or zeros (what a crash can leave on some disks), or half of the text.
+    const auto good = file.loadFileAsString();
+    const char zeros[1024] {};
+    REQUIRE (file.replaceWithData (zeros, sizeof (zeros)));
+    auto error = loadProject (folder, loaded).getErrorMessage();
+    CHECK (error.startsWith (file.getFullPathName() + ": the file is empty"));
+    REQUIRE (file.deleteFile());
+    REQUIRE (file.create());
+    error = loadProject (folder, loaded).getErrorMessage();
+    CHECK (error.startsWith (file.getFullPathName() + ": the file is empty"));
+    CHECK (! error.contains ("autosave")); // none yet
+
+    REQUIRE (file.replaceWithText (good.substring (0, good.length() / 2)));
+    error = loadProject (folder, loaded).getErrorMessage();
+    CHECK (error.contains ("the project file is damaged (not valid JSON)"));
+    CHECK (! error.contains ("project.json"));
+
+    // With autosaves, the message says where the newest one is.
+    Autosaves autosaves (folder);
+    requireOk (autosaves.save (exampleData()));
+    error = loadProject (folder, loaded).getErrorMessage();
+    INFO (error);
+    CHECK (error.contains ("the newest is " + autosaves.list().getFirst().getFullPathName()));
+}
+
 TEST_CASE ("Saving reports why it could not write", "[project]")
 {
     TempFolder temp;

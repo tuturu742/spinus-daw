@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Opening a damaged project file (cut off by a crash or a full disk while it was saved) now says so in plain
+  words, for example "the file is empty", instead of "project.json is not a JSON object", and says where the
+  project's newest autosave is.
 - A save that failed (a full disk, a folder you may not write in) could leave the project half saved: the
   plugins' settings from the new save next to the song from the old one. Now nothing on disk changes unless
   the whole save succeeds. The message also says why when the project's folder is read-only.

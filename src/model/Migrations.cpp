@@ -18,7 +18,7 @@ juce::Result migrateToCurrent (juce::var& projectJson)
     const auto version = projectJson.getProperty ("schemaVersion", {});
 
     if (! (version.isInt() || version.isInt64()))
-        return juce::Result::fail ("project.json has no schemaVersion");
+        return juce::Result::fail ("the project file is damaged, or not a Spinus project (it has no schemaVersion)");
 
     auto v = (int)version;
 
@@ -28,7 +28,7 @@ juce::Result migrateToCurrent (juce::var& projectJson)
                                    juce::String (Project::currentSchemaVersion));
 
     if (v < 1)
-        return juce::Result::fail ("unknown schemaVersion " + juce::String (v));
+        return juce::Result::fail ("the project file is damaged (unknown schemaVersion " + juce::String (v) + ")");
 
     if (v < Project::currentSchemaVersion)
         projectJson = projectJson.clone(); // never modify the caller's object
