@@ -156,7 +156,8 @@ struct Song
                                         bool cancelHalfway = false)
     {
         std::optional<engine::ExportJob::Result> result;
-        auto job = session->createExportJob (file, settings, [&] (const engine::ExportJob::Result& r) { result = r; });
+        auto job = session->createExportJob (file, std::move (settings),
+                                             [&] (const engine::ExportJob::Result& r) { result = r; });
         job->start();
         bool cancelled = false;
         for (int i = 0; i < 6000 && ! result; ++i)
@@ -576,7 +577,7 @@ TEST_CASE ("A 20-minute song of 200 clips: editing, drawing and exporting keep u
     const auto lane = song.addLane();
     const auto started = juce::Time::getMillisecondCounterHiRes();
     for (int i = 0; i < 200; ++i)
-        song.place (lane, pattern, i * 3 * bar); // 200 clips of 6 s: 20 minutes
+        song.place (lane, pattern, (Ticks)i * 3 * bar); // 200 clips of 6 s: 20 minutes
     const auto placingMs = juce::Time::getMillisecondCounterHiRes() - started;
     INFO ("placing 200 clips took " << placingMs << " ms");
     CHECK (placingMs < 20000.0);
