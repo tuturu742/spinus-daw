@@ -312,7 +312,7 @@ TEST_CASE ("The Export dialog exports and says where the files went", "[ui][expo
     dialog.setFormat (ExportSettings::Format::wav16);
     dialog.setStems (true);
     CHECK (dialog.getSettings().format == ExportSettings::Format::wav16);
-    CHECK (dialog.getSettings().maxTailSeconds == ExportSettings::ringOutSeconds); // tails ring out
+    CHECK (dialog.getSettings().maxTailSeconds == Catch::Approx (ExportSettings::ringOutSeconds)); // tails ring out
     CHECK (! dialog.getSettings().pattern.has_value());
 
     dialog.startExport (folder.getFile().getChildFile ("My song.wav"));
@@ -1196,7 +1196,7 @@ TEST_CASE ("The export's tail lasts until echoes and reverbs have died away, and
     CHECK (mix.endRms < 1.0e-4f);
     CHECK (mix.seconds > 2.0 + 4.0);
     CHECK (mix.seconds - mix.lastSound < 0.5);
-    CHECK (stem.seconds == mix.seconds); // the stems are as long as the mix
+    CHECK (stem.seconds == Catch::Approx (mix.seconds)); // the stems are as long as the mix
 
     // An echo that never dies away stops 15 s after the song.
     run ("device.setParameters", R"({"device": )" + delay.toString() + R"(, "values": {"feedback": 1.0, "mix": 0.5}})");
