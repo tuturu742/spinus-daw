@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- No more stuck notes when you edit while the song plays: deleting a note that is sounding, making it
+  shorter, moving or deleting its clip in the Playlist now stops it at once. Before, it kept sounding until
+  you stopped playback. This was the same for Spinus's own instruments and for plugins.
 - Opening a damaged project file (cut off by a crash or a full disk while it was saved) now says so in plain
   words, for example "the file is empty", instead of "project.json is not a JSON object", and says where the
   project's newest autosave is.
