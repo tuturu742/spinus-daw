@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A save that failed (a full disk, a folder you may not write in) could leave the project half saved: the
+  plugins' settings from the new save next to the song from the old one. Now nothing on disk changes unless
+  the whole save succeeds. The message also says why when the project's folder is read-only.
 - An effect moved in the Mixer to the Master or to an insert further left went silent and showed as
   **Missing** until the next change to the song. The same happened when **Ctrl+Z** took back moving an effect to
   an insert further right. It now plays in its new slot at once, as the same plugin with its settings.

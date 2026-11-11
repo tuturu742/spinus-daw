@@ -6,8 +6,11 @@
 #include "commands/CommandRegistry.h"
 #include "engine/EngineAdapter.h"
 #include "engine/EngineHost.h"
+#include "model/ModelJson.h"
 #include "project/ProjectFiles.h"
 #if ! JUCE_WINDOWS
+#include <csignal>
+#include <sys/resource.h>
 #include <unistd.h>
 #endif
 
@@ -144,6 +147,90 @@ TEST_CASE ("Saving reports why it could not write", "[project]")
 #endif
     CHECK (describeWriteProblem (temp.root.getChildFile ("Fine")).isEmpty());
 }
+
+#if ! JUCE_WINDOWS
+TEST_CASE ("A save into a read-only folder fails, says why, and leaves the saved project as it was", "[project]")
+{
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    auto data = exampleData();
+    requireOk (saveProject (folder, data));
+    const auto savedText = folder.getChildFile ("Song.spn").loadFileAsString();
+
+    auto changed = data;
+    changed.project.settings.tempoBpm = 99.0;
+    changed.deviceStates[model::DeviceId { 3 }] = blob ("compressor, changed");
+
+    // The project's folder, or only its plugin-states folder, read-only.
+    for (const auto& readOnly : { folder, folder.getChildFile ("plugin-states") })
+    {
+        INFO (readOnly.getFullPathName());
+        REQUIRE (readOnly.setReadOnly (true));
+        if (readOnly.hasWriteAccess())
+        {
+            readOnly.setReadOnly (false);
+            SKIP ("this user can write anywhere (root)");
+        }
+        const auto result = saveProject (folder, changed);
+        readOnly.setReadOnly (false);
+
+        CHECK (result.failed());
+        INFO (result.getErrorMessage());
+        CHECK (result.getErrorMessage().contains ("no permission to write in " + readOnly.getFullPathName()));
+        // Neither the .spn file nor the device states changed: the settings still belong to the saved project.
+        CHECK (folder.getChildFile ("Song.spn").loadFileAsString() == savedText);
+        CHECK (folder.getChildFile ("plugin-states/3.bin").loadFileAsString() == "compressor state");
+        CHECK (folder.findChildFiles (juce::File::findFiles, true, "*temp*").isEmpty());
+    }
+}
+
+TEST_CASE ("A save the disk cannot hold fails and leaves the saved project as it was", "[project]")
+{
+    // A full disk, as near as a test gets: no file may grow past a size, and writing past it fails.
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    const auto data = exampleData();
+    requireOk (saveProject (folder, data));
+    const auto savedText = folder.getChildFile ("Song.spn").loadFileAsString();
+
+    // A bigger song (many channels): its .spn file outgrows the limit, while each device state fits.
+    auto bigger = data;
+    for (int i = 0; i < 400; ++i)
+    {
+        model::Channel channel;
+        channel.id = bigger.project.allocateId<model::ChannelId>();
+        channel.name = "Channel " + juce::String (i);
+        bigger.project.channels.push_back (channel);
+    }
+    bigger.deviceStates[model::DeviceId { 3 }] = blob ("compressor, changed");
+    REQUIRE (model::toJsonText (bigger.project).getNumBytesAsUTF8() > 64 * 1024);
+
+    struct rlimit old {};
+    REQUIRE (getrlimit (RLIMIT_FSIZE, &old) == 0);
+    const auto oldHandler = std::signal (SIGXFSZ, SIG_IGN);
+    struct rlimit limited = old;
+    limited.rlim_cur = rlim_t { 32 } * 1024;
+    REQUIRE (setrlimit (RLIMIT_FSIZE, &limited) == 0);
+
+    const auto result = saveProject (folder, bigger);
+
+    setrlimit (RLIMIT_FSIZE, &old);
+    std::signal (SIGXFSZ, oldHandler);
+
+    CHECK (result.failed());
+    INFO (result.getErrorMessage());
+    CHECK (result.getErrorMessage().contains ("Spinus could not write " +
+                                              folder.getChildFile ("Song.spn").getFullPathName()));
+    CHECK (folder.getChildFile ("Song.spn").loadFileAsString() == savedText);
+    CHECK (folder.getChildFile ("plugin-states/3.bin").loadFileAsString() == "compressor state");
+    CHECK (folder.findChildFiles (juce::File::findFiles, true, "*temp*").isEmpty());
+
+    ProjectData reread;
+    requireOk (loadProject (folder, reread));
+    CHECK (reread.project == data.project);
+    CHECK (reread.deviceStates == data.deviceStates);
+}
+#endif
 
 TEST_CASE ("A renamed folder keeps its .spn file, and an older project.json becomes a .spn", "[project]")
 {
