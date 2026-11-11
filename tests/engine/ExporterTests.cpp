@@ -1144,7 +1144,7 @@ TEST_CASE ("The export's tail lasts until echoes and reverbs have died away, and
     session.setMode (Session::Mode::song);
 
     juce::TemporaryFile scratch;
-    const auto folder = scratch.getFile();
+    const auto& folder = scratch.getFile();
     REQUIRE (folder.createDirectory());
     auto exportSong = [&] (const juce::String& name, bool stems)
     {
