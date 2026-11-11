@@ -202,6 +202,9 @@ off the grid) and right-click a point to remove it. Move, resize and delete the 
 (right-click away from the points deletes it).
 
 - Automation plays in song mode. In pattern mode the settings stay where you left them.
+- A setting with steps (a switch, or a choice such as the Filter's Slope) follows the line and takes the
+  nearest step, as in FL Studio: on a slope between two points it changes halfway. To change exactly on a
+  point, make the line jump there (the **Square** shape, or two points at the same place).
 - While automation plays, the Mixer's faders and knobs and the Channel Rack's knobs move with it. In
   pattern mode, or without automation, they show their own setting again.
 - Several clips for the same setting can sit one after another; between them the setting holds the last
