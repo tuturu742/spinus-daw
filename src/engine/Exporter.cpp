@@ -232,6 +232,7 @@ void ExportJob::start()
     running = true;
     cancelRequested = false;
     current = 0;
+    firstStepSamples = 0;
     renderStep();
 }
 
@@ -322,7 +323,11 @@ void ExportJob::startRender()
             return finish ({ false, false, findProblem (step.project, settings), {} });
         range = { te::TimePosition(), ticksToTime (*edit, (double)end) };
     }
-    range = range.withEnd (range.getEnd() + te::TimeDuration::fromSeconds (settings.tailSeconds));
+    // Rendered with the longest tail; finishFiles cuts it once everything has rung out.
+    step.shortestSamples = te::toSamples (range.getLength(), settings.sampleRate) +
+                           (juce::int64)(settings.tailSeconds * settings.sampleRate);
+    range = range.withEnd (range.getEnd() +
+                           te::TimeDuration::fromSeconds (juce::jmax (settings.tailSeconds, settings.maxTailSeconds)));
 
     if (step.file != juce::File())
     {
@@ -442,6 +447,8 @@ juce::String ExportJob::finishFiles (Step& step)
     for (auto& stem : step.stems)
         if (stem.capture != nullptr && ! stem.capture->finish() && error.isEmpty())
             error = "Could not write " + stem.file.getFileName() + ".";
+    if (error.isEmpty() && settings.maxTailSeconds > settings.tailSeconds)
+        error = trimTail (step);
     if (error.isNotEmpty() || ! isEncoded (settings.format))
         return error;
 
@@ -470,6 +477,96 @@ juce::String ExportJob::finishFiles (Step& step)
     for (auto& e : errors)
         if (e.isNotEmpty())
             return e;
+    return {};
+}
+
+namespace
+{
+/** The sample after the last one louder than `threshold` (0 for silence). */
+juce::int64 findSoundEnd (juce::AudioFormatReader& reader, float threshold)
+{
+    constexpr int block = 65536;
+    juce::AudioBuffer<float> buffer ((int)reader.numChannels, block);
+    for (auto end = reader.lengthInSamples; end > 0;)
+    {
+        const auto start = std::max<juce::int64> (0, end - block);
+        const auto count = (int)(end - start);
+        reader.read (&buffer, 0, count, start, true, true);
+        for (int i = count; --i >= 0;)
+            for (int c = 0; c < buffer.getNumChannels(); ++c)
+                if (std::abs (buffer.getSample (c, i)) > threshold)
+                    return start + i + 1;
+        end = start;
+    }
+    return 0;
+}
+
+/** Rewrites a WAV with only its first `length` samples (same format: the samples come back as they were). */
+juce::String shortenWav (const juce::File& file, juce::int64 length)
+{
+    const auto shorter = file.getSiblingFile ("." + file.getFileName() + ".part");
+    {
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::AudioFormatReader> reader (wav.createReaderFor (new juce::FileInputStream (file), true));
+        if (reader == nullptr)
+            return "Could not read the rendered audio.";
+        if (reader->lengthInSamples <= length)
+            return {};
+        shorter.deleteFile();
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (shorter);
+        using SampleFormat = juce::AudioFormatWriterOptions::SampleFormat;
+        auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions()
+                                                       .withSampleRate (reader->sampleRate)
+                                                       .withNumChannels ((int)reader->numChannels)
+                                                       .withBitsPerSample ((int)reader->bitsPerSample)
+                                                       .withSampleFormat (reader->usesFloatingPointData
+                                                                              ? SampleFormat::floatingPoint
+                                                                              : SampleFormat::integral));
+        if (writer == nullptr || ! writer->writeFromAudioReader (*reader, 0, length))
+        {
+            writer = nullptr;
+            shorter.deleteFile();
+            return "Could not write " + file.getFileName() + ".";
+        }
+    }
+    if (! shorter.moveFileTo (file))
+    {
+        shorter.deleteFile();
+        return "Could not write " + file.getFileName() + ".";
+    }
+    return {};
+}
+} // namespace
+
+juce::String ExportJob::trimTail (Step& step)
+{
+    // The mix (when this render makes one) and the stems end together: when the last of them falls silent
+    // (-80 dBFS, below 16-bit dither's noise), a moment after, and never before the shortest tail.
+    std::vector<juce::File> files;
+    if (step.file != juce::File())
+        files.push_back (step.renderTo);
+    for (auto& stem : step.stems)
+        files.push_back (stem.wav);
+
+    constexpr float threshold = 1.0e-4f;
+    const auto pad = (juce::int64)(0.1 * settings.sampleRate);
+    juce::int64 keep = std::max (step.shortestSamples, firstStepSamples), longest = 0;
+    juce::WavAudioFormat wav;
+    for (auto& file : files)
+    {
+        std::unique_ptr<juce::AudioFormatReader> reader (wav.createReaderFor (new juce::FileInputStream (file), true));
+        if (reader == nullptr)
+            return "Could not read the rendered audio.";
+        longest = std::max (longest, reader->lengthInSamples);
+        keep = std::max (keep, findSoundEnd (*reader, threshold) + pad);
+    }
+    keep = std::min (keep, longest);
+    if (firstStepSamples == 0)
+        firstStepSamples = keep;
+
+    for (auto& file : files)
+        if (const auto error = shortenWav (file, keep); error.isNotEmpty())
+            return error;
     return {};
 }
 

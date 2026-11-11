@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Exports no longer cut off reverbs and echoes at the end of the song. Before, the file always ended two
+  seconds after the last clip, even when a long echo or reverb was still ringing. Now the export goes on until
+  the sound has died away (at least two seconds, at most 15), and the stems stay as long as the main file.
 - No more stuck notes when you edit while the song plays: deleting a note that is sounding, making it
   shorter, moving or deleting its clip in the Playlist now stops it at once. Before, it kept sounding until
   you stopped playback. This was the same for Spinus's own instruments and for plugins.
