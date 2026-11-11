@@ -50,7 +50,8 @@ or the pattern is), the window says so before asking for a file name.
   out and the window says what to install. FLAC and Opus need nothing extra.
   - On Arch Linux: `sudo pacman -S lame` for MP3, `sudo pacman -S ffmpeg` for AAC.
   - On Windows: install LAME (`lame.exe`) or FFmpeg (`ffmpeg.exe`) so that it is on the PATH.
-  - The Flatpak version of Spinus has neither, so MP3 and AAC stay greyed out there: use FLAC or Opus.
+  - The Flatpak version of Spinus comes with `lame`, so MP3 works there. It has no `ffmpeg`, so AAC stays
+    greyed out there: use MP3, FLAC or Opus.
 - MP3, Opus and AAC files get the project's name as their title tag.
 - When it is done, **Show in folder** opens the folder in your file manager.
 
