@@ -519,3 +519,39 @@ TEST_CASE ("Help > Report a problem makes the report file, then opens the bug pa
     CHECK (shown[0].existsAsFile());
     CHECK (shown[0].getParentDirectory() == ui.view.reportFolder);
 }
+
+TEST_CASE ("Opening a project covers the window with a bar until it is open", "[ui][document]")
+{
+    Ui ui;
+    ui.view.setSize (1000, 700);
+    REQUIRE (ui.history
+                 .perform (make ("channel.add",
+                                 R"({"name": "Keys", "instrument": {"kind": "stock", "stockType": "spinus.sampler"}})"))
+                 .wasOk());
+    ui.chosenFile = ui.root.getChildFile ("Song");
+    REQUIRE (invoke (ui.view, MainView::saveProject));
+
+    auto overlay = [&ui]() -> juce::Component*
+    {
+        for (auto* child : ui.view.getChildren())
+            if (dynamic_cast<LoadingOverlay*> (child) != nullptr)
+                return child;
+        return nullptr;
+    };
+    REQUIRE (overlay() != nullptr);
+    CHECK (! overlay()->isVisible());
+
+    // While each plugin loads, the overlay is up, over the whole window.
+    juce::StringArray seen;
+    auto shown = ui.session.onLoadProgress;
+    ui.session.onLoadProgress = [&] (int done, int total, const juce::String& what)
+    {
+        shown (done, total, what);
+        seen.add (what);
+        CHECK (overlay()->isVisible());
+        CHECK (overlay()->getBounds() == ui.view.getLocalBounds());
+    };
+    REQUIRE (ui.view.openProjectFile (ui.root.getChildFile ("Song")));
+    CHECK (seen.contains ("Sampler on Keys"));
+    CHECK (! overlay()->isVisible());
+}

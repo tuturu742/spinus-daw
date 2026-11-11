@@ -72,6 +72,9 @@ public:
     /** Replaces the open project with a loaded one: stops playback, clears the undo history and
         creates the devices with their saved settings. */
     void loadProject (project::ProjectData);
+    /** Called during loadProject before each of the project's plugins is created, as they can take seconds
+        each: how many are done, how many there are, and the one being loaded ("Serum on Lead"). */
+    std::function<void (int done, int total, const juce::String& what)> onLoadProgress;
 
     /** The project's folder (invalid while untitled): audio clips with relative paths are found in its
         audio/ folder. */

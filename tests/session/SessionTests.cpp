@@ -341,3 +341,36 @@ TEST_CASE ("The play head never loops over an empty range: a new project, channe
     CHECK (loopsSafely());
     runner.stop();
 }
+
+TEST_CASE ("Opening a project says which plugin it is loading, one by one", "[session]")
+{
+    Fixture f;
+    auto project = test::makeExample();
+    int devices = 0;
+    for (auto& channel : project.channels)
+        devices += channel.instrument ? 1 : 0;
+    devices += (int)project.mixer.master.effects.size();
+    for (auto& insert : project.mixer.inserts)
+        devices += (int)insert.effects.size();
+    REQUIRE (devices > 1);
+
+    std::vector<std::pair<int, int>> steps;
+    juce::StringArray names;
+    f.session.onLoadProgress = [&] (int done, int total, const juce::String& what)
+    {
+        steps.emplace_back (done, total);
+        names.add (what);
+    };
+    f.session.loadProject ({ project, {} });
+
+    REQUIRE ((int)steps.size() == devices);
+    for (int i = 0; i < devices; ++i)
+        CHECK (steps[(size_t)i] == std::pair { i, devices });
+    CHECK (names[0].contains (" on ")); // "<plugin> on <channel or insert>"
+
+    // Only opening reports: a plugin added afterwards is no load.
+    steps.clear();
+    f.session.getHistory().perform (
+        make ("channel.add", R"({"name": "More", "instrument": {"kind": "stock", "stockType": "spinus.sampler"}})"));
+    CHECK (steps.empty());
+}

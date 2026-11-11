@@ -579,6 +579,9 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     addAndMakeVisible (workspace);
     addAndMakeVisible (hintBar);
     addChildComponent (assistantResizer);
+    addChildComponent (loadingOverlay);
+    session.onLoadProgress = [this] (int done, int total, const juce::String& what)
+    { loadingOverlay.setProgress (done, total, what); };
     addChildComponent (browserResizer);
 
     auto rack = std::make_unique<ChannelRack> (session);
@@ -753,6 +756,7 @@ MainView::~MainView()
     if (keepLastLayout)
         layouts->setLast (getCurrentLayout());
     menuBar.setModel (nullptr);
+    session.onLoadProgress = nullptr;
     if (shortcutsSaver != nullptr)
         commandManager.getKeyMappings()->removeChangeListener (shortcutsSaver.get());
     session.getAudioRecorder().onFinished = nullptr;
@@ -1140,9 +1144,12 @@ bool MainView::openProjectFile (const juce::File& file)
             return true;
         }
 
-    if (auto r = document->open (file); r.failed())
+    loadingOverlay.start (folder.getFileName());
+    const auto opened = document->open (file);
+    loadingOverlay.finish();
+    if (opened.failed())
     {
-        showProblem ("Could not open the project", r.getErrorMessage());
+        showProblem ("Could not open the project", opened.getErrorMessage());
         return false;
     }
 
@@ -1772,8 +1779,11 @@ void MainView::askToRecover (const ProjectDocument::Recovery& recovery, const st
                             otherwise();
                         return;
                     }
-                    if (auto r = safe->document->recover (recovery); r.failed())
-                        safe->showProblem ("Could not recover the project", r.getErrorMessage());
+                    safe->loadingOverlay.start (recovery.untitled ? juce::String ("the autosave") : recovery.name);
+                    const auto recovered = safe->document->recover (recovery);
+                    safe->loadingOverlay.finish();
+                    if (recovered.failed())
+                        safe->showProblem ("Could not recover the project", recovered.getErrorMessage());
                     else
                         safe->hintBar.showMessage ("Recovered " + safe->document->getName() +
                                                    " from the autosave. Save to keep it.");
@@ -1928,6 +1938,7 @@ void MainView::paint (juce::Graphics& g) { g.fillAll (lookAndFeel.getTheme().get
 void MainView::resized()
 {
     auto area = getLocalBounds();
+    loadingOverlay.setBounds (area);
     menuBar.setBounds (area.removeFromTop (menuBarHeight));
     topBar->setBounds (area.removeFromTop (topBarHeight));
     hintBar.setBounds (area.removeFromBottom (hintBarHeight));

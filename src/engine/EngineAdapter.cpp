@@ -743,6 +743,8 @@ te::Plugin::Ptr EngineAdapter::ensureDevice (const Device& device)
     if (plugin == nullptr)
     {
         // A third-party plugin's libraries are noted, so a crash in them names it.
+        if (onCreatingDevice)
+            onCreatingDevice (device);
         const PluginCrashGuard::ModuleWatch watch;
         auto created = devices.create (edit, device);
         if (created == nullptr)
