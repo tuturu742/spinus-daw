@@ -49,7 +49,7 @@ really does.
 | Double-click an effect | Opens the effect's window (its own controls). |
 | Green light | Click to bypass the effect (it turns grey) or turn it back on. |
 | Dragging a slot | Drag an effect onto another slot to change the order. |
-| Right-click an effect | Open window, Bypass, Move up, Move down, Move to another insert, **Copy to insert** (the same effect with the same settings on another insert, also the ones you turned in its window), **Replace effect** (another effect in the same slot, from the same list as Add effect; its dry/wet stays, automation clips of the old effect's settings are removed, and Ctrl+Z brings it back), Remove. |
+| Right-click an effect | Open window, Bypass, Move up, Move down, Move to another insert, **Copy to insert** (the same effect with the same settings on another insert, also the ones you turned in its window), **Replace effect** (another effect in the same slot, from the same list as Add effect; its dry/wet stays, automation clips of the old effect's settings are removed and the message bar says how many, and Ctrl+Z brings it back), Remove. |
 | **Out:** | Where the insert's sound goes: the Master or another insert (for example, all drums into a "Drums" insert). |
 | **Sends** | Send some of the sound to another insert as well, typically a reverb insert. **+ Send** adds one; the knob sets how much (point at it to see the level; all the way down is silence); **x** removes it. In the **+ Send** list, the insert the sound already plays into (usually the Master) is greyed out, since a send there would only make it louder, and so are inserts that would make a feedback loop. |
 

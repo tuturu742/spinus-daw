@@ -6,8 +6,11 @@
 #include "commands/CommandRegistry.h"
 #include "engine/EngineAdapter.h"
 #include "engine/EngineHost.h"
+#include "model/ModelJson.h"
 #include "project/ProjectFiles.h"
 #if ! JUCE_WINDOWS
+#include <csignal>
+#include <sys/resource.h>
 #include <unistd.h>
 #endif
 
@@ -123,6 +126,39 @@ TEST_CASE ("Loading reports what is wrong", "[project]")
     CHECK (error.contains ("not valid JSON"));
 }
 
+TEST_CASE ("A damaged project file says it is damaged, and where its newest autosave is", "[project]")
+{
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    requireOk (saveProject (folder, exampleData()));
+    const auto file = folder.getChildFile ("Song.spn");
+    ProjectData loaded;
+
+    // Cut off while saving: empty, or zeros (what a crash can leave on some disks), or half of the text.
+    const auto good = file.loadFileAsString();
+    const char zeros[1024] {};
+    REQUIRE (file.replaceWithData (zeros, sizeof (zeros)));
+    auto error = loadProject (folder, loaded).getErrorMessage();
+    CHECK (error.startsWith (file.getFullPathName() + ": the file is empty"));
+    REQUIRE (file.deleteFile());
+    REQUIRE (file.create());
+    error = loadProject (folder, loaded).getErrorMessage();
+    CHECK (error.startsWith (file.getFullPathName() + ": the file is empty"));
+    CHECK (! error.contains ("autosave")); // none yet
+
+    REQUIRE (file.replaceWithText (good.substring (0, good.length() / 2)));
+    error = loadProject (folder, loaded).getErrorMessage();
+    CHECK (error.contains ("the project file is damaged (not valid JSON)"));
+    CHECK (! error.contains ("project.json"));
+
+    // With autosaves, the message says where the newest one is.
+    Autosaves autosaves (folder);
+    requireOk (autosaves.save (exampleData()));
+    error = loadProject (folder, loaded).getErrorMessage();
+    INFO (error);
+    CHECK (error.contains ("the newest is " + autosaves.list().getFirst().getFullPathName()));
+}
+
 TEST_CASE ("Saving reports why it could not write", "[project]")
 {
     TempFolder temp;
@@ -144,6 +180,90 @@ TEST_CASE ("Saving reports why it could not write", "[project]")
 #endif
     CHECK (describeWriteProblem (temp.root.getChildFile ("Fine")).isEmpty());
 }
+
+#if ! JUCE_WINDOWS
+TEST_CASE ("A save into a read-only folder fails, says why, and leaves the saved project as it was", "[project]")
+{
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    auto data = exampleData();
+    requireOk (saveProject (folder, data));
+    const auto savedText = folder.getChildFile ("Song.spn").loadFileAsString();
+
+    auto changed = data;
+    changed.project.settings.tempoBpm = 99.0;
+    changed.deviceStates[model::DeviceId { 3 }] = blob ("compressor, changed");
+
+    // The project's folder, or only its plugin-states folder, read-only.
+    for (const auto& readOnly : { folder, folder.getChildFile ("plugin-states") })
+    {
+        INFO (readOnly.getFullPathName());
+        REQUIRE (readOnly.setReadOnly (true));
+        if (readOnly.hasWriteAccess())
+        {
+            readOnly.setReadOnly (false);
+            SKIP ("this user can write anywhere (root)");
+        }
+        const auto result = saveProject (folder, changed);
+        readOnly.setReadOnly (false);
+
+        CHECK (result.failed());
+        INFO (result.getErrorMessage());
+        CHECK (result.getErrorMessage().contains ("no permission to write in " + readOnly.getFullPathName()));
+        // Neither the .spn file nor the device states changed: the settings still belong to the saved project.
+        CHECK (folder.getChildFile ("Song.spn").loadFileAsString() == savedText);
+        CHECK (folder.getChildFile ("plugin-states/3.bin").loadFileAsString() == "compressor state");
+        CHECK (folder.findChildFiles (juce::File::findFiles, true, "*temp*").isEmpty());
+    }
+}
+
+TEST_CASE ("A save the disk cannot hold fails and leaves the saved project as it was", "[project]")
+{
+    // A full disk, as near as a test gets: no file may grow past a size, and writing past it fails.
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    const auto data = exampleData();
+    requireOk (saveProject (folder, data));
+    const auto savedText = folder.getChildFile ("Song.spn").loadFileAsString();
+
+    // A bigger song (many channels): its .spn file outgrows the limit, while each device state fits.
+    auto bigger = data;
+    for (int i = 0; i < 400; ++i)
+    {
+        model::Channel channel;
+        channel.id = bigger.project.allocateId<model::ChannelId>();
+        channel.name = "Channel " + juce::String (i);
+        bigger.project.channels.push_back (channel);
+    }
+    bigger.deviceStates[model::DeviceId { 3 }] = blob ("compressor, changed");
+    REQUIRE (model::toJsonText (bigger.project).getNumBytesAsUTF8() > 64 * 1024);
+
+    struct rlimit old {};
+    REQUIRE (getrlimit (RLIMIT_FSIZE, &old) == 0);
+    const auto oldHandler = std::signal (SIGXFSZ, SIG_IGN);
+    struct rlimit limited = old;
+    limited.rlim_cur = rlim_t { 32 } * 1024;
+    REQUIRE (setrlimit (RLIMIT_FSIZE, &limited) == 0);
+
+    const auto result = saveProject (folder, bigger);
+
+    setrlimit (RLIMIT_FSIZE, &old);
+    std::signal (SIGXFSZ, oldHandler);
+
+    CHECK (result.failed());
+    INFO (result.getErrorMessage());
+    CHECK (result.getErrorMessage().contains ("Spinus could not write " +
+                                              folder.getChildFile ("Song.spn").getFullPathName()));
+    CHECK (folder.getChildFile ("Song.spn").loadFileAsString() == savedText);
+    CHECK (folder.getChildFile ("plugin-states/3.bin").loadFileAsString() == "compressor state");
+    CHECK (folder.findChildFiles (juce::File::findFiles, true, "*temp*").isEmpty());
+
+    ProjectData reread;
+    requireOk (loadProject (folder, reread));
+    CHECK (reread.project == data.project);
+    CHECK (reread.deviceStates == data.deviceStates);
+}
+#endif
 
 TEST_CASE ("A renamed folder keeps its .spn file, and an older project.json becomes a .spn", "[project]")
 {

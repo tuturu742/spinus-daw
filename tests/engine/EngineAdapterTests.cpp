@@ -1,13 +1,18 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "../commands/ExampleCalls.h"
 #include "../model/ExampleProject.h"
 #include "TestDevices.h"
 #include "AudioChecks.h"
 #include "RealtimeRunner.h"
 #include "commands/CommandHistory.h"
 #include "commands/CommandRegistry.h"
+#include "engine/BundledDevices.h"
 #include "engine/EngineAdapter.h"
 #include "engine/EngineHost.h"
+#include "plugins/SandboxList.h"
+#include "plugins/clap/ClapPluginFormat.h"
+#include "session/Session.h"
 
 #include <random>
 
@@ -222,6 +227,34 @@ TEST_CASE ("Incremental syncs match a fresh build after random edits and undo", 
     CHECK (adapter.describe() == f.describeFresh (makeExample()));
 }
 
+TEST_CASE ("Every command: after do, undo and redo the engine plays what a fresh build of the project would",
+           "[engine][commands]")
+{
+    Fixture f;
+    for (auto& [name, params] : test::exampleCalls())
+    {
+        INFO (name << " " << params);
+        auto edit = f.newEdit();
+        EngineAdapter adapter (*edit, f.factory);
+        CommandHistory history (test::exampleProjectFor (name));
+        history.addListener ([&] (const ChangeSet&) { adapter.sync (history.getProject()); });
+        adapter.sync (history.getProject());
+
+        const auto result = history.perform (make (name, params));
+        INFO (result.getErrorMessage());
+        REQUIRE (result.wasOk());
+        CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+        for (int round = 0; round < 2; ++round)
+        {
+            INFO ("round " << round);
+            REQUIRE (history.undo());
+            CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+            REQUIRE (history.redo());
+            CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+        }
+    }
+}
+
 TEST_CASE ("The master plays every effect on it, beyond the first", "[engine]")
 {
     // Tracktion allows 4 plugins on the master by default; Spinus's own around each device and the master's
@@ -309,6 +342,56 @@ TEST_CASE ("Effects are added, reordered and moved in place; undoing a removal r
     CHECK (adapter.getInsertTrack (model::InsertId { 6 })->pluginList.indexOf (moved) >= 0);
     CHECK (juce::approximatelyEqual (moved->getAutomatableParameter (0)->getCurrentValue(), value));
     CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+}
+
+TEST_CASE ("An effect moved to the master or an earlier insert plays there, and undo and redo move it back and forth",
+           "[engine]")
+{
+    // The adapter syncs the master first, then the inserts in order: an effect moving to one synced earlier was put
+    // there and then dropped as having left its old insert, so it was silent (and "Missing") until the next sync.
+    Fixture f;
+    auto edit = f.newEdit();
+    EngineAdapter adapter (*edit, f.factory);
+    CommandHistory history (makeExample());
+    history.addListener ([&] (const ChangeSet&) { adapter.sync (history.getProject()); });
+    adapter.sync (history.getProject());
+
+    auto* compressor = adapter.getDevicePlugin (model::DeviceId { 3 }); // on Drums (2)
+    REQUIRE (compressor != nullptr);
+    auto* parameter = compressor->getAutomatableParameter (0).get();
+    parameter->setParameter (0.123f, juce::sendNotificationSync);
+    const auto value = parameter->getCurrentValue();
+
+    auto placedOn = [&] (model::InsertId insert) -> bool
+    {
+        auto* plugin = adapter.getDevicePlugin (model::DeviceId { 3 });
+        if (plugin == nullptr)
+            return false;
+        auto& list =
+            insert == model::masterInsertId ? edit->getMasterPluginList() : adapter.getInsertTrack (insert)->pluginList;
+        return list.indexOf (plugin) >= 0;
+    };
+
+    // Bass (6) comes after Drums: moving there always worked. Undo moves it back to an earlier insert.
+    REQUIRE (history.perform (make ("insert.moveEffect", R"({"device": 3, "insert": 6, "index": 0})")).wasOk());
+    CHECK (placedOn (model::InsertId { 6 }));
+    REQUIRE (history.undo());
+    CHECK (placedOn (model::InsertId { 2 }));
+    const auto missing = adapter.getMissingDevices(); // the example's uninstalled reverb plugin only
+    CHECK (std::find (missing.begin(), missing.end(), model::DeviceId { 3 }) == missing.end());
+    CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+    REQUIRE (history.redo());
+    CHECK (placedOn (model::InsertId { 6 }));
+    CHECK (adapter.describe() == f.describeFresh (history.getProject())); // with Bass's sidechain from Drums
+
+    // To the master, which is synced before every insert.
+    REQUIRE (history.perform (make ("insert.moveEffect", R"({"device": 3, "insert": 1, "index": 0})")).wasOk());
+    CHECK (placedOn (model::masterInsertId));
+    CHECK (adapter.describe() == f.describeFresh (history.getProject()));
+
+    // The same plugin all along, with its settings.
+    CHECK (adapter.getDevicePlugin (model::DeviceId { 3 }) == compressor);
+    CHECK (juce::approximatelyEqual (parameter->getCurrentValue(), value));
 }
 
 TEST_CASE ("Replacing a channel's instrument swaps the plugin on its track; undo brings back its settings", "[engine]")
@@ -648,4 +731,107 @@ TEST_CASE ("Muting the master silences the output after its effects, whatever it
 
     runner.stop();
     edit->getTransport().stop (false, true);
+}
+
+TEST_CASE ("Notes taken away, moved or cut short while they play stop sounding", "[engine][audio][notes]")
+{
+    // 3x Osc, and a plugin (the test synth) inside Spinus and in its own process: every kind of instrument.
+    const auto synthFile = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("test-synth.clap");
+    for (int kind = 0; kind < 3; ++kind)
+    {
+        INFO ((kind == 0 ? "3x Osc" : kind == 1 ? "test synth" : "test synth in its own process"));
+        const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile ("spinus-held-notes-" + juce::Uuid().toString());
+        root.createDirectory();
+        EngineHost host ({ .openAudioDevice = false, .pluginHost = juce::File (SPINUS_PLUGIN_HOST) });
+        plugins::ClapPluginFormat clap;
+        juce::OwnedArray<juce::PluginDescription> found;
+        clap.findAllTypesForFile (found, synthFile.getFullPathName());
+        for (auto* d : found)
+            if (d->name == "Spinus Test Synth")
+                host.getEngine().getPluginManager().knownPluginList.addType (*d);
+        plugins::SandboxList list { root.getChildFile ("run-separately.json") };
+        if (kind == 2)
+            list.set (plugins::SandboxList::keyOf ("CLAP", synthFile.getFullPathName()), true, "Spinus Test Synth");
+        auto devices = std::make_unique<DefaultDeviceFactory>();
+        registerSpinusDevices (*devices, host.getEngine());
+        devices->setRunSeparately (
+            [&list] (const juce::PluginDescription& d)
+            { return list.contains (plugins::SandboxList::keyOf (d.pluginFormatName, d.fileOrIdentifier)); });
+        auto session = std::make_unique<Session> (host.getEngine(), std::move (devices));
+        session->setSandboxList (&list);
+
+        auto run = [&] (const juce::String& name, const juce::String& json)
+        {
+            juce::String error;
+            auto command = CommandRegistry::get().create (name, juce::JSON::parse (json), error);
+            INFO (name << ": " << error);
+            REQUIRE (command != nullptr);
+            auto* raw = command.get();
+            REQUIRE (session->getHistory().perform (std::move (command)).wasOk());
+            return raw->getResult();
+        };
+        const auto instrument =
+            kind == 0
+                ? juce::String (R"({"kind": "stock", "stockType": "spinus.3x-osc"})")
+                : R"({"kind": "plugin", "plugin": {"format": "CLAP", "name": "Spinus Test Synth", "manufacturer": "Spinus tests", "fileOrIdentifier": )" +
+                      juce::JSON::toString (synthFile.getFullPathName()) + "}}";
+        const auto channel = run ("channel.add", R"({"name": "Keys", "instrument": )" + instrument + "}")["channel"];
+        const auto pattern = run ("pattern.add", R"({"name": "P", "length": 7680})")["pattern"];
+        const auto lane = run ("lane.add", "{}")["lane"];
+        const auto clip = run ("clip.addPattern", R"({"lane": )" + lane.toString() + R"(, "pattern": )" +
+                                                      pattern.toString() + R"(, "start": 0})")["clip"];
+        auto setNotes = [&] (const juce::String& notes)
+        {
+            run ("pattern.setNotes", R"({"pattern": )" + pattern.toString() + R"(, "channel": )" + channel.toString() +
+                                         R"(, "notes": [)" + notes + "]}");
+        };
+        const juce::String longNote = R"({"start": 0, "length": 7680, "pitch": 60, "velocity": 0.8})";
+        session->setMode (Session::Mode::song);
+
+        test::RealtimeRunner runner (host.getEngine(),
+                                     { .outputChannels = 2, .maxSeconds = 40.0, .paceInRealTime = true });
+        auto now = [&] { return runner.getSecondsProcessed(); };
+        auto level = [&] (double from, double to)
+        { return test::checks::rms (runner.getChannel (0), (int64_t)(from * 48000.0), (int64_t)(to * 48000.0)); };
+        runner.start();
+        runner.runUntil (0.2);
+
+        // Each edit, one second into a two-bar note: the note stops (its release is well under half a second).
+        auto trial = [&] (const char* what, const std::function<void()>& edit, const std::function<void()>& undo = {})
+        {
+            INFO (what);
+            setNotes (longNote);
+            runner.runUntil (now() + 0.2);
+            runner.betweenBlocks ([&] { session->play(); });
+            const auto start = now();
+            runner.runUntil (start + 1.0);
+            CHECK (level (start + 0.5, start + 0.9) > 0.01f);
+            edit();
+            runner.runUntil (now() + 0.8);
+            CHECK (level (now() - 0.3, now()) < 1.0e-4f);
+            session->stop();
+            if (undo)
+                undo();
+            runner.runUntil (now() + 0.3); // the edits reach the playback graph before the next play
+        };
+        trial ("deleted", [&] { setNotes ({}); });
+        trial ("cut short", [&] { setNotes (R"({"start": 0, "length": 480, "pitch": 60, "velocity": 0.8})"); });
+        trial (
+            "moved to another key",
+            [&]
+            {
+                setNotes (
+                    R"({"start": 0, "length": 480, "pitch": 60, "velocity": 0.8}, {"start": 3840, "length": 480, "pitch": 64, "velocity": 0.8})");
+            });
+        trial (
+            "its clip moved away", [&] { run ("clip.set", R"({"clip": )" + clip.toString() + R"(, "start": 15360})"); },
+            [&] { run ("clip.set", R"({"clip": )" + clip.toString() + R"(, "start": 0})"); });
+        trial ("its clip removed", [&] { run ("clip.remove", R"({"clip": )" + clip.toString() + "}"); });
+
+        // Another note on the same key keeps playing when one of two is taken away.
+        runner.stop();
+        session = nullptr;
+        root.deleteRecursively();
+    }
 }

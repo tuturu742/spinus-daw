@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "RealtimeRunner.h"
 #include "ai/Proposal.h"
 #include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
@@ -542,4 +543,77 @@ TEST_CASE ("Typed values and device.setParameters' text are in the units the dev
     CHECK (fails (R"({"device": )" + d + R"(, "text": {"amount": 0.5}})"));     // text, not numbers
     CHECK (fails (R"({"device": )" + d + R"(, "text": {}})"));
     CHECK (near (stored.at ("amount"), 0.6f)); // nothing changed
+}
+
+TEST_CASE ("A drag in a CLAP plugin's window is one undo step, and holds an automated setting while it lasts",
+           "[session][engine][automation]")
+{
+    EngineHost host ({ .openAudioDevice = false });
+    Session session (host.getEngine(), makeDevices (host.getEngine()));
+    session.setMode (Session::Mode::song);
+    const auto device = addEffect (session, installParamIdsPlugin (host.getEngine()));
+    // Tone (position 1; its CLAP ID is 1000): 0.9 in bar 2, its knob (0.2) before and after.
+    const model::ParameterTarget tone { model::ParameterTarget::Kind::deviceParameter, {}, {}, device, "1" };
+    {
+        auto command = make ("clip.addAutomation", R"({"start": 3840, "length": 3840, "target": )" +
+                                                       juce::JSON::toString (model::targetToJson (tone), true) +
+                                                       R"(, "points": [{"time": 0, "value": 0.9}]})");
+        REQUIRE (session.getHistory().perform (std::move (command)).wasOk());
+    }
+    auto* parameter = session.getAdapter().findParameter (tone);
+    REQUIRE (parameter != nullptr);
+    auto& curve = parameter->getCurve();
+    auto near = [] (float a, float b) { return std::abs (a - b) < 0.01f; };
+    auto at = [&] (double beats)
+    {
+        const auto time = session.getEdit().tempoSequence.toTime (te::BeatPosition::fromBeats (beats));
+        return parameter->valueRange.convertTo0to1 (curve.getValueAt (time, 0.0f));
+    };
+    CHECK (near (at (2.0), 0.2f));
+    CHECK (near (at (6.0), 0.9f));
+
+    // The effect turns Tone as its window would (in its next block, on the audio thread).
+    juce::DynamicLibrary library (
+        juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("param-ids.clap").getFullPathName());
+    auto* hand = reinterpret_cast<void (*) (int, double, int)> (library.getFunction ("spinus_test_param_ids_hand"));
+    REQUIRE (hand != nullptr);
+    test::RealtimeRunner runner (host.getEngine(), { .outputChannels = 2, .maxSeconds = 8.0 });
+    runner.start();
+    auto run = [&]
+    {
+        runner.runUntil (runner.getSecondsProcessed() + 0.1);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    };
+    run();
+
+    // Stopped, before the clip: held while dragged; where it is let go is the knob, before and after the clip.
+    const auto steps = session.getHistory().getUndoDescriptions().size();
+    hand (1, 0.6, 1);
+    run();
+    CHECK (curve.bypass.get());
+    hand (1, 0.6, 3);
+    run();
+    CHECK (! curve.bypass.get());
+    CHECK (near (at (2.0), 0.6f));
+    CHECK (near (at (12.0), 0.6f));
+    CHECK (near (at (6.0), 0.9f));
+    // One undo step, which puts the knob back.
+    CHECK (session.getHistory().getUndoDescriptions().size() == steps + 1);
+    REQUIRE (session.getHistory().undo());
+    run();
+    CHECK (near (at (12.0), 0.2f));
+
+    // Playing in the clip: the hand wins while it holds Tone; then the clip again.
+    session.getEdit().getTransport().setPosition (te::TimePosition::fromSeconds (2.1)); // bar 2 at 120 BPM
+    session.play();
+    run();
+    CHECK (near (parameter->getCurrentNormalisedValue(), 0.9f));
+    hand (1, 0.3, 1);
+    run();
+    CHECK (near (parameter->getCurrentNormalisedValue(), 0.3f));
+    hand (1, 0.3, 3);
+    run();
+    CHECK (near (parameter->getCurrentNormalisedValue(), 0.9f));
+    session.stop();
+    runner.stop();
 }

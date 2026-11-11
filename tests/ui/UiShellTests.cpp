@@ -5,6 +5,7 @@
 #include "ai/AiService.h"
 #include "ui/Browser.h"
 #include "ui/MainView.h"
+#include "ui/Mixer.h"
 #include "ui/Playlist.h"
 #include "ui/AudioSettings.h"
 #include "ui/ColourMenu.h"
@@ -672,4 +673,31 @@ TEST_CASE ("Shortcuts reach the main window from other windows and from text fie
     CHECK_FALSE (
         shortcuts::getTextFieldKeys().keyPressed (juce::KeyPress ('a', juce::ModifierKeys::ctrlModifier, 'a'), &field));
     CHECK_FALSE (shortcuts::getTextFieldKeys().keyPressed (juce::KeyPress ('3', 0, '3'), &field)); // typing
+}
+
+TEST_CASE ("Replace effect says when it removed automation clips of the old effect", "[ui][mixer][automation]")
+{
+    Ui ui;
+    auto* mixer = dynamic_cast<Mixer*> (ui.view.getWorkspace().getPanel ("mixer"));
+    REQUIRE (mixer != nullptr);
+    REQUIRE (mixer->addEffect (model::masterInsertId, "spinus.filter"));
+    const auto old = ui.session.getProject().mixer.master.effects.front().device.id;
+    REQUIRE (ui.history
+                 .perform (make ("clip.addAutomation",
+                                 R"({"start": 0, "length": 3840, "target": {"kind": "deviceParameter", "device": )" +
+                                     juce::String ((int)old.value) +
+                                     R"(, "parameterId": "cutoff"}, "points": [{"time": 0, "value": 0.5}]})"))
+                 .wasOk());
+
+    model::Device filter;
+    filter.kind = model::Device::Kind::stock;
+    filter.stockType = "spinus.filter";
+    REQUIRE (mixer->replaceEffect (old, filter));
+    CHECK (ui.session.getProject().playlist.clips.empty());
+    CHECK (ui.view.getHintBar().getText().startsWith ("Removed 1 automation clip of the old effect's settings"));
+
+    // Nothing automated: nothing to say.
+    ui.view.getHintBar().showMessage ({});
+    REQUIRE (mixer->replaceEffect (ui.session.getProject().mixer.master.effects.front().device.id, filter));
+    CHECK (! ui.view.getHintBar().getText().contains ("automation"));
 }

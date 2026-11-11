@@ -23,9 +23,10 @@ struct ProjectData
         .autosave/<time>/       the last 10 autosaves (project.spn + plugin-states/)
         .session.lock           present while a Spinus session has the project open
 
-    Saving is crash-safe: every file is written to a temporary file and renamed into place, plugin
-    states before the .spn file, and stale state files are removed last. At any moment the folder
-    holds a loadable project.
+    Saving is crash-safe and all or nothing: every file is written to a temporary file first, and only when
+    all are written are they renamed into place, plugin states before the .spn file; stale state files are
+    removed last. At any moment the folder holds a loadable project, and a save that fails (a full disk, a
+    read-only folder) leaves it as it was.
 */
 
 inline constexpr const char* projectFileExtension = ".spn";
