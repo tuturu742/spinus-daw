@@ -99,7 +99,6 @@ TEST_CASE ("A mouse drag on a strip's fader or pan knob, however many moves, is 
     MixerFixture f;
     REQUIRE (f.mixer.addInsert());
     f.mixer.updateNow();
-    const auto id = f.project().mixer.inserts[0].id;
 
     auto find = [&] (const juce::String& help)
     {
