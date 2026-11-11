@@ -802,10 +802,17 @@ void EngineAdapter::applyPresetState (te::Plugin& plugin, const Device& device)
     lastLoaded = device.presetState;
 }
 
+float EngineAdapter::masterFaderDb (float volumeDb) const noexcept
+{
+    // All the way down stays silence: a raised monitor level would otherwise lift -100 dB (Tracktion's silence)
+    // back to a faint sound.
+    return volumeDb <= silentDb ? silentDb : volumeDb + monitorTrimDb;
+}
+
 void EngineAdapter::setMonitorTrim (float db, const Project& project)
 {
     monitorTrimDb = db;
-    edit.getMasterVolumePlugin()->setVolumeDb (project.mixer.master.volumeDb + monitorTrimDb);
+    edit.getMasterVolumePlugin()->setVolumeDb (masterFaderDb (project.mixer.master.volumeDb));
 }
 
 std::map<juce::String, float> EngineAdapter::readParameters (DeviceId id) const
@@ -1047,7 +1054,7 @@ void EngineAdapter::syncInsert (const Insert& insert, const Project& project)
     if (insert.id == masterInsertId)
     {
         auto volume = edit.getMasterVolumePlugin();
-        volume->setVolumeDb (insert.volumeDb + monitorTrimDb);
+        volume->setVolumeDb (masterFaderDb (insert.volumeDb));
         volume->setPan (insert.pan);
 
         // The Master is no Tracktion track, so it has no track mute: a MutePlugin after its effects silences it
