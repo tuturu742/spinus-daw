@@ -78,6 +78,26 @@ modules:
       - type: dir # the submodule, pinned to the 4.0.0 release
         path: ../../external/rubberband
 
+  # The `lame` program for MP3 export (Spinus runs it as a separate process; nothing links it).
+  - name: lame
+    build-options:
+      env:
+        LIBS: -ltinfo # the runtime's ncurses keeps the termcap functions the frontend uses in libtinfo
+    config-opts:
+      - --disable-static
+      - --disable-frontend-debug
+      - --disable-gtktest
+      - --disable-decoder
+    cleanup:
+      - /include
+      - /lib/*.la
+      - /share/doc
+      - /share/man
+    sources:
+      - type: archive
+        url: https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+        sha256: ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+
   - name: spinus
     buildsystem: cmake-ninja
     config-opts:
