@@ -316,6 +316,20 @@ public:
         sendValueChangedMessageToListeners (toNormalised (plainValue));
     }
 
+    /** A hand starts or stops turning it in the plugin's window (CLAP gesture events): the host hears it as
+        JUCE's change gesture, which Spinus makes one undo step of. A begin or end without its pair is
+        ignored. Message thread. */
+    void gestureFromPlugin (bool starting)
+    {
+        if (starting == held)
+            return;
+        held = starting;
+        if (starting)
+            beginChangeGesture();
+        else
+            endChangeGesture();
+    }
+
     clap_id getClapId() const noexcept { return info.id; }
     void* getCookie() const noexcept { return info.cookie; }
 
@@ -335,6 +349,7 @@ private:
     ClapPluginInstance& owner;
     clap_param_info_t info;
     std::atomic<double> current;
+    bool held = false; // a hand is on it in the plugin's window (message thread)
 };
 
 //==============================================================================
@@ -357,6 +372,7 @@ public:
         *alive = false;
         timers.clear();
         fdPoller = nullptr;
+        fromPluginTimer = nullptr;
 
         if (plugin != nullptr)
         {
@@ -714,6 +730,7 @@ private:
             return false;
         }
 
+        fromPluginTimer = std::make_unique<FromPluginTimer> (*this);
         paramsExt = static_cast<const clap_plugin_params_t*> (plugin->get_extension (plugin, CLAP_EXT_PARAMS));
         stateExt = static_cast<const clap_plugin_state_t*> (plugin->get_extension (plugin, CLAP_EXT_STATE));
         latencyExt = static_cast<const clap_plugin_latency_t*> (plugin->get_extension (plugin, CLAP_EXT_LATENCY));
@@ -1304,16 +1321,78 @@ private:
         return true;
     }
 
+    /** What the plugin says about a setting as it processes: a new value, or a hand starting or stopping on it in
+        its window. Mostly said on the audio thread, so it is passed on to the message thread in order, where
+        Tracktion and Spinus listen (a gesture heard elsewhere is dropped there, and listeners take locks): a
+        drag's start is heard before its values, with the value from before it. */
+    struct FromPlugin
+    {
+        enum class Kind : uint8_t
+        {
+            value,
+            gestureBegin,
+            gestureEnd
+        };
+        clap_id id = CLAP_INVALID_ID;
+        Kind kind = Kind::value;
+        double value = 0.0;
+    };
+
     void handleOutputEvent (const clap_event_header_t& e)
     {
-        if (e.space_id != CLAP_CORE_EVENT_SPACE_ID || e.type != CLAP_EVENT_PARAM_VALUE)
+        if (e.space_id != CLAP_CORE_EVENT_SPACE_ID)
             return;
 
-        const auto& pv = reinterpret_cast<const clap_event_param_value_t&> (e);
+        FromPlugin message;
+        if (e.type == CLAP_EVENT_PARAM_VALUE)
+        {
+            const auto& pv = reinterpret_cast<const clap_event_param_value_t&> (e);
+            message = { pv.param_id, FromPlugin::Kind::value, pv.value };
+        }
+        else if (e.type == CLAP_EVENT_PARAM_GESTURE_BEGIN || e.type == CLAP_EVENT_PARAM_GESTURE_END)
+        {
+            const auto& g = reinterpret_cast<const clap_event_param_gesture_t&> (e);
+            message = { g.param_id,
+                        e.type == CLAP_EVENT_PARAM_GESTURE_BEGIN ? FromPlugin::Kind::gestureBegin
+                                                                 : FromPlugin::Kind::gestureEnd,
+                        0.0 };
+        }
+        else
+            return;
 
-        if (auto it = parametersById.find (pv.param_id); it != parametersById.end())
-            it->second->updateFromPlugin (pv.value);
+        if (juce::MessageManager::existsAndIsCurrentThread())
+        {
+            passOnFromPlugin(); // what came before it first
+            passOn (message);
+        }
+        else if (fromPluginFifo.getFreeSpace() > 0) // full: dropped rather than block (values are read again)
+            fromPluginFifo.write (1).forEach ([&] (int index) { fromPlugin[static_cast<size_t> (index)] = message; });
     }
+
+    /** Message thread. */
+    void passOnFromPlugin()
+    {
+        fromPluginFifo.read (fromPluginFifo.getNumReady())
+            .forEach ([this] (int index) { passOn (fromPlugin[static_cast<size_t> (index)]); });
+    }
+
+    void passOn (const FromPlugin& message)
+    {
+        auto it = parametersById.find (message.id);
+        if (it == parametersById.end())
+            return;
+        if (message.kind == FromPlugin::Kind::value)
+            it->second->updateFromPlugin (message.value);
+        else
+            it->second->gestureFromPlugin (message.kind == FromPlugin::Kind::gestureBegin);
+    }
+
+    struct FromPluginTimer final : juce::Timer
+    {
+        explicit FromPluginTimer (ClapPluginInstance& p) : owner (p) { startTimer (15); }
+        void timerCallback() override { owner.passOnFromPlugin(); }
+        ClapPluginInstance& owner;
+    };
 
     /** Runs a callback on the message thread, unless this instance has been deleted by then. */
     void onMainThread (std::function<void (ClapPluginInstance&)> fn)
@@ -1552,6 +1631,9 @@ private:
     BusesLayout supportedLayout;
 
     std::map<clap_id, ClapParameter*> parametersById;
+    juce::AbstractFifo fromPluginFifo { 1024 };
+    std::array<FromPlugin, 1024> fromPlugin {};
+    std::unique_ptr<FromPluginTimer> fromPluginTimer;
     juce::AbstractFifo paramFifo { 1024 };
     std::map<clap_id, ParamChange> changedWhileInactive; // sent again on activation (message thread)
     std::vector<ParamChange> paramQueue;

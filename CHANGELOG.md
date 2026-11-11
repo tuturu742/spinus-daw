@@ -44,6 +44,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   again. Its knobs now follow the automation while the song plays. Other plugins were not affected.
 - A knob turned in a plugin's own window can be undone: each drag is one **Ctrl+Z** step, which puts the knob
   back where it was. Before, Ctrl+Z skipped it and undid the change before it instead.
+- The same now works in CLAP plugins (Surge XT, LSP, Dragonfly Reverb, Six Sines, OB-Xf and others Spinus
+  loads as CLAP): a knob dragged in their window is one Ctrl+Z step, and holding a knob that has automation
+  takes over from the automation until you let go. Before, Spinus did not hear when such a drag started and
+  ended, so neither worked.
 - An agent's song summary (and `spinus --check`) now lists each Playlist lane's clips: where they start, how long
   they are and what they play. Before, it only counted them, so an agent could not move clips between lanes.
 - An agent could only see a plugin's first 80 or so settings, so on big plugins (Ample Guitar's amp section, for
