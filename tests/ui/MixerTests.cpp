@@ -138,8 +138,8 @@ TEST_CASE ("A mouse drag on a strip's fader or pan knob, however many moves, is 
         f.mixer.updateNow();
     };
 
-    for (auto [help, by] : { std::pair { juce::String ("Insert volume"), juce::Point<float> (0.0f, 60.0f) },
-                             std::pair { juce::String ("Insert pan"), juce::Point<float> (0.0f, -60.0f) } })
+    for (const auto& [help, by] : { std::pair { juce::String ("Insert volume"), juce::Point<float> (0.0f, 60.0f) },
+                                    std::pair { juce::String ("Insert pan"), juce::Point<float> (0.0f, -60.0f) } })
     {
         INFO (help);
         auto* slider = find (help);

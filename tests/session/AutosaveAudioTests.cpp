@@ -118,8 +118,9 @@ TEST_CASE ("Autosave while the song plays: the sound goes on without a gap", "[s
     const project::Autosaves autosaves (f.document->getFolder());
     double slowest = 0.0;
     int saved = 0;
-    for (double t = 0.75; t < 5.0; t += 0.25)
+    for (int quarter = 3; quarter < 20; ++quarter)
     {
+        const double t = quarter * 0.25;
         f.edit (saved);
         const auto started = juce::Time::getMillisecondCounterHiRes();
         requireOk (f.document->autosave());
