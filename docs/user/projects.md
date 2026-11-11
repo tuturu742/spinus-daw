@@ -31,6 +31,22 @@ takes a while to open; the bar shows it is still working.
 Every project you open or save is also listed in the [Browser](browser.md#projects) under **Projects**,
 with the demo songs and folders of projects you add: double-click one there to open it.
 
+## Missing plugins and audio files
+
+A project opens even when something it uses isn't on this computer, and Spinus shows what is missing:
+
+- A plugin that isn't installed shows as **Missing: <name>** in red, in the [Mixer](mixer.md) or the
+  Channel Rack. It stays silent, keeps its settings, and plays again once the plugin is installed.
+- An audio file that was moved or deleted: its clip in the [Playlist](playlist.md) turns red with a flat
+  line instead of the waveform and **Missing:** before its name, and its track in
+  [Audio tracks](audio-tracks.md) shows **Missing:** in red with the file's name. The clip stays silent.
+
+Saving keeps the missing things in the project. Put the audio file back where it was (usually the
+project's `audio` folder) and it plays again; reopen the project if it stays silent.
+
+The Sampler, the Drum Machine and the Beat Slicer keep a copy of their sounds inside the project, so their
+channels never miss a file, even after the original sample is deleted.
+
 ## Unsaved changes
 
 The window title shows the project's name. A **\*** after the name means there are changes you have not
