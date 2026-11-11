@@ -44,6 +44,9 @@ in a separate process**. There, if it crashes or stops responding again, only th
 - A message says which plugin stopped. **Reload** starts it again with its settings.
 - Until it is reloaded, the Mixer shows the effect as **Stopped** in red (an instrument's name turns red in
   the Channel Rack), and its window closes.
+- If it stops during an **export**, the export ends with a message naming the plugin, and no file is saved
+  (it would be missing the plugin's sound). Export again; if it keeps happening, bypass the plugin and export
+  without it.
 
 Running separately costs a little more CPU and adds one audio block of delay (Spinus lines up the
 rest of the song with it). Playing that instrument live from a keyboard feels that block. Its window

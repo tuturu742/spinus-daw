@@ -5,7 +5,10 @@
 #include "commands/CommandRegistry.h"
 #include "engine/EngineHost.h"
 #include "plugins/clap/ClapPluginFormat.h"
+#include "project/ProjectFiles.h"
+#include "session/ProjectDocument.h"
 #include "session/Session.h"
+#include "ui/MainView.h"
 
 using namespace spinus;
 
@@ -265,4 +268,96 @@ TEST_CASE ("An export waits for an instrument in its own process that loads its 
         CHECK (audio.getRMSLevel (0, (int)(from * rate), (int)(0.3 * rate)) > 0.01f);
     session = nullptr;
     root.deleteRecursively();
+}
+
+TEST_CASE ("A plugin crashing in its own process: the window names it, the project still saves and opens with it",
+           "[engine][sandbox][ui]")
+{
+    Fixture f;
+    f.session->setRunSeparately (f.device, true);
+    ProjectDocument document (*f.session, f.root.getChildFile ("settings"));
+    ui::MainView view (*f.session, &document);
+    juce::StringArray titles, messages;
+    view.setMessageBoxHandler (
+        [&] (const juce::MessageBoxOptions& o, const std::function<void (int)>& done)
+        {
+            titles.add (o.getTitle());
+            messages.add (o.getMessage());
+            if (done)
+                done (1); // "Leave it off"
+        });
+
+    // It crashes while the song plays: the main window says so, by name, once.
+    test::RealtimeRunner runner (f.host.getEngine(),
+                                 { .outputChannels = 2, .maxSeconds = 10.0, .paceInRealTime = true });
+    runner.start();
+    f.session->setMode (Session::Mode::song);
+    f.session->play();
+    runner.runUntil (0.5);
+    f.run ("device.setParameters", R"({"device": )" + juce::String (f.device.value) + R"(, "values": {"1": 1}})");
+    for (int i = 0; i < 200 && titles.isEmpty(); ++i)
+    {
+        runner.runUntil (runner.getSecondsProcessed() + 0.05);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+    }
+    f.session->stop();
+    runner.stop();
+    REQUIRE (titles == juce::StringArray { "A plugin stopped working" });
+    CHECK (messages[0].contains ("Crash Test"));
+
+    // The project saves, and opens again with the plugin and the settings it had (gain 50 %).
+    f.session->getHistory().undo(); // the crash switch
+    REQUIRE (view.saveProjectTo (f.root.getChildFile ("After crash")));
+    CHECK (titles.size() == 1); // no problem shown
+    REQUIRE (document.open (f.root.getChildFile ("After crash")).wasOk());
+    const auto* device = f.session->getProject().findDevice (f.device);
+    REQUIRE (device != nullptr);
+    CHECK (device->plugin.name == "Crash Test");
+    CHECK (f.session->getAdapter().getStoppedDevices().empty()); // loaded again
+    auto* plugin = dynamic_cast<tracktion::ExternalPlugin*> (f.session->getAdapter().getDevicePlugin (f.device));
+    REQUIRE (plugin != nullptr);
+    REQUIRE (plugin->getAudioPluginInstance() != nullptr);
+    CHECK (std::abs (plugin->getAudioPluginInstance()->getParameters()[0]->getValue() - 0.5f) < 0.01f);
+}
+
+TEST_CASE ("A plugin crashing in its own process during an export: the export says which, and keeps no file",
+           "[engine][sandbox][export]")
+{
+    Fixture f;
+    f.session->setRunSeparately (f.device, true);
+    f.session->setMode (Session::Mode::song);
+    f.run ("device.setParameters", R"({"device": )" + juce::String (f.device.value) + R"(, "values": {"1": 1}})");
+    engine::ExportSettings settings;
+    settings.format = engine::ExportSettings::Format::wav32Float;
+    settings.tailSeconds = 0.0;
+    std::optional<engine::ExportJob::Result> result;
+    const auto file = f.root.getChildFile ("Song.wav");
+    auto job = f.session->createExportJob (file, settings, [&] (const engine::ExportJob::Result& r) { result = r; });
+    job->start();
+    for (int i = 0; i < 1200 && ! result; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    job = nullptr;
+    REQUIRE (result.has_value());
+    const auto r = result.value_or (engine::ExportJob::Result {});
+    INFO (r.error);
+    // Not a file that silently lacks the plugin's sound.
+    CHECK (! r.ok);
+    CHECK (r.error.startsWith ("Crash Test stopped working"));
+    CHECK (! file.existsAsFile());
+
+    // Spinus goes on: the song plays (the live plugin was not touched), and the project still saves.
+    CHECK (f.session->getAdapter().getStoppedDevices().empty());
+    CHECK (project::saveProject (f.root.getChildFile ("Saved"), { f.session->getProject(), {} }).wasOk());
+
+    // Without the crash, the export is made.
+    f.session->getHistory().undo();
+    result.reset();
+    job = f.session->createExportJob (file, settings, [&] (const engine::ExportJob::Result& r2) { result = r2; });
+    job->start();
+    for (int i = 0; i < 1200 && ! result; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    job = nullptr;
+    REQUIRE (result.has_value());
+    CHECK (result.value_or (engine::ExportJob::Result {}).ok);
+    CHECK (file.existsAsFile());
 }

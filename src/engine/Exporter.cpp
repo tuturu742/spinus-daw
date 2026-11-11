@@ -584,6 +584,14 @@ void ExportJob::deleteScratchFiles (Step& step)
 
 void ExportJob::stepFinished (const juce::String& error)
 {
+    // A plugin in its own process that crashed or stopped answering during the render was passed by: the file
+    // would be missing its sound, without a word. Say which, and keep no file.
+    juce::StringArray failed;
+    if (adapter != nullptr)
+        for (auto id : adapter->getStoppedDevices())
+            if (const auto* device = steps[current].project.findDevice (id))
+                failed.addIfNotAlreadyThere (model::getDeviceDisplayName (*device));
+
     handle.reset();
     adapter.reset();
     edit.reset();
@@ -593,6 +601,14 @@ void ExportJob::stepFinished (const juce::String& error)
         return finish ({ false, true, "Export cancelled.", {} });
     if (error.isNotEmpty())
         return finish ({ false, false, error, {} });
+    if (! failed.isEmpty())
+        return finish ({ false,
+                         false,
+                         failed.joinIntoString (", ") +
+                             " stopped working (in its own process) during the export, so the file would be missing "
+                             "its sound, and none was saved. Export again; if it happens again, bypass the plugin "
+                             "and export without it.",
+                         {} });
 
     if (++current < steps.size())
         return renderStep();

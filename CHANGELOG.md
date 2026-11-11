@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A plugin running in a separate process that crashed during an export was quietly left out: the file was
+  saved without its sound, and nothing said so. Now the export ends with a message naming the plugin, and no
+  file is saved.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's
