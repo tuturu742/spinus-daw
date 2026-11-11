@@ -194,6 +194,10 @@ public:
         an undo step. Plugins that don't say when a drag starts and ends are not heard. */
     std::function<void (model::DeviceId, const juce::String& parameterId, float before, float after)> onHandChange;
 
+    /** Called on the message thread just before a device's plugin is created (which can take seconds), so
+        opening a project can show what it is loading. */
+    std::function<void (const model::Device&)> onCreatingDevice;
+
 private:
     /** Hears a device's plugin say a drag of one of its settings started or ended (any thread). */
     class GestureWatcher;

@@ -3,6 +3,7 @@
 #include "core/FileDialog.h"
 #include "TypingKeyboard.h"
 #include "HintBar.h"
+#include "LoadingOverlay.h"
 #include "Theme.h"
 #include "WindowLayouts.h"
 #include "Workspace.h"
@@ -362,6 +363,7 @@ private:
 private:
     Workspace workspace;
     HintBar hintBar;
+    LoadingOverlay loadingOverlay; // while a project opens
     TypingKeyboard typingKeyboard { [this] (int note, bool down)
                                     { session.getRecorder().playComputerKey (note, down); } };
     bool browserVisible = true, assistantVisible = false;

@@ -292,6 +292,31 @@ void Session::loadProject (project::ProjectData data)
     // Remove the old project's devices first: device IDs repeat between projects, and a device must
     // be created fresh to receive its saved settings.
     suggestions.discard(); // they were for the old project
+
+    // Plugins are created one by one below; say which, so a long load doesn't look like a hang.
+    std::map<model::DeviceId, juce::String> where;
+    for (auto& channel : data.project.channels)
+        if (channel.instrument)
+            where[channel.instrument->id] = channel.name;
+    for (auto& slot : data.project.mixer.master.effects)
+        where[slot.device.id] = "Master";
+    for (auto& insert : data.project.mixer.inserts)
+        for (auto& slot : insert.effects)
+            where[slot.device.id] = insert.name;
+    int created = 0;
+    const int total = (int)where.size();
+    adapter->onCreatingDevice = [this, &where, &created, total] (const model::Device& device)
+    {
+        if (onLoadProgress)
+        {
+            const auto it = where.find (device.id);
+            onLoadProgress (created, total,
+                            model::getDeviceDisplayName (device) + (it != where.end() ? " on " + it->second : ""));
+        }
+        ++created;
+    };
+    const juce::ScopeGuard stopReporting { [this] { adapter->onCreatingDevice = nullptr; } };
+
     loading = Loading::clearing;
     history.reset ({});
     adapter->setSavedDeviceStates (std::move (data.deviceStates));

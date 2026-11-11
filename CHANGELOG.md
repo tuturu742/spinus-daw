@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
+  Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's
   ending when you typed the name without one ("Song" saved as `Song.wav`). Before, only the exact file name you
   picked was asked about, and the rest was replaced without a word.

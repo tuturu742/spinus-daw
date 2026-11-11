@@ -334,6 +334,8 @@ add_library (spinus_core STATIC
     ui/HintBar.h
     ui/HistoryPanel.cpp
     ui/HistoryPanel.h
+    ui/LoadingOverlay.cpp
+    ui/LoadingOverlay.h
     ui/Logo.cpp
     ui/Manual.cpp
     ui/Manual.h
