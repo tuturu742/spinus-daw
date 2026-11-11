@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- The assistant no longer waits forever when the AI service crashes while it works on your question: it says
+  the service stopped, with its last words, and you can ask again. The same for the other AI features that work
+  in the background (Generate, Record idea, model downloads). **Stop** now frees the assistant at once, also when
+  the service doesn't answer at all; before, it did nothing until the service answered.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's
