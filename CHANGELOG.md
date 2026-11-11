@@ -11,6 +11,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   with a flat line instead of a waveform, and its track in Audio tracks shows **Missing:** in red with the
   file's name, as missing plugins do in the Mixer. The project still opens and saves with the file's name, so
   putting the file back brings the clip back.
+- The Master fader all the way down is silent while you compare before and after in the Automixer. Before,
+  the comparison's louder listening level made it faintly audible.
+- MP3 export works in the Flatpak: it now comes with the LAME encoder. Before, MP3 was greyed out there, and
+  installing `lame` on your system didn't help, because the Flatpak can't see it.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's

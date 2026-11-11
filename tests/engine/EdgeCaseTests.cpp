@@ -1,6 +1,7 @@
-/*  Edge cases from the 0.1.0-rc.1 checklist (Piano Roll and Channel Rack, Playlist, Export): notes at the edges of
-    a pattern and of the keyboard, stuck notes, swing, export formats, long songs, audio clips at another
-    sample rate, track groups, and which of mute and solo wins. */
+/*  Edge cases from the 0.1.0-rc.1 checklist (Piano Roll and Channel Rack, Playlist, Mixer, Export): notes at the edges
+   of a pattern and of the keyboard, stuck notes, swing, export formats, long songs, audio clips at another sample rate,
+   track groups, which of mute and solo wins, routing loops, faders all the way down, sidechains, removed send targets,
+   delay compensation, and mono, stereo and many-output sources. */
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -19,6 +20,7 @@
 #include "session/ProjectDocument.h"
 #include "session/Session.h"
 #include "ui/ChannelRack.h"
+#include "ui/Mixer.h"
 #include "ui/PianoRoll.h"
 #include "ui/Playlist.h"
 
@@ -38,11 +40,14 @@ struct Song
     {
         root.createDirectory();
         plugins::ClapPluginFormat clap;
-        juce::OwnedArray<juce::PluginDescription> found;
-        clap.findAllTypesForFile (found, synthFile().getFullPathName());
-        for (auto* d : found)
-            if (d->name == "Spinus Test Synth")
-                host.getEngine().getPluginManager().knownPluginList.addType (*d);
+        for (const auto& file : { synthFile(), synthFile ("mono-synth"), synthFile ("multi-out-synth") })
+        {
+            juce::OwnedArray<juce::PluginDescription> found;
+            clap.findAllTypesForFile (found, file.getFullPathName());
+            for (auto* d : found)
+                if (d->name != "Spinus Test Organ")
+                    host.getEngine().getPluginManager().knownPluginList.addType (*d);
+        }
 
         if (synthSeparately)
             list.set (plugins::SandboxList::keyOf ("CLAP", synthFile().getFullPathName()), true, "Spinus Test Synth");
@@ -62,7 +67,10 @@ struct Song
         root.deleteRecursively();
     }
 
-    static juce::File synthFile() { return juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("test-synth.clap"); }
+    static juce::File synthFile (const juce::String& name = "test-synth")
+    {
+        return juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile (name + ".clap");
+    }
 
     juce::var run (const juce::String& name, const juce::var& params)
     {
@@ -85,14 +93,17 @@ struct Song
         return command != nullptr && session->getHistory().perform (std::move (command)).wasOk();
     }
 
-    /** A channel with a stock device ("spinus.3x-osc") or, with an empty type, the test synth. */
-    ChannelId addChannel (const juce::String& stockType = "spinus.3x-osc", InsertId insert = {})
+    /** A channel with a stock device ("spinus.3x-osc") or, with an empty type, the test synth (or another of
+        the test synths: `synth` is its file's name, `synthName` its name). */
+    ChannelId addChannel (const juce::String& stockType = "spinus.3x-osc", InsertId insert = {},
+                          const juce::String& synth = "test-synth", const juce::String& synthName = "Spinus Test Synth")
     {
-        juce::String instrument =
-            stockType.isNotEmpty()
-                ? R"({"kind": "stock", "stockType": ")" + stockType + "\"}"
-                : R"({"kind": "plugin", "plugin": {"format": "CLAP", "name": "Spinus Test Synth", "manufacturer": "Spinus tests", "fileOrIdentifier": )" +
-                      juce::JSON::toString (synthFile().getFullPathName()) + "}}";
+        juce::String instrument = stockType.isNotEmpty()
+                                      ? R"({"kind": "stock", "stockType": ")" + stockType + "\"}"
+                                      : R"({"kind": "plugin", "plugin": {"format": "CLAP", "name": )" +
+                                            juce::JSON::toString (synthName) +
+                                            R"(, "manufacturer": "Spinus tests", "fileOrIdentifier": )" +
+                                            juce::JSON::toString (synthFile (synth).getFullPathName()) + "}}";
         const auto made =
             run ("channel.add",
                  R"({"name": "Ch", "instrument": )" + instrument +
@@ -575,6 +586,7 @@ TEST_CASE ("A 20-minute song of 200 clips: editing, drawing and exporting keep u
     const auto pattern = song.addPattern (3 * bar);
     song.setNotes (pattern, channel, { note (0, beat), note (bar, beat, 64), note (2 * bar, beat, 67) });
     const auto lane = song.addLane();
+    song.session->setMode (Session::Mode::song); // the Playlist plays: each edit syncs its clips
     const auto started = juce::Time::getMillisecondCounterHiRes();
     for (int i = 0; i < 200; ++i)
         song.place (lane, pattern, (Ticks)i * 3 * bar); // 200 clips of 6 s: 20 minutes
@@ -603,7 +615,6 @@ TEST_CASE ("A 20-minute song of 200 clips: editing, drawing and exporting keep u
         CHECK (paintMs < 200.0);
     }
 
-    song.session->setMode (Session::Mode::song);
     engine::ExportSettings settings;
     settings.format = engine::ExportSettings::Format::flac;
     t0 = juce::Time::getMillisecondCounterHiRes();
@@ -615,6 +626,25 @@ TEST_CASE ("A 20-minute song of 200 clips: editing, drawing and exporting keep u
     const auto rendered = Song::read (result.files.front());
     CHECK (rendered.seconds() == Catch::Approx (1200.0 + 2.0).margin (0.1));
     CHECK (rendered.rms (1190.0, 1190.5) > 0.01f); // the last clip plays
+
+    // Playback keeps up, from the start and near the end: no block takes longer than the sound card gives it.
+    for (const auto from : { 0.0, 1190.0 })
+    {
+        INFO ("playing from " << from << " s");
+        Player player (song, 8.0);
+        player.runner.start();
+        player.started = true;
+        player.runner.runUntil (0.2);
+        song.session->getEdit().getTransport().setPosition (tracktion::TimePosition::fromSeconds (from));
+        const auto start = player.play();
+        player.runFor (3.0);
+        song.session->stop();
+        CHECK (player.level (start + 0.1, start + 0.4) > 0.01f);
+        const auto& times = player.runner.getBlockTimesMs();
+        const auto slowest = times.empty() ? 0.0f : *std::max_element (times.begin(), times.end());
+        INFO ("slowest block " << slowest << " ms of " << player.runner.getBlockPeriodMs() << " ms");
+        CHECK (player.runner.getNumOverrunBlocks() == 0);
+    }
 }
 
 TEST_CASE ("A reversed, pitched and sped-up audio clip exports as it plays, also after saving and reopening",
@@ -921,5 +951,481 @@ TEST_CASE ("Cancelling an export halfway leaves no file that looks finished", "[
         CHECK (result.cancelled);
         CHECK (! result.ok);
         CHECK (folder.findChildFiles (juce::File::findFiles, true, "*", juce::File::FollowSymlinks::no).isEmpty());
+    }
+}
+
+//==============================================================================
+// 5. Mixer and routing
+
+namespace
+{
+juce::String json (std::initializer_list<std::pair<const char*, juce::var>> values)
+{
+    auto* o = new juce::DynamicObject();
+    for (auto& [key, value] : values)
+        o->setProperty (key, value);
+    return juce::JSON::toString (juce::var (o), true);
+}
+
+int idOf (InsertId id) { return (int)id.value; }
+
+/** RMS of one channel of a render between two times. */
+float channelRms (const Song::Rendered& r, int channel, double from, double to)
+{
+    const auto a = juce::jlimit (0, r.audio.getNumSamples(), (int)(from * r.sampleRate));
+    const auto b = juce::jlimit (0, r.audio.getNumSamples(), (int)(to * r.sampleRate));
+    return b > a ? r.audio.getRMSLevel (channel, a, b - a) : 0.0f;
+}
+
+/** The first sample louder than `threshold`, or -1. */
+int64_t firstSound (const float* x, int64_t from, int64_t to, float threshold = 1.0e-3f)
+{
+    for (auto i = from; i < to; ++i)
+        if (std::abs (x[i]) > threshold)
+            return i;
+    return -1;
+}
+
+/** The stem file of an insert in an export's files (named "NN Name"). */
+juce::File stemOf (const engine::ExportJob::Result& result, const juce::String& insertName)
+{
+    for (auto& f : result.files)
+        if (f.getParentDirectory().getFileName().endsWith (" stems") &&
+            f.getFileNameWithoutExtension().fromFirstOccurrenceOf (" ", false, false) == insertName)
+            return f;
+    return {};
+}
+} // namespace
+
+TEST_CASE ("A routing loop is refused with a message, by output, send or sidechain, also in a project file",
+           "[engine][edges][routing]")
+{
+    Song song;
+    song.addChannel();
+    const auto a = song.lastInsert;
+    song.addChannel();
+    const auto b = song.lastInsert;
+    song.run ("insert.setSend", json ({ { "insert", idOf (a) }, { "target", idOf (b) }, { "levelDb", -6.0 } }));
+
+    auto refused = [&] (const juce::String& name, const juce::String& params)
+    {
+        juce::String error;
+        auto command = commands::CommandRegistry::get().create (name, juce::JSON::parse (params), error);
+        REQUIRE (command != nullptr);
+        const auto started = juce::Time::getMillisecondCounterHiRes();
+        const auto result = song.session->getHistory().perform (std::move (command));
+        CHECK (juce::Time::getMillisecondCounterHiRes() - started < 1000.0);
+        INFO (name << ": " << result.getErrorMessage());
+        CHECK (result.failed());
+        CHECK (result.getErrorMessage().contains ("feedback loop"));
+    };
+    const auto before = song.session->getProject();
+    refused ("insert.setSend", json ({ { "insert", idOf (b) }, { "target", idOf (a) }, { "levelDb", -6.0 } }));
+    refused ("insert.setOutput", json ({ { "insert", idOf (b) }, { "target", idOf (a) } }));
+    refused ("insert.setSidechain", json ({ { "insert", idOf (a) }, { "source", idOf (b) } }));
+    CHECK (song.session->getProject() == before);
+
+    // The Mixer says why, and the strip's + Send menu greys the loop out.
+    ui::Mixer mixer (*song.session);
+    CHECK (! mixer.setSend (b, a, -6.0));
+    CHECK (mixer.getLastError().contains ("feedback loop"));
+    for (const auto& target : mixer.getSendTargets (b))
+        if (target.insert == a)
+        {
+            CHECK (! target.allowed);
+            CHECK (target.text.contains ("loop"));
+        }
+
+    // A project file edited by hand (or by another program) with sends both ways: an output loop is refused when
+    // the file is read; a loop of sends is not (an owner decision), but it plays and exports rather than hangs.
+    auto outputLoop = song.session->getProject();
+    outputLoop.findInsert (a)->output = b;
+    outputLoop.findInsert (b)->output = a;
+    Project read;
+    const auto parsed = fromJsonText (toJsonText (outputLoop), read);
+    CHECK (parsed.failed());
+    CHECK (parsed.getErrorMessage().contains ("routing cycle"));
+
+    const auto pattern = song.addPattern();
+    song.setNotes (pattern, song.session->getProject().channels[0].id, { note (0, beat) });
+    auto data = song.session->captureProjectData();
+    data.project.findInsert (b)->sends.push_back ({ a, -6.0f });
+    REQUIRE (fromJsonText (toJsonText (data.project), read).wasOk());
+    song.session->loadProject (data);
+    song.session->setMode (Session::Mode::pattern);
+    song.session->setCurrentPattern (pattern);
+    engine::ExportSettings settings;
+    settings.pattern = pattern;
+    CHECK (song.render (settings, "Loop").rms (0.05, 0.4) > 0.01f);
+    Player player (song, 4.0);
+    const auto start = player.play();
+    player.runFor (1.0);
+    song.session->stop();
+    CHECK (player.level (start + 0.05, start + 0.4) > 0.01f);
+}
+
+TEST_CASE ("A fader all the way down is silent: insert, channel and Master, with a send after it",
+           "[engine][edges][fader][audio]")
+{
+    Song song;
+    const auto channel = song.addChannel();
+    const auto insert = song.lastInsert;
+    const auto pattern = song.addPattern();
+    song.setNotes (pattern, channel, { note (0, bar - beat, 60, 1.0f) });
+    song.place (song.addLane(), pattern, 0);
+    // A reverb bus the insert sends to: the send comes after the fader, so it goes quiet too.
+    const auto bus = InsertId { (uint32_t)(int)song.run ("insert.add", json ({ { "name", "Bus" } }))["insert"] };
+    song.run ("insert.setSend", json ({ { "insert", idOf (insert) }, { "target", idOf (bus) }, { "levelDb", 0.0 } }));
+    song.session->setMode (Session::Mode::song);
+    REQUIRE (song.render().rms (0.1, 1.4) > 0.01f);
+
+    auto peak = [] (const Song::Rendered& r)
+    {
+        return juce::jmax (r.audio.getMagnitude (0, 0, r.audio.getNumSamples()),
+                           r.audio.getMagnitude (1, 0, r.audio.getNumSamples()));
+    };
+
+    for (auto [command, key, id] : { std::tuple { "insert.set", "insert", idOf (insert) },
+                                     std::tuple { "channel.set", "channel", (int)channel.value },
+                                     std::tuple { "insert.set", "insert", idOf (masterInsertId) } })
+    {
+        INFO (command << " " << id);
+        song.run (command, json ({ { key, id }, { "volumeDb", -100.0 } }));
+        const auto r = song.render ({}, "Down");
+        CHECK (peak (r) <= 0.0f);
+
+        // In playback too.
+        Player player (song, 4.0);
+        const auto start = player.play();
+        player.runFor (1.5);
+        song.session->stop();
+        float loudest = 0.0f;
+        for (int c = 0; c < 2; ++c)
+            for (auto i = (size_t)(start * rate); i < (size_t)((start + 1.5) * rate); ++i)
+                loudest = juce::jmax (loudest, std::abs (player.runner.getChannel (c)[i]));
+        CHECK (loudest <= 0.0f);
+        song.run (command, json ({ { key, id }, { "volumeDb", 0.0 } }));
+    }
+}
+
+TEST_CASE ("A sidechain Ducker and Compressor still duck after saving and reopening, and after the source moves",
+           "[engine][edges][sidechain][audio]")
+{
+    Song song;
+    const auto kick = song.addChannel();
+    const auto kickInsert = song.lastInsert;
+    const auto bass = song.addChannel();
+    const auto bassInsert = song.lastInsert;
+    song.run ("insert.set", json ({ { "insert", idOf (kickInsert) }, { "name", "Kick" } }));
+    song.run ("insert.set", json ({ { "insert", idOf (bassInsert) }, { "name", "Bass" } }));
+    const auto pattern = song.addPattern (2 * bar);
+    std::vector<Note> hits;
+    hits.reserve (8);
+    for (int i = 0; i < 8; ++i)
+        hits.push_back (note (i * beat, beat / 8, 84, 1.0f));
+    song.setNotes (pattern, kick, hits);
+    song.setNotes (pattern, bass, { note (0, 2 * bar, 36, 0.8f) });
+    song.place (song.addLane(), pattern, 0);
+    song.session->setMode (Session::Mode::song);
+
+    // How far the bass dips just after each kick, against just before the next one (dB): from its stem.
+    auto dip = [&] (const juce::String& name)
+    {
+        engine::ExportSettings settings;
+        settings.format = engine::ExportSettings::Format::wav32Float;
+        settings.stems = true;
+        const auto result = song.exportTo (song.root.getChildFile (name + "/Mix"), settings);
+        INFO (result.error);
+        REQUIRE (result.ok);
+        const auto stem = stemOf (result, "Bass");
+        REQUIRE (stem.existsAsFile());
+        const auto r = Song::read (stem);
+        float after = 0.0f, before = 0.0f;
+        for (int i = 1; i < 7; ++i)
+        {
+            const auto t = i * 0.5;
+            after += r.rms (t + 0.03, t + 0.08);
+            before += r.rms (t + 0.40, t + 0.48);
+        }
+        return juce::Decibels::gainToDecibels (after / juce::jmax (before, 1.0e-9f));
+    };
+    const auto none = dip ("None");
+    INFO ("without a sidechain: " << none << " dB");
+    CHECK (std::abs (none) < 1.5f);
+
+    for (auto type : { "spinus.ducker", "spinus.compressor" })
+    {
+        INFO (type);
+        const auto device = (uint32_t)(int)song.run (
+            "insert.addEffect", json ({ { "insert", idOf (bassInsert) },
+                                        { "device", juce::JSON::parse (R"({"kind": "stock", "stockType": ")" +
+                                                                       juce::String (type) + "\"}") } }))["device"];
+        if (juce::String (type) == "spinus.compressor") // follows the sidechain, hard and fast
+            song.run (
+                "device.setParameters",
+                R"({"device": )" + juce::String (device) +
+                    R"(, "text": {"sidechain": "Sidechain", "threshold": "-40", "ratio": "20", "attack": "0.1", "release": "100"}})");
+        song.run ("insert.setSidechain", json ({ { "insert", idOf (bassInsert) }, { "source", idOf (kickInsert) } }));
+        const auto ducked = dip ("Ducked");
+        INFO ("ducked: " << ducked << " dB");
+        CHECK (ducked < -4.0f);
+
+        // Saved and opened again.
+        song.document = std::make_unique<ProjectDocument> (*song.session, song.root.getChildFile ("settings"));
+        const auto folder = song.root.getChildFile (juce::String ("Sidechain ") + type);
+        REQUIRE (song.document->saveAs (folder).wasOk());
+        song.document->newProject();
+        REQUIRE (song.document->open (folder).wasOk());
+        song.session->setMode (Session::Mode::song);
+        CHECK (song.session->getProject().findInsert (bassInsert)->sidechainSources == std::vector { kickInsert });
+        const auto reopened = dip ("Reopened");
+        INFO ("reopened: " << reopened << " dB");
+        CHECK (reopened == Catch::Approx (ducked).margin (1.0));
+
+        // The kick's insert moved to the end of the mixer, and back.
+        song.run ("insert.move", json ({ { "insert", idOf (kickInsert) }, { "index", 1 } }));
+        CHECK (song.session->getProject().mixer.inserts.back().id == kickInsert);
+        const auto moved = dip ("Moved");
+        INFO ("moved: " << moved << " dB");
+        CHECK (moved == Catch::Approx (ducked).margin (1.0));
+        song.run ("insert.move", json ({ { "insert", idOf (kickInsert) }, { "index", 0 } }));
+
+        // The Ducker moved to after another effect on the bass's insert: still follows the kick.
+        song.run ("insert.addEffect",
+                  json ({ { "insert", idOf (bassInsert) },
+                          { "device", juce::JSON::parse (R"({"kind": "stock", "stockType": "spinus.filter"})") },
+                          { "index", 0 } }));
+        const auto behind = dip ("Behind");
+        INFO ("behind another effect: " << behind << " dB");
+        CHECK (behind < -4.0f);
+
+        // Off again for the next device.
+        while (! song.session->getProject().findInsert (bassInsert)->effects.empty())
+            song.run (
+                "insert.removeEffect",
+                json ({ { "device",
+                          (int)song.session->getProject().findInsert (bassInsert)->effects[0].device.id.value } }));
+        song.run ("insert.setSidechain", json ({ { "insert", idOf (bassInsert) } }));
+    }
+}
+
+TEST_CASE ("Removing an insert that others send to removes the sends; Undo brings them back, heard",
+           "[engine][edges][routing][audio]")
+{
+    Song song;
+    const auto one = song.addChannel();
+    const auto a = song.lastInsert;
+    const auto two = song.addChannel();
+    const auto b = song.lastInsert;
+    const auto pattern = song.addPattern();
+    song.setNotes (pattern, one, { note (0, beat, 60) });
+    song.setNotes (pattern, two, { note (2 * beat, beat, 67) });
+    song.place (song.addLane(), pattern, 0);
+    const auto reverb = InsertId { (uint32_t)(int)song.run ("insert.add", json ({ { "name", "Reverb" } }))["insert"] };
+    song.run ("insert.set", json ({ { "insert", idOf (a) }, { "name", "A" } }));
+    song.run ("insert.setSend", json ({ { "insert", idOf (a) }, { "target", idOf (reverb) }, { "levelDb", -3.0 } }));
+    song.run ("insert.setSend", json ({ { "insert", idOf (b) }, { "target", idOf (reverb) }, { "levelDb", -9.0 } }));
+    song.session->setMode (Session::Mode::song);
+
+    auto sendsIn = [] (const juce::String& description)
+    {
+        int n = 0;
+        for (auto& line : juce::StringArray::fromLines (description))
+            if (line.contains ("sends=[") && ! line.contains ("sends=[]"))
+                ++n;
+        return n;
+    };
+    auto returnStem = [&] (const juce::String& name)
+    {
+        engine::ExportSettings settings;
+        settings.format = engine::ExportSettings::Format::wav32Float;
+        settings.stems = true;
+        const auto result = song.exportTo (song.root.getChildFile (name + "/Mix"), settings);
+        INFO (result.error);
+        REQUIRE (result.ok);
+        return std::pair { Song::read (result.files.front()), stemOf (result, "Reverb") };
+    };
+
+    const auto [withSends, reverbStem] = returnStem ("Sends");
+    REQUIRE (reverbStem.existsAsFile());
+    const auto wet = Song::read (reverbStem);
+    CHECK (wet.rms (0.05, 0.45) > 0.005f); // A's send
+    CHECK (wet.rms (1.05, 1.45) > 0.002f); // B's
+    CHECK (sendsIn (song.session->getAdapter().describe()) == 2);
+
+    song.run ("insert.remove", json ({ { "insert", idOf (reverb) } }));
+    const auto& project = song.session->getProject();
+    CHECK (project.findInsert (reverb) == nullptr);
+    CHECK (project.findInsert (a)->sends.empty());
+    CHECK (project.findInsert (b)->sends.empty());
+    CHECK (sendsIn (song.session->getAdapter().describe()) == 0);
+    const auto [without, gone] = returnStem ("Removed");
+    CHECK (gone == juce::File());
+    CHECK (without.rms (0.05, 0.45) > 0.005f); // the dry sound still plays
+    CHECK (without.rms (0.05, 0.45) < withSends.rms (0.05, 0.45));
+
+    song.session->getHistory().undo();
+    {
+        const auto& back = song.session->getProject();
+        REQUIRE (back.findInsert (reverb) != nullptr);
+        REQUIRE (back.findInsert (a)->sends.size() == 1);
+        REQUIRE (back.findInsert (b)->sends.size() == 1);
+        CHECK (back.findInsert (a)->sends[0].target == reverb);
+        CHECK (back.findInsert (a)->sends[0].levelDb == Catch::Approx (-3.0f));
+        CHECK (back.findInsert (b)->sends[0].levelDb == Catch::Approx (-9.0f));
+    }
+    CHECK (sendsIn (song.session->getAdapter().describe()) == 2);
+    const auto [again, againStem] = returnStem ("Undone");
+    REQUIRE (againStem.existsAsFile());
+    const auto wetAgain = Song::read (againStem);
+    CHECK (wetAgain.rms (0.05, 0.45) == Catch::Approx (wet.rms (0.05, 0.45)).epsilon (0.01));
+    CHECK (wetAgain.rms (1.05, 1.45) == Catch::Approx (wet.rms (1.05, 1.45)).epsilon (0.01));
+    CHECK (again.rms (0.05, 1.5) == Catch::Approx (withSends.rms (0.05, 1.5)).epsilon (0.01));
+
+    song.session->getHistory().redo();
+    CHECK (song.session->getProject().findInsert (a)->sends.empty());
+    CHECK (sendsIn (song.session->getAdapter().describe()) == 0);
+}
+
+TEST_CASE ("Delay compensation: a drum behind a look-ahead Limiter stays in time, in playback and export",
+           "[engine][edges][latency][audio]")
+{
+    Song song;
+    const auto late = song.addChannel();
+    const auto lateInsert = song.lastInsert;
+    const auto other = song.addChannel();
+    const auto otherInsert = song.lastInsert;
+    const auto pattern = song.addPattern();
+    // The same hit on both, on every beat: one on the left, the other on the right.
+    std::vector<Note> hits;
+    hits.reserve (4);
+    for (int i = 0; i < 4; ++i)
+        hits.push_back (note (i * beat, beat / 4, 60, 0.5f));
+    song.setNotes (pattern, late, hits);
+    song.setNotes (pattern, other, hits);
+    song.place (song.addLane(), pattern, 0);
+    song.run ("insert.set", json ({ { "insert", idOf (lateInsert) }, { "pan", -1.0 } }));
+    song.run ("insert.set", json ({ { "insert", idOf (otherInsert) }, { "pan", 1.0 } }));
+    const auto limiter = (int)song.run (
+        "insert.addEffect",
+        json ({ { "insert", idOf (lateInsert) },
+                { "device", juce::JSON::parse (R"({"kind": "stock", "stockType": "spinus.limiter"})") } }))["device"];
+    song.run ("device.setParameters", R"({"device": )" + juce::String (limiter) + R"(, "values": {"lookahead": 1.0}})");
+    song.session->setMode (Session::Mode::song);
+
+    // Each hit's start on the left against the right, in samples.
+    auto offsets = [] (const float* left, const float* right, double sampleRate, double start)
+    {
+        std::vector<int64_t> result;
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto from = std::max<int64_t> (0, (int64_t)((start + i * 0.5 - 0.05) * sampleRate));
+            const auto to = (int64_t)((start + i * 0.5 + 0.1) * sampleRate);
+            const auto l = firstSound (left, from, to), r = firstSound (right, from, to);
+            result.push_back (l < 0 || r < 0 ? 100000 : l - r);
+        }
+        return result;
+    };
+
+    const auto exported = song.render();
+    for (auto offset : offsets (exported.audio.getReadPointer (0), exported.audio.getReadPointer (1), rate, 0.0))
+    {
+        INFO ("exported " << offset << " samples apart");
+        CHECK (std::abs (offset) <= 2);
+    }
+
+    Player player (song, 6.0);
+    const auto start = player.play();
+    player.runFor (2.2);
+    song.session->stop();
+    // Playback starts a little late by the compensation: the hits are still together.
+    for (auto offset : offsets (player.runner.getChannel (0).data(), player.runner.getChannel (1).data(), rate, start))
+    {
+        INFO ("played " << offset << " samples apart");
+        CHECK (std::abs (offset) <= 2);
+    }
+
+    // The test means something: the Limiter (prepared by playing) holds the sound back by more than 4 ms.
+    auto* plugin = song.session->getAdapter().getDevicePlugin (DeviceId { (uint32_t)limiter });
+    REQUIRE (plugin != nullptr);
+    INFO ("the Limiter's latency: " << plugin->getLatencySeconds() * 1000.0 << " ms");
+    CHECK (plugin->getLatencySeconds() > 0.004);
+}
+
+TEST_CASE ("Mono, stereo and many-output sources reach the mixer at the right level and pan",
+           "[engine][edges][levels][audio]")
+{
+    // Audio clips: a mono file and a stereo one with the same sine on both sides.
+    {
+        Song song;
+        ui::Playlist playlist (*song.session);
+        playlist.setSize (800, 400);
+        const auto mono = writeSine (song.root.getChildFile ("in/Mono.wav"), 1.0, 440.0, rate);
+        auto stereo = song.root.getChildFile ("in/Stereo.wav");
+        {
+            juce::AudioBuffer<float> audio (2, (int)rate);
+            for (int i = 0; i < audio.getNumSamples(); ++i)
+                for (int c = 0; c < 2; ++c)
+                    audio.setSample (c, i, 0.5f * (float)std::sin (2.0 * M_PI * 440.0 * i / rate));
+            std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (stereo);
+            auto writer = juce::WavAudioFormat().createWriterFor (
+                stream,
+                juce::AudioFormatWriterOptions().withSampleRate (rate).withNumChannels (2).withBitsPerSample (16));
+            REQUIRE (writer != nullptr);
+            writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+        }
+        REQUIRE (playlist.addAudioFile (0, 0, mono));
+        const auto monoChannel = std::get<AudioClip> (song.session->getProject().playlist.clips.back().content).channel;
+        REQUIRE (playlist.addAudioFile (0, 4 * beat, stereo)); // two seconds later
+        song.session->setMode (Session::Mode::song);
+
+        const auto r = song.render();
+        const auto expected = 0.5f / std::sqrt (2.0f); // the files' own level: a sine at 0.5
+        INFO ("mono L " << channelRms (r, 0, 0.1, 0.9) << " R " << channelRms (r, 1, 0.1, 0.9) << ", stereo L "
+                        << channelRms (r, 0, 2.1, 2.9) << " R " << channelRms (r, 1, 2.1, 2.9));
+        for (int c = 0; c < 2; ++c)
+        {
+            CHECK (channelRms (r, c, 0.1, 0.9) == Catch::Approx (expected).epsilon (0.05));
+            CHECK (channelRms (r, c, 2.1, 2.9) == Catch::Approx (expected).epsilon (0.05));
+        }
+
+        // Panned hard left on its insert: all on the left, at the same level as both sides had.
+        const auto insert = song.session->getProject().findChannel (monoChannel)->targetInsert;
+        song.run ("insert.set", json ({ { "insert", idOf (insert) }, { "pan", -1.0 } }));
+        const auto left = song.render ({}, "Left");
+        CHECK (channelRms (left, 1, 0.1, 0.9) < 1.0e-4f);
+        CHECK (channelRms (left, 0, 0.1, 0.9) > 0.5f * expected);
+    }
+
+    // Instruments: the stereo test synth, its mono twin and its twin with three stereo outputs play the same note
+    // at the same level on both sides (a plugin's extra outputs are not mixed in).
+    {
+        Song song;
+        const auto pattern = song.addPattern();
+        std::vector<std::pair<juce::String, ChannelId>> synths;
+        for (auto [file, name] :
+             { std::pair { "test-synth", "Spinus Test Synth" }, std::pair { "mono-synth", "Spinus Mono Synth" },
+               std::pair { "multi-out-synth", "Spinus Multi-Out Synth" } })
+            synths.emplace_back (name, song.addChannel ({}, {}, file, name));
+        const auto lane = song.addLane();
+        song.place (lane, pattern, 0);
+        song.session->setMode (Session::Mode::song);
+        float reference = 0.0f;
+        for (auto& [name, channel] : synths)
+        {
+            INFO (name);
+            for (auto& [other, otherChannel] : synths)
+                song.setNotes (pattern, otherChannel,
+                               otherChannel == channel ? std::vector { note (0, bar - beat, 57) }
+                                                       : std::vector<Note> {});
+            const auto r = song.render ({}, name.removeCharacters (" "));
+            const auto l = channelRms (r, 0, 0.2, 1.2), rr = channelRms (r, 1, 0.2, 1.2);
+            INFO ("L " << l << " R " << rr);
+            CHECK (l > 0.01f);
+            CHECK (l == Catch::Approx (rr).epsilon (0.02));
+            if (reference <= 0.0f)
+                reference = l;
+            CHECK (l == Catch::Approx (reference).epsilon (0.05));
+        }
     }
 }
