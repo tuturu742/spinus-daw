@@ -40,10 +40,11 @@ typedef struct
 static effect_t* self (const clap_plugin_t* p) { return (effect_t*) p->plugin_data; }
 
 /* A hand on a setting, as a plugin's window reports it: the next block sends it (step 1: the start of the drag
-   and a value, 2: a value, 3: the end of the drag) as output events, from the audio thread. */
-static _Atomic int hand_step = 0;
-static _Atomic int hand_position = 0;
-static _Atomic double hand_value = 0.0;
+   and a value, 2: a value, 3: the end of the drag) as output events, from the audio thread. Plain volatile, not
+   _Atomic, which MSVC's C compiler doesn't accept: a test sets these and then waits for the next blocks. */
+static volatile int hand_step = 0;
+static volatile int hand_position = 0;
+static volatile double hand_value = 0.0;
 
 CLAP_EXPORT void spinus_test_param_ids_hand (int position, double value, int step)
 {
