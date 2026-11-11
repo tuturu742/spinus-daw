@@ -403,7 +403,7 @@ TEST_CASE ("The Export dialog asks before replacing files the save dialog didn't
     Session session (host.getEngine(), std::make_unique<test::TestDevices> (host.getEngine()));
     session.getHistory().reset (makeSong());
     juce::TemporaryFile scratch;
-    const auto folder = scratch.getFile();
+    const auto& folder = scratch.getFile();
     REQUIRE (folder.createDirectory());
 
     ui::ExportDialog dialog (session);
