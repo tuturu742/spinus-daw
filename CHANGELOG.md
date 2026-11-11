@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Get free plugins without an internet connection now says to check that the computer is connected to the
+  internet. Before, it only gave the network library's words ("Could not resolve host").
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's
