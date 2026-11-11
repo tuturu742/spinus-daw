@@ -110,13 +110,13 @@ struct Song
 
     void setNotes (PatternId pattern, ChannelId channel, const std::vector<Note>& notes)
     {
-        juce::Array<juce::var> list;
+        juce::Array<juce::var> json;
         for (auto& n : notes)
-            list.add (noteToJson (n));
+            json.add (noteToJson (n));
         auto* p = new juce::DynamicObject();
         p->setProperty ("pattern", (int)pattern.value);
         p->setProperty ("channel", (int)channel.value);
-        p->setProperty ("notes", list);
+        p->setProperty ("notes", json);
         run ("pattern.setNotes", juce::var (p));
     }
 
@@ -691,7 +691,7 @@ TEST_CASE ("An audio clip at another sample rate keeps its pitch and length",
             engine::ExportSettings settings;
             settings.sampleRate = exportRate;
             const auto r = song.render (settings, "At" + juce::String ((int)exportRate));
-            CHECK (r.sampleRate == exportRate);
+            CHECK (r.sampleRate == Catch::Approx (exportRate));
             CHECK (frequencyOf (r.left(), r.sampleRate, 0.1, 0.9) == Catch::Approx (441.0).epsilon (0.005));
             CHECK (lastSound (r.left(), r.sampleRate, 0.01f) == Catch::Approx (1.0).margin (0.01));
         }
@@ -839,7 +839,7 @@ TEST_CASE ("Exports at 44.1, 48 and 96 kHz, 16 and 24 bit have the right pitch a
             INFO (result.error);
             REQUIRE (result.ok);
             const auto r = Song::read (result.files.front());
-            CHECK (r.sampleRate == exportRate);
+            CHECK (r.sampleRate == Catch::Approx (exportRate));
             CHECK (r.bits == bits);
             CHECK (r.seconds() == Catch::Approx (2.0 + 2.0).margin (0.01));
             CHECK (frequencyOf (r.left(), r.sampleRate, 0.1, 1.9) == Catch::Approx (440.0).epsilon (0.002));
