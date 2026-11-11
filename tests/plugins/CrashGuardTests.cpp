@@ -9,10 +9,13 @@ using spinus::engine::PluginCrashGuard;
 namespace
 {
 /** Runs the helper and waits for it to end (crashed, as it should). */
-void runHelper (const juce::File& record, const juce::String& target)
+void runHelper (const juce::File& record, const juce::String& target, const juce::String& when = {})
 {
     spinus::core::ChildProcess helper;
-    REQUIRE (helper.start (juce::StringArray { SPINUS_CRASH_GUARD_HELPER, record.getFullPathName(), target }, 0));
+    juce::StringArray command { SPINUS_CRASH_GUARD_HELPER, record.getFullPathName(), target };
+    if (when.isNotEmpty())
+        command.add (when);
+    REQUIRE (helper.start (command, 0));
     REQUIRE (helper.waitForProcessToFinish (30000));
     // The helper's own codes (12 to 127) mean it did not crash. Linux: a process ended by a signal reports
     // 128 + the signal, and AddressSanitizer's handler exits with 1. Windows: an access violation ends it
@@ -41,6 +44,12 @@ TEST_CASE ("A crash inside a plugin names the plugin for the next start", "[plug
     CHECK (crash.value_or (PluginCrashGuard::Crash {}).key == spinus::plugins::SandboxList::keyOf ("CLAP", plugin));
     CHECK (crash.value_or (PluginCrashGuard::Crash {}).name == "Crash Test");
     CHECK (! record.exists()); // taken: offered once
+
+    // The same when it crashes as its own window opens.
+    runHelper (record, plugin, "--window");
+    const auto inWindow = PluginCrashGuard::takeRecorded (record);
+    REQUIRE (inWindow.has_value());
+    CHECK (inWindow.value_or (PluginCrashGuard::Crash {}).name == "Crash Test");
 
     // A crash elsewhere names nothing.
     runHelper (record, "--elsewhere");

@@ -16,6 +16,7 @@ int main (int argc, char* argv[])
         return 12;
     spinus::engine::PluginCrashGuard::install (juce::File (argv[1]));
     const juce::String target (argv[2]);
+    const bool window = argc > 3 && juce::String (argv[3]) == "--window"; // crash as its window opens
     if (target == "--elsewhere")
     {
         raise (SIGSEGV);
@@ -33,6 +34,12 @@ int main (int argc, char* argv[])
     if (instance == nullptr)
         return 15;
     watch.addNewModules (spinus::plugins::SandboxList::keyOf ("CLAP", target), found[0]->name, target);
+
+    if (window)
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> editor (instance->createEditorAndMakeActive());
+        return 17; // not reached
+    }
 
     instance->prepareToPlay (48000.0, 256);
     instance->getParameters()[1]->setValue (1.0f); // Crash

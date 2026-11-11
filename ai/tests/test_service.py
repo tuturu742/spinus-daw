@@ -834,3 +834,31 @@ def test_device_settings_go_as_text_in_the_units_the_device_shows() -> None:
     assert propose({"device": 3, "values": {"amount": 0.35}})[1] is False
     assert propose({"device": 3, "text": {"amount": 35}})[1] is True  # text is text
     assert propose({"device": 3, "values": {"amount": 35}})[1] is True  # values are 0 to 1
+
+
+async def test_without_internet_the_assistant_and_the_connection_test_say_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No internet: the provider can't be reached. Options > AI's test and the assistant's answer end with a
+    message that says so, instead of waiting."""
+    import spinus_ai.gateway as gateway
+
+    monkeypatch.setattr(gateway, "NETWORK_RETRY_WAITS", (0.0, 0.0))  # asked again at once, not after seconds
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("[Errno -3] Temporary failure in name resolution")
+
+    service = make_service(tmp_path, handler)
+    saved, _ = await collect(service, "ai.v1.connections.save", {"name": "A", "provider": "anthropic", "key": "k"})
+    tested, _ = await collect(service, "ai.v1.connections.test", {"id": saved["id"]})
+    assert tested["ok"] is False
+    assert "name resolution" in tested["message"]
+
+    _, updates = await collect(
+        service,
+        "ai.v1.assistant.ask",
+        {"conversation": [{"role": "user", "text": "Make it faster"}], "context": {"project": EXAMPLE}},
+    )
+    final = updates[-1]
+    assert final["kind"] == "error", final
+    assert "Could not reach" in final["message"] and "name resolution" in final["message"]
