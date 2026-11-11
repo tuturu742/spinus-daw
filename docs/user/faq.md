@@ -26,8 +26,9 @@ Spinus Tune and Record idea work on your computer. See [The assistant and AI set
 
 Send the whole project folder (zip it first). Recordings are kept in its `audio` folder, and **File ›
 Save as...** copies every audio file the project uses into its new folder, so it plays the same
-elsewhere, as long as the other computer has the same plugins. Missing plugins show as **Missing**, keep
-their settings, and come back once installed.
+elsewhere, as long as the other computer has the same plugins. Missing plugins and audio files show as
+**Missing** in red, keep their settings and file names, and come back once installed or put back (see
+[Projects](projects.md#missing-plugins-and-audio-files)).
 
 ## Can I open FL Studio projects?
 

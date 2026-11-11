@@ -58,6 +58,9 @@ public:
 
     /** "2 clips, 3:12": what the track plays on the Playlist. */
     juce::String describeClips (model::ChannelId) const;
+    /** The names of the files the track's clips play that are not there (moved or deleted), each once. A track
+        with any is shown as "Missing:" in red, as missing plugins are in the Mixer. */
+    juce::StringArray getMissingFiles (model::ChannelId) const;
 
     /** Called with audio files to add as new tracks (MainView puts them on the Playlist). */
     std::function<void (const juce::StringArray&)> onAddFiles;

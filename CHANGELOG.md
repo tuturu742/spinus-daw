@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- An audio file a project uses that was moved or deleted is now easy to spot: its clip in the Playlist is red
+  with a flat line instead of a waveform, and its track in Audio tracks shows **Missing:** in red with the
+  file's name, as missing plugins do in the Mixer. The project still opens and saves with the file's name, so
+  putting the file back brings the clip back.
 - The Master fader all the way down is silent while you compare before and after in the Automixer. Before,
   the comparison's louder listening level made it faintly audible.
 - MP3 export works in the Flatpak: it now comes with the LAME encoder. Before, MP3 was greyed out there, and
