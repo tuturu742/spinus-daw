@@ -487,7 +487,7 @@ TEST_CASE ("A frozen channel plays its instrument's automation; unfrozen, the cl
     Song song;
     // The lead's own low pass cutoff: its knob (set by hand) in the first bar, a dark clip in the second.
     for (auto& c : song.project.channels)
-        if (c.id == song.lead)
+        if (c.id == song.lead && c.instrument)
         {
             c.instrument->parameters["filter"] = 1.0f / 3.0f; // low pass
             c.instrument->parameters["cutoff"] = 0.9f;

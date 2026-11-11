@@ -156,7 +156,7 @@ const juce::String rampUp = R"([{"time": 0, "value": 0}, {"time": 15360, "value"
 TEST_CASE ("Mixer faders: automation plays in its clip; outside it, the fader as it is set", "[ui][automation-edge]")
 {
     Fixture f;
-    auto check = [&] (model::ParameterTarget target, std::function<bool()> moveByHand)
+    auto check = [&] (const model::ParameterTarget& target, const std::function<bool()>& moveByHand)
     {
         INFO ("target kind " << (int)target.kind);
         f.addClip (target, bar, bar, R"([{"time": 0, "value": 0.1}])");
@@ -387,7 +387,7 @@ TEST_CASE ("Automation goes with an effect moved to another slot", "[ui][automat
 TEST_CASE ("Automation, and a knob set outside its clips, are saved and opened again", "[ui][automation-edge]")
 {
     juce::TemporaryFile folder (".spinus");
-    const auto projectFolder = folder.getFile();
+    const auto& projectFolder = folder.getFile();
     model::ParameterTarget cutoff, volume;
     {
         Fixture f;
