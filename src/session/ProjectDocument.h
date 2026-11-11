@@ -48,7 +48,8 @@ public:
         nothing changes. */
     juce::Result open (const juce::File&);
 
-    /** Saves to the current folder. Fails for an untitled project (use saveAs). */
+    /** Saves to the current folder. Fails for an untitled project (use saveAs). Over a damaged project file
+        (see getDamage), a copy of it is kept first as "<name>.spn.damaged". */
     juce::Result save();
 
     /** Saves to a new folder (a chosen "Song.spn" means the folder "Song"). The project's audio files
@@ -57,6 +58,12 @@ public:
 
     /** Saves an autosave now if anything changed since the last save or autosave. */
     juce::Result autosave();
+
+    /** Opening a damaged project opens what can be read of it, or its newest autosave (project::loadProject),
+        with unsaved changes: the damaged file stays as it is until the user saves. What happened, until then. */
+    const project::OpenReport& getDamage() const noexcept { return damage; }
+    /** What to tell the user about the damage, in plain words; empty when the project was not damaged. */
+    juce::String describeDamage() const;
 
     //==============================================================================
     /** A project whose last session crashed and whose newest autosave has work the saved project lacks. */
@@ -107,6 +114,7 @@ private:
     juce::File folder;         // invalid while untitled
     juce::File untitledFolder; // where an untitled project autosaves; created on its first autosave
     std::unique_ptr<project::SessionLock> lock;
+    project::OpenReport damage;
     int historyListener = 0;
 
     uint64_t savedStateId = 0, autosavedStateId = 0;

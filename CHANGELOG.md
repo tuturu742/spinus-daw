@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A damaged project file now opens as much as can be read, instead of not opening at all. When only parts of
+  it are damaged, Spinus opens the rest and lists what it left out. When it can't be read at all (cut off by a
+  crash or a full disk), Spinus opens the project's newest autosave instead and says from when. Saving repairs
+  the project, and keeps the damaged file beside it as `<name>.spn.damaged`.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
   Before, the window just stopped responding until every plugin had loaded, which looked like a freeze.
 - Exporting again over an earlier export asks before replacing its stems, or the file with the format's

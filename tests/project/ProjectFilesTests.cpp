@@ -7,6 +7,7 @@
 #include "engine/EngineAdapter.h"
 #include "engine/EngineHost.h"
 #include "model/ModelJson.h"
+#include "model/Validation.h"
 #include "project/ProjectFiles.h"
 #if ! JUCE_WINDOWS
 #include <csignal>
@@ -157,6 +158,95 @@ TEST_CASE ("A damaged project file says it is damaged, and where its newest auto
     error = loadProject (folder, loaded).getErrorMessage();
     INFO (error);
     CHECK (error.contains ("the newest is " + autosaves.list().getFirst().getFullPathName()));
+}
+
+TEST_CASE ("A damaged project file opens with what can be read, and says what was left out", "[project]")
+{
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    requireOk (saveProject (folder, exampleData()));
+    const auto file = folder.getChildFile ("Song.spn");
+
+    // Damage in several places; the rest of the file is fine.
+    auto json = juce::JSON::parse (file.loadFileAsString());
+    auto at = [] (const juce::var& array, int index) -> juce::DynamicObject&
+    {
+        REQUIRE (array.isArray());
+        REQUIRE (index < array.size());
+        auto* object = array[index].getDynamicObject();
+        REQUIRE (object != nullptr);
+        return *object;
+    };
+    at (json["playlist"]["clips"], 2).setProperty ("type", "mystery"); // the audio clip
+    at (json["channels"], 1).setProperty ("targetInsert", 999);        // Surge: a missing insert
+    at (at (json["patterns"], 0).getProperty ("channels")[0]["notes"], 0).setProperty ("pitch", "C");
+    at (json["mixer"]["inserts"], 0).getProperty ("sends")[0].getDynamicObject()->setProperty ("target", 999);
+    json["channels"].getArray()->add (json["channels"][0].clone()); // the Kick twice
+    const auto damagedText = juce::JSON::toString (json);
+    REQUIRE (file.replaceWithText (damagedText));
+
+    // The strict reading refuses it; the other one opens it without the damaged parts.
+    ProjectData loaded;
+    CHECK (loadProject (folder, loaded).failed());
+    OpenReport report;
+    requireOk (loadProject (folder, loaded, report));
+    CHECK (report.isDamaged());
+    CHECK (report.damagedFile == file);
+    CHECK (report.autosave == juce::File());
+    INFO (report.skipped.joinIntoString ("\n"));
+    CHECK (report.skipped.size() == 3);
+    CHECK (report.skipped.joinIntoString ("\n").contains ("a clip in the Playlist (clip "));
+    CHECK (report.skipped.joinIntoString ("\n").contains ("a note in pattern 'Beat'"));
+    CHECK (report.skipped.joinIntoString ("\n").contains ("channel 'Kick'"));
+
+    const auto example = exampleData();
+    const auto& p = loaded.project;
+    CHECK (p.channels.size() == 2);
+    CHECK (p.channels[1].targetInsert == model::masterInsertId);
+    CHECK (p.playlist.clips.size() == example.project.playlist.clips.size() - 1);
+    CHECK (p.patterns[0].notes.at (p.channels[0].id).size() == 3);
+    CHECK (p.mixer.inserts[0].sends.empty());
+    CHECK (p.settings == example.project.settings);
+    CHECK (p.launcher == example.project.launcher);
+    CHECK (loaded.deviceStates == example.deviceStates);
+    CHECK (model::validate (p).isEmpty());
+    CHECK (file.loadFileAsString() == damagedText); // opening changes nothing on disk
+
+    // A fine project: nothing to report.
+    requireOk (saveProject (folder, exampleData()));
+    requireOk (loadProject (folder, loaded, report));
+    CHECK (! report.isDamaged());
+    CHECK (report.skipped.isEmpty());
+}
+
+TEST_CASE ("An unreadable project file opens its newest readable autosave", "[project]")
+{
+    TempFolder temp;
+    const auto folder = temp.root.getChildFile ("Song");
+    requireOk (saveProject (folder, exampleData()));
+    const auto file = folder.getChildFile ("Song.spn");
+    REQUIRE (file.replaceWithText (file.loadFileAsString().substring (0, 100)));
+
+    ProjectData loaded;
+    OpenReport report;
+    CHECK (loadProject (folder, loaded, report).failed()); // no autosave yet
+
+    Autosaves autosaves (folder);
+    auto older = exampleData();
+    older.project.settings.tempoBpm = 99.0;
+    requireOk (autosaves.save (older));
+    juce::Thread::sleep (5);
+    requireOk (autosaves.save (exampleData()));
+    // The newest one is damaged too: the one before it opens.
+    const auto newest = autosaves.list().getFirst();
+    REQUIRE (findProjectFile (newest).replaceWithText ("{"));
+
+    requireOk (loadProject (folder, loaded, report));
+    CHECK (report.isDamaged());
+    CHECK (report.autosave == autosaves.list()[1]);
+    CHECK (report.autosaveTime == findProjectFile (autosaves.list()[1]).getLastModificationTime());
+    CHECK (juce::exactlyEqual (loaded.project.settings.tempoBpm, 99.0));
+    CHECK (loaded.deviceStates == older.deviceStates);
 }
 
 TEST_CASE ("Saving reports why it could not write", "[project]")

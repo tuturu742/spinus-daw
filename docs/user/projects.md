@@ -59,9 +59,22 @@ start it, or when you open that project again:
 - **Discard** keeps the last version you saved. For a saved project the autosave copies stay in its
   `.autosave` folder. For a project you never saved, Discard deletes them.
 
-If a project file is damaged (for example cut off by a crash while it was saved), Spinus says so when you
-open it, and where the project's newest autosave is. Spinus can't open that autosave for you yet; see
-[Known issues](known-issues.md#projects).
+## A damaged project file
+
+A project file can be damaged, for example cut off by a crash or a full disk while it was saved. Spinus
+then opens as much of your work as it can, and tells you what happened:
+
+- **Parts of the file are damaged:** Spinus opens everything it can read and lists what it left out, for
+  example "a clip at bar 5 on 'Drums' (its pattern is missing)" or "channel 'Bass'".
+- **The file can't be read at all** (it is empty or cut off): Spinus opens the project's newest autosave
+  instead and says so: "Song.spn was damaged and could not be read; Spinus opened the autosave from
+  12 Nov 2026 14:05 instead."
+- **Nothing can be read and there is no autosave:** Spinus says why it can't open the project, and your
+  current project stays open.
+
+The title shows a \* after a damaged project opens. **Save** to repair it. Nothing is written over the damaged
+file until you save, and when you do, Spinus keeps a copy of it beside the project as `Song.spn.damaged`, in
+case something you need was in it. You can delete that copy once the song is as it should be.
 
 A project can be open in only one Spinus window at a time; Spinus tells you if it is already open
 elsewhere.

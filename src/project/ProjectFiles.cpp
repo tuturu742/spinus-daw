@@ -101,6 +101,17 @@ juce::Result writeModelAndStates (const juce::File& folder, const juce::File& mo
     return juce::Result::ok();
 }
 
+void readStates (const juce::File& folder, ProjectData& data)
+{
+    for (auto& stateFile : folder.getChildFile (statesFolder).findChildFiles (juce::File::findFiles, false, "*.bin"))
+    {
+        const auto id = model::DeviceId { (uint32_t)stateFile.getFileNameWithoutExtension().getIntValue() };
+        juce::MemoryBlock block;
+        if (id.isValid() && stateFile.loadFileAsData (block))
+            data.deviceStates[id] = std::move (block);
+    }
+}
+
 juce::Result readModelAndStates (const juce::File& folder, ProjectData& result)
 {
     const auto file = findProjectFile (folder);
@@ -126,14 +137,7 @@ juce::Result readModelAndStates (const juce::File& folder, ProjectData& result)
         return juce::Result::fail (message);
     }
 
-    for (auto& stateFile : folder.getChildFile (statesFolder).findChildFiles (juce::File::findFiles, false, "*.bin"))
-    {
-        const auto id = model::DeviceId { (uint32_t)stateFile.getFileNameWithoutExtension().getIntValue() };
-        juce::MemoryBlock block;
-        if (id.isValid() && stateFile.loadFileAsData (block))
-            data.deviceStates[id] = std::move (block);
-    }
-
+    readStates (folder, data);
     result = std::move (data);
     return juce::Result::ok();
 }
@@ -220,6 +224,60 @@ juce::Result loadProject (const juce::File& folder, ProjectData& result)
         return juce::Result::fail (folder.getFullPathName() + " is not a project folder");
 
     return readModelAndStates (folder, result);
+}
+
+juce::Result loadProject (const juce::File& folder, ProjectData& result, OpenReport& report)
+{
+    report = {};
+    auto strict = loadProject (folder, result);
+    const auto file = findProjectFile (folder);
+    if (strict.wasOk() || ! folder.isDirectory() || ! file.existsAsFile())
+        return strict;
+
+    // Damaged. First what the file itself still holds, if it is a project at all.
+    juce::var json;
+    if (const auto text = file.loadFileAsString(); text.trim().isNotEmpty() && juce::JSON::parse (text, json).wasOk())
+    {
+        // From a newer Spinus: not damaged, and an older autosave would lose that work.
+        if ((int)json.getProperty ("schemaVersion", 0) > model::Project::currentSchemaVersion)
+            return strict;
+
+        ProjectData data;
+        juce::StringArray skipped;
+        if (model::fromJsonSalvaging (json, data.project, skipped).wasOk())
+        {
+            readStates (folder, data);
+            report.damagedFile = file;
+            report.skipped = std::move (skipped);
+            result = std::move (data);
+            return juce::Result::ok();
+        }
+    }
+
+    // Unreadable: the newest autosave that opens.
+    for (const auto& autosave : Autosaves (folder).list())
+    {
+        ProjectData data;
+        if (readModelAndStates (autosave, data).wasOk())
+        {
+            report.damagedFile = file;
+            report.autosave = autosave;
+            report.autosaveTime = findProjectFile (autosave).getLastModificationTime();
+            result = std::move (data);
+            return juce::Result::ok();
+        }
+    }
+    return strict;
+}
+
+juce::File keepDamagedCopy (const juce::File& damagedFile)
+{
+    if (! damagedFile.existsAsFile())
+        return {};
+    auto copy = damagedFile.getSiblingFile (damagedFile.getFileName() + ".damaged");
+    if (copy.exists())
+        copy = copy.getNonexistentSibling (false);
+    return damagedFile.copyFileTo (copy) ? copy : juce::File();
 }
 
 juce::Result importAudioFile (const juce::File& folder, const juce::File& source, juce::String& relativePath)
