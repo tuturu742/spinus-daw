@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- The Master fader all the way down is silent while you compare before and after in the Automixer. Before,
+  the comparison's louder listening level made it faintly audible.
 - MP3 export works in the Flatpak: it now comes with the LAME encoder. Before, MP3 was greyed out there, and
   installing `lame` on your system didn't help, because the Flatpak can't see it.
 - Opening a project now shows a bar with the plugin being loaded ("Loading Surge XT on Lead, 3 of 12").
