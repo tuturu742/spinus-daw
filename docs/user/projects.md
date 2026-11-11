@@ -39,6 +39,10 @@ saved. Before New, Open or Quit, Spinus asks whether to save them:
 Changing a setting inside a plugin's own window does not add a \*, but Spinus still notices it and asks
 before closing.
 
+If a save fails (the disk is full, or the folder is one you may not write in), Spinus says why and the
+project on disk stays exactly as you last saved it: nothing is half-written. Free some space, or use
+**Save as...** to save somewhere else.
+
 ## Autosave and recovery
 
 Every 2 minutes, if anything changed, Spinus saves a copy of your work in the project's `.autosave`
