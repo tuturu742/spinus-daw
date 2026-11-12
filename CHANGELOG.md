@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A preset picked in a plugin's own window could be partly undone when you opened the project again: settings
+  you had set earlier with Spinus's knobs (or the assistant, or a Spinus preset) went back to Spinus's values.
+  The same happened in exports. Now what you picked in the plugin's window is kept.
 - Get free plugins without an internet connection now says to check that the computer is connected to the
   internet. Before, it only gave the network library's words ("Could not resolve host").
 - The assistant no longer waits forever when the AI service crashes while it works on your question: it says
