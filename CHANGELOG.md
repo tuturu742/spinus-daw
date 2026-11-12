@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Get free plugins without an internet connection now says to check that the computer is connected to the
+  internet. Before, it only gave the network library's words ("Could not resolve host").
 - The assistant no longer waits forever when the AI service crashes while it works on your question: it says
   the service stopped, with its last words, and you can ask again. The same for the other AI features that work
   in the background (Generate, Record idea, model downloads). **Stop** now frees the assistant at once, also when
