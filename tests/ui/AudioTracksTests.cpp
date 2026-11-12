@@ -95,6 +95,26 @@ TEST_CASE ("Audio clips' channels are audio tracks: in their own panel, not the 
     CHECK (f.tracks.createComponentSnapshot (f.tracks.getLocalBounds()).isValid());
 }
 
+TEST_CASE ("An audio track whose file is missing says so", "[ui][audiotracks]")
+{
+    Fixture f;
+    const auto vocal = writeTone (f.root.getChildFile ("Vocal take.wav"), 1.0);
+    REQUIRE (f.playlist.addAudioFile (0, 0, vocal));
+    REQUIRE (f.playlist.addAudioFile (0, 3840, vocal));
+    f.update();
+    const auto track = f.tracks.getTracks().front();
+    CHECK (f.tracks.getMissingFiles (track).isEmpty());
+
+    REQUIRE (vocal.deleteFile());
+    CHECK (f.tracks.getMissingFiles (track) == juce::StringArray { "Vocal take.wav" }); // named once
+    f.update();
+    CHECK (f.tracks.createComponentSnapshot (f.tracks.getLocalBounds()).isValid());
+    // The clips keep the file's path: putting it back is enough.
+    CHECK (f.session.getProject().playlist.clips.size() == 2);
+    writeTone (vocal, 1.0);
+    CHECK (f.tracks.getMissingFiles (track).isEmpty());
+}
+
 TEST_CASE ("Older projects: channels that only play audio clips become audio tracks", "[ui][audiotracks]")
 {
     Fixture f;

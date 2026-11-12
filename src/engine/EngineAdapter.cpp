@@ -646,6 +646,9 @@ int EngineAdapter::getNumMidiClips() const { return (int)midiClips.size(); }
 void EngineAdapter::setSavedDeviceStates (std::map<DeviceId, juce::MemoryBlock> states)
 {
     savedStates = std::move (states);
+    statesFromSave.clear();
+    for (auto& [id, state] : savedStates)
+        statesFromSave.insert (id);
 }
 
 std::map<DeviceId, juce::MemoryBlock> EngineAdapter::captureDeviceStates() const
@@ -767,6 +770,14 @@ te::Plugin::Ptr EngineAdapter::ensureDevice (const Device& device)
         {
             restoreState (*plugin, saved->second);
             savedStates.erase (saved);
+            // A save's state was taken with the settings and preset that commands gave the plugin, and anything
+            // changed in its own window since (a preset picked there): applying the commands' ones again would
+            // undo that.
+            if (statesFromSave.erase (device.id) > 0)
+            {
+                appliedParameters[device.id] = device.parameters;
+                appliedPresetStates[device.id] = device.presetState;
+            }
         }
     }
 
@@ -802,10 +813,17 @@ void EngineAdapter::applyPresetState (te::Plugin& plugin, const Device& device)
     lastLoaded = device.presetState;
 }
 
+float EngineAdapter::masterFaderDb (float volumeDb) const noexcept
+{
+    // All the way down stays silence: a raised monitor level would otherwise lift -100 dB (Tracktion's silence)
+    // back to a faint sound.
+    return volumeDb <= silentDb ? silentDb : volumeDb + monitorTrimDb;
+}
+
 void EngineAdapter::setMonitorTrim (float db, const Project& project)
 {
     monitorTrimDb = db;
-    edit.getMasterVolumePlugin()->setVolumeDb (project.mixer.master.volumeDb + monitorTrimDb);
+    edit.getMasterVolumePlugin()->setVolumeDb (masterFaderDb (project.mixer.master.volumeDb));
 }
 
 std::map<juce::String, float> EngineAdapter::readParameters (DeviceId id) const
@@ -979,6 +997,7 @@ void EngineAdapter::dropDevice (DeviceId id)
     {
         // Keep the state: if an undo brings the device back, it returns with its settings.
         savedStates[id] = stateOf (*it->second);
+        statesFromSave.erase (id);
         gestureWatchers.erase (id);
         appliedParameters.erase (id); // a device brought back gets its command settings again
         it->second->deleteFromParent();
@@ -1047,7 +1066,7 @@ void EngineAdapter::syncInsert (const Insert& insert, const Project& project)
     if (insert.id == masterInsertId)
     {
         auto volume = edit.getMasterVolumePlugin();
-        volume->setVolumeDb (insert.volumeDb + monitorTrimDb);
+        volume->setVolumeDb (masterFaderDb (insert.volumeDb));
         volume->setPan (insert.pan);
 
         // The Master is no Tracktion track, so it has no track mute: a MutePlugin after its effects silences it

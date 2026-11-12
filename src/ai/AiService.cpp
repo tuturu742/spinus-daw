@@ -315,6 +315,7 @@ void AiService::stop()
         queued.clear();
     }
     failPending ("The AI service stopped.");
+    endJobs ("The AI service stopped.");
     if (state == State::starting || state == State::running)
     {
         core::Logs::info ("ai", "AI service stopped");
@@ -414,6 +415,21 @@ void AiService::failPending (const juce::String& error)
             {
                 if (*a && reply)
                     reply ({}, error);
+            });
+}
+
+void AiService::endJobs (const juce::String& error)
+{
+    for (auto& job : std::exchange (jobs, {}))
+        juce::MessageManager::callAsync (
+            [this, job, error, a = alive]
+            {
+                if (! *a)
+                    return;
+                auto copy = listeners;
+                for (auto& [id, listener] : copy)
+                    listener ("ai.v1.job.update",
+                              object ({ { "job", job }, { "kind", "error" }, { "message", error } }));
             });
 }
 
@@ -537,6 +553,7 @@ void AiService::run()
                                                     : juce::String()) +
                                                ". Its last words: " + readLogTail());
                 failPending ("The AI service stopped unexpectedly. " + readLogTail());
+                endJobs ("The AI service stopped unexpectedly while it worked on this. " + readLogTail());
                 setState (enabled ? State::stopped : State::off);
             });
     }
@@ -563,10 +580,14 @@ void AiService::received (const juce::String& line)
             return;
         const auto error = message["error"].isObject() ? message["error"]["message"].toString() : juce::String();
         juce::MessageManager::callAsync (
-            [reply, result = message["result"], error, a = alive]
+            [this, reply, result = message["result"], error, a = alive]
             {
-                if (*a)
-                    reply (result, error);
+                if (! *a)
+                    return;
+                // A job started: its updates come as notifications, the last one "done" or "error".
+                if (const auto& job = result["job"]; error.isEmpty() && job.isString() && job.toString().isNotEmpty())
+                    jobs.insert (job.toString());
+                reply (result, error);
             });
         return;
     }
@@ -576,6 +597,9 @@ void AiService::received (const juce::String& line)
         {
             if (! *a)
                 return;
+            if (method == "ai.v1.job.update" &&
+                (params["kind"].toString() == "done" || params["kind"].toString() == "error"))
+                jobs.erase (params["job"].toString());
             auto copy = listeners;
             for (auto& [id, listener] : copy)
                 listener (method, params);

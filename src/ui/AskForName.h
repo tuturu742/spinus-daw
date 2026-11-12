@@ -14,9 +14,13 @@ inline void askForName (const juce::String& title, const juce::String& current, 
     window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
     window->enterModalState (true,
                              juce::ModalCallbackFunction::create (
-                                 [window, then = std::move (then)] (int result)
+                                 // Deleted from outside (the app closing), the window is gone by now: no name then.
+                                 [safe = juce::Component::SafePointer<juce::AlertWindow> (window),
+                                  then = std::move (then)] (int result)
                                  {
-                                     const auto name = window->getTextEditorContents ("name").trim();
+                                     if (safe == nullptr)
+                                         return;
+                                     const auto name = safe->getTextEditorContents ("name").trim();
                                      if (result == 1 && name.isNotEmpty())
                                          then (name);
                                  }),

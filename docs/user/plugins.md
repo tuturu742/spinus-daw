@@ -80,4 +80,7 @@ Double-click a channel's name in the Channel Rack, or an effect in the Mixer, to
   before you grabbed it. This works when the plugin says when you start and stop dragging, which almost all
   do (VST3 and CLAP plugins and Spinus's own devices); picking a preset in the plugin's own browser is not an
   undo step. While you hold a knob that has automation, your hand wins over the automation until you let go.
+- What you change in the window, a preset picked in the plugin's own browser too, is saved with the project
+  and is what plays when you open it again, also for settings you had set earlier with Spinus's knobs or the
+  assistant.
 - The title says what it is and where: for example, "Hall Reverb - 4 Reverb".

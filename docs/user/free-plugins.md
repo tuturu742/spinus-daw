@@ -66,6 +66,9 @@ The first time you start Spinus, the **Get free plugins** window opens. Later, o
 
 **Cancel** stops the download; closing the window does too. Nothing half-downloaded is kept.
 
+Without an internet connection the download fails at once, and the window says there is no connection: connect,
+then click **Download** again. Spinus itself works as before meanwhile.
+
 Spinus checks every download against the exact file it expects. If a download is damaged or was
 changed, it is not installed and the window says so: try again later.
 

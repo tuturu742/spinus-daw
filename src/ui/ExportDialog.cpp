@@ -185,7 +185,7 @@ juce::String ExportDialog::getMissingEncoderText (bool mp3, bool aac, System sys
             missing.add (juce::String (! mp3 && ! aac ? "MP3 and AAC are"
                                        : ! mp3        ? "MP3 is"
                                                       : "AAC is") +
-                         " not available in the Flatpak version of Spinus. FLAC and Opus work.");
+                         " not available in the Flatpak version of Spinus. The other formats work.");
         break;
     case System::windows:
         if (! mp3)
