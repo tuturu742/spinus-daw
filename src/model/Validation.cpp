@@ -1,5 +1,6 @@
 #include "Validation.h"
 
+#include <cmath>
 #include <set>
 
 namespace spinus::model
@@ -58,6 +59,12 @@ bool reaches (const Project& project, InsertId start, InsertId goal)
 }
 
 juce::String describe (InsertId id) { return "insert " + juce::String (id.value); }
+
+juce::String deviceName (const Device& device)
+{
+    const auto name = device.kind == Device::Kind::plugin ? device.plugin.name : device.stockType;
+    return name.isNotEmpty() ? "'" + name + "'" : juce::String ("a device");
+}
 
 template <typename Item, typename IdType> int indexOf (const std::vector<Item>& items, IdType id)
 {
@@ -281,6 +288,264 @@ juce::StringArray validate (const Project& project)
     }
 
     return problems;
+}
+
+juce::StringArray repair (Project& project)
+{
+    juce::StringArray notes;
+    std::set<uint32_t> ids;
+    auto claim = [&ids] (uint32_t id) { return id != 0 && ids.insert (id).second; };
+    auto named = [] (const juce::String& kind, const juce::String& name)
+    { return name.isNotEmpty() ? kind + " '" + name + "'" : "a " + kind; };
+
+    // The master: always ID 1, no output.
+    project.mixer.master.id = masterInsertId;
+    project.mixer.master.output = {};
+    ids.insert (masterInsertId.value);
+    std::erase_if (project.mixer.inserts,
+                   [&] (const Insert& insert)
+                   {
+                       if (claim (insert.id.value))
+                           return false;
+                       notes.add (named ("mixer insert", insert.name));
+                       return true;
+                   });
+
+    // Devices: each with its own ID, a type, and settings from 0 to 1.
+    auto deviceProblem = [&] (Device& device) -> bool
+    {
+        if (! claim (device.id.value) || (device.kind == Device::Kind::stock && device.stockType.isEmpty()) ||
+            (device.kind == Device::Kind::plugin && device.plugin.format.isEmpty()))
+            return true;
+        bool reset = false;
+        for (auto it = device.parameters.begin(); it != device.parameters.end();)
+        {
+            if (it->first.isEmpty() || ! std::isfinite (it->second))
+            {
+                it = device.parameters.erase (it);
+                reset = true;
+                continue;
+            }
+            if (it->second < 0.0f || it->second > 1.0f)
+            {
+                it->second = juce::jlimit (0.0f, 1.0f, it->second);
+                reset = true;
+            }
+            ++it;
+        }
+        if (reset)
+            notes.add ("some settings of " + deviceName (device) + " (set back into range)");
+        return false;
+    };
+    auto repairEffects = [&] (Insert& insert, const juce::String& where)
+    {
+        std::erase_if (insert.effects,
+                       [&] (EffectSlot& slot)
+                       {
+                           if (! deviceProblem (slot.device))
+                               return false;
+                           notes.add ("the effect " + deviceName (slot.device) + " on " + where);
+                           return true;
+                       });
+    };
+    repairEffects (project.mixer.master, "the Master");
+    for (auto& insert : project.mixer.inserts)
+        repairEffects (insert, insert.name.isNotEmpty() ? "insert '" + insert.name + "'" : juce::String ("an insert"));
+
+    // Channels.
+    std::erase_if (project.channels,
+                   [&] (const Channel& channel)
+                   {
+                       if (claim (channel.id.value))
+                           return false;
+                       notes.add (named ("channel", channel.name));
+                       return true;
+                   });
+    for (auto& channel : project.channels)
+    {
+        if (channel.instrument && deviceProblem (*channel.instrument))
+        {
+            notes.add ("the instrument of " + named ("channel", channel.name));
+            channel.instrument.reset();
+        }
+        if (project.findInsert (channel.targetInsert) == nullptr)
+            channel.targetInsert = masterInsertId; // silently: nothing is lost
+    }
+
+    // Routing: outputs, sends and sidechains to inserts that are there, without cycles.
+    auto repairRouting = [&] (Insert& insert)
+    {
+        if (insert.id != masterInsertId &&
+            (project.findInsert (insert.output) == nullptr || insert.output == insert.id))
+            insert.output = masterInsertId;
+        std::erase_if (insert.sends, [&] (const Send& send)
+                       { return send.target == insert.id || project.findInsert (send.target) == nullptr; });
+        std::erase_if (insert.sidechainSources,
+                       [&] (InsertId source) { return project.findInsert (source) == nullptr; });
+        if (insert.notesFrom && (insert.id == masterInsertId || project.findChannel (insert.notesFrom) == nullptr))
+            insert.notesFrom = {};
+    };
+    repairRouting (project.mixer.master);
+    for (auto& insert : project.mixer.inserts)
+        repairRouting (insert);
+    for (auto& insert : project.mixer.inserts)
+        if (reaches (project, insert.output, insert.id))
+        {
+            insert.output = masterInsertId;
+            if (reaches (project, insert.output, insert.id)) // through sends or sidechains: drop those too
+            {
+                insert.sends.clear();
+                for (auto& other : project.mixer.inserts)
+                    std::erase (other.sidechainSources, insert.id);
+                std::erase (project.mixer.master.sidechainSources, insert.id);
+            }
+        }
+
+    if (! project.settings.timeSignature.isValid())
+    {
+        project.settings.timeSignature = {};
+        notes.add ("the song's time signature (set back to 4/4)");
+    }
+
+    // Patterns.
+    std::erase_if (project.patterns,
+                   [&] (const Pattern& pattern)
+                   {
+                       if (claim (pattern.id.value))
+                           return false;
+                       notes.add (named ("pattern", pattern.name));
+                       return true;
+                   });
+    for (auto& pattern : project.patterns)
+    {
+        if (pattern.length <= 0)
+            pattern.length = Pattern {}.length;
+        if (pattern.timeSignature && ! pattern.timeSignature->isValid())
+            pattern.timeSignature.reset();
+        for (auto it = pattern.notes.begin(); it != pattern.notes.end();)
+        {
+            if (project.findChannel (it->first) == nullptr)
+            {
+                notes.add ("the notes of a missing channel in " + named ("pattern", pattern.name));
+                it = pattern.notes.erase (it);
+                continue;
+            }
+            const auto removed = std::erase_if (it->second,
+                                                [] (const Note& note)
+                                                {
+                                                    return note.pitch < 0 || note.pitch > 127 || note.length <= 0 ||
+                                                           note.start < 0 || ! (note.velocity >= 0.0f) ||
+                                                           note.velocity > 1.0f;
+                                                });
+            if (removed > 0)
+                notes.add (juce::String ((int)removed) + (removed == 1 ? " note" : " notes") + " in " +
+                           named ("pattern", pattern.name));
+            ++it;
+        }
+    }
+
+    // Playlist.
+    std::erase_if (project.playlist.lanes,
+                   [&] (const Lane& lane)
+                   {
+                       if (claim (lane.id.value))
+                           return false;
+                       notes.add (named ("Playlist track", lane.name));
+                       return true;
+                   });
+
+    std::set<DeviceId> devices;
+    auto addDevice = [&devices] (const Device& d) { devices.insert (d.id); };
+    for (auto& channel : project.channels)
+        if (channel.instrument)
+            addDevice (*channel.instrument);
+    for (auto& slot : project.mixer.master.effects)
+        addDevice (slot.device);
+    for (auto& insert : project.mixer.inserts)
+        for (auto& slot : insert.effects)
+            addDevice (slot.device);
+
+    /** Why a clip's content cannot be kept, or empty. Fixes what can be fixed. */
+    auto contentProblem = [&] (auto& content) -> juce::String
+    {
+        if (auto* p = std::get_if<PatternClip> (&content); p != nullptr && project.findPattern (p->pattern) == nullptr)
+            return "its pattern is missing";
+        if (auto* a = std::get_if<AudioClip> (&content))
+        {
+            if (a->file.isEmpty())
+                return "it has no audio file";
+            if (a->channel.isValid() && project.findChannel (a->channel) == nullptr)
+                return "its audio track is missing";
+            a->offset = std::max<Ticks> (0, a->offset);
+            a->fadeIn = std::max<Ticks> (0, a->fadeIn);
+            a->fadeOut = std::max<Ticks> (0, a->fadeOut);
+        }
+        return {};
+    };
+
+    const auto bar = (Ticks)project.settings.timeSignature.barTicks();
+    std::erase_if (project.playlist.clips,
+                   [&] (Clip& clip)
+                   {
+                       juce::String why;
+                       if (! claim (clip.id.value))
+                           why = "it has no ID of its own";
+                       else if (project.findLane (clip.lane) == nullptr)
+                           why = "its track is missing";
+                       else if (clip.length <= 0 || clip.start < 0)
+                           why = "its position is invalid";
+                       else if (auto* automation = std::get_if<AutomationClip> (&clip.content))
+                       {
+                           const auto& t = automation->target;
+                           using K = ParameterTarget::Kind;
+                           const bool found = (t.kind == K::channelVolume || t.kind == K::channelPan)
+                                                  ? project.findChannel (t.channel) != nullptr
+                                              : (t.kind == K::insertVolume || t.kind == K::insertPan)
+                                                  ? project.findInsert (t.insert) != nullptr
+                                                  : devices.contains (t.device) && t.parameterId.isNotEmpty();
+                           if (! found)
+                               why = "what it automates is missing";
+                           auto& points = automation->points;
+                           std::erase_if (points, [] (const AutomationPoint& p) { return ! std::isfinite (p.value); });
+                           for (auto& point : points)
+                               point.value = juce::jlimit (0.0f, 1.0f, point.value);
+                           std::stable_sort (points.begin(), points.end(),
+                                             [] (auto& a, auto& b) { return a.time < b.time; });
+                       }
+                       else
+                           why = contentProblem (clip.content);
+                       if (why.isEmpty())
+                           return false;
+                       const auto* lane = project.findLane (clip.lane);
+                       notes.add ("a clip at bar " + juce::String (juce::jmax<Ticks> (0, clip.start) / bar + 1) +
+                                  (lane != nullptr && lane->name.isNotEmpty() ? " on '" + lane->name + "'" : "") +
+                                  " (" + why + ")");
+                       return true;
+                   });
+
+    // Clip launcher.
+    auto& launcher = project.launcher;
+    std::erase_if (launcher.tracks, [&] (const LauncherTrack& t) { return ! claim (t.id.value); });
+    std::erase_if (launcher.scenes, [&] (const Scene& s) { return ! claim (s.id.value); });
+    std::set<std::pair<uint32_t, uint32_t>> filled;
+    std::erase_if (launcher.clips,
+                   [&] (LauncherClip& clip)
+                   {
+                       const bool keep = claim (clip.id.value) && indexOf (launcher.tracks, clip.track) >= 0 &&
+                                         indexOf (launcher.scenes, clip.scene) >= 0 && clip.length > 0 &&
+                                         contentProblem (clip.content).isEmpty() &&
+                                         filled.insert ({ clip.track.value, clip.scene.value }).second;
+                       if (! keep)
+                           notes.add ("a clip in the Clip Launcher");
+                       return ! keep;
+                   });
+
+    // New IDs after every one in use.
+    const auto highest = ids.empty() ? 0u : *ids.rbegin();
+    if (project.nextId <= highest)
+        project.nextId = highest + 1;
+
+    return notes;
 }
 
 } // namespace spinus::model

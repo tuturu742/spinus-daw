@@ -54,6 +54,27 @@ juce::String describeWriteProblem (const juce::File& target);
 juce::Result saveProject (const juce::File& folder, const ProjectData&);
 juce::Result loadProject (const juce::File& folder, ProjectData& result);
 
+/** What opening a damaged project did (see the loadProject below). */
+struct OpenReport
+{
+    juce::File damagedFile;    // the damaged project file; none when the project was fine
+    juce::StringArray skipped; // what was left out of it or set back, in plain words
+    juce::File autosave;       // the autosave opened instead, when the file could not be read at all
+    juce::Time autosaveTime;
+
+    bool isDamaged() const { return damagedFile != juce::File(); }
+};
+
+/** Opens a project, damaged or not: "load what can, and say so". A file that is valid JSON but has entries
+    that cannot be read opens without them (model::fromJsonSalvaging); one that cannot be read at all (cut off,
+    empty) opens its newest readable autosave instead. `report` says which. Fails only when nothing can be
+    loaded, or the project is from a newer Spinus. Nothing on disk is changed. */
+juce::Result loadProject (const juce::File& folder, ProjectData& result, OpenReport& report);
+
+/** Before saving over a damaged project file: keeps a copy beside it, "<name>.spn.damaged" (numbered if one is
+    already there). Returns the copy, or no file if it could not be made. */
+juce::File keepDamagedCopy (const juce::File& damagedFile);
+
 /** Copies an audio file into the project's audio/ folder (renaming on a name clash) and returns the
     path to store in AudioClip::file, relative to audio/. */
 juce::Result importAudioFile (const juce::File& folder, const juce::File& source, juce::String& relativePath);

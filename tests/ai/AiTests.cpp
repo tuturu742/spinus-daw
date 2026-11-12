@@ -368,3 +368,69 @@ TEST_CASE ("The project harness's edits apply in Spinus as one undo step", "[ai]
     undone.nextId = example().nextId; // IDs are not handed out again after an undo
     CHECK (undone == example());
 }
+
+TEST_CASE ("A proposal applied after the user changed the project by hand changes only what it named", "[ai]")
+{
+    juce::String error;
+    auto perform = [&error] (commands::CommandHistory& h, const juce::String& name, const juce::String& params)
+    {
+        auto command = commands::CommandRegistry::get().create (name, juce::JSON::parse (params), error);
+        REQUIRE (command != nullptr);
+        auto* raw = command.get();
+        REQUIRE (h.perform (std::move (command)).wasOk());
+        return raw->getResult();
+    };
+
+    // The user deletes the channel the proposal changes: it is refused, says why, and changes nothing.
+    {
+        commands::CommandHistory history (example());
+        const auto bass = (int)perform (history, "channel.add", R"({"name": "Bass"})")["channel"];
+        auto p = Proposal::prepare (proposal (R"({"summary": "Quieter bass", "steps": [
+                {"command": "channel.set", "parameters": {"channel": )" +
+                                              juce::String (bass) + R"(, "volumeDb": -6}},
+                {"command": "project.setTempo", "parameters": {"bpm": 90}}]})"),
+                                    history);
+        REQUIRE (p.canApply());
+        perform (history, "channel.remove", R"({"channel": )" + juce::String (bass) + "}");
+        const auto before = history.getProject();
+        const auto steps = history.getUndoDescriptions().size();
+        const auto result = p.apply (history);
+        CHECK (result.failed());
+        CHECK (result.getErrorMessage().isNotEmpty());
+        CHECK (history.getProject() == before); // not even the tempo: all or nothing
+        CHECK (history.getUndoDescriptions().size() == steps);
+    }
+
+    // The channel the proposal named was undone, and the user made another, which may get the same number:
+    // the proposal must not change the new one.
+    {
+        commands::CommandHistory history (example());
+        const auto bass = (int)perform (history, "channel.add", R"({"name": "Bass"})")["channel"];
+        auto p = Proposal::prepare (proposal (R"({"summary": "Quieter bass", "steps": [
+                {"command": "channel.set", "parameters": {"channel": )" +
+                                              juce::String (bass) + R"(, "volumeDb": -6}}]})"),
+                                    history);
+        REQUIRE (p.canApply());
+        REQUIRE (history.undo());
+        const auto drums = (int)perform (history, "channel.add", R"({"name": "Drums"})")["channel"];
+        INFO ("Bass was " << bass << ", Drums is " << drums);
+        const auto result = p.apply (history);
+        const auto* channel = history.getProject().findChannel (model::ChannelId { (uint32_t)drums });
+        REQUIRE (channel != nullptr);
+        CHECK (juce::exactlyEqual (channel->volumeDb, 0.0f)); // Drums untouched
+        CHECK (result.failed());
+    }
+
+    // An unrelated change by hand meanwhile: the proposal applies, and the user's change stays.
+    {
+        commands::CommandHistory history (example());
+        auto p = Proposal::prepare (
+            proposal (
+                R"({"summary": "Faster", "steps": [{"command": "project.setTempo", "parameters": {"bpm": 150}}]})"),
+            history);
+        perform (history, "channel.add", R"({"name": "Mine"})");
+        REQUIRE (p.apply (history).wasOk());
+        CHECK (juce::approximatelyEqual (history.getProject().settings.tempoBpm, 150.0));
+        CHECK (history.getProject().channels.back().name == "Mine");
+    }
+}

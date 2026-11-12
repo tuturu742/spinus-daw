@@ -92,6 +92,7 @@ void ProjectDocument::newProject()
 {
     core::Logs::info ("project", "New project");
     closeCurrent();
+    damage = {};
     folder = juce::File();
     session.setProjectFolder ({});
     session.loadProject ({});
@@ -116,7 +117,8 @@ juce::Result ProjectDocument::openFolder (const juce::File& projectFolder)
         return juce::Result::fail (projectFolder.getFileName() + " is already open in another Spinus window");
 
     project::ProjectData data;
-    if (auto r = project::loadProject (projectFolder, data); r.failed())
+    project::OpenReport report;
+    if (auto r = project::loadProject (projectFolder, data, report); r.failed())
         return r;
 
     // A crash left the lock: drop it, the caller has already offered the autosave (findRecoveries).
@@ -129,6 +131,20 @@ juce::Result ProjectDocument::openFolder (const juce::File& projectFolder)
     session.loadProject (std::move (data));
     markSaved();
     addToRecent (folder);
+
+    damage = std::move (report);
+    if (damage.isDamaged())
+    {
+        core::Logs::warning ("project", "Damaged project file " + damage.damagedFile.getFullPathName() +
+                                            (damage.autosave != juce::File()
+                                                 ? ": opened the autosave " + damage.autosave.getFileName()
+                                                 : ": left out " + juce::String (damage.skipped.size()) + " things"));
+        // What opened is not what the file holds: unsaved, so the user saves to repair it.
+        savedStateId = 0;
+        savedStates.clear();
+        lastNotifiedUnsaved = true;
+        sendChangeMessage();
+    }
     return juce::Result::ok();
 }
 
@@ -185,9 +201,17 @@ juce::Result ProjectDocument::saveHere()
     if (auto r = collectAudioFiles (folder); r.failed())
         return r;
 
+    // The damaged file is replaced only now, by the user's save, and a copy of it stays.
+    const bool overDamaged =
+        damage.isDamaged() && damage.damagedFile.existsAsFile() && damage.damagedFile.getParentDirectory() == folder;
+    if (overDamaged && project::keepDamagedCopy (damage.damagedFile) == juce::File())
+        return juce::Result::fail ("Spinus could not keep a copy of the damaged " + damage.damagedFile.getFileName() +
+                                   project::describeWriteProblem (folder));
+
     if (auto r = project::saveProject (folder, session.captureProjectData()); r.failed())
         return r;
 
+    damage = {};
     if (lock == nullptr)
         lock = std::make_unique<project::SessionLock> (folder);
     markSaved();
@@ -244,6 +268,7 @@ juce::Result ProjectDocument::saveIntoNewFolder (juce::File newFolder)
         return r;
 
     closeCurrent();
+    damage = {}; // the damaged file stays as it was, in the old folder
     folder = std::move (newFolder);
     session.setProjectFolder (folder);
     lock = std::make_unique<project::SessionLock> (folder);
@@ -288,6 +313,36 @@ void ProjectDocument::timerCallback()
     // A failed autosave is retried next time; the user's own saves report their problems.
     [[maybe_unused]] const auto result = autosave();
     jassert (result.wasOk());
+}
+
+juce::String ProjectDocument::describeDamage() const
+{
+    if (! damage.isDamaged())
+        return {};
+
+    const auto file = damage.damagedFile.getFileName();
+    juce::String text;
+    if (damage.autosave != juce::File())
+        text << file << " was damaged and could not be read; Spinus opened the autosave from "
+             << damage.autosaveTime.toString (true, true, false, true) << " instead.";
+    else
+    {
+        text << file << " was damaged; Spinus opened everything it could read.";
+        if (! damage.skipped.isEmpty())
+        {
+            constexpr int shown = 12;
+            text << " Left out or set back:\n";
+            for (int i = 0; i < juce::jmin (shown, damage.skipped.size()); ++i)
+                text << "\n- " << damage.skipped[i];
+            if (damage.skipped.size() > shown)
+                text << "\n- and " << (damage.skipped.size() - shown) << " more";
+            text << "\n";
+        }
+    }
+    text << "\nSave to repair it. The damaged file is not changed until you save; then a copy of it stays beside the "
+            "project as "
+         << file << ".damaged.";
+    return text;
 }
 
 //==============================================================================
@@ -346,6 +401,7 @@ juce::Result ProjectDocument::recover (const Recovery& recovery)
                                      recovery.autosave.getFileName());
 
     closeCurrent();
+    damage = {};
     project::SessionLock::clearCrashedLock (recovery.projectFolder);
 
     if (recovery.untitled)

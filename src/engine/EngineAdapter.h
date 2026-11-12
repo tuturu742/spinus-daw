@@ -111,6 +111,8 @@ public:
         of the project, not in exports. */
     void setMonitorTrim (float db, const model::Project&);
     float getMonitorTrim() const noexcept { return monitorTrimDb; }
+    /** A fader this low is silence (Tracktion's, and the Mixer's fader all the way down). */
+    static constexpr float silentDb = -100.0f;
 
     /** Frozen channels and inserts that play rendered audio instead of their plugins (model/Freeze.h):
         the file to play from the start of the song (or of the pattern, in pattern mode), or no file for
@@ -305,11 +307,14 @@ private:
     std::map<model::DeviceId, tracktion::Plugin::Ptr> guards;    // AudioGuardPlugin right after each device
     std::map<model::DeviceId, tracktion::Plugin::Ptr> probes;    // AudioGuardPlugin (probe) right before each device
     std::map<model::DeviceId, juce::MemoryBlock> savedStates;    // not yet applied, or plugin missing
+    std::set<model::DeviceId> statesFromSave; // of savedStates, those given by setSavedDeviceStates (a save's)
     std::set<model::DeviceId> reportedFailures;
     // Settings set through commands, as last applied, and what each was before.
     std::map<model::DeviceId, std::map<juce::String, float>> appliedParameters;
     std::map<model::DeviceId, juce::MemoryBlock> appliedPresetStates, statesBeforePresets;
     float monitorTrimDb = 0.0f;
+    /** The Master's fader with the monitor trim, silence kept silent. */
+    float masterFaderDb (float volumeDb) const noexcept;
     std::map<model::DeviceId, std::map<juce::String, float>> originalParameters;
     std::map<model::InsertId, int> returnBuses; // target insert -> aux bus number
     std::map<ClipKey, tracktion::MidiClip::Ptr> midiClips;

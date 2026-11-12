@@ -1,6 +1,7 @@
 /* A test CLAP effect for the plugin sandbox: stereo in, stereo out = in x Gain. Its "Crash"
    switch makes processing crash (SIGSEGV) and its "Hang" switch makes it stop answering, so tests can check
-   that Spinus survives both. Gain is saved in its state. Never installed or shipped. */
+   that Spinus survives both. Its own window crashes as it opens. Gain is saved in its state. Never installed or
+   shipped. */
 
 #include <clap/clap.h>
 #include <signal.h>
@@ -172,9 +173,41 @@ static clap_process_status process (const clap_plugin_t* p, const clap_process_t
     return CLAP_PROCESS_CONTINUE;
 }
 
+//==============================================================================
+/* Its window: any window system; creating it crashes. */
+static bool gui_is_api_supported (const clap_plugin_t* p, const char* api, bool floating) { (void) p; (void) api; return ! floating; }
+static bool gui_get_preferred_api (const clap_plugin_t* p, const char** api, bool* floating) { (void) p; (void) api; (void) floating; return false; }
+static bool gui_create (const clap_plugin_t* p, const char* api, bool floating)
+{
+    (void) p;
+    (void) api;
+    (void) floating;
+    CRASH();
+    return false;
+}
+static void gui_destroy (const clap_plugin_t* p) { (void) p; }
+static bool gui_set_scale (const clap_plugin_t* p, double scale) { (void) p; (void) scale; return false; }
+static bool gui_get_size (const clap_plugin_t* p, uint32_t* w, uint32_t* h) { (void) p; *w = 300; *h = 200; return true; }
+static bool gui_can_resize (const clap_plugin_t* p) { (void) p; return false; }
+static bool gui_get_resize_hints (const clap_plugin_t* p, clap_gui_resize_hints_t* hints) { (void) p; (void) hints; return false; }
+static bool gui_adjust_size (const clap_plugin_t* p, uint32_t* w, uint32_t* h) { (void) p; (void) w; (void) h; return false; }
+static bool gui_set_size (const clap_plugin_t* p, uint32_t w, uint32_t h) { (void) p; (void) w; (void) h; return false; }
+static bool gui_set_parent (const clap_plugin_t* p, const clap_window_t* window) { (void) p; (void) window; return false; }
+static bool gui_set_transient (const clap_plugin_t* p, const clap_window_t* window) { (void) p; (void) window; return false; }
+static void gui_suggest_title (const clap_plugin_t* p, const char* title) { (void) p; (void) title; }
+static bool gui_show (const clap_plugin_t* p) { (void) p; return false; }
+static bool gui_hide (const clap_plugin_t* p) { (void) p; return false; }
+
+static const clap_plugin_gui_t gui = { gui_is_api_supported, gui_get_preferred_api, gui_create, gui_destroy,
+                                       gui_set_scale, gui_get_size, gui_can_resize, gui_get_resize_hints,
+                                       gui_adjust_size, gui_set_size, gui_set_parent, gui_set_transient,
+                                       gui_suggest_title, gui_show, gui_hide };
+
 static const void* get_extension (const clap_plugin_t* p, const char* id)
 {
     (void) p;
+    if (strcmp (id, CLAP_EXT_GUI) == 0)
+        return &gui;
     if (strcmp (id, CLAP_EXT_AUDIO_PORTS) == 0)
         return &audio_ports;
     if (strcmp (id, CLAP_EXT_PARAMS) == 0)

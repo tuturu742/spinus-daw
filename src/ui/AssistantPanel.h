@@ -83,6 +83,7 @@ private:
     std::vector<Entry> entries;
     juce::String job;
     bool waitingForJob = false;
+    int questionsAsked = 0; // counts questions: a reply to an earlier (stopped) one is dropped
     std::map<juce::String, bool> chipsOn {
         { "project", true }, { "channel", true }, { "pattern", true }, { "insert", true }
     };
