@@ -986,3 +986,28 @@ TEST_CASE ("Get free plugins, opened for a project, ticks just the packs it need
     CHECK (! two.isSelected ("second"));
     CHECK (two.isSelected ("third"));
 }
+
+TEST_CASE ("Get free plugins without internet: the download fails at once, says so, and the window stays usable",
+           "[plugins][downloads][ui]")
+{
+    Fixture f;
+    // A server that is not there (as with no internet): a port on this computer nothing listens on.
+    juce::StreamingSocket probe;
+    REQUIRE (probe.createListener (0, "127.0.0.1"));
+    const auto port = probe.getBoundPort();
+    probe.close();
+    auto offline = f.pack;
+    offline.archives[0].url = "http://127.0.0.1:" + juce::String (port) + "/plugin.tar.gz";
+
+    ui::PluginDownloadDialog dialog (f.downloads, {}, "fake-synth", { offline });
+    const auto started = juce::Time::getMillisecondCounterHiRes();
+    dialog.startDownloads();
+    CHECK (juce::Time::getMillisecondCounterHiRes() - started < 500.0); // in the background: no frozen window
+    CHECK (dialog.isDownloading());
+    dialog.finishForTests();
+    CHECK (! dialog.isDownloading());
+    CHECK (dialog.getPackStatus ("fake-synth") == "Failed");
+    INFO (dialog.getStatusText());
+    CHECK (dialog.getStatusText().contains ("internet"));
+    CHECK (! f.downloads.isInstalled (offline));
+}

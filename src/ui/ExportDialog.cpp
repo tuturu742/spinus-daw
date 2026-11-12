@@ -387,7 +387,13 @@ void ExportDialog::finished (const engine::ExportJob::Result& result)
     stopTimer();
     progress = 1.0;
 
-    if (result.ok)
+    if (result.ok && result.warning.isNotEmpty())
+    {
+        // Made, but not as it should sound: said, not "Saved".
+        status.setText (result.warning, juce::dontSendNotification);
+        showButton.setVisible (true);
+    }
+    else if (result.ok)
     {
         const auto stemCount = (int)result.files.size() - 1;
         status.setText ("Saved " + lastFile.getFileName() +

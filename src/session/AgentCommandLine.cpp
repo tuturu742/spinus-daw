@@ -852,6 +852,8 @@ int render (Session& session, const juce::File& audioFolder, const juce::File& o
     if (encoded)
         mixReport.getDynamicObject()->setProperty ("unencodedTruePeakDb", unencodedPeak);
     auto report = object ({ { "ok", true }, { "mix", mixReport } });
+    if (result->warning.isNotEmpty()) // made, but a plugin crashed and is missing from it
+        report.getDynamicObject()->setProperty ("warning", result->warning);
 
     if (stems != juce::File())
     {

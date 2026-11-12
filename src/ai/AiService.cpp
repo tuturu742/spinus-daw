@@ -120,6 +120,8 @@ AiService::AiService (const juce::File& settingsFolder, const juce::File& models
     const auto settings = juce::JSON::parse (folder.getChildFile ("settings.json"));
     enabled = (bool)settings["enabled"];
     experimental = (bool)settings["experimental"];
+    if (const auto& limit = settings["requestTimeLimit"]; limit.isInt() || limit.isInt64() || limit.isDouble())
+        timeLimit = juce::jmax (0, (int)limit);
     state = enabled ? State::stopped : State::off;
 }
 
@@ -199,11 +201,30 @@ void AiService::setShowExperimentalFeatures (bool shouldShow)
     notifyStateListeners();
 }
 
+void AiService::setTimeLimit (int seconds)
+{
+    seconds = juce::jmax (0, seconds);
+    if (seconds == timeLimit)
+        return;
+    timeLimit = seconds;
+    core::Logs::info ("ai", "Time limit for an answer: " + (seconds > 0 ? describeTimeLimit (seconds) : "none"));
+    saveSettings();
+    notifyStateListeners();
+}
+
+juce::String AiService::describeTimeLimit (int seconds)
+{
+    if (seconds >= 60 && seconds % 60 == 0)
+        return juce::String (seconds / 60) + (seconds == 60 ? " minute" : " minutes");
+    return juce::String (seconds) + (seconds == 1 ? " second" : " seconds");
+}
+
 void AiService::saveSettings()
 {
     folder.createDirectory();
     folder.getChildFile ("settings.json")
-        .replaceWithText (juce::JSON::toString (object ({ { "enabled", enabled }, { "experimental", experimental } })));
+        .replaceWithText (juce::JSON::toString (
+            object ({ { "enabled", enabled }, { "experimental", experimental }, { "requestTimeLimit", timeLimit } })));
 }
 
 void AiService::setState (State s, const juce::String& why)
@@ -315,6 +336,7 @@ void AiService::stop()
         queued.clear();
     }
     failPending ("The AI service stopped.");
+    endJobs ("The AI service stopped.");
     if (state == State::starting || state == State::running)
     {
         core::Logs::info ("ai", "AI service stopped");
@@ -356,8 +378,10 @@ void AiService::call (const juce::String& method, const juce::var& params, Reply
     {
         const std::scoped_lock lock (pendingLock);
         id = nextId++;
-        pending[id] = std::move (reply);
+        pending[id] = { std::move (reply), juce::Time::getMillisecondCounterHiRes() };
     }
+    if (! watch.isTimerRunning())
+        watch.startTimer (1000);
     const auto line = juce::JSON::toString (
         object ({ { "jsonrpc", "2.0" }, { "id", id }, { "method", method }, { "params", params } }), true);
     {
@@ -403,18 +427,90 @@ bool AiService::sendLine (std::intptr_t s, const juce::String& line)
 
 void AiService::failPending (const juce::String& error)
 {
-    std::map<int, Reply> failed;
+    std::map<int, Pending> failed;
     {
         const std::scoped_lock lock (pendingLock);
         failed.swap (pending);
     }
-    for (auto& [id, reply] : failed)
+    for (auto& [id, waiting] : failed)
         juce::MessageManager::callAsync (
-            [reply, error, a = alive]
+            [reply = std::move (waiting.reply), error, a = alive]
             {
                 if (*a && reply)
                     reply ({}, error);
             });
+}
+
+void AiService::endJobs (const juce::String& error)
+{
+    for (auto& [job, since] : std::exchange (jobs, {}))
+        juce::MessageManager::callAsync (
+            [this, job, error, a = alive]
+            {
+                if (! *a)
+                    return;
+                auto copy = listeners;
+                for (auto& [id, listener] : copy)
+                    listener ("ai.v1.job.update",
+                              object ({ { "job", job }, { "kind", "error" }, { "message", error } }));
+            });
+}
+
+void AiService::checkTimeLimit()
+{
+    {
+        const std::scoped_lock lock (pendingLock);
+        if (pending.empty() && jobs.empty())
+            return watch.stopTimer();
+    }
+    if (timeLimit <= 0)
+        return;
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    const auto limit = timeLimit * 1000.0;
+    const auto error = "No answer from the AI service for " + describeTimeLimit (timeLimit) +
+                       ". Try again, or raise the time limit in Options > AI.";
+
+    std::vector<Reply> late;
+    {
+        const std::scoped_lock lock (pendingLock);
+        for (auto it = pending.begin(); it != pending.end();)
+        {
+            if (now - it->second.since < limit)
+            {
+                ++it;
+                continue;
+            }
+            late.push_back (std::move (it->second.reply));
+            it = pending.erase (it); // a reply after this is dropped
+        }
+    }
+    juce::StringArray lateJobs;
+    for (auto it = jobs.begin(); it != jobs.end();)
+    {
+        if (now - it->second < limit)
+        {
+            ++it;
+            continue;
+        }
+        lateJobs.add (it->first);
+        it = jobs.erase (it);
+    }
+    if (late.empty() && lateJobs.isEmpty())
+        return;
+
+    core::Logs::warning ("ai", "No answer from the AI service for " + describeTimeLimit (timeLimit) + ": " +
+                                   juce::String ((int)late.size() + lateJobs.size()) + " request(s) stopped");
+    for (auto& reply : late)
+        if (reply)
+            reply ({}, error);
+    for (auto& job : lateJobs)
+    {
+        // The service may still be at it: asked to stop, and its last words are ignored.
+        call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
+        auto copy = listeners;
+        for (auto& [id, listener] : copy)
+            listener ("ai.v1.job.update", object ({ { "job", job }, { "kind", "error" }, { "message", error } }));
+    }
 }
 
 juce::String AiService::readLogTail() const
@@ -537,6 +633,7 @@ void AiService::run()
                                                     : juce::String()) +
                                                ". Its last words: " + readLogTail());
                 failPending ("The AI service stopped unexpectedly. " + readLogTail());
+                endJobs ("The AI service stopped unexpectedly while it worked on this. " + readLogTail());
                 setState (enabled ? State::stopped : State::off);
             });
     }
@@ -555,7 +652,7 @@ void AiService::received (const juce::String& line)
             const std::scoped_lock lock (pendingLock);
             if (auto it = pending.find ((int)message["id"]); it != pending.end())
             {
-                reply = std::move (it->second);
+                reply = std::move (it->second.reply);
                 pending.erase (it);
             }
         }
@@ -563,10 +660,18 @@ void AiService::received (const juce::String& line)
             return;
         const auto error = message["error"].isObject() ? message["error"]["message"].toString() : juce::String();
         juce::MessageManager::callAsync (
-            [reply, result = message["result"], error, a = alive]
+            [this, reply, result = message["result"], error, a = alive]
             {
-                if (*a)
-                    reply (result, error);
+                if (! *a)
+                    return;
+                // A job started: its updates come as notifications, the last one "done" or "error".
+                if (const auto& job = result["job"]; error.isEmpty() && job.isString() && job.toString().isNotEmpty())
+                {
+                    jobs[job.toString()] = juce::Time::getMillisecondCounterHiRes();
+                    if (! watch.isTimerRunning())
+                        watch.startTimer (1000);
+                }
+                reply (result, error);
             });
         return;
     }
@@ -576,6 +681,13 @@ void AiService::received (const juce::String& line)
         {
             if (! *a)
                 return;
+            if (method == "ai.v1.job.update")
+            {
+                if (params["kind"].toString() == "done" || params["kind"].toString() == "error")
+                    jobs.erase (params["job"].toString());
+                else if (auto it = jobs.find (params["job"].toString()); it != jobs.end())
+                    it->second = juce::Time::getMillisecondCounterHiRes(); // still at work: the wait starts again
+            }
             auto copy = listeners;
             for (auto& [id, listener] : copy)
                 listener (method, params);

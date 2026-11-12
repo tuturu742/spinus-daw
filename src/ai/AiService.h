@@ -38,6 +38,15 @@ public:
     bool showsExperimentalFeatures() const noexcept { return experimental; }
     void setShowExperimentalFeatures (bool);
 
+    /** Options > AI > Wait for an answer: how long a call, or a job between two of its updates, may go without a
+        word from the service before Spinus stops waiting and says so ("No answer from the AI service for 3
+        minutes..."). In seconds; 0 waits for ever. Kept in settings.json. */
+    static constexpr int defaultTimeLimit = 180;
+    int getTimeLimit() const noexcept { return timeLimit; }
+    void setTimeLimit (int seconds);
+    /** "3 minutes", "1 minute", "90 seconds". */
+    static juce::String describeTimeLimit (int seconds);
+
     /** Where the service is: the Python package, the Python to run it and the manual it searches. Empty
         python when it is not installed. */
     struct Installation
@@ -90,11 +99,16 @@ private:
     static bool sendLine (std::intptr_t socket, const juce::String&);
     void received (const juce::String& line);
     void failPending (const juce::String& error);
+    /** Ends the jobs still running (their callers wait for a last update that will never come), with this error. */
+    void endJobs (const juce::String& error);
     juce::String readLogTail() const;
+    /** Ends the calls and jobs that have waited longer than the time limit (each second, while any waits). */
+    void checkTimeLimit();
 
     juce::File folder, modelsFolder;
     Installation installation;
     bool enabled = false, experimental = false;
+    int timeLimit = defaultTimeLimit;
     State state = State::off;
     juce::String problem;
 
@@ -104,9 +118,24 @@ private:
     std::atomic<std::intptr_t> connection { -1 }; // the socket (an int on Linux, a SOCKET on Windows)
     std::mutex writeLock, pendingLock;
     std::vector<juce::String> queued; // lines waiting for the connection
-    std::map<int, Reply> pending;
+    struct Pending
+    {
+        Reply reply;
+        double since = 0.0; // juce::Time::getMillisecondCounterHiRes() when asked
+    };
+    std::map<int, Pending> pending;
     int nextId = 1;
     std::map<int, Listener> listeners;
+    // Started (a reply with "job") and not done yet, with when the service last said something about it: message
+    // thread only.
+    std::map<juce::String, double> jobs;
+    struct Watch final : juce::Timer
+    {
+        explicit Watch (AiService& s) : service (s) {}
+        void timerCallback() override { service.checkTimeLimit(); }
+        AiService& service;
+    };
+    Watch watch { *this };
     std::map<int, std::function<void()>> stateListeners;
     int nextListener = 1;
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);

@@ -86,6 +86,9 @@ public:
         bool cancelled = false;
         juce::String error;
         std::vector<juce::File> files;
+        /** Made, but not as it should sound: e.g. a plugin crashed during the export and is missing from the file.
+            Empty when all went well. */
+        juce::String warning;
     };
 
     ExportJob (tracktion::Engine&, DeviceFactory&, const model::Project&,
@@ -179,6 +182,7 @@ private:
 
     std::vector<Step> steps;
     std::vector<juce::File> plannedFiles;
+    juce::StringArray leftOut; // plugins that crashed during a render, "Crash Test on 1 Tone"
     size_t current = 0;
     juce::int64 firstStepSamples = 0; // the first render's length after trimTail: the later ones are as long
     bool running = false, cancelRequested = false;

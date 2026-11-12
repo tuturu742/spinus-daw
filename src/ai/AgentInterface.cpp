@@ -1640,6 +1640,8 @@ void AgentInterface::render (bool stems, const ToolReply& reply)
                 o->removeProperty ("file");
             lastRender = object ({ { "mix", mix }, { "sections", sections }, { "silentParts", silent } });
             auto out = lastRender.clone();
+            if (result.warning.isNotEmpty()) // a plugin crashed: the numbers are without it
+                out.getDynamicObject()->setProperty ("warning", result.warning);
             if (! stemList.isEmpty())
                 out.getDynamicObject()->setProperty ("stems", stemList);
             // Numbers as measured, to two decimals at most (-16.9, not -16.899999999999999).

@@ -44,6 +44,10 @@ in a separate process**. There, if it crashes or stops responding again, only th
 - A message says which plugin stopped. **Reload** starts it again with its settings.
 - Until it is reloaded, the Mixer shows the effect as **Stopped** in red (an instrument's name turns red in
   the Channel Rack), and its window closes.
+- If it stops during an **export**, the export still finishes, but the Export window says which plugin
+  crashed and where, for example "Exported, but Surge XT on Lead crashed during the export and is missing from
+  the file". The file is made without that plugin's sound. Export again; if it keeps happening, bypass the
+  plugin and export without it.
 
 Running separately costs a little more CPU and adds one audio block of delay (Spinus lines up the
 rest of the song with it). Playing that instrument live from a keyboard feels that block. Its window
@@ -80,4 +84,7 @@ Double-click a channel's name in the Channel Rack, or an effect in the Mixer, to
   before you grabbed it. This works when the plugin says when you start and stop dragging, which almost all
   do (VST3 and CLAP plugins and Spinus's own devices); picking a preset in the plugin's own browser is not an
   undo step. While you hold a knob that has automation, your hand wins over the automation until you let go.
+- What you change in the window, a preset picked in the plugin's own browser too, is saved with the project
+  and is what plays when you open it again, also for settings you had set earlier with Spinus's knobs or the
+  assistant.
 - The title says what it is and where: for example, "Hall Reverb - 4 Reverb".

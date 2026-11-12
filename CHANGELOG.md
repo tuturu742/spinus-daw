@@ -10,6 +10,27 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - A project file with a feedback loop of sends or sidechains in it (insert A sends to B and B back to A, for
   example after editing the file by hand) now opens with the send that closes the loop removed, and Spinus
   says which one. Before, such a file opened with the loop in it.
+- A plugin running in a separate process that crashed during an export was quietly left out: the file was
+  saved without its sound, and nothing said so. Now the export still finishes, but says which plugin crashed
+  and where ("Exported, but Crash Test on insert 1 Tone crashed during the export and is missing from the
+  file"), so you can reload it and export again.
+- Spinus could crash when a Rename window was closed from outside, for example by quitting while it was open.
+- A preset picked in a plugin's own window could be partly undone when you opened the project again: settings
+  you had set earlier with Spinus's knobs (or the assistant, or a Spinus preset) went back to Spinus's values.
+  The same happened in exports. Now what you picked in the plugin's window is kept.
+- Get free plugins without an internet connection now says to check that the computer is connected to the
+  internet. Before, it only gave the network library's words ("Could not resolve host").
+- The assistant no longer waits forever when the AI service crashes while it works on your question: it says
+  the service stopped, with its last words, and you can ask again. The same for the other AI features that work
+  in the background (Generate, Record idea, model downloads). **Stop** now frees the assistant at once, also when
+  the service doesn't answer at all; before, it did nothing until the service answered.
+- When the AI service says nothing for 3 minutes, the assistant, Generate, Record idea and the other AI
+  features stop waiting and say so: "No answer from the AI service for 3 minutes. Try again, or raise the time
+  limit in Options > AI." Before, they could wait forever. The time is set in **Options › AI › Wait for an
+  answer** (1 to 30 minutes, or no limit); a job that keeps showing progress is not cut off.
+- A change from a coding agent that arrived while you were dragging a note in the Piano Roll was lost when you
+  let go: the drag put back the notes as they were before the agent's change. Now both changes stay. If the agent
+  removed the note you were holding, your drag isn't made, and the hint bar says why.
 - A damaged project file now opens as much as can be read, instead of not opening at all. When only parts of
   it are damaged, Spinus opens the rest and lists what it left out. When it can't be read at all (cut off by a
   crash or a full disk), Spinus opens the project's newest autosave instead and says from when. Saving repairs

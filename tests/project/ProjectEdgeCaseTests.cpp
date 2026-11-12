@@ -632,7 +632,24 @@ TEST_CASE ("Projects saved by the alpha releases open, and saving them again los
 
         requireOk (document.open (copy));
         CHECK (session.getProject() == opened);
-        CHECK (settingsOfDevices() == settings);
+        // The same settings, to float precision: they come back from the devices' saved states (a value read
+        // back through a state may differ in its last bit).
+        const auto again = settingsOfDevices();
+        REQUIRE (again.size() == settings.size());
+        for (auto& [id, values] : settings)
+        {
+            INFO ("device " << (int)id.value);
+            REQUIRE (again.contains (id));
+            const auto& now = again.at (id);
+            CHECK (now.size() == values.size());
+            for (auto& [parameter, value] : values)
+            {
+                INFO (parameter);
+                CHECK (now.contains (parameter));
+                if (auto it = now.find (parameter); it != now.end())
+                    CHECK (std::abs (it->second - value) < 1.0e-5f);
+            }
+        }
         document.newProject();
     }
 }

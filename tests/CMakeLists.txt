@@ -64,6 +64,7 @@ add_executable (spinus_tests
     session/DemoSongTests.cpp
     session/ProblemReportTests.cpp
     session/ProjectDocumentTests.cpp
+    session/PluginStateTests.cpp
     session/UndoEveryCommandTests.cpp
     session/AutosaveAudioTests.cpp
     session/ProjectListTests.cpp
@@ -123,6 +124,8 @@ add_executable (spinus_tests
     ui/PluginWindowTests.cpp
     ui/SpinusTuneTests.cpp
     ui/ProjectMenuTests.cpp
+    ui/MenuCommandsTests.cpp
+    ui/AiMisbehavingTests.cpp
     ui/TypingKeyboardTests.cpp
     ui/UiShellTests.cpp
     ui/ManualScreenshotTests.cpp
