@@ -6,6 +6,8 @@ when AI goes wrong. Started by AiService as the real one is (same arguments); wh
     silent      takes every call and never answers (a hung or very slow service)
     crash       ends at once, without answering, when a call arrives (a crash mid-request)
     crash-job   answers ai.v1.assistant.ask with a job, then ends (a crash while the job runs)
+    silent-job  answers every call with a job, then never says anything about it (a job that hangs)
+    slow-job    answers ai.v1.assistant.ask with a job that reports progress every 0.3 s for 3 s, then is done
 
 Only the standard library: it never talks to any model or the internet."""
 
@@ -14,6 +16,7 @@ import json
 import os
 import socket
 import sys
+import time
 
 
 def main() -> None:
@@ -63,12 +66,28 @@ def main() -> None:
             os._exit(3)
         if mode == "silent":
             continue
+        if mode == "silent-job":
+            if method == "ai.v1.job.cancel":
+                send({"jsonrpc": "2.0", "id": request["id"], "result": {}})
+            else:
+                send({"jsonrpc": "2.0", "id": request["id"], "result": {"job": f"job-{request['id']}"}})
+            continue
         if method == "ai.v1.assistant.ask":
             send({"jsonrpc": "2.0", "id": request["id"], "result": {"job": "job-1"}})
             if mode == "crash-job":
                 with open(args.log, "a") as log:
                     log.write("Fake service: crashed during the job on purpose\n")
                 os._exit(3)
+            if mode == "slow-job":
+                for i in range(10):
+                    time.sleep(0.3)
+                    send(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "ai.v1.job.update",
+                            "params": {"job": "job-1", "kind": "progress", "done": i, "total": 10},
+                        }
+                    )
             send(
                 {
                     "jsonrpc": "2.0",

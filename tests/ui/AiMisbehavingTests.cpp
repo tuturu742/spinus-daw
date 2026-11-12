@@ -193,3 +193,111 @@ TEST_CASE ("An AI service that doesn't answer: the DAW works, Stop frees the ass
     CHECK (waitFor ([&] { return ! settings.isWaiting(); }, 5000));
     CHECK (f.service.getState() == ai::AiService::State::off);
 }
+
+TEST_CASE ("An AI service that doesn't answer within the time limit: Spinus stops waiting and says so",
+           "[ui][ai][misbehaving][time-limit]")
+{
+    if (pythonMissing())
+        SKIP ("no Python for the AI service");
+
+    // No reply to the question at all.
+    {
+        Fixture f ("silent");
+        f.service.setTimeLimit (1);
+        f.panel.ask ("Make it slower");
+        CHECK (f.panel.isAnswering());
+        REQUIRE (waitFor ([&] { return ! f.panel.isAnswering(); }, 15000));
+        REQUIRE (! f.panel.getEntries().empty());
+        const auto& last = f.panel.getEntries().back();
+        INFO (last.text);
+        CHECK (last.kind == AssistantPanel::Entry::Kind::error);
+        CHECK (last.text.startsWith ("No answer from the AI service for 1 second."));
+        CHECK (last.text.contains ("raise the time limit in Options > AI"));
+        f.checkUsable();
+    }
+
+    // The question is taken, as a job, and then nothing more comes.
+    {
+        Fixture f ("silent-job");
+        f.service.setTimeLimit (1);
+        f.panel.ask ("Make it slower");
+        REQUIRE (waitFor ([&] { return ! f.panel.isAnswering(); }, 15000));
+        REQUIRE (! f.panel.getEntries().empty());
+        const auto& last = f.panel.getEntries().back();
+        INFO (last.text);
+        CHECK (last.kind == AssistantPanel::Entry::Kind::error);
+        CHECK (last.text.startsWith ("No answer from the AI service for 1 second."));
+
+        // Any other job (Generate, Record idea...) gets its last update, an error, the way they all end.
+        juce::String job, kind, message;
+        const auto listener = f.service.addListener (
+            [&] (const juce::String& method, const juce::var& params)
+            {
+                if (method == "ai.v1.job.update" && params["job"].toString() == job)
+                {
+                    kind = params["kind"].toString();
+                    message = params["message"].toString();
+                }
+            });
+        f.service.call ("ai.v1.pattern.generate", juce::var (new juce::DynamicObject()),
+                        [&] (const juce::var& result, const juce::String&) { job = result["job"].toString(); });
+        REQUIRE (waitFor ([&] { return kind.isNotEmpty(); }, 15000));
+        CHECK (job.isNotEmpty());
+        CHECK (kind == "error");
+        CHECK (message.startsWith ("No answer from the AI service for 1 second."));
+        f.service.removeListener (listener);
+        f.checkUsable();
+    }
+}
+
+TEST_CASE ("A job that keeps reporting progress may take longer than the time limit", "[ui][ai][time-limit]")
+{
+    if (pythonMissing())
+        SKIP ("no Python for the AI service");
+
+    // 3 seconds in all, with a word every 0.3 s: the limit counts from the last word, not from the start.
+    Fixture f ("slow-job");
+    f.service.setTimeLimit (1);
+    f.panel.ask ("Make it slower");
+    REQUIRE (waitFor ([&] { return ! f.panel.isAnswering(); }, 15000));
+    REQUIRE (! f.panel.getEntries().empty());
+    const auto& last = f.panel.getEntries().back();
+    INFO (last.text);
+    CHECK (last.kind == AssistantPanel::Entry::Kind::assistant);
+    CHECK (last.text.contains ("Fine."));
+}
+
+TEST_CASE ("The time limit for an answer is kept with the AI settings", "[ui][ai][time-limit]")
+{
+    const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getChildFile ("spinus-ai-time-limit-" + juce::Uuid().toString());
+    {
+        ai::AiService service (root);
+        CHECK (service.getTimeLimit() == 180); // 3 minutes until the user changes it
+        AiSettingsDialog dialog (service);
+        CHECK (dialog.getTimeLimitText() == "3 minutes");
+        dialog.setTimeLimit (600);
+        CHECK (service.getTimeLimit() == 600);
+        CHECK (dialog.getTimeLimitText() == "10 minutes");
+        service.setEnabled (true);
+    }
+    {
+        ai::AiService service (root);
+        CHECK (service.getTimeLimit() == 600);
+        CHECK (service.isEnabled()); // kept beside the other settings, not instead of them
+        AiSettingsDialog dialog (service);
+        CHECK (dialog.getTimeLimitText() == "10 minutes");
+        dialog.setTimeLimit (45);
+        CHECK (dialog.getTimeLimitText() == "45 seconds");
+        dialog.setTimeLimit (0);
+        CHECK (dialog.getTimeLimitText() == "No limit");
+        service.setEnabled (false);
+    }
+    {
+        ai::AiService service (root);
+        CHECK (service.getTimeLimit() == 0);
+    }
+    CHECK (ai::AiService::describeTimeLimit (60) == "1 minute");
+    CHECK (ai::AiService::describeTimeLimit (90) == "90 seconds");
+    root.deleteRecursively();
+}

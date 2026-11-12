@@ -21,6 +21,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   the service stopped, with its last words, and you can ask again. The same for the other AI features that work
   in the background (Generate, Record idea, model downloads). **Stop** now frees the assistant at once, also when
   the service doesn't answer at all; before, it did nothing until the service answered.
+- When the AI service says nothing for 3 minutes, the assistant, Generate, Record idea and the other AI
+  features stop waiting and say so: "No answer from the AI service for 3 minutes. Try again, or raise the time
+  limit in Options > AI." Before, they could wait forever. The time is set in **Options › AI › Wait for an
+  answer** (1 to 30 minutes, or no limit); a job that keeps showing progress is not cut off.
 - A change from a coding agent that arrived while you were dragging a note in the Piano Roll was lost when you
   let go: the drag put back the notes as they were before the agent's change. Now both changes stay. If the agent
   removed the note you were holding, your drag isn't made, and the hint bar says why.

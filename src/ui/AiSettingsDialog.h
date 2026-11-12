@@ -40,6 +40,10 @@ public:
     /** Show experimental features: the Analyzer appears (or closes) in the main window at once. */
     void setShowExperimental (bool);
     juce::String getExperimentalNote() const { return experimentalNote.getText(); }
+    /** Wait for an answer: how long Spinus waits for the AI service before it stops and says so (0: for ever). */
+    void setTimeLimit (int seconds);
+    /** What the Wait for an answer box shows ("3 minutes"). */
+    juce::String getTimeLimitText() const { return timeLimitBox.getText(); }
     void addConnection (const juce::String& provider, const juce::String& name, const juce::String& key,
                         const juce::String& baseUrl);
     void testConnection (int row);
@@ -93,6 +97,7 @@ public:
 private:
     void call (const juce::String& method, const juce::var& params, std::function<void (const juce::var&)> onResult);
     void updateVisibility();
+    void showTimeLimit();
     void showAddForm (bool);
 
     int getNumRows() override { return (int)connections.size(); }
@@ -109,6 +114,8 @@ private:
     juce::ToggleButton onOff { "Turn on AI features" };
     juce::ToggleButton experimentalToggle { "Show experimental features" };
     juce::Label experimentalNote;
+    juce::Label timeLimitLabel;
+    juce::ComboBox timeLimitBox;
     MessageLabel status;
     juce::Label explanation, connectionsLabel, modelLabel, usage;
     juce::ListBox list { "AI connections", this };
