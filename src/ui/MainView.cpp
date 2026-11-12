@@ -502,11 +502,15 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     messageBox = [this] (const juce::MessageBoxOptions& options, std::function<void (int)> done)
     {
         const auto n = options.getNumButtons();
+        // The answer is acted on once the dialog has gone: it would still be on the screen during an action that
+        // keeps the message loop busy (opening a project), covering the loading bar.
         juce::AlertWindow::showAsync (options.withAssociatedComponent (this),
                                       [n, done = std::move (done)] (int result)
                                       {
                                           if (done)
-                                              done ((result + n - 1) % juce::jmax (1, n));
+                                              juce::MessageManager::callAsync (
+                                                  [done, answer = (result + n - 1) % juce::jmax (1, n)]
+                                                  { done (answer); });
                                       });
     };
 
@@ -524,8 +528,10 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
         activeChooser->launchAsync (chooserFlags,
                                     [done = std::move (done)] (const core::FileDialog& fc)
                                     {
+                                        // Once the dialog has gone, as for messageBox above.
                                         if (fc.getResult() != juce::File())
-                                            done (fc.getResult());
+                                            juce::MessageManager::callAsync ([done, file = fc.getResult()]
+                                                                             { done (file); });
                                     });
     };
 
