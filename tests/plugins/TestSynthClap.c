@@ -20,7 +20,11 @@
 
    Built with DIFFICULT=2 it is "Spinus Busy Synth" (busy-synth.clap): the difficult synth as it is through a
    bridge or in a plugin that holds its processing while it loads, so slow to answer: each block takes 1.5 s
-   while it loads, and 2 ms after. */
+   while it loads, and 2 ms after.
+
+   Built with OUTPUTS=1 it is "Spinus Mono Synth" (mono-synth.clap): its one output is mono. Built with OUTPUTS=6
+   it is "Spinus Multi-Out Synth" (multi-out-synth.clap): a stereo main output and two more stereo outputs, all
+   playing the same sound, as drum plugins with an output per drum have (EdgeCaseTests.cpp, mixer levels). */
 
 #include <clap/clap.h>
 #include <math.h>
@@ -28,32 +32,32 @@
 #include <stdlib.h>
 #include <string.h>
 #if MISBEHAVING || DIFFICULT
-    #ifdef _WIN32
-        #include <windows.h>
-        #define CRASH() (*(volatile int*)0 = 0)
-        #define PAUSE() Sleep (1000)
-        #define NOW() ((double)GetTickCount64() / 1000.0)
-        #define WAIT_MS(ms) Sleep (ms)
-    #else
-        #include <signal.h>
-        #include <time.h>
-        #include <unistd.h>
-        #define CRASH() raise (SIGSEGV)
-        #define PAUSE() sleep (1)
+#ifdef _WIN32
+#include <windows.h>
+#define CRASH() (*(volatile int*)0 = 0)
+#define PAUSE() Sleep (1000)
+#define NOW() ((double)GetTickCount64() / 1000.0)
+#define WAIT_MS(ms) Sleep (ms)
+#else
+#include <signal.h>
+#include <time.h>
+#include <unistd.h>
+#define CRASH() raise (SIGSEGV)
+#define PAUSE() sleep (1)
 static double now_seconds (void)
 {
     struct timespec t;
     clock_gettime (CLOCK_MONOTONIC, &t);
     return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
 }
-        #define NOW() now_seconds()
+#define NOW() now_seconds()
 static void wait_ms (long ms)
 {
     struct timespec t = { ms / 1000, (ms % 1000) * 1000000L };
     nanosleep (&t, NULL);
 }
-        #define WAIT_MS(ms) wait_ms (ms)
-    #endif
+#define WAIT_MS(ms) wait_ms (ms)
+#endif
 #endif
 
 #define PI 3.14159265358979323846
@@ -105,9 +109,9 @@ static const param_t organ_params[ORGAN_PARAMS] = {
 
 /* The synth's presets: Wave, Cutoff, Resonance, Attack, Decay, Sustain, Release (the rest as by default). */
 #if MISBEHAVING
-    #define PRESETS 8
+#define PRESETS 8
 #else
-    #define PRESETS 6
+#define PRESETS 6
 #endif
 static const struct
 {
@@ -125,29 +129,29 @@ static const struct
 static const char* const features[] = { CLAP_PLUGIN_FEATURE_INSTRUMENT, CLAP_PLUGIN_FEATURE_SYNTHESIZER, NULL };
 
 #if MISBEHAVING
-    #define SYNTH_ID "io.github.tuturu742.spinus.test.misbehaving-synth"
-    #define SYNTH_NAME "Spinus Misbehaving Synth"
+#define SYNTH_ID "io.github.tuturu742.spinus.test.misbehaving-synth"
+#define SYNTH_NAME "Spinus Misbehaving Synth"
 #elif DIFFICULT == 2
-    #define SYNTH_ID "io.github.tuturu742.spinus.test.busy-synth"
-    #define SYNTH_NAME "Spinus Busy Synth"
+#define SYNTH_ID "io.github.tuturu742.spinus.test.busy-synth"
+#define SYNTH_NAME "Spinus Busy Synth"
 #elif DIFFICULT
-    #define SYNTH_ID "io.github.tuturu742.spinus.test.difficult-synth"
-    #define SYNTH_NAME "Spinus Difficult Synth"
+#define SYNTH_ID "io.github.tuturu742.spinus.test.difficult-synth"
+#define SYNTH_NAME "Spinus Difficult Synth"
+#elif OUTPUTS == 1
+#define SYNTH_ID "io.github.tuturu742.spinus.test.mono-synth"
+#define SYNTH_NAME "Spinus Mono Synth"
+#elif OUTPUTS == 6
+#define SYNTH_ID "io.github.tuturu742.spinus.test.multi-out-synth"
+#define SYNTH_NAME "Spinus Multi-Out Synth"
 #else
-    #define SYNTH_ID "io.github.tuturu742.spinus.test.synth"
-    #define SYNTH_NAME "Spinus Test Synth"
+#define SYNTH_ID "io.github.tuturu742.spinus.test.synth"
+#define SYNTH_NAME "Spinus Test Synth"
 #endif
 
-static const clap_plugin_descriptor_t synth_descriptor = { CLAP_VERSION_INIT,
-                                                           SYNTH_ID,
-                                                           SYNTH_NAME,
-                                                           "Spinus tests",
-                                                           "",
-                                                           "",
-                                                           "",
-                                                           "1.0",
-                                                           "A tiny synth with named settings",
-                                                           features };
+static const clap_plugin_descriptor_t synth_descriptor = {
+    CLAP_VERSION_INIT, SYNTH_ID, SYNTH_NAME, "Spinus tests", "", "", "", "1.0", "A tiny synth with named settings",
+    features
+};
 static const clap_plugin_descriptor_t organ_descriptor = { CLAP_VERSION_INIT,
                                                            "io.github.tuturu742.spinus.test.organ",
                                                            "Spinus Test Organ",
@@ -179,24 +183,24 @@ static synth_t* self (const clap_plugin_t* p) { return (synth_t*)p->plugin_data;
    processing a block (a Windows plugin destroyed while another one plays can leave both waiting on Wine for ever).
    Slow, each block takes a millisecond more, so a render is almost always in one. */
 #ifdef _MSC_VER
-    #include <intrin.h>
+#include <intrin.h>
 static volatile long in_process = 0, destroyed = 0, destroyed_while_processing = 0, slow = 0;
-    #define ADD(v, n) _InterlockedExchangeAdd (&(v), (n))
+#define ADD(v, n) _InterlockedExchangeAdd (&(v), (n))
 #else
 static long in_process = 0, destroyed = 0, destroyed_while_processing = 0, slow = 0;
-    #define ADD(v, n) __atomic_fetch_add (&(v), (n), __ATOMIC_SEQ_CST)
+#define ADD(v, n) __atomic_fetch_add (&(v), (n), __ATOMIC_SEQ_CST)
 #endif
 #ifdef _WIN32
-    #include <windows.h>
-    #define SLEEP_1MS() Sleep (1)
+#include <windows.h>
+#define SLEEP_1MS() Sleep (1)
 #else
-    #include <time.h>
+#include <time.h>
 static void sleep_1ms (void)
 {
     struct timespec t = { 0, 1000000L };
     nanosleep (&t, NULL);
 }
-    #define SLEEP_1MS() sleep_1ms()
+#define SLEEP_1MS() sleep_1ms()
 #endif
 CLAP_EXPORT long spinus_test_synth_destroyed (void) { return ADD (destroyed, 0); }
 CLAP_EXPORT long spinus_test_synth_destroyed_while_processing (void) { return ADD (destroyed_while_processing, 0); }
@@ -311,21 +315,32 @@ static const clap_plugin_params_t params = { params_count,   params_info,      p
                                              params_to_text, params_from_text, params_flush };
 
 /* Ports */
+#if OUTPUTS == 6
+#define OUTPUT_PORTS 3
+#else
+#define OUTPUT_PORTS 1
+#endif
 static uint32_t audio_count (const clap_plugin_t* p, bool is_input)
 {
     (void)p;
-    return is_input ? 0 : 1;
+    return is_input ? 0 : OUTPUT_PORTS;
 }
 static bool audio_get (const clap_plugin_t* p, uint32_t index, bool is_input, clap_audio_port_info_t* info)
 {
     (void)p;
-    if (is_input || index > 0)
+    if (is_input || index >= OUTPUT_PORTS)
         return false;
     memset (info, 0, sizeof (*info));
-    strcpy (info->name, "Out");
-    info->flags = CLAP_AUDIO_PORT_IS_MAIN;
+    info->id = index;
+    strcpy (info->name, index == 0 ? "Out" : index == 1 ? "Out 3-4" : "Out 5-6");
+    info->flags = index == 0 ? CLAP_AUDIO_PORT_IS_MAIN : 0;
+#if OUTPUTS == 1
+    info->channel_count = 1;
+    info->port_type = CLAP_PORT_MONO;
+#else
     info->channel_count = 2;
     info->port_type = CLAP_PORT_STEREO;
+#endif
     info->in_place_pair = CLAP_INVALID_ID;
     return true;
 }
@@ -512,9 +527,9 @@ static clap_process_status process_block (const clap_plugin_t* p, const clap_pro
         PAUSE();
 #endif
 #if DIFFICULT
-    #if DIFFICULT == 2
+#if DIFFICULT == 2
     WAIT_MS (NOW() - s->created < 3.0 ? 1500 : 2);
-    #endif
+#endif
     if (NOW() - s->created < 3.0)
     {
         /* Still "loading its samples": silence. */
@@ -527,7 +542,6 @@ static clap_process_status process_block (const clap_plugin_t* p, const clap_pro
     const uint32_t frames = process->frames_count;
     const uint32_t events = process->in_events->size (process->in_events);
     uint32_t next = 0;
-    const clap_audio_buffer_t* out = &process->audio_outputs[0];
     for (uint32_t i = 0; i < frames; ++i)
     {
         while (next < events)
@@ -539,8 +553,9 @@ static clap_process_status process_block (const clap_plugin_t* p, const clap_pro
             ++next;
         }
         const float x = next_sample (s);
-        for (uint32_t c = 0; c < out->channel_count; ++c)
-            out->data32[c][i] = x;
+        for (uint32_t port = 0; port < process->audio_outputs_count; ++port)
+            for (uint32_t c = 0; c < process->audio_outputs[port].channel_count; ++c)
+                process->audio_outputs[port].data32[c][i] = x;
     }
     while (next < events)
         apply_event (s, process->in_events->get (process->in_events, next++));

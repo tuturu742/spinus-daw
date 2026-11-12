@@ -58,6 +58,15 @@ float rmsOf (const juce::File& file)
 
 juce::MemoryBlock blob (const juce::String& text) { return { text.toRawUTF8(), text.getNumBytesAsUTF8() }; }
 
+/** Writes a damaged project file (an empty one too: replaceWithData would delete the file). */
+void writeDamage (const juce::File& file, const juce::MemoryBlock& bytes)
+{
+    REQUIRE (file.deleteFile());
+    REQUIRE (file.create());
+    if (bytes.getSize() > 0)
+        REQUIRE (file.replaceWithData (bytes.getData(), bytes.getSize()));
+}
+
 /** A session with a project document; everything on disk in a fresh temporary folder. */
 struct Fixture
 {
@@ -281,7 +290,7 @@ TEST_CASE ("Save As to a new folder, then the original deleted: the copy opens w
     CHECK (! f.document->getRecentProjects().contains (original)); // the deleted one is not listed
 }
 
-TEST_CASE ("A damaged project file gives a clear message, changes nothing, and its autosave still opens",
+TEST_CASE ("A project file that cannot be read opens its newest autosave; with none, a clear message",
            "[project][document]")
 {
     Fixture f;
@@ -295,53 +304,106 @@ TEST_CASE ("A damaged project file gives a clear message, changes nothing, and i
 
     const auto file = folder.getChildFile ("Song.spn");
     const auto good = file.loadFileAsString();
-    const std::vector<std::pair<const char*, juce::String>> damages {
-        { "cut off", good.substring (0, good.length() / 2) },
-        { "cut off at the first byte", good.substring (0, 1) },
-        { "not text", juce::String (juce::CharPointer_UTF8 ("\xc3\x28\xa0\xa1 garbage")) },
-        { "a list", "[1, 2, 3]" },
-        { "an empty object", "{}" },
-        { "a wrong type", R"({"schemaVersion": 1, "channels": "none"})" },
-        { "from a newer Spinus", R"({"schemaVersion": 99})" },
+    const char zeros[4096] {};
+    const std::vector<std::pair<const char*, juce::MemoryBlock>> damages {
+        { "cut off", blob (good.substring (0, good.length() / 2)) },
+        { "cut off at the first byte", blob (good.substring (0, 1)) },
+        { "not text", blob (juce::String (juce::CharPointer_UTF8 ("\xc3\x28\xa0\xa1 garbage"))) },
+        { "a list", blob ("[1, 2, 3]") },
+        { "an empty object", blob ("{}") },
+        { "a wrong type", blob (R"({"schemaVersion": 1, "channels": "none"})") },
+        { "zero bytes", juce::MemoryBlock (zeros, sizeof (zeros)) },
+        { "empty", juce::MemoryBlock() },
     };
 
-    // Something open that must stay as it is when opening fails.
-    f.session.getHistory().reset (test::makeExample());
-    const auto before = f.session.getProject();
-
-    for (auto& [what, text] : damages)
+    for (auto& [what, bytes] : damages)
     {
         INFO (what);
-        REQUIRE (file.replaceWithText (text, false, false, nullptr));
-        const auto result = f.document->open (folder);
+        writeDamage (file, bytes);
+        requireOk (f.document->open (folder));
+        CHECK (f.session.getProject() == autosaved);
+        CHECK (f.document->getFolder() == folder);
+        CHECK (f.document->hasUnsavedEdits()); // save to repair it
+        CHECK (f.document->getDamage().autosave == project::Autosaves (folder).list().getFirst());
+        CHECK (f.document->describeDamage().contains ("Song.spn was damaged"));
+        CHECK (f.document->describeDamage().contains ("opened the autosave from"));
+        // Nothing is written over the damaged file before the user saves.
+        requireOk (f.document->autosave());
+        juce::MemoryBlock now;
+        REQUIRE (file.loadFileAsData (now));
+        CHECK (now == bytes);
+        f.document->newProject();
+        CHECK (f.document->describeDamage().isEmpty());
+    }
+
+    // From a newer Spinus: not damaged, and not replaced by an older autosave.
+    f.session.getHistory().reset (test::makeExample());
+    const auto before = f.session.getProject();
+    REQUIRE (file.replaceWithText (R"({"schemaVersion": 99})", false, false, nullptr));
+    auto result = f.document->open (folder);
+    CHECK (result.failed());
+    CHECK (result.getErrorMessage().contains ("newer version"));
+    CHECK (f.session.getProject() == before);
+    CHECK (f.document->isUntitled());
+
+    // Without autosaves, it is as before: a clear message, and the open project stays.
+    REQUIRE (folder.getChildFile (".autosave").deleteRecursively());
+    for (auto& [what, bytes] : damages)
+    {
+        INFO (what);
+        writeDamage (file, bytes);
+        result = f.document->open (folder);
         CHECK (result.failed());
         INFO (result.getErrorMessage());
         CHECK (result.getErrorMessage().contains (file.getFullPathName()));
         CHECK (f.session.getProject() == before);
         CHECK (f.document->isUntitled());
     }
+}
 
-    // Zero bytes (what a crash while the disk was writing can leave), and an empty file.
-    const char zeros[4096] {};
-    REQUIRE (file.replaceWithData (zeros, sizeof (zeros)));
-    for (int empty = 0; empty < 2; ++empty)
-    {
-        INFO (file.getSize() << " bytes");
-        const auto result = f.document->open (folder);
-        CHECK (result.failed());
-        INFO (result.getErrorMessage());
-        CHECK (result.getErrorMessage().contains (file.getFullPathName()));
-        CHECK (f.session.getProject() == before);
-        REQUIRE (file.deleteFile());
-        REQUIRE (file.create()); // empty
-    }
+TEST_CASE ("A damaged project opens what it can read, says what was left out, and keeps a copy when saved",
+           "[project][document]")
+{
+    Fixture f;
+    const auto folder = f.root.getChildFile ("Song");
+    f.session.getHistory().reset (test::makeExample());
+    requireOk (f.document->saveAs (folder));
+    const auto saved = f.session.getProject();
+    f.document->newProject();
 
-    // The autosave from before the damage opens.
-    const auto autosave = project::Autosaves (folder).list();
-    REQUIRE (autosave.size() == 1);
-    project::ProjectData recovered;
-    requireOk (project::loadProject (autosave.getFirst(), recovered));
-    CHECK (recovered.project == autosaved);
+    // One pattern damaged: a wrong type in it. Everything else reads.
+    const auto file = folder.getChildFile ("Song.spn");
+    auto json = juce::JSON::parse (file.loadFileAsString());
+    auto* patterns = json["patterns"].getArray();
+    REQUIRE (patterns != nullptr);
+    REQUIRE (! patterns->isEmpty());
+    const auto damagedName = patterns->getReference (0)["name"].toString();
+    patterns->getReference (0).getDynamicObject()->setProperty ("length", "long");
+    const auto damagedText = juce::JSON::toString (json);
+    REQUIRE (file.replaceWithText (damagedText));
+
+    requireOk (f.document->open (folder));
+    const auto& opened = f.session.getProject();
+    CHECK (opened.patterns.size() == saved.patterns.size() - 1);
+    CHECK (opened.channels == saved.channels);
+    CHECK (opened.mixer == saved.mixer);
+    CHECK (f.document->hasUnsavedEdits());
+    CHECK (f.document->getDamage().autosave == juce::File());
+    const auto message = f.document->describeDamage();
+    INFO (message);
+    CHECK (message.contains ("Song.spn was damaged; Spinus opened everything it could read."));
+    CHECK (message.contains (damagedName.isNotEmpty() ? "pattern '" + damagedName + "'" : "a pattern"));
+    CHECK (message.contains ("Save to repair it"));
+    CHECK (file.loadFileAsString() == damagedText); // unchanged until the user saves
+
+    // Saving repairs it, and keeps the damaged file beside it.
+    requireOk (f.document->save());
+    CHECK (folder.getChildFile ("Song.spn.damaged").loadFileAsString() == damagedText);
+    CHECK (f.document->describeDamage().isEmpty());
+    CHECK (! f.document->hasUnsavedEdits());
+    model::Project reread;
+    requireOk (model::fromJsonText (file.loadFileAsString(), reread));
+    CHECK (reread == f.session.getProject());
 }
 
 TEST_CASE ("Projects saved by the alpha releases open, and saving them again loses nothing", "[project][document]")

@@ -270,6 +270,25 @@ set_target_properties (spinus_test_synth_clap PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
 add_dependencies (spinus_tests spinus_test_synth_clap)
 
+# The same synth with a mono output, and with more than two outputs (EdgeCaseTests.cpp, mixer levels).
+foreach (outputs IN ITEMS 1 6)
+    if (outputs EQUAL 1)
+        set (name mono)
+    else()
+        set (name multi-out)
+    endif()
+    add_library (spinus_test_outputs${outputs}_clap MODULE plugins/TestSynthClap.c)
+    target_include_directories (spinus_test_outputs${outputs}_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+    target_compile_definitions (spinus_test_outputs${outputs}_clap PRIVATE OUTPUTS=${outputs})
+    if (NOT WIN32)
+        target_link_libraries (spinus_test_outputs${outputs}_clap PRIVATE m)
+    endif()
+    set_target_properties (spinus_test_outputs${outputs}_clap PROPERTIES
+        PREFIX "" OUTPUT_NAME "${name}-synth" SUFFIX ".clap"
+        LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
+    add_dependencies (spinus_tests spinus_test_outputs${outputs}_clap)
+endforeach()
+
 # The same synth with two presets that crash and hang it, for the sound index's helper (SoundIndexTests.cpp).
 add_library (spinus_test_misbehaving_clap MODULE plugins/TestSynthClap.c)
 target_include_directories (spinus_test_misbehaving_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)

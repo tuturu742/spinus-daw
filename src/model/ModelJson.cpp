@@ -580,7 +580,11 @@ juce::String toJsonText (const Project& p)
     return out.toUTF8();
 }
 
-juce::Result fromJson (const juce::var& input, Project& result)
+namespace
+{
+/** Reads a project. With `skipped`, an entry that cannot be read (a wrong type in a channel, a clip...) is
+    left out and described there instead of failing, and repair() makes the rest valid. */
+juce::Result readProject (const juce::var& input, Project& result, juce::StringArray* skipped)
 {
     if (! input.isObject())
         return juce::Result::fail ("the project file is damaged (not a JSON object)");
@@ -588,9 +592,24 @@ juce::Result fromJson (const juce::var& input, Project& result)
     auto json = input;
     if (auto migrated = migrateToCurrent (json); migrated.failed())
         return migrated;
+    if (skipped != nullptr && ! Reader::get (json, "mixer").isObject())
+        return juce::Result::fail ("the project file is damaged (it has no mixer)");
 
     Reader r;
     Project p;
+    // Salvaging: errors since `before` mean the entry is left out (true), with what and why.
+    auto leaveOut = [&r, skipped] (int before, const juce::String& what)
+    {
+        if (skipped == nullptr || r.errors.size() == before)
+            return false;
+        skipped->add (what + " (" + r.errors[before] + ")");
+        r.errors.removeRange (before, r.errors.size() - before);
+        return true;
+    };
+    auto named = [] (const juce::String& kind, const juce::String& name)
+    { return name.isNotEmpty() ? kind + " '" + name + "'" : "a " + kind; };
+
+    const auto settingsErrors = r.errors.size();
     auto settings = Reader::get (json, "settings");
     p.settings.tempoBpm = r.number (settings, "tempoBpm", 120.0);
     auto sig = Reader::get (settings, "timeSignature");
@@ -602,9 +621,11 @@ juce::Result fromJson (const juce::var& input, Project& result)
 
     if (auto key = Reader::get (settings, "key"); key.isObject())
         p.settings.key = Key { r.integer (key, "tonic", 0), r.text (key, "scale", "major") };
+    leaveOut (settingsErrors, "some of the song's settings");
 
     for (auto& c : r.array (json, "channels"))
     {
+        const auto before = r.errors.size();
         Channel ch;
         ch.id = r.id<ChannelId> (c, "id");
         ch.name = r.text (c, "name");
@@ -623,11 +644,13 @@ juce::Result fromJson (const juce::var& input, Project& result)
         ch.recordInput = juce::jmax (0, r.integer (c, "recordInput", 0));
         ch.recordStereo = r.boolean (c, "recordStereo", false);
         ch.recordArmed = r.boolean (c, "recordArmed", false);
-        p.channels.push_back (ch);
+        if (! leaveOut (before, named ("channel", ch.name)))
+            p.channels.push_back (ch);
     }
 
     for (auto& pj : r.array (json, "patterns"))
     {
+        const auto before = r.errors.size();
         Pattern pattern;
         pattern.id = r.id<PatternId> (pj, "id");
         pattern.name = r.text (pj, "name");
@@ -643,32 +666,76 @@ juce::Result fromJson (const juce::var& input, Project& result)
         {
             auto& notes = pattern.notes[r.id<ChannelId> (perChannel, "channel")];
             for (auto& n : r.array (perChannel, "notes"))
-                notes.push_back (r.note (n));
+            {
+                const auto noteBefore = r.errors.size();
+                auto note = r.note (n);
+                if (! leaveOut (noteBefore, "a note in " + named ("pattern", pattern.name)))
+                    notes.push_back (note);
+            }
         }
 
-        p.patterns.push_back (pattern);
+        if (! leaveOut (before, named ("pattern", pattern.name)))
+            p.patterns.push_back (pattern);
     }
 
     auto playlist = Reader::get (json, "playlist");
     for (auto& l : r.array (playlist, "lanes"))
-        p.playlist.lanes.push_back ({ r.id<LaneId> (l, "id"), r.text (l, "name"), r.colour (l, "colour", 0xff3d4450),
-                                      r.boolean (l, "muted", false), r.id<LaneId> (l, "group"),
-                                      r.boolean (l, "collapsed", false), r.boolean (l, "solo", false) });
+    {
+        const auto before = r.errors.size();
+        Lane lane { r.id<LaneId> (l, "id"),        r.text (l, "name"),        r.colour (l, "colour", 0xff3d4450),
+                    r.boolean (l, "muted", false), r.id<LaneId> (l, "group"), r.boolean (l, "collapsed", false),
+                    r.boolean (l, "solo", false) };
+        if (! leaveOut (before, named ("Playlist track", lane.name)))
+            p.playlist.lanes.push_back (lane);
+    }
 
     for (auto& c : r.array (playlist, "clips"))
-        p.playlist.clips.push_back (r.clip (c));
+    {
+        const auto before = r.errors.size();
+        auto clip = r.clip (c);
+        if (! leaveOut (before, "a clip in the Playlist"))
+            p.playlist.clips.push_back (clip);
+    }
     if (Reader::get (playlist, "markers").isArray())
         for (auto& m : r.array (playlist, "markers"))
-            p.playlist.markers.push_back ({ r.id<MarkerId> (m, "id"), r.tick (m, "at", 0), r.text (m, "name") });
+        {
+            const auto before = r.errors.size();
+            Marker marker { r.id<MarkerId> (m, "id"), r.tick (m, "at", 0), r.text (m, "name") };
+            if (! leaveOut (before, named ("marker", marker.name)))
+                p.playlist.markers.push_back (marker);
+        }
 
     auto mixer = Reader::get (json, "mixer");
-    p.mixer.master = r.insert (Reader::get (mixer, "master"));
+    {
+        const auto before = r.errors.size();
+        p.mixer.master = r.insert (Reader::get (mixer, "master"));
+        if (leaveOut (before, "the Master's settings and effects"))
+        {
+            p.mixer.master = {};
+            p.mixer.master.id = masterInsertId;
+            p.mixer.master.name = "Master";
+        }
+    }
     for (auto& i : r.array (mixer, "inserts"))
-        p.mixer.inserts.push_back (r.insert (i));
+    {
+        const auto before = r.errors.size();
+        auto insert = r.insert (i);
+        if (! leaveOut (before, named ("mixer insert", insert.name)))
+            p.mixer.inserts.push_back (insert);
+    }
 
     if (auto launcher = Reader::get (json, "launcher"); launcher.isObject())
+    {
+        const auto before = r.errors.size();
         p.launcher = r.launcher (launcher);
-    p.nextId = (uint32_t)r.number (json, "nextId", 0);
+        if (leaveOut (before, "the Clip Launcher"))
+            p.launcher = {};
+    }
+    {
+        const auto before = r.errors.size();
+        p.nextId = (uint32_t)r.number (json, "nextId", 0);
+        leaveOut (before, "the next free ID"); // repair() works it out again
+    }
 
     // Projects saved before audio tracks: a channel without an instrument that audio clips play
     // through was made for them, so it is one.
@@ -687,11 +754,24 @@ juce::Result fromJson (const juce::var& input, Project& result)
     if (! r.errors.isEmpty())
         return juce::Result::fail (r.errors.joinIntoString ("\n"));
 
+    if (skipped != nullptr)
+        skipped->addArray (repair (p));
+
     if (auto problems = validate (p); ! problems.isEmpty())
         return juce::Result::fail ("invalid project:\n" + problems.joinIntoString ("\n"));
 
     result = std::move (p);
     return juce::Result::ok();
+}
+
+} // namespace
+
+juce::Result fromJson (const juce::var& input, Project& result) { return readProject (input, result, nullptr); }
+
+juce::Result fromJsonSalvaging (const juce::var& input, Project& result, juce::StringArray& skipped)
+{
+    skipped.clear();
+    return readProject (input, result, &skipped);
 }
 
 juce::var noteToJson (const Note& n) { return write (n); }

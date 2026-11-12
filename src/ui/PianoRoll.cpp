@@ -7,6 +7,7 @@
 #include "commands/CommandRegistry.h"
 #include "model/ModelJson.h"
 #include "model/Scales.h"
+#include "MainView.h"
 
 namespace spinus::ui
 {
@@ -1489,6 +1490,7 @@ void PianoRoll::reloadNotes()
             notes = it->second;
 
     std::sort (notes.begin(), notes.end(), byStartThenPitch);
+    loaded = notes;
     selectMatching (keep);
 
     suggestionBar->update();
@@ -1537,6 +1539,44 @@ bool PianoRoll::commit (std::vector<model::Note> newNotes, const juce::String& d
 {
     if (! session.getSelectedChannel().isValid() || ! ensurePattern())
         return false;
+
+    lastProblem.clear();
+    // Someone else changed these notes since they were loaded (an agent, while the mouse was down): the edit is
+    // made on their notes, so both changes stay. An edit to a note they removed or changed is not made: it would
+    // bring that note back.
+    std::vector<model::Note> current;
+    if (auto* pattern = session.getProject().findPattern (session.getCurrentPattern()))
+        if (auto it = pattern->notes.find (session.getSelectedChannel()); it != pattern->notes.end())
+            current = it->second;
+    std::sort (current.begin(), current.end(), byStartThenPitch);
+    if (! (current == loaded))
+    {
+        auto removed = loaded, added = newNotes;
+        for (auto it = removed.begin(); it != removed.end();)
+            if (auto match = std::find (added.begin(), added.end(), *it); match != added.end())
+            {
+                added.erase (match);
+                it = removed.erase (it);
+            }
+            else
+                ++it;
+        for (auto& gone : removed)
+        {
+            auto match = std::find (current.begin(), current.end(), gone);
+            if (match == current.end())
+            {
+                lastProblem = "The notes changed while you were editing them (another change came in, such as an "
+                              "agent's), so your edit was not made. Make it again on the notes as they are now.";
+                if (auto* view = findParentComponentOfClass<MainView>())
+                    view->getHintBar().showMessage (lastProblem);
+                reloadNotes();
+                return false;
+            }
+            current.erase (match);
+        }
+        current.insert (current.end(), added.begin(), added.end());
+        newNotes = std::move (current);
+    }
 
     std::sort (newNotes.begin(), newNotes.end(), byStartThenPitch);
 
