@@ -329,24 +329,36 @@ void AssistantPanel::ask (const juce::String& question)
     entries.push_back ({ Entry::Kind::assistant, {}, {}, {}, Entry::Outcome::open });
     waitingForJob = true;
     status.setText ("Thinking...", juce::dontSendNotification);
-    service.call ("ai.v1.assistant.ask", object ({ { "conversation", conversation }, { "context", makeContext() } }),
-                  [this, a = alive] (const juce::var& result, const juce::String& error)
-                  {
-                      if (! *a)
-                          return;
-                      waitingForJob = false;
-                      if (error.isNotEmpty())
-                          return fail (error);
-                      job = result["job"].toString();
-                      refresh();
-                  });
+    service.call (
+        "ai.v1.assistant.ask", object ({ { "conversation", conversation }, { "context", makeContext() } }),
+        [this, a = alive, thisQuestion = ++questionsAsked] (const juce::var& result, const juce::String& error)
+        {
+            if (! *a)
+                return;
+            if (thisQuestion != questionsAsked) // stopped before the service took it: its job is not wanted
+            {
+                if (result["job"].toString().isNotEmpty())
+                    service.call ("ai.v1.job.cancel", object ({ { "job", result["job"] } }), {});
+                return;
+            }
+            waitingForJob = false;
+            if (error.isNotEmpty())
+                return fail (error);
+            job = result["job"].toString();
+            refresh();
+        });
     refresh();
 }
 
 void AssistantPanel::stop()
 {
+    if (! isAnswering())
+        return;
+    // Freed at once, also when the service doesn't answer (stuck, or very slow): a late answer is dropped.
     if (job.isNotEmpty())
         service.call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
+    ++questionsAsked;
+    fail ("Stopped.");
 }
 
 void AssistantPanel::received (const juce::String& method, const juce::var& params)

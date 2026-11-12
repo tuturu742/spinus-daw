@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- The assistant no longer waits forever when the AI service crashes while it works on your question: it says
+  the service stopped, with its last words, and you can ask again. The same for the other AI features that work
+  in the background (Generate, Record idea, model downloads). **Stop** now frees the assistant at once, also when
+  the service doesn't answer at all; before, it did nothing until the service answered.
 - A change from a coding agent that arrived while you were dragging a note in the Piano Roll was lost when you
   let go: the drag put back the notes as they were before the agent's change. Now both changes stay. If the agent
   removed the note you were holding, your drag isn't made, and the hint bar says why.

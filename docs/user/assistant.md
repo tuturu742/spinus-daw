@@ -127,7 +127,9 @@ its left edge to make it wider or narrower. Select text in an answer with the mo
 - "Make the bass pluckier."
 
 The answer appears as it is written; the line under the conversation says what the assistant is doing
-("Looking at the project", "Searching the manual"). **Stop** ends an answer early.
+("Looking at the project", "Searching the manual"). **Stop** ends an answer early, at once, also when the AI
+service doesn't answer at all; you can ask again right away. If the AI service stops (crashes) while it answers,
+the conversation says so, with the service's last words; your next question starts it again.
 
 The buttons above the conversation say what the assistant sees: the **project**, the selected
 **channel**, the current **pattern** and the **insert** selected in the Mixer. Click one to leave it out
