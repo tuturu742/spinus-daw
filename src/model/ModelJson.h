@@ -15,6 +15,12 @@ juce::String toJsonText (const Project&);
 juce::Result fromJson (const juce::var&, Project& result);
 juce::Result fromJsonText (const juce::String&, Project& result);
 
+/** For a damaged project file: reads what it can. An entry that cannot be read (a channel, a pattern, a clip,
+    a note, an insert...) is left out, and repair() makes the rest valid; `skipped` says in plain words what was
+    left out or set back (empty when the project was fine). Still fails when the JSON is no Spinus project at all:
+    not an object, no schemaVersion, a newer schema, or no mixer. */
+juce::Result fromJsonSalvaging (const juce::var&, Project& result, juce::StringArray& skipped);
+
 /** Pieces of the format, shared with the Command API's JSON parameters. The readers return an error
     message (empty on success). */
 juce::var noteToJson (const Note&);

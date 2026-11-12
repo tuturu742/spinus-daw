@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A damaged project file now opens as much as can be read, instead of not opening at all. When only parts of
+  it are damaged, Spinus opens the rest and lists what it left out. When it can't be read at all (cut off by a
+  crash or a full disk), Spinus opens the project's newest autosave instead and says from when. Saving repairs
+  the project, and keeps the damaged file beside it as `<name>.spn.damaged`.
 - An audio file a project uses that was moved or deleted is now easy to spot: its clip in the Playlist is red
   with a flat line instead of a waveform, and its track in Audio tracks shows **Missing:** in red with the
   file's name, as missing plugins do in the Mixer. The project still opens and saves with the file's name, so
