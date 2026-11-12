@@ -7,6 +7,7 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Spinus could crash when a Rename window was closed from outside, for example by quitting while it was open.
 - A preset picked in a plugin's own window could be partly undone when you opened the project again: settings
   you had set earlier with Spinus's knobs (or the assistant, or a Spinus preset) went back to Spinus's values.
   The same happened in exports. Now what you picked in the plugin's window is kept.

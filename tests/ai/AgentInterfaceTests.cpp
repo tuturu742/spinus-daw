@@ -10,6 +10,7 @@
 #include "ui/AgentInterfacePage.h"
 
 #include <map>
+#include <array>
 #include <thread>
 
 #if ! JUCE_WINDOWS
@@ -864,4 +865,148 @@ TEST_CASE ("The live interface answers a POST without a length with 411, and rea
     INFO (inChunks);
     CHECK (inChunks.startsWith ("HTTP/1.1 200 OK"));
     CHECK (inChunks.contains ("\"serverInfo\""));
+}
+
+namespace
+{
+/** One HTTP request to the live interface, as an agent's MCP client sends it; the status, the session header and
+    the body. Any thread. */
+struct HttpReply
+{
+    int status = 0;
+    juce::String session;
+    juce::var json;
+};
+
+HttpReply post (int port, const juce::String& token, const juce::String& sessionId, const juce::var& body)
+{
+    HttpReply r;
+    juce::StreamingSocket socket;
+    if (! socket.connect ("127.0.0.1", port, 5000))
+        return r;
+    const auto text = juce::JSON::toString (body, true);
+    auto request = "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer " + token +
+                   "\r\nAccept: application/json, text/event-stream\r\nConnection: close\r\n" +
+                   (sessionId.isNotEmpty() ? "Mcp-Session-Id: " + sessionId + "\r\n" : juce::String()) +
+                   "Content-Type: application/json\r\nContent-Length: " + juce::String ((int)text.getNumBytesAsUTF8()) +
+                   "\r\n\r\n" + text;
+    socket.write (request.toRawUTF8(), (int)request.getNumBytesAsUTF8());
+    juce::MemoryBlock got;
+    char buffer[8192];
+    while (socket.waitUntilReady (true, 20000) == 1)
+    {
+        const auto n = socket.read (buffer, (int)sizeof (buffer), false);
+        if (n <= 0)
+            break;
+        got.append (buffer, (size_t)n);
+        // Done once the body is as long as the header says.
+        const auto all = got.toString();
+        const auto headerEnd = all.indexOf ("\r\n\r\n");
+        if (headerEnd > 0)
+        {
+            const auto headers = all.substring (0, headerEnd);
+            const auto length = headers.fromFirstOccurrenceOf ("Content-Length: ", false, true)
+                                    .upToFirstOccurrenceOf ("\r\n", false, false)
+                                    .getIntValue();
+            if (length > 0 && (int)got.getSize() >= headerEnd + 4 + length)
+                break;
+        }
+    }
+    const auto all = got.toString();
+    r.status = all.fromFirstOccurrenceOf (" ", false, false).getIntValue();
+    r.session =
+        all.fromFirstOccurrenceOf ("Mcp-Session-Id: ", false, true).upToFirstOccurrenceOf ("\r\n", false, false).trim();
+    auto payload = all.fromFirstOccurrenceOf ("\r\n\r\n", false, false);
+    if (payload.startsWith ("event:") || payload.startsWith ("data:"))
+        payload = payload.fromFirstOccurrenceOf ("data:", false, false).upToFirstOccurrenceOf ("\n\n", false, false);
+    r.json = juce::JSON::parse (payload);
+    return r;
+}
+} // namespace
+
+TEST_CASE ("Two agents connected at once over HTTP: each one's changes land, none is lost", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    REQUIRE (f.agents->isListening());
+    const auto port = f.agents->getPort();
+    const auto token = f.agents->getToken();
+    constexpr int changesEach = 5;
+
+    // Two agents, each on its own thread, add channels as fast as they can. A change made after the other
+    // agent's is refused once (it is told what the other did), then made when sent again.
+    struct Agent
+    {
+        juce::String name;
+        int made = 0, refused = 0, failed = 0;
+        juce::StringArray problems;
+    };
+    std::array<Agent, 2> agents { Agent { "claude-code" }, Agent { "cursor" } };
+    std::atomic<int> finished { 0 };
+    std::vector<std::thread> threads;
+    threads.reserve (agents.size());
+    for (auto& agent : agents)
+        threads.emplace_back (
+            [&, a = &agent]
+            {
+                const auto hello =
+                    post (port, token, {},
+                          Fixture::rpc ("initialize", object ({ { "clientInfo", object ({ { "name", a->name } }) } })));
+                if (hello.status != 200 || hello.session.isEmpty())
+                {
+                    a->problems.add ("initialize: " + juce::String (hello.status));
+                    ++finished;
+                    return;
+                }
+                for (int i = 1; i <= changesEach && a->failed < 20; ++i)
+                {
+                    const auto name = a->name + " " + juce::String (i);
+                    const auto reply = post (
+                        port, token, hello.session,
+                        Fixture::rpc (
+                            "tools/call",
+                            object ({ { "name", "run_commands" },
+                                      { "arguments",
+                                        stepsOf ({ command ("channel.add", object ({ { "name", name } })) }) } })));
+                    const auto result = reply.json["result"];
+                    if (reply.status != 200 || ! result.isObject())
+                    {
+                        a->problems.add (name + ": HTTP " + juce::String (reply.status));
+                        ++a->failed;
+                        --i;
+                    }
+                    else if ((bool)result["isError"])
+                    {
+                        // Refused: said why, plainly; sent again.
+                        if (! said (result).contains ("Another agent"))
+                            a->problems.add (name + ": " + said (result));
+                        ++a->refused;
+                        --i;
+                    }
+                    else
+                        ++a->made;
+                }
+                ++finished;
+            });
+    for (int i = 0; i < 12000 && finished < 2; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+    for (auto& t : threads)
+        t.join();
+
+    for (auto& agent : agents)
+    {
+        INFO (agent.name << ": " << agent.problems.joinIntoString ("; "));
+        CHECK (agent.made == changesEach);
+        CHECK (agent.problems.isEmpty());
+    }
+    // Every change is in the song, once.
+    juce::StringArray names;
+    for (auto& channel : f.session.getProject().channels)
+        names.add (channel.name);
+    for (auto& agent : agents)
+        for (int i = 1; i <= changesEach; ++i)
+            CHECK (names.indexOf (agent.name + " " + juce::String (i)) >= 0);
+    CHECK (names.size() == 2 * changesEach);
+    CHECK (f.agents->getAgentCount() == 2);
+    CHECK (f.agents->getAgentChanges() == 2 * changesEach);
 }

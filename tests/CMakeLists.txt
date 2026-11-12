@@ -124,6 +124,7 @@ add_executable (spinus_tests
     ui/PluginWindowTests.cpp
     ui/SpinusTuneTests.cpp
     ui/ProjectMenuTests.cpp
+    ui/MenuCommandsTests.cpp
     ui/AiMisbehavingTests.cpp
     ui/TypingKeyboardTests.cpp
     ui/UiShellTests.cpp
