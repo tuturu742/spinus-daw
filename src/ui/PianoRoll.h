@@ -82,6 +82,8 @@ public:
 
     /** The notes being shown (the selected channel's notes in the current pattern, sorted by start). */
     const std::vector<model::Note>& getNotes() const noexcept { return notes; }
+    /** Why the last edit was not made, if it was refused (empty when it was made). */
+    juce::String getLastProblem() const { return lastProblem; }
 
     //==============================================================================
     // Selection and editing several notes at once. The selection is part of the
@@ -315,7 +317,9 @@ private:
 
     Session& session;
     int historyListener = 0;
-    std::vector<model::Note> notes; // what the components draw (a working copy during gestures)
+    std::vector<model::Note> notes;  // what the components draw (a working copy during gestures)
+    std::vector<model::Note> loaded; // the notes as last loaded from the project: what edits start from
+    juce::String lastProblem;
     std::vector<Ghost> ghosts;
     bool ghostsShown = true;
     std::set<model::ChannelId> hiddenGhosts;

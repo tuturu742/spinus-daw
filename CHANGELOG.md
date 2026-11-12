@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A change from a coding agent that arrived while you were dragging a note in the Piano Roll was lost when you
+  let go: the drag put back the notes as they were before the agent's change. Now both changes stay. If the agent
+  removed the note you were holding, your drag isn't made, and the hint bar says why.
 - A damaged project file now opens as much as can be read, instead of not opening at all. When only parts of
   it are damaged, Spinus opens the rest and lists what it left out. When it can't be read at all (cut off by a
   crash or a full disk), Spinus opens the project's newest autosave instead and says from when. Saving repairs
