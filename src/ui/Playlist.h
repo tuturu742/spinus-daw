@@ -177,6 +177,10 @@ public:
 
     /** A waveform picture of an audio file (loaded in the background; repaints when ready). */
     juce::AudioThumbnail* getThumbnail (const juce::File&);
+    /** True for an audio clip whose file is not there (moved or deleted): it is drawn red with a flat line and
+        "Missing:" before its name, and plays nothing. The clip keeps its file's path, so putting the file back
+        brings it back. */
+    bool isAudioFileMissing (model::ClipId) const;
 
     bool isInterestedInFileDrag (const juce::StringArray&) override;
     void filesDropped (const juce::StringArray&, int x, int y) override;

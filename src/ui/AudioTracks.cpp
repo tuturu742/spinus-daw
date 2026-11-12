@@ -100,6 +100,9 @@ public:
         const auto* insert = tracks.session.getProject().findInsert (channel.targetInsert);
         insertName = insert != nullptr ? insert->name : juce::String ("Master");
         summary = tracks.describeClips (id);
+        missingFiles = tracks.getMissingFiles (id);
+        if (! missingFiles.isEmpty())
+            summary = "File not found: " + missingFiles.joinIntoString (", ") + "  (" + summary + ")";
         armed = channel.recordArmed;
         arm.setToggleState (armed, juce::dontSendNotification);
         arm.setColour (juce::TextButton::textColourOnId, juce::Colour (0xffe05252));
@@ -143,9 +146,11 @@ public:
         g.fillRect (nameBox.removeFromLeft (4));
         auto text = nameBox.reduced (6, 0);
         drawWave (g, text.removeFromLeft (14).toFloat(), theme.get ("textDim"));
-        g.setColour (muted ? theme.get ("textDim") : theme.get ("text"));
+        const bool missing = ! missingFiles.isEmpty();
+        g.setColour (missing ? theme.get ("danger") : muted ? theme.get ("textDim") : theme.get ("text"));
         g.setFont (juce::FontOptions (13.0f));
-        g.drawText (name, text.withTrimmedLeft (4), juce::Justification::centredLeft, true);
+        g.drawText (missing ? "Missing: " + name : name, text.withTrimmedLeft (4), juce::Justification::centredLeft,
+                    true);
 
         // The input's level while armed (or recording).
         if (armed)
@@ -165,6 +170,8 @@ public:
         g.setColour (theme.get ("textDim"));
         g.drawText (juce::String (juce::CharPointer_UTF8 ("\xe2\x86\x92 ")) + insertName,
                     juce::Rectangle<int> (x, 0, insertWidth, rowHeight), juce::Justification::centredLeft, true);
+        if (missing)
+            g.setColour (theme.get ("danger"));
         g.drawText (summary, juce::Rectangle<int> (x + insertWidth, 0, getWidth() - x - insertWidth - 8, rowHeight),
                     juce::Justification::centredLeft, true);
     }
@@ -338,6 +345,7 @@ private:
     AudioTracks& tracks;
     model::ChannelId id;
     juce::String name, insertName, summary;
+    juce::StringArray missingFiles;
     juce::Colour colour;
     bool muted = false, volumeAutomated = false, panAutomated = false, armed = false;
     juce::Slider volume, pan;
@@ -428,6 +436,16 @@ std::optional<juce::File> AudioTracks::getTrackFile (model::ChannelId channel) c
         return std::nullopt;
     const auto file = session.resolveAudioFile (*path);
     return file.existsAsFile() ? std::optional (file) : std::nullopt;
+}
+
+juce::StringArray AudioTracks::getMissingFiles (model::ChannelId channel) const
+{
+    juce::StringArray missing;
+    for (auto& clip : session.getProject().playlist.clips)
+        if (auto* audio = std::get_if<model::AudioClip> (&clip.content); audio != nullptr && audio->channel == channel)
+            if (const auto file = session.resolveAudioFile (audio->file); ! file.existsAsFile())
+                missing.addIfNotAlreadyThere (file.getFileName().isNotEmpty() ? file.getFileName() : audio->file);
+    return missing;
 }
 
 juce::String AudioTracks::describeClips (model::ChannelId channel) const
