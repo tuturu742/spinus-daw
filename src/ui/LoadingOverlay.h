@@ -6,7 +6,7 @@ namespace spinus::ui
 {
 
 /** Covers the window while a project opens: its name, a bar, and the plugin being loaded. Opening runs on the
-    message thread, so the overlay paints itself straight away (paintNow) instead of waiting for the loop. */
+    message thread, so the overlay paints itself straight away (ui::paintNow) instead of waiting for the loop. */
 class LoadingOverlay : public juce::Component
 {
 public:
@@ -21,13 +21,15 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    /** The part of the bar drawn filled: done / total of it, or a moving block before the count is known. */
+    juce::Rectangle<int> getFilledPart() const;
+
 private:
     void paintNow();
 
     juce::String title, detail;
     double progress = 0.0;
-    juce::ProgressBar bar { progress };
-    juce::Rectangle<int> card;
+    juce::Rectangle<int> card, bar;
 };
 
 } // namespace spinus::ui

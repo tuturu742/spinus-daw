@@ -345,6 +345,8 @@ add_library (spinus_core STATIC
     ui/MainView.h
     ui/Mixer.cpp
     ui/Mixer.h
+    ui/PaintNow.cpp
+    ui/PaintNow.h
     ui/PatternGenerator.cpp
     ui/PatternGenerator.h
     ui/PianoRoll.cpp

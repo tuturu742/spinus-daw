@@ -5,8 +5,10 @@
 #include "project/ProjectFiles.h"
 #include "ui/About.h"
 #include "ui/Browser.h"
+#include "ui/LoadingOverlay.h"
 #include "ui/MainView.h"
 #include "ui/Manual.h"
+#include "ui/PaintNow.h"
 
 #include <SpinusVersion.h>
 
@@ -585,8 +587,60 @@ TEST_CASE ("Opening a project covers the window with a bar until it is open", "[
         seen.add (what);
         CHECK (overlay()->isVisible());
         CHECK (overlay()->getBounds() == ui.view.getLocalBounds());
+        // The bar shows the count straight away, with no timer (the message loop is busy).
+        auto* bar = dynamic_cast<LoadingOverlay*> (overlay());
+        REQUIRE (bar != nullptr);
+        CHECK (bar->getFilledPart().getWidth() == juce::roundToInt (400.0 * done / total));
     };
     REQUIRE (ui.view.openProjectFile (ui.root.getChildFile ("Song")));
     CHECK (seen.contains ("Sampler on Keys"));
     CHECK (! overlay()->isVisible());
+}
+
+TEST_CASE ("The loading bar draws the count it is given, without waiting for a timer", "[ui][document]")
+{
+    juce::Component window;
+    LoadingOverlay overlay;
+    window.setSize (800, 600);
+    window.addChildComponent (overlay);
+
+    overlay.start ("Song");
+    CHECK (overlay.isVisible());
+    CHECK (overlay.getBounds() == window.getLocalBounds());
+    // No count yet: a quarter-width block somewhere in the bar.
+    CHECK (overlay.getFilledPart().getWidth() == 100);
+
+    overlay.setProgress (1, 4, "Sampler on Keys");
+    const auto filled = overlay.getFilledPart();
+    CHECK (filled.getWidth() == 100); // a quarter of the 400 pixel bar
+
+    // Painted (as paintNow paints it) the filled part has the bar colour and the rest does not.
+    const auto image = overlay.createComponentSnapshot (overlay.getLocalBounds());
+    const auto y = filled.getCentreY();
+    CHECK (image.getPixelAt (filled.getX() + 50, y) != image.getPixelAt (filled.getRight() + 150, y));
+    CHECK (image.getPixelAt (filled.getX() + 50, y) == image.getPixelAt (filled.getX() + 20, y));
+
+    overlay.finish();
+    CHECK (! overlay.isVisible());
+    paintNow (overlay); // no window: nothing to do, and no crash
+}
+
+TEST_CASE ("Work that waits for a window to be on the screen still runs without one", "[ui][document]")
+{
+    // A test has no screen: the wait ends at its time limit.
+    juce::Component component;
+    CHECK (! isOnScreen (component));
+    bool ran = false;
+    callWhenOnScreen (component, [&ran] { ran = true; }, 100);
+    CHECK (! ran);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (400);
+    CHECK (ran);
+
+    // Not at all once the component is gone.
+    auto gone = std::make_unique<juce::Component>();
+    bool ranForGone = false;
+    callWhenOnScreen (*gone, [&ranForGone] { ranForGone = true; }, 100);
+    gone = nullptr;
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (400);
+    CHECK (! ranForGone);
 }

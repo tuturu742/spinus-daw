@@ -44,6 +44,7 @@
 #include "ui/MainView.h"
 #include "ui/ManualDemo.h"
 #include "ui/Mixer.h"
+#include "ui/PaintNow.h"
 #include "ui/PianoRoll.h"
 #include "ui/PluginDownloadDialog.h"
 #include "ui/WindowsPluginsDialog.h"
@@ -311,12 +312,23 @@ public:
         view.setWindowsPlugins (windows.get(), getHelperProgram ("spinus-plugin-scanner"));
 
         // `spinus "Song/Song.spn"` (or the folder) opens that project; otherwise offer crashed work, if any.
+        auto offerCrashedWork = [crashed, v = &view]
+        {
+            if (crashed)
+                v->offerToRunSeparately (crashed->key, crashed->name, [v] { v->offerRecovery(); });
+            else
+                v->offerRecovery();
+        };
         if (projectToOpen != juce::File())
-            view.openProjectFile (projectToOpen);
-        if (crashed)
-            view.offerToRunSeparately (crashed->key, crashed->name, [v = &view] { v->offerRecovery(); });
+            // Once the window is on the screen: the loading bar painted into a window not shown yet would be lost.
+            ui::callWhenOnScreen (view,
+                                  [v = &view, projectToOpen, offerCrashedWork]
+                                  {
+                                      v->openProjectFile (projectToOpen);
+                                      offerCrashedWork();
+                                  });
         else
-            view.offerRecovery();
+            offerCrashedWork();
 
         // The Wine on this computer changed since Windows plugins were last tested with it: test again.
         if (windows != nullptr && windows->getChosenRuntime() == plugins::WindowsPlugins::Runtime::Kind::system &&
