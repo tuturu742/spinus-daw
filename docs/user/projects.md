@@ -81,7 +81,8 @@ A project file can be damaged, for example cut off by a crash or a full disk whi
 then opens as much of your work as it can, and tells you what happened:
 
 - **Parts of the file are damaged:** Spinus opens everything it can read and lists what it left out, for
-  example "a clip at bar 5 on 'Drums' (its pattern is missing)" or "channel 'Bass'".
+  example "a clip at bar 5 on 'Drums' (its pattern is missing)" or "channel 'Bass'". Routing that feeds
+  an insert back into itself is set right the same way: "the send from 'B' to 'A' (it made a feedback loop)".
 - **The file can't be read at all** (it is empty or cut off): Spinus opens the project's newest autosave
   instead and says so: "Song.spn was damaged and could not be read; Spinus opened the autosave from
   12 Nov 2026 14:05 instead."

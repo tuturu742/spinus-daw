@@ -1,6 +1,9 @@
 #include "Validation.h"
 
 #include <cmath>
+#include <functional>
+#include <map>
+#include <numeric>
 #include <set>
 
 namespace spinus::model
@@ -9,28 +12,37 @@ namespace spinus::model
 namespace
 {
 
-/** Inserts `insert` feeds directly: its output, its send targets and the inserts it is a sidechain
-    source for. */
-std::vector<InsertId> downstreamOf (const Project& project, const Insert& insert)
+/** One connection between inserts: the source's output, one of its sends, or the sidechain it feeds. */
+struct Route
 {
-    std::vector<InsertId> result;
+    enum class Kind
+    {
+        output,
+        send,
+        sidechain
+    };
+    Kind kind;
+    InsertId from, to;
+};
 
+/** The connections leaving `insert`, always in the same order: its output, its sends in their order, then the
+    inserts that follow it as a sidechain (the Master first, then the mixer's order). */
+std::vector<Route> routesFrom (const Project& project, const Insert& insert)
+{
+    std::vector<Route> result;
     if (insert.output)
-        result.push_back (insert.output);
-
+        result.push_back ({ Route::Kind::output, insert.id, insert.output });
     for (auto& send : insert.sends)
-        result.push_back (send.target);
-
+        result.push_back ({ Route::Kind::send, insert.id, send.target });
     auto addSidechained = [&] (const Insert& other)
     {
         if (std::find (other.sidechainSources.begin(), other.sidechainSources.end(), insert.id) !=
             other.sidechainSources.end())
-            result.push_back (other.id);
+            result.push_back ({ Route::Kind::sidechain, insert.id, other.id });
     };
     addSidechained (project.mixer.master);
     for (auto& other : project.mixer.inserts)
         addSidechained (other);
-
     return result;
 }
 
@@ -51,14 +63,218 @@ bool reaches (const Project& project, InsertId start, InsertId goal)
             continue;
 
         if (auto* insert = project.findInsert (current))
-            for (auto next : downstreamOf (project, *insert))
-                stack.push_back (next);
+            for (const auto& route : routesFrom (project, *insert))
+                stack.push_back (route.to);
     }
 
     return false;
 }
 
+/** The first routing loop found, as its connections in order (empty when there is none). The search goes
+    through the inserts in the mixer's order (the Master first) and each insert's connections in routesFrom's
+    order, so the same project always gives the same loop; the last connection is the one leading back to the
+    insert the loop was entered from. */
+std::vector<Route> findRoutingLoop (const Project& project)
+{
+    enum class State
+    {
+        unseen,
+        open,
+        done
+    };
+    std::map<InsertId, State> state;
+    std::vector<Route> path;
+    std::vector<Route> loop;
+
+    std::function<bool (const Insert&)> visit = [&] (const Insert& insert)
+    {
+        state[insert.id] = State::open;
+        for (const auto& route : routesFrom (project, insert))
+        {
+            const auto* next = project.findInsert (route.to);
+            if (next == nullptr)
+                continue;
+            if (state[route.to] == State::open)
+            {
+                auto start =
+                    std::find_if (path.begin(), path.end(), [&] (const Route& r) { return r.from == route.to; });
+                loop.assign (start, path.end());
+                loop.push_back (route);
+                return true;
+            }
+            if (state[route.to] == State::unseen)
+            {
+                path.push_back (route);
+                if (visit (*next))
+                    return true;
+                path.pop_back();
+            }
+        }
+        state[insert.id] = State::done;
+        return false;
+    };
+
+    if (visit (project.mixer.master))
+        return loop;
+    for (const auto& insert : project.mixer.inserts)
+        if (state[insert.id] == State::unseen && visit (insert))
+            return loop;
+    return {};
+}
+
+void removeRoute (Project& project, const Route& route)
+{
+    if (route.kind == Route::Kind::send)
+    {
+        if (auto* insert = project.findInsert (route.from))
+            std::erase_if (insert->sends, [&] (const Send& send) { return send.target == route.to; });
+    }
+    else if (route.kind == Route::Kind::sidechain)
+    {
+        if (auto* insert = project.findInsert (route.to))
+            std::erase (insert->sidechainSources, route.from);
+    }
+}
+
+/** Breaks every routing loop that goes through a send or a sidechain (loops of outputs alone must be broken
+    before) and returns what it removed. The fewest sends and sidechains that break them all go; among as few,
+    the first set in a fixed order: sends and sidechains leading back up the mixer (to an insert before their
+    own) before those leading down, each group in the mixer's order. With more than 16 candidates, which takes
+    too long to try, loops are broken one at a time instead, each losing its send or sidechain leading back to
+    where the loop was entered. Either way, the same project always loses the same ones. */
+std::vector<Route> removeLoopingRoutes (Project& project)
+{
+    std::vector<const Insert*> inserts { &project.mixer.master };
+    for (auto& insert : project.mixer.inserts)
+        inserts.push_back (&insert);
+    std::map<InsertId, size_t> position;
+    for (size_t i = 0; i < inserts.size(); ++i)
+        position[inserts[i]->id] = i;
+
+    std::vector<Route> routes;
+    for (auto* insert : inserts)
+        for (const auto& route : routesFrom (project, *insert))
+            if (position.contains (route.to))
+                routes.push_back (route);
+
+    // The sends and sidechains on a loop: those whose target leads back to their source.
+    std::vector<size_t> candidates;
+    for (size_t i = 0; i < routes.size(); ++i)
+        if (routes[i].kind != Route::Kind::output && reaches (project, routes[i].to, routes[i].from))
+            candidates.push_back (i);
+    std::stable_sort (candidates.begin(), candidates.end(),
+                      [&] (size_t x, size_t y)
+                      {
+                          auto up = [&] (size_t r) { return position[routes[r].to] < position[routes[r].from]; };
+                          return up (x) && ! up (y);
+                      });
+
+    // Whether the routes without the removed ones still loop (Kahn's algorithm).
+    auto loops = [&] (const std::vector<bool>& removed)
+    {
+        std::vector<int> incoming (inserts.size(), 0);
+        std::vector<std::vector<size_t>> next (inserts.size());
+        for (size_t i = 0; i < routes.size(); ++i)
+            if (! removed[i])
+            {
+                ++incoming[position[routes[i].to]];
+                next[position[routes[i].from]].push_back (position[routes[i].to]);
+            }
+        std::vector<size_t> ready;
+        for (size_t n = 0; n < inserts.size(); ++n)
+            if (incoming[n] == 0)
+                ready.push_back (n);
+        size_t visited = 0;
+        while (! ready.empty())
+        {
+            const auto n = ready.back();
+            ready.pop_back();
+            ++visited;
+            for (auto m : next[n])
+                if (--incoming[m] == 0)
+                    ready.push_back (m);
+        }
+        return visited < inserts.size();
+    };
+
+    std::vector<Route> removed;
+    if (candidates.empty())
+        return removed;
+
+    if (candidates.size() <= 16)
+    {
+        // Every set of k candidates in order, k = 1, 2...: the first that breaks every loop.
+        for (size_t k = 1; k <= candidates.size(); ++k)
+        {
+            std::vector<size_t> chosen (k);
+            std::iota (chosen.begin(), chosen.end(), size_t { 0 });
+            for (;;)
+            {
+                std::vector<bool> without (routes.size(), false);
+                for (auto c : chosen)
+                    without[candidates[c]] = true;
+                if (! loops (without))
+                {
+                    for (auto c : chosen)
+                        removed.push_back (routes[candidates[c]]);
+                    for (const auto& route : removed)
+                        removeRoute (project, route);
+                    return removed;
+                }
+                // The next set: the last index that can still move moves, those after it follow.
+                auto i = k;
+                while (i > 0 && chosen[i - 1] == candidates.size() - k + i - 1)
+                    --i;
+                if (i == 0)
+                    break;
+                ++chosen[i - 1];
+                for (auto j = i; j < k; ++j)
+                    chosen[j] = chosen[j - 1] + 1;
+            }
+        }
+    }
+
+    for (auto loop = findRoutingLoop (project); ! loop.empty(); loop = findRoutingLoop (project))
+    {
+        const auto last =
+            std::find_if (loop.rbegin(), loop.rend(), [] (const Route& r) { return r.kind != Route::Kind::output; });
+        if (last == loop.rend())
+            break; // outputs alone: broken before, never here
+        removed.push_back (*last);
+        removeRoute (project, *last);
+    }
+    return removed;
+}
+
+/** True if following outputs only from `start` arrives at `goal`. */
+bool reachesByOutputs (const Project& project, InsertId start, InsertId goal)
+{
+    std::set<InsertId> seen;
+    for (auto current = start; current.isValid() && seen.insert (current).second;)
+    {
+        if (current == goal)
+            return true;
+        const auto* insert = project.findInsert (current);
+        if (insert == nullptr)
+            return false;
+        current = insert->output;
+    }
+    return false;
+}
+
 juce::String describe (InsertId id) { return "insert " + juce::String (id.value); }
+
+/** An insert as the user knows it: "the Master", "'Reverb'", or "insert 3" (its place in the mixer). */
+juce::String insertName (const Project& project, InsertId id)
+{
+    if (id == masterInsertId)
+        return "the Master";
+    for (size_t i = 0; i < project.mixer.inserts.size(); ++i)
+        if (project.mixer.inserts[i].id == id)
+            return project.mixer.inserts[i].name.isNotEmpty() ? "'" + project.mixer.inserts[i].name + "'"
+                                                              : "insert " + juce::String ((int)i + 1);
+    return describe (id);
+}
 
 juce::String deviceName (const Device& device)
 {
@@ -149,14 +365,15 @@ juce::StringArray validate (const Project& project)
 
         for (auto& slot : insert.effects)
             checkDevice (slot.device, name);
-
-        if (insert.id != masterInsertId && reaches (project, insert.output, insert.id))
-            problems.add (name + " is part of a routing cycle");
     };
 
     checkInsert (project.mixer.master);
     for (auto& insert : project.mixer.inserts)
         checkInsert (insert);
+
+    // Outputs, sends and sidechains together: one search for the whole mixer.
+    for (const auto& route : findRoutingLoop (project))
+        problems.add (describe (route.from) + " is part of a routing cycle");
 
     // Channels
     for (auto& channel : project.channels)
@@ -388,18 +605,22 @@ juce::StringArray repair (Project& project)
     repairRouting (project.mixer.master);
     for (auto& insert : project.mixer.inserts)
         repairRouting (insert);
+    // Loops of outputs alone: the insert plays into the Master instead.
     for (auto& insert : project.mixer.inserts)
-        if (reaches (project, insert.output, insert.id))
+        if (reachesByOutputs (project, insert.output, insert.id))
         {
             insert.output = masterInsertId;
-            if (reaches (project, insert.output, insert.id)) // through sends or sidechains: drop those too
-            {
-                insert.sends.clear();
-                for (auto& other : project.mixer.inserts)
-                    std::erase (other.sidechainSources, insert.id);
-                std::erase (project.mixer.master.sidechainSources, insert.id);
-            }
+            notes.add ("where " + insertName (project, insert.id) +
+                       " played (it made a feedback loop; it plays into the Master now)");
         }
+    // Loops through sends or sidechains: as few sends and sidechains as possible go (removeLoopingRoutes).
+    for (const auto& route : removeLoopingRoutes (project))
+    {
+        const auto from = insertName (project, route.from), to = insertName (project, route.to);
+        notes.add (route.kind == Route::Kind::send
+                       ? "the send from " + from + " to " + to + " (it made a feedback loop)"
+                       : "the sidechain from " + from + " into " + to + " (it made a feedback loop)");
+    }
 
     if (! project.settings.timeSignature.isValid())
     {

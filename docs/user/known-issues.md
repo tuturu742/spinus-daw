@@ -63,6 +63,8 @@ what happened, and attach the project if you can.
   the Flatpak has run in a separate process with your system's libraries, so they have that process's limits
   (below). A plugin that needs a library your system doesn't have either is listed under Problem plugins
   with the reason. The Flatpak can use only Spinus's tested Wine for Windows plugins. See [Install](install.md#as-a-flatpak).
+- Only a plugin's main stereo output is heard; extra outputs (for example one per drum) aren't routed to the
+  mixer yet.
 - A plugin running in a separate process can't use sidechain inputs, send MIDI out, or have more than
   eight channels. See [Plugins](plugins.md).
 - Some **LV2 plugins open with Spinus's sliders instead of their own window**: those whose window is
