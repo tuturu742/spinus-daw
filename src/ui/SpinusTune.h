@@ -20,6 +20,9 @@ namespace spinus::ui
 class SpinusTuneEditor final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
+    /** The toolbar's height, as in the Piano Roll, the Playlist and the Automation editor. */
+    static constexpr int toolbarHeight = 30;
+
     SpinusTuneEditor (Session&, model::ClipId, ai::AiService*);
     ~SpinusTuneEditor() override;
 

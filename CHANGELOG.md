@@ -7,6 +7,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- Spinus Tune's top bar now has its own background, tall enough for its buttons and sliders, like the Piano
+  Roll's. Before, the top row of notes was painted over it, so the bar looked smaller than its buttons.
 - A project file with a feedback loop of sends or sidechains in it (insert A sends to B and B back to A, for
   example after editing the file by hand) now opens with the send that closes the loop removed, and Spinus
   says which one. Before, such a file opened with the loop in it.
