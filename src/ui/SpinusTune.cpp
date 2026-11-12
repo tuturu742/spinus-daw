@@ -34,7 +34,7 @@ juce::String noteName (int pitch)
     return juce::String (names[((pitch % 12) + 12) % 12]) + juce::String (pitch / 12);
 }
 
-constexpr int keyboardWidth = 52, toolbarHeight = 34;
+constexpr int keyboardWidth = 52;
 } // namespace
 
 SpinusTuneEditor::SpinusTuneEditor (Session& s, model::ClipId c, ai::AiService* ai)
@@ -371,7 +371,7 @@ int SpinusTuneEditor::noteAt (juce::Point<float> p) const
 void SpinusTuneEditor::resized()
 {
     auto area = getLocalBounds();
-    auto toolbar = area.removeFromTop (toolbarHeight).reduced (6, 4);
+    auto toolbar = area.removeFromTop (toolbarHeight).reduced (4, 3);
     resetButton.setBounds (toolbar.removeFromRight (70));
     toolbar.removeFromRight (6);
     snapButton.setBounds (toolbar.removeFromRight (100));
@@ -394,8 +394,13 @@ void SpinusTuneEditor::paint (juce::Graphics& g)
 {
     const auto& theme = themeOf (*this);
     g.fillAll (theme.get ("panel"));
+    // The toolbar's own strip, as in the Piano Roll and the Playlist.
+    g.setColour (theme.get ("panelHeader"));
+    g.fillRect (getLocalBounds().removeFromTop (toolbarHeight));
 
-    // Rows and keys.
+    // Rows and keys, kept out of the toolbar and the status line (the top and bottom rows are only partly in view).
+    juce::Graphics::ScopedSaveState clipToRows (g);
+    g.reduceClipRegion (keyboard.getUnion (grid));
     for (auto pitch = (int)lowestPitch; pitchToY ((float)pitch) > (float)grid.getY() - rowHeight; ++pitch)
     {
         const auto y = pitchToY ((float)pitch) - rowHeight * 0.5f;

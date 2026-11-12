@@ -118,6 +118,38 @@ TEST_CASE ("Spinus Tune's window: move, split, join, drift, vibrato, snap and re
     CHECK (editor.getStatusText().isNotEmpty());
 }
 
+TEST_CASE ("Spinus Tune's toolbar holds its controls, and the rows stay out of it", "[ui][tune]")
+{
+    Vocal v;
+    ui::SpinusLookAndFeel lookAndFeel { ui::Theme::dark() };
+    ui::SpinusTuneEditor editor (v.session, v.clip, nullptr);
+    editor.setLookAndFeel (&lookAndFeel);
+    for (auto width : { 900, 1400 })
+    {
+        editor.setSize (width, 420);
+        const auto bar = editor.getLocalBounds().removeFromTop (ui::SpinusTuneEditor::toolbarHeight);
+        int inBar = 0;
+        for (auto* child : editor.getChildren())
+            if (child->isVisible() && child->getY() < bar.getBottom())
+            {
+                CHECK (bar.contains (child->getBounds()));
+                ++inBar;
+            }
+        CHECK (inBar == 8); // Fit/zoom, Drift and Vibrato (each a label and a slider), Join, Snap to key, Reset
+
+        // The bar is painted in the toolbar colour all the way down to its bottom edge, over no row of the grid.
+        const auto image = editor.createComponentSnapshot (editor.getLocalBounds(), true, 1.0f);
+        const auto header = lookAndFeel.getTheme().get ("panelHeader");
+        for (auto y : { 0, bar.getBottom() - 1 })
+        {
+            CHECK (image.getPixelAt (1, y) == header); // over the keyboard, left of the zoom buttons
+            CHECK (image.getPixelAt (bar.getCentreX() - 250, y) == header); // over the grid, between the controls
+        }
+        CHECK (image.getPixelAt (1, bar.getBottom()) != header);
+    }
+    editor.setLookAndFeel (nullptr);
+}
+
 TEST_CASE ("Spinus Tune editor screenshot for the manual", "[.screenshot][tune]")
 {
     Vocal v;
