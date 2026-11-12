@@ -170,6 +170,41 @@ TEST_CASE ("A problem opening a project is shown, and the open project stays", "
     CHECK (ui.session.getProject() == before);
 }
 
+TEST_CASE ("A damaged project opens what can be read and says so; saving repairs it", "[ui][document]")
+{
+    Ui ui;
+    const auto folder = ui.root.getChildFile ("Damaged");
+    ui.edit();
+    REQUIRE (ui.view.saveProjectTo (folder));
+    ui.edit();
+    const auto autosaved = ui.session.getProject();
+    REQUIRE (ui.document.autosave().wasOk());
+    ui.document.newProject();
+
+    // Cut off by a crash while it was saved: the autosave opens instead, with a *.
+    const auto file = folder.getChildFile ("Damaged.spn");
+    REQUIRE (file.replaceWithText (file.loadFileAsString().substring (0, 40)));
+    const auto damaged = file.loadFileAsString();
+    ui.answers = { 0 }; // OK
+    REQUIRE (ui.view.openProjectFile (folder));
+    CHECK (ui.questions == juce::StringArray { "The project was damaged" });
+    CHECK (ui.session.getProject() == autosaved);
+    CHECK (ui.view.getWindowTitle() == "Damaged* - Spinus DAW");
+    CHECK (ui.document.describeDamage().contains ("Damaged.spn was damaged and could not be read; Spinus opened "
+                                                  "the autosave from"));
+    CHECK (file.loadFileAsString() == damaged);
+
+    // Saving repairs it; the damaged file is kept beside it.
+    REQUIRE (invoke (ui.view, MainView::saveProject));
+    CHECK (folder.getChildFile ("Damaged.spn.damaged").loadFileAsString() == damaged);
+    CHECK (ui.view.getWindowTitle() == "Damaged - Spinus DAW");
+    ui.document.newProject();
+    ui.questions.clear();
+    REQUIRE (ui.view.openProjectFile (folder));
+    CHECK (ui.questions.isEmpty());
+    CHECK (ui.session.getProject() == autosaved);
+}
+
 TEST_CASE ("Opening a project whose last session crashed offers the autosave", "[ui][document]")
 {
     Ui ui;

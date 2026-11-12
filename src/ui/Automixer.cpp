@@ -232,6 +232,8 @@ void Automixer::render (bool withStems, const std::function<void (const std::vec
                                                         return fail ("Stopped.");
                                                     if (! result.ok)
                                                         return fail (result.error);
+                                                    if (result.warning.isNotEmpty()) // measured without a plugin
+                                                        return fail (result.warning);
                                                     then (result.files);
                                                 });
                                         });

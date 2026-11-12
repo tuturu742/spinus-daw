@@ -98,6 +98,9 @@ the rest. Every change is still one undo step.
 - **You can keep working on the song.** The agent is told what you changed (or undid) since it last looked. If
   you changed something, its next change isn't made: it's told what you did, so it can check its change still
   fits, and then makes it.
+- **An agent's change while you drag a note** in the Piano Roll: both stay (your note moves, the agent's notes
+  stay). If the agent removed or changed the very note you're holding, your drag isn't made, and the hint bar
+  says so: drag it again on the notes as they are now.
 - **Opening another project or starting a new one** (File › Open, File › New) while an agent is connected: the
   agent stays connected and is told that the song changed, before its next change. **Undo the agent's changes**
   then only goes back to how the new project was when you opened it.

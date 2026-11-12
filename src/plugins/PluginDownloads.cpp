@@ -62,6 +62,9 @@ juce::Result download (const juce::String& url, const juce::File& target,
                                                      .withNumRedirectsToFollow (10)
                                                      .withExtraHeaders ("User-Agent: Spinus DAW")
                                                      .withStatusCode (&status));
+    if (in == nullptr && status == 0 && url.startsWith ("http")) // no answer at all: no connection to the server
+        return juce::Result::fail ("Could not download " + url + ": no connection to " + juce::URL (url).getDomain() +
+                                   ". Check that this computer is connected to the internet, then try again.");
     if (in == nullptr || status >= 400)
         return juce::Result::fail ("Could not download " + url +
                                    (status >= 400 ? " (the server answered " + juce::String (status) + ")." : "."));
@@ -165,8 +168,16 @@ juce::Result download (const juce::String& url, const juce::File& target,
     if (code == CURLE_ABORTED_BY_CALLBACK)
         return juce::Result::fail ("Cancelled.");
     if (code != CURLE_OK)
-        return juce::Result::fail ("Could not download " + url + ": " +
-                                   (error[0] != 0 ? juce::String (error) : juce::String (curl_easy_strerror (code))));
+    {
+        // No connection at all (no internet, or the name can't be looked up): said in plain words too.
+        const bool offline = code == CURLE_COULDNT_RESOLVE_HOST || code == CURLE_COULDNT_RESOLVE_PROXY ||
+                             code == CURLE_COULDNT_CONNECT || code == CURLE_OPERATION_TIMEDOUT;
+        return juce::Result::fail (
+            "Could not download " + url + ": " +
+            (error[0] != 0 ? juce::String (error) : juce::String (curl_easy_strerror (code))) +
+            (offline ? juce::String (". Check that this computer is connected to the internet, then try again.")
+                     : juce::String()));
+    }
     return juce::Result::ok();
 }
 

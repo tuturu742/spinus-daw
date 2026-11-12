@@ -101,6 +101,43 @@ TEST_CASE ("An audio file becomes an audio clip on its own channel", "[ui][playl
     CHECK (f.playlist->createComponentSnapshot (f.playlist->getLocalBounds()).isValid());
 }
 
+TEST_CASE ("An audio clip whose file is missing is drawn red with a flat line, and keeps its file",
+           "[ui][playlist][audioclip]")
+{
+    Fixture f;
+    f.makeSession();
+    const auto file = writeTone (f.root.getChildFile ("Gone.wav"), 2.0);
+    REQUIRE (f.playlist->addAudioFile (0, 0, file));
+    const auto id = f.lastClip().id;
+    CHECK (! f.playlist->isAudioFileMissing (id));
+
+    REQUIRE (file.deleteFile());
+    CHECK (f.playlist->isAudioFileMissing (id));
+    CHECK (f.lastAudio().file == file.getFullPathName()); // the path stays, so the file can be put back
+
+    // Row 0 of the lanes, below the toolbar and ruler: a red clip with a straight dark line across its middle.
+    const auto image = f.playlist->createComponentSnapshot (f.playlist->getLocalBounds(), true, 1.0f);
+    const auto top = Playlist::toolbarHeight + Playlist::rulerHeight;
+    const auto left = Playlist::headerWidth + juce::roundToInt (f.playlist->tickToX (0));
+    const auto right = Playlist::headerWidth + juce::roundToInt (f.playlist->tickToX (f.lastClip().length));
+    REQUIRE (right - left > 60);
+    auto isRed = [] (juce::Colour c) { return c.getRed() > c.getGreen() + 60 && c.getRed() > c.getBlue() + 60; };
+    auto isDark = [] (juce::Colour c) { return c.getRed() < 110 && c.getGreen() < 60; };
+    // The line is at the middle of the waveform area (the clip's rows 15 to 41 at the default track height).
+    const auto lineY = top + 28;
+    for (int x = left + 10; x < right - 10; x += 7)
+    {
+        INFO ("x " << x);
+        CHECK (isRed (image.getPixelAt (x, top + 22)));
+        CHECK (isDark (image.getPixelAt (x, lineY)));
+        CHECK (isRed (image.getPixelAt (x, top + 36)));
+    }
+
+    // Put back, it is drawn as before.
+    writeTone (file, 2.0);
+    CHECK (! f.playlist->isAudioFileMissing (id));
+}
+
 TEST_CASE ("Audio clips play in song mode, and not in pattern mode or when muted", "[ui][playlist][audioclip][audio]")
 {
     Fixture f;

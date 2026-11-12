@@ -274,7 +274,7 @@ void ExportJob::renderStep()
         for (auto id : adapter->getMissingDevices())
             if (const auto* device = step.project.findDevice (id))
                 names.addIfNotAlreadyThere (model::getDeviceDisplayName (*device));
-        return finish ({ false, false, "Missing plugin: " + names.joinIntoString (", "), {} });
+        return finish ({ false, false, "Missing plugin: " + names.joinIntoString (", "), {}, {} });
     }
 
     waitUntilAudible (*edit, *adapter, step.project, std::chrono::seconds (45), std::chrono::seconds (90));
@@ -314,13 +314,13 @@ void ExportJob::startRender()
     {
         range = adapter->getPatternLoopRange();
         if (range.isEmpty())
-            return finish ({ false, false, "That pattern does not exist or is empty.", {} });
+            return finish ({ false, false, "That pattern does not exist or is empty.", {}, {} });
     }
     else
     {
         const auto end = getSongEnd (step.project);
         if (end <= 0)
-            return finish ({ false, false, findProblem (step.project, settings), {} });
+            return finish ({ false, false, findProblem (step.project, settings), {}, {} });
         range = { te::TimePosition(), ticksToTime (*edit, (double)end) };
     }
     // Rendered with the longest tail; finishFiles cuts it once everything has rung out.
@@ -344,7 +344,7 @@ void ExportJob::startRender()
     step.renderTo = step.file == juce::File() || encoded ? juce::File::createTempFile (".wav") : step.file;
 
     if (const auto error = prepareStems (step, range); error.isNotEmpty())
-        return finish ({ false, false, error, {} });
+        return finish ({ false, false, error, {}, {} });
 
     deleteUnusedPlugins (engine); // any closed while this step waited for its instruments
 
@@ -582,22 +582,61 @@ void ExportJob::deleteScratchFiles (Step& step)
         step.renderTo.deleteFile();
 }
 
+namespace
+{
+/** "Crash Test on 1 Tone": the device, and the channel or mixer insert it is on. */
+juce::String describeDevice (const model::Project& project, model::DeviceId id)
+{
+    for (auto& channel : project.channels)
+        if (channel.instrument && channel.instrument->id == id)
+            return model::getDeviceDisplayName (*channel.instrument) + " on " + channel.name;
+    auto search = [id] (const model::Insert& insert, const juce::String& where) -> juce::String
+    {
+        for (auto& slot : insert.effects)
+            if (slot.device.id == id)
+                return model::getDeviceDisplayName (slot.device) + " on " + where;
+        return {};
+    };
+    if (auto found = search (project.mixer.master, "the Master"); found.isNotEmpty())
+        return found;
+    for (size_t i = 0; i < project.mixer.inserts.size(); ++i)
+        if (auto found = search (project.mixer.inserts[i],
+                                 "insert " + juce::String ((int)i + 1) + " " + project.mixer.inserts[i].name);
+            found.isNotEmpty())
+            return found;
+    return {};
+}
+} // namespace
+
 void ExportJob::stepFinished (const juce::String& error)
 {
+    // A plugin in its own process that crashed or stopped answering during the render was passed by: the file is
+    // made without its sound, and the result says which (not a plain success).
+    if (adapter != nullptr)
+        for (auto id : adapter->getStoppedDevices())
+            if (const auto what = describeDevice (steps[current].project, id); what.isNotEmpty())
+                leftOut.addIfNotAlreadyThere (what);
+
     handle.reset();
     adapter.reset();
     edit.reset();
     deleteScratchFiles (steps[current]);
 
     if (cancelRequested)
-        return finish ({ false, true, "Export cancelled.", {} });
+        return finish ({ false, true, "Export cancelled.", {}, {} });
     if (error.isNotEmpty())
-        return finish ({ false, false, error, {} });
+        return finish ({ false, false, error, {}, {} });
 
     if (++current < steps.size())
         return renderStep();
 
-    finish ({ true, false, {}, plannedFiles });
+    juce::String warning;
+    if (! leftOut.isEmpty())
+        warning = "Exported, but " + leftOut.joinIntoString (" and ") +
+                  (leftOut.size() == 1 ? " crashed during the export and is missing from the file. Reload it"
+                                       : " crashed during the export and are missing from the file. Reload them") +
+                  " and export again.";
+    finish ({ true, false, {}, plannedFiles, warning });
 }
 
 void ExportJob::finish (const Result& result)
@@ -638,7 +677,9 @@ void ExportJob::noteStart (const juce::String& what, const juce::File& file, con
 void ExportJob::noteEnd (const juce::String& what, const juce::File& file, const Result& r, double startedMs)
 {
     const auto took = juce::String ((juce::Time::getMillisecondCounterHiRes() - startedMs) / 1000.0, 1) + " s";
-    if (r.ok)
+    if (r.ok && r.warning.isNotEmpty())
+        core::Logs::warning ("export", what + " done in " + took + ", with a problem: " + r.warning);
+    else if (r.ok)
         core::Logs::info ("export", what + " done: " + juce::String ((int)r.files.size()) +
                                         (r.files.size() == 1 ? " file" : " files") + " in " + took);
     else if (r.cancelled)

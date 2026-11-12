@@ -733,6 +733,46 @@ TEST_CASE ("Muting the master silences the output after its effects, whatever it
     edit->getTransport().stop (false, true);
 }
 
+TEST_CASE ("The Master all the way down stays silent while the listening level is raised (Automixer A/B)", "[engine]")
+{
+    Fixture f;
+    test::RealtimeRunner runner (f.host.getEngine(),
+                                 { .outputChannels = 2, .maxSeconds = 4.0, .paceInRealTime = true });
+    auto edit = f.newEdit();
+    EngineAdapter adapter (*edit, f.factory);
+
+    CommandHistory history;
+    history.addListener ([&] (const ChangeSet&) { adapter.sync (history.getProject()); });
+    REQUIRE (history
+                 .perform (make ("channel.add",
+                                 R"({"name": "Tone", "instrument": {"kind": "stock", "stockType": "test.tone"}})"))
+                 .wasOk());
+    REQUIRE (history.perform (make ("insert.set", R"({"insert": 1, "volumeDb": -100})")).wasOk());
+    adapter.setMonitorTrim (6.0f, history.getProject()); // A/B at matched loudness: louder for listening
+    CHECK (contains (adapter.describe(), "master: vol=-100.00"));
+
+    edit->dispatchPendingUpdatesSynchronously();
+    edit->getTransport().ensureContextAllocated();
+    edit->getTransport().play (false);
+    runner.start();
+    runner.runUntil (1.5);
+    float loudest = 0.0f;
+    for (int c = 0; c < 2; ++c)
+        for (auto i = (size_t)(0.5 * runner.getParams().sampleRate); i < (size_t)(1.5 * runner.getParams().sampleRate);
+             ++i)
+            loudest = juce::jmax (loudest, std::abs (runner.getChannel (c)[i]));
+    CHECK (loudest <= 0.0f);
+
+    // Just above the bottom, the trim applies as before.
+    REQUIRE (history.perform (make ("insert.set", R"({"insert": 1, "volumeDb": -20})")).wasOk());
+    CHECK (contains (adapter.describe(), "master: vol=-14.00"));
+    adapter.setMonitorTrim (0.0f, history.getProject());
+    CHECK (contains (adapter.describe(), "master: vol=-20.00"));
+
+    runner.stop();
+    edit->getTransport().stop (false, true);
+}
+
 TEST_CASE ("Notes taken away, moved or cut short while they play stop sounding", "[engine][audio][notes]")
 {
     // 3x Osc, and a plugin (the test synth) inside Spinus and in its own process: every kind of instrument.
