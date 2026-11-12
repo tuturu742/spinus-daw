@@ -1153,6 +1153,14 @@ bool MainView::openProjectFile (const juce::File& file)
         return false;
     }
 
+    if (const auto damage = document->describeDamage(); damage.isNotEmpty())
+    {
+        // Loaded what could be: say what, and that saving repairs it.
+        hintBar.showMessage ("Opened " + document->getName() + ", which was damaged: save to repair it");
+        showProblem ("The project was damaged", damage);
+        return true;
+    }
+
     hintBar.showMessage ("Opened " + document->getName());
     offeredDownloads = offerMissingDownloads();
     return true;

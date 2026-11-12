@@ -499,6 +499,17 @@ TEST_CASE ("Dropping audio files on the Channel Rack adds Sampler channels", "[d
     REQUIRE (samplerOf (1) != nullptr);
     REQUIRE (samplerOf (1)->getZones().size() == 1);
     CHECK (samplerOf (1)->getZones()[0].name == "Hat");
+
+    // The project keeps the sounds themselves: with the files gone, it still opens with them, nothing missing.
+    REQUIRE (temp.root.deleteRecursively());
+    auto data = session.captureProjectData();
+    session.loadProject ({});
+    session.loadProject (data);
+    CHECK (session.getAdapter().getMissingDevices().empty());
+    CHECK (! rack.isInstrumentMissing (channels[0].id));
+    REQUIRE (samplerOf (0) != nullptr);
+    REQUIRE (samplerOf (0)->getZones().size() == 1);
+    CHECK (samplerOf (0)->getZones()[0].name == "Kick");
 }
 
 TEST_CASE ("Sampler CPU cost: 32 voices with the filter, 48 kHz, 128 samples", "[.bench][sampler]")

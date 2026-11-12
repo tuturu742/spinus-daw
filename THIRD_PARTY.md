@@ -177,7 +177,7 @@ from source for pluginval and the plugin tests. Not installed by the package.
 
 | Component | License | Used for | Notes |
 |---|---|---|---|
-| [LAME](https://lame.sourceforge.io/) (`lame` program) | LGPL-2.0-or-later | MP3 export | Not linked or shipped: Spinus runs the system's `lame` as a separate process (Arch package `lame`, an optional dependency). MP3 export is disabled when it is missing |
+| [LAME](https://lame.sourceforge.io/) (`lame` program) | LGPL-2.0-or-later | MP3 export | Not linked: Spinus runs `lame` as a separate process. The Flatpak ships the unmodified `lame` 3.100 program (source: lame.sourceforge.io); elsewhere it is the system's (Arch package `lame`, an optional dependency). MP3 export is disabled when it is missing |
 | [FFmpeg](https://ffmpeg.org/) (`ffmpeg` program) | LGPL-2.1-or-later (GPL-2.0-or-later or GPL-3.0-or-later in builds with GPL parts, as Arch's) | Reading M4A, AAC and other audio files (dropped files and songs in the Analyzer), and MP3s Spinus cannot read to the end; AAC export | Not linked or shipped: Spinus runs the system's `ffmpeg` as a separate process (Arch package `ffmpeg`, an optional dependency). Without it, Spinus reads WAV, AIFF, FLAC, Ogg, MP3 and Opus |
 
 ## Test tools (not shipped)

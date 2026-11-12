@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <map>
+#include <set>
 #include <mutex>
 
 namespace spinus::ai
@@ -90,6 +91,8 @@ private:
     static bool sendLine (std::intptr_t socket, const juce::String&);
     void received (const juce::String& line);
     void failPending (const juce::String& error);
+    /** Ends the jobs still running (their callers wait for a last update that will never come), with this error. */
+    void endJobs (const juce::String& error);
     juce::String readLogTail() const;
 
     juce::File folder, modelsFolder;
@@ -107,6 +110,7 @@ private:
     std::map<int, Reply> pending;
     int nextId = 1;
     std::map<int, Listener> listeners;
+    std::set<juce::String> jobs; // started (a reply with "job") and not done yet: message thread only
     std::map<int, std::function<void()>> stateListeners;
     int nextListener = 1;
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);
