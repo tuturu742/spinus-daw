@@ -7,6 +7,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A plugin running in a separate process that crashed during an export was quietly left out: the file was
+  saved without its sound, and nothing said so. Now the export still finishes, but says which plugin crashed
+  and where ("Exported, but Crash Test on insert 1 Tone crashed during the export and is missing from the
+  file"), so you can reload it and export again.
 - Spinus could crash when a Rename window was closed from outside, for example by quitting while it was open.
 - A preset picked in a plugin's own window could be partly undone when you opened the project again: settings
   you had set earlier with Spinus's knobs (or the assistant, or a Spinus preset) went back to Spinus's values.
