@@ -1,7 +1,7 @@
 /* A test CLAP effect for the plugin sandbox: stereo in, stereo out = in x Gain. Its "Crash"
    switch makes processing crash (SIGSEGV) and its "Hang" switch makes it stop answering, so tests can check
-   that Spinus survives both. Its own window crashes as it opens. Gain is saved in its state. Never installed or
-   shipped. */
+   that Spinus survives both. Its own window crashes as it opens. All three are saved in its state, as a real
+   plugin saves its settings. Never installed or shipped. */
 
 #include <clap/clap.h>
 #include <signal.h>
@@ -128,16 +128,21 @@ static const clap_plugin_params_t params = { params_count, params_info, params_v
 //==============================================================================
 static bool state_save (const clap_plugin_t* p, const clap_ostream_t* stream)
 {
-    const float gain = (float) self (p)->values[paramGain];
-    return stream->write (stream, &gain, sizeof (gain)) == (int64_t) sizeof (gain);
+    float values[paramCount];
+    for (int i = 0; i < paramCount; ++i)
+        values[i] = (float) self (p)->values[i];
+    return stream->write (stream, values, sizeof (values)) == (int64_t) sizeof (values);
 }
 
 static bool state_load (const clap_plugin_t* p, const clap_istream_t* stream)
 {
-    float gain = 1.0f;
-    if (stream->read (stream, &gain, sizeof (gain)) != (int64_t) sizeof (gain))
+    /* Gain first; the switches after it (a state saved before they were saved holds only the gain). */
+    float values[paramCount] = { 1.0f, 0.0f, 0.0f };
+    const int64_t got = stream->read (stream, values, sizeof (values));
+    if (got < (int64_t) sizeof (float))
         return false;
-    self (p)->values[paramGain] = gain;
+    for (int i = 0; i < paramCount; ++i)
+        self (p)->values[i] = values[i];
     return true;
 }
 

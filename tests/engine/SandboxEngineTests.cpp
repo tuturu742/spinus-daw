@@ -326,13 +326,25 @@ TEST_CASE ("A plugin crashing in its own process during an export: the file is m
     Fixture f;
     f.session->setRunSeparately (f.device, true);
     f.session->setMode (Session::Mode::song);
-    f.run ("device.setParameters", R"({"device": )" + juce::String (f.device.value) + R"(, "values": {"1": 1}})");
     engine::ExportSettings settings;
     settings.format = engine::ExportSettings::Format::wav32Float;
     settings.tailSeconds = 0.0;
     std::optional<engine::ExportJob::Result> result;
     const auto file = f.root.getChildFile ("Song.wav");
-    auto job = f.session->createExportJob (file, settings, [&] (const engine::ExportJob::Result& r) { result = r; });
+    // Only the export's copy of the plugin gets the crash switch, through the state the export starts it from
+    // (the live plugin would crash as soon as it took the switch in).
+    auto states = f.session->getAdapter().captureDeviceStates();
+    REQUIRE (states.count (f.device) == 1);
+    auto tree = juce::ValueTree::readFromData (states[f.device].getData(), states[f.device].getSize());
+    const float gainCrashHang[] = { 1.0f, 1.0f, 0.0f };
+    tree.setProperty (tracktion::IDs::state,
+                      juce::MemoryBlock (gainCrashHang, sizeof (gainCrashHang)).toBase64Encoding(), nullptr);
+    juce::MemoryOutputStream out;
+    tree.writeToStream (out);
+    states[f.device] = out.getMemoryBlock();
+    auto job = std::make_unique<engine::ExportJob> (f.session->getEdit().engine, f.session->getDeviceFactory(),
+                                                    f.session->getProject(), states, file, settings,
+                                                    [&] (const engine::ExportJob::Result& r) { result = r; });
     job->start();
     for (int i = 0; i < 1200 && ! result; ++i)
         juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
@@ -353,7 +365,6 @@ TEST_CASE ("A plugin crashing in its own process during an export: the file is m
     CHECK (project::saveProject (f.root.getChildFile ("Saved"), { f.session->getProject(), {} }).wasOk());
 
     // Without the crash, the export is made.
-    f.session->getHistory().undo();
     result.reset();
     job = f.session->createExportJob (file, settings, [&] (const engine::ExportJob::Result& r2) { result = r2; });
     job->start();
