@@ -729,7 +729,8 @@ can work on the open project while the user watches and listens.
 - Undo history: unlimited by default within memory budget; "History" panel lists steps by description.
 - Autosave as in §7.3. On startup after a crash, Spinus offers to recover the newest autosave.
 - A damaged project file loads what it can (`project::loadProject` with an `OpenReport`): valid JSON with entries
-  that can't be read opens without them (`model::fromJsonSalvaging`, then `model::repair` makes the rest valid);
+  that can't be read opens without them (`model::fromJsonSalvaging`, then `model::repair` makes the rest valid;
+  a routing loop through sends or sidechains loses the fewest of them that break it, the same ones every time);
   a file that can't be read at all opens the newest readable autosave. The user is told what was left out or which
   autosave opened, the project opens with unsaved changes, and the damaged file is only replaced by the user's
   Save, which keeps a copy as `<name>.spn.damaged`.

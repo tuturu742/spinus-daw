@@ -1036,8 +1036,8 @@ TEST_CASE ("A routing loop is refused with a message, by output, send or sidecha
             CHECK (target.text.contains ("loop"));
         }
 
-    // A project file edited by hand (or by another program) with sends both ways: an output loop is refused when
-    // the file is read; a loop of sends is not (an owner decision), but it plays and exports rather than hangs.
+    // A project file edited by hand (or by another program) with a loop is no valid project: opening one repairs it
+    // (ProjectEdgeCaseTests.cpp). Should a loop of sends still reach the engine, it plays and exports, no hang.
     auto outputLoop = song.session->getProject();
     outputLoop.findInsert (a)->output = b;
     outputLoop.findInsert (b)->output = a;
@@ -1050,7 +1050,7 @@ TEST_CASE ("A routing loop is refused with a message, by output, send or sidecha
     song.setNotes (pattern, song.session->getProject().channels[0].id, { note (0, beat) });
     auto data = song.session->captureProjectData();
     data.project.findInsert (b)->sends.push_back ({ a, -6.0f });
-    REQUIRE (fromJsonText (toJsonText (data.project), read).wasOk());
+    CHECK (fromJsonText (toJsonText (data.project), read).getErrorMessage().contains ("routing cycle"));
     song.session->loadProject (data);
     song.session->setMode (Session::Mode::pattern);
     song.session->setCurrentPattern (pattern);

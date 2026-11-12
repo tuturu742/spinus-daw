@@ -56,6 +56,10 @@ really does.
 - Spinus refuses routing that would feed an insert back into itself (a feedback loop) and says so below
   the sends. Sidechains count too: an insert that follows another through **Sidechain from** cannot
   send its own sound back into that insert.
+- A project file with such a loop in it (edited by hand, or written by another program) still opens: Spinus
+  removes as few sends or sidechains as it takes to break the loop, always the same ones, and tells you which,
+  for example "the send from 'B' to 'A' (it made a feedback loop)". **Save** to keep the change; see
+  [A damaged project file](projects.md#a-damaged-project-file).
 - Effects can be added, moved and removed while the song plays.
 - Every change can be undone with **Ctrl+Z**. One fader or knob drag is one undo step, and undoing the
   removal of an effect brings it back with its settings.

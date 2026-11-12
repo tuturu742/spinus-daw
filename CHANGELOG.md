@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ### Fixes
 
+- A project file with a feedback loop of sends or sidechains in it (insert A sends to B and B back to A, for
+  example after editing the file by hand) now opens with the send that closes the loop removed, and Spinus
+  says which one. Before, such a file opened with the loop in it.
 - A plugin running in a separate process that crashed during an export was quietly left out: the file was
   saved without its sound, and nothing said so. Now the export still finishes, but says which plugin crashed
   and where ("Exported, but Crash Test on insert 1 Tone crashed during the export and is missing from the

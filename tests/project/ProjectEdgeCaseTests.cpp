@@ -6,6 +6,7 @@
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
 #include "model/ModelJson.h"
+#include "model/Validation.h"
 #include "session/ProjectDocument.h"
 
 using namespace spinus;
@@ -404,6 +405,132 @@ TEST_CASE ("A damaged project opens what it can read, says what was left out, an
     model::Project reread;
     requireOk (model::fromJsonText (file.loadFileAsString(), reread));
     CHECK (reread == f.session.getProject());
+}
+
+TEST_CASE ("A project file with a loop of sends or sidechains opens without the send that closes it, and says so",
+           "[project][document][routing]")
+{
+    Fixture f;
+    const auto folder = f.root.getChildFile ("Loops");
+    for (auto name : { "A", "B", "C" })
+        requireOk (f.session.getHistory().perform (
+            make ("insert.add", juce::JSON::parse (juce::String (R"({"name": ")") + name + "\"}"))));
+    requireOk (f.document->saveAs (folder));
+    const auto ids = [&]
+    {
+        std::vector<model::InsertId> result;
+        for (auto& insert : f.session.getProject().mixer.inserts)
+            result.push_back (insert.id);
+        return result;
+    }();
+    REQUIRE (ids.size() == 3);
+    f.document->newProject();
+
+    const auto file = folder.getChildFile ("Loops.spn");
+    const auto good = file.loadFileAsString();
+    /** Writes the file with these sends (from, to) and sidechains (source, insert), as an editor or another program
+        might, and opens it. */
+    auto openWith = [&] (const std::vector<std::pair<int, int>>& sends,
+                         const std::vector<std::pair<int, int>>& sidechains = {},
+                         const std::vector<std::pair<int, int>>& outputs = {})
+    {
+        auto json = juce::JSON::parse (good);
+        auto* inserts = json["mixer"]["inserts"].getArray();
+        REQUIRE (inserts != nullptr);
+        REQUIRE (inserts->size() == 3);
+        for (auto [from, to] : sends)
+            inserts->getReference (from)["sends"].getArray()->add (juce::JSON::parse (
+                R"({"target": )" + juce::String ((int)ids[(size_t)to].value) + R"(, "levelDb": -6.0})"));
+        for (auto [source, insert] : sidechains)
+            inserts->getReference (insert)["sidechainSources"].getArray()->add ((int)ids[(size_t)source].value);
+        for (auto [from, to] : outputs)
+            inserts->getReference (from).getDynamicObject()->setProperty ("output", (int)ids[(size_t)to].value);
+        REQUIRE (file.replaceWithText (juce::JSON::toString (json)));
+        requireOk (f.document->open (folder));
+        INFO (f.document->describeDamage());
+        CHECK (model::validate (f.session.getProject()).isEmpty());
+    };
+    auto insert = [&] (int i) -> const model::Insert& { return *f.session.getProject().findInsert (ids[(size_t)i]); };
+    auto sendsTo = [&] (int from)
+    {
+        std::vector<model::InsertId> targets;
+        for (auto& send : insert (from).sends)
+            targets.push_back (send.target);
+        return targets;
+    };
+
+    SECTION ("A sends to B, B sends to A: B's send goes, A's stays")
+    {
+        openWith ({ { 0, 1 }, { 1, 0 } });
+        CHECK (sendsTo (0) == std::vector { ids[1] });
+        CHECK (sendsTo (1).empty());
+        CHECK (f.document->hasUnsavedEdits());
+        const auto message = f.document->describeDamage();
+        INFO (message);
+        CHECK (message.contains ("the send from 'B' to 'A' (it made a feedback loop)"));
+        CHECK (message.contains ("Save to repair it"));
+        CHECK (f.document->getDamage().skipped.size() == 1);
+
+        // The same file always gives the same result.
+        const auto first = f.session.getProject();
+        openWith ({ { 0, 1 }, { 1, 0 } });
+        CHECK (f.session.getProject() == first);
+
+        // Saved: the loop is gone for good, and the file opens as an ordinary project.
+        requireOk (f.document->save());
+        requireOk (f.document->open (folder));
+        CHECK (f.document->describeDamage().isEmpty());
+        CHECK (f.session.getProject() == first);
+    }
+
+    SECTION ("A loop of three: only the send back to the start goes")
+    {
+        openWith ({ { 0, 1 }, { 1, 2 }, { 2, 0 }, { 0, 2 } });
+        CHECK (sendsTo (0) == std::vector { ids[1], ids[2] });
+        CHECK (sendsTo (1) == std::vector { ids[2] });
+        CHECK (sendsTo (2).empty());
+        CHECK (f.document->getDamage().skipped ==
+               juce::StringArray { "the send from 'C' to 'A' (it made a feedback loop)" });
+    }
+
+    SECTION ("Two loops sharing a send: the fewest sends go")
+    {
+        // A -> B -> A and A -> B -> C -> A: A's one send to B breaks both (B's two sends back would be two).
+        openWith ({ { 0, 1 }, { 1, 0 }, { 1, 2 }, { 2, 0 } });
+        CHECK (sendsTo (0).empty());
+        CHECK (sendsTo (1) == std::vector { ids[0], ids[2] });
+        CHECK (sendsTo (2) == std::vector { ids[0] });
+        CHECK (f.document->getDamage().skipped ==
+               juce::StringArray { "the send from 'A' to 'B' (it made a feedback loop)" });
+    }
+
+    SECTION ("A sidechain closing the loop goes, the send stays")
+    {
+        // A sends to B, and B feeds A's sidechain: A waits for B, which waits for A.
+        openWith ({ { 0, 1 } }, { { 1, 0 } });
+        CHECK (sendsTo (0) == std::vector { ids[1] });
+        CHECK (insert (0).sidechainSources.empty());
+        CHECK (f.document->getDamage().skipped ==
+               juce::StringArray { "the sidechain from 'B' into 'A' (it made a feedback loop)" });
+    }
+
+    SECTION ("An output and a send in the loop: the send goes, the output stays")
+    {
+        openWith ({ { 1, 0 } }, {}, { { 0, 1 } });
+        CHECK (insert (0).output == ids[1]);
+        CHECK (sendsTo (1).empty());
+        CHECK (f.document->getDamage().skipped ==
+               juce::StringArray { "the send from 'B' to 'A' (it made a feedback loop)" });
+    }
+
+    SECTION ("Outputs alone in a loop: one plays into the Master")
+    {
+        openWith ({}, {}, { { 0, 1 }, { 1, 0 } });
+        CHECK (insert (0).output == model::masterInsertId);
+        CHECK (insert (1).output == ids[0]);
+        CHECK (f.document->getDamage().skipped ==
+               juce::StringArray { "where 'A' played (it made a feedback loop; it plays into the Master now)" });
+    }
 }
 
 TEST_CASE ("Projects saved by the alpha releases open, and saving them again loses nothing", "[project][document]")
