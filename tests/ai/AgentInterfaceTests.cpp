@@ -150,6 +150,15 @@ struct Fixture
                  answer.headers["Content-Type"] };
     }
 
+    /** Turns the interface on at a port it can listen on: a random one may be taken by another test, or reserved
+        (Windows keeps blocks of ports for itself), so others are tried. */
+    void listen()
+    {
+        agents->setEnabled (true);
+        for (int i = 0; i < 20 && ! agents->isListening(); ++i)
+            agents->setPort (40000 + juce::Random::getSystemRandom().nextInt (20000));
+    }
+
     static juce::var rpc (const juce::String& method, const juce::var& params = juce::var (new juce::DynamicObject()))
     {
         return object ({ { "jsonrpc", "2.0" }, { "id", 1 }, { "method", method }, { "params", params } });
@@ -180,7 +189,7 @@ TEST_CASE ("The live interface for agents is off until turned on, and needs its 
     CHECK_FALSE (f.agents->isEnabled());
     CHECK (f.request ("POST", Fixture::rpc ("initialize")).status == 403);
 
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     CHECK (f.agents->getToken().length() == 32);
     CHECK (f.request ("POST", Fixture::rpc ("initialize"), {}, "Bearer wrong").status == 401);
@@ -442,7 +451,7 @@ TEST_CASE ("An agent plays a section for the user to hear, looped, and stops", "
 TEST_CASE ("The live interface answers MCP over HTTP on 127.0.0.1", "[ai][agents]")
 {
     Fixture f;
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     const auto port = f.agents->getPort();
     const auto token = f.agents->getToken();
@@ -908,7 +917,7 @@ TEST_CASE ("With AI off the agent is told only of the tools it has, and told whe
 TEST_CASE ("The live interface answers a POST without a length with 411, and reads a chunked one", "[ai][agents]")
 {
     Fixture f;
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     const auto port = f.agents->getPort();
     const auto token = f.agents->getToken();
@@ -1013,7 +1022,7 @@ HttpReply post (int port, const juce::String& token, const juce::String& session
 TEST_CASE ("Two agents connected at once over HTTP: each one's changes land, none is lost", "[ai][agents]")
 {
     Fixture f;
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     const auto port = f.agents->getPort();
     const auto token = f.agents->getToken();
