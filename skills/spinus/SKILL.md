@@ -81,8 +81,10 @@ off or making a new token. Several agents can be connected at once, each in its 
 - `play`: plays bars (`"9-16"`) or a section by its marker name (`"Chorus"`, `"Chorus 2"` for the second) for
   the user to hear, looped. It sets the song's loop region and song mode. `stop` stops it.
 - `save_project`: saves the open project. An untitled one needs `name`: it's saved as a new project of that name
-  in the user's projects folder.
-- `list_projects` (`find` words): the projects in the Browser, with their folders and which is open.
+  in the first of the user's folders of projects, or in `folder`: one of those folders or a folder inside one,
+  made if it isn't there (`"Album/Act 1"` is inside the first). Keep an album's songs together that way.
+- `list_projects` (`find` words): `projects` in the Browser, with their folders and which is open, and the
+  `folders` of projects (where `save_project` can save).
 - `open_project` (`project`: a name or folder from `list_projects`) and `new_project`: replace the open project.
   Both are refused while it has unsaved changes: `save_project` first (ask the user if those changes aren't
   yours). Neither is an undo step. Call `song_summary` after.

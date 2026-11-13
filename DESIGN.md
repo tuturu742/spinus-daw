@@ -673,7 +673,9 @@ can work on the open project while the user watches and listens.
     `list_devices`, `list_presets`, `render` (an offline export measured: mix, sections, stems), `undo_last`,
     `what_changed`, `play`, `stop`; and the project as files (owner decision 2026-11-13), when the host gives
     them (`Host::projects`, `openProject`...; MainView without message boxes): `save_project` (an untitled
-    project needs a name: a new folder in the Browser's first folder of projects), `list_projects` (the
+    project needs a name: a new folder in the Browser's first folder of projects, or in `folder`: one of the
+    Browser's folders of projects or a folder inside one, made if missing, at most 4 deep, never inside a
+    project; `Host::projectFolders`), `list_projects` (the
     Browser's `ProjectList`), `open_project` (only a project listed there) and `new_project`. Opening and
     starting are refused while the project has unsaved changes (`ProjectDocument::hasUnsavedChanges`), so an
     agent never discards the user's work; they aren't undo steps, and the agent that did it has seen the new
