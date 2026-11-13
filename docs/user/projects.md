@@ -24,9 +24,10 @@ they aren't.
 
 You can also open a project from a terminal: `spinus "My Song/My Song.spn"`.
 
-While a project opens, Spinus shows **Opening <name>** with a bar and the plugin it is loading, for example
-"Loading Surge XT on Lead (3 of 12)". Big plugins can take a few seconds each, so a project with many of them
-takes a while to open; the bar shows it is still working.
+While a project opens, Spinus shows a small card in the bottom right corner of the window: **Opening <name>**
+with a bar and the plugin it is loading, for example "Loading Surge XT on Lead (3 of 12)". The rest of the window
+stays in view, as it was when opening began, until the project is open. Big plugins can take a few seconds
+each, so a project with many of them takes a while to open; the bar shows it is still working.
 
 Every project you open or save is also listed in the [Browser](browser.md#projects) under **Projects**,
 with the demo songs and folders of projects you add: double-click one there to open it.

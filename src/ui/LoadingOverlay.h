@@ -5,14 +5,16 @@
 namespace spinus::ui
 {
 
-/** Covers the window while a project opens: its name, a bar, and the plugin being loaded. Opening runs on the
-    message thread, so the overlay paints itself straight away (ui::paintNow) instead of waiting for the loop. */
+/** While a project opens: a small card in the window's bottom corner with its name, a bar, and the plugin being
+    loaded, over the window as it looked when opening began. Opening runs on the message thread, so the overlay
+    paints itself straight away (ui::paintNow) instead of waiting for the loop. */
 class LoadingOverlay : public juce::Component
 {
 public:
     LoadingOverlay();
 
-    /** Shows "Opening <name>" over the parent, empty bar, and paints it now. */
+    /** Shows "Opening <name>" over the parent, empty bar, and paints it now. Takes a picture of the parent first, to
+        show around the card. */
     void start (const juce::String& name);
     /** done of total plugins created; what is loading next. Paints now. */
     void setProgress (int done, int total, const juce::String& what);
@@ -30,6 +32,7 @@ private:
     juce::String title, detail;
     double progress = 0.0;
     juce::Rectangle<int> card, bar;
+    juce::Image underneath; // the parent as it looked at start
 };
 
 } // namespace spinus::ui

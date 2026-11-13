@@ -3,6 +3,11 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## Unreleased
+
+- While a project opens, its name and bar now show in a small card in the bottom right corner, instead of
+  covering the whole window.
+
 ## 0.1.0-rc.1 (2026-11-13)
 
 ### Coding agents: save, start and open projects

@@ -557,7 +557,7 @@ TEST_CASE ("Help > Report a problem makes the report file, then opens the bug pa
     CHECK (shown[0].getParentDirectory() == ui.view.reportFolder);
 }
 
-TEST_CASE ("Opening a project covers the window with a bar until it is open", "[ui][document]")
+TEST_CASE ("Opening a project shows a small card with a bar until it is open", "[ui][document]")
 {
     Ui ui;
     ui.view.setSize (1000, 700);
@@ -578,7 +578,7 @@ TEST_CASE ("Opening a project covers the window with a bar until it is open", "[
     REQUIRE (overlay() != nullptr);
     CHECK (! overlay()->isVisible());
 
-    // While each plugin loads, the overlay is up, over the whole window.
+    // While each plugin loads, the overlay is up, over the whole window (showing it as it was, with a small card).
     juce::StringArray seen;
     auto shown = ui.session.onLoadProgress;
     ui.session.onLoadProgress = [&] (int done, int total, const juce::String& what)
@@ -590,7 +590,7 @@ TEST_CASE ("Opening a project covers the window with a bar until it is open", "[
         // The bar shows the count straight away, with no timer (the message loop is busy).
         auto* bar = dynamic_cast<LoadingOverlay*> (overlay());
         REQUIRE (bar != nullptr);
-        CHECK (bar->getFilledPart().getWidth() == juce::roundToInt (400.0 * done / total));
+        CHECK (bar->getFilledPart().getWidth() == juce::roundToInt (312.0 * done / total));
     };
     REQUIRE (ui.view.openProjectFile (ui.root.getChildFile ("Song")));
     CHECK (seen.contains ("Sampler on Keys"));
@@ -599,7 +599,10 @@ TEST_CASE ("Opening a project covers the window with a bar until it is open", "[
 
 TEST_CASE ("The loading bar draws the count it is given, without waiting for a timer", "[ui][document]")
 {
-    juce::Component window;
+    struct Window : juce::Component
+    {
+        void paint (juce::Graphics& g) override { g.fillAll (juce::Colours::red); }
+    } window;
     LoadingOverlay overlay;
     window.setSize (800, 600);
     window.addChildComponent (overlay);
@@ -607,18 +610,22 @@ TEST_CASE ("The loading bar draws the count it is given, without waiting for a t
     overlay.start ("Song");
     CHECK (overlay.isVisible());
     CHECK (overlay.getBounds() == window.getLocalBounds());
-    // No count yet: a quarter-width block somewhere in the bar.
-    CHECK (overlay.getFilledPart().getWidth() == 100);
+    // No count yet: a quarter-width block somewhere in the bar, which sits in the bottom right corner.
+    CHECK (overlay.getFilledPart().getWidth() == 78);
+    CHECK (overlay.getFilledPart().getX() >= 800 - 16 - 340);
+    CHECK (overlay.getFilledPart().getY() > 600 - 140);
 
     overlay.setProgress (1, 4, "Sampler on Keys");
     const auto filled = overlay.getFilledPart();
-    CHECK (filled.getWidth() == 100); // a quarter of the 400 pixel bar
+    CHECK (filled.getWidth() == 78); // a quarter of the 312 pixel bar
 
     // Painted (as paintNow paints it) the filled part has the bar colour and the rest does not.
     const auto image = overlay.createComponentSnapshot (overlay.getLocalBounds());
     const auto y = filled.getCentreY();
     CHECK (image.getPixelAt (filled.getX() + 50, y) != image.getPixelAt (filled.getRight() + 150, y));
     CHECK (image.getPixelAt (filled.getX() + 50, y) == image.getPixelAt (filled.getX() + 20, y));
+    // Around the card, the window as it looked when opening began.
+    CHECK (image.getPixelAt (100, 100) == juce::Colours::red);
 
     overlay.finish();
     CHECK (! overlay.isVisible());

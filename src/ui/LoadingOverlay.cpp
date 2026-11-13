@@ -8,7 +8,8 @@ namespace spinus::ui
 
 LoadingOverlay::LoadingOverlay()
 {
-    // Opaque, so painting it now paints nothing under it: the panels may be half way through the new project.
+    // Opaque, so painting it now paints nothing under it: the panels may be half way through the new project. What
+    // shows around the card is a picture of them from before.
     setOpaque (true);
     setVisible (false);
 }
@@ -19,7 +20,11 @@ void LoadingOverlay::start (const juce::String& name)
     detail = "Reading the project";
     progress = -1.0; // no count yet: the bar moves on its own
     if (auto* parent = getParentComponent())
+    {
+        underneath = parent->createComponentSnapshot (parent->getLocalBounds(), true,
+                                                      juce::Component::getApproximateScaleFactorForComponent (parent));
         setBounds (parent->getLocalBounds());
+    }
     setVisible (true);
     toFront (false);
     paintNow();
@@ -34,15 +39,21 @@ void LoadingOverlay::setProgress (int done, int total, const juce::String& what)
     paintNow();
 }
 
-void LoadingOverlay::finish() { setVisible (false); }
+void LoadingOverlay::finish()
+{
+    setVisible (false);
+    underneath = {};
+}
 
 // The message loop is busy opening the project, so a repaint would wait for the end: paint now.
 void LoadingOverlay::paintNow() { ui::paintNow (*this); }
 
 void LoadingOverlay::resized()
 {
-    card = getLocalBounds().withSizeKeepingCentre (juce::jmin (440, getWidth() - 32), 110);
-    bar = card.reduced (20).removeFromBottom (14);
+    // Bottom right, clear of the hint bar, so the window stays in view.
+    const auto width = juce::jmin (340, getWidth() - 32);
+    card = { getWidth() - 16 - width, getHeight() - 40 - 84, width, 84 };
+    bar = card.reduced (14).removeFromBottom (10);
 }
 
 juce::Rectangle<int> LoadingOverlay::getFilledPart() const
@@ -62,19 +73,23 @@ void LoadingOverlay::paint (juce::Graphics& g)
     auto colour = [lf] (const char* name, juce::Colour fallback)
     { return lf != nullptr ? lf->getTheme().get (name) : fallback; };
 
-    g.fillAll (colour ("background", juce::Colours::black));
+    if (underneath.isValid())
+        g.drawImage (underneath, getLocalBounds().toFloat());
+    else
+        g.fillAll (colour ("background", juce::Colours::black));
+    juce::DropShadow (juce::Colours::black.withAlpha (0.5f), 12, {}).drawForRectangle (g, card);
     g.setColour (colour ("panel", juce::Colours::darkgrey));
     g.fillRoundedRectangle (card.toFloat(), 6.0f);
     g.setColour (colour ("border", juce::Colours::grey));
     g.drawRoundedRectangle (card.toFloat().reduced (0.5f), 6.0f, 1.0f);
 
-    auto area = card.reduced (20);
+    auto area = card.reduced (14);
     g.setColour (colour ("text", juce::Colours::white));
-    g.setFont (juce::FontOptions (16.0f, juce::Font::bold));
-    g.drawText (title, area.removeFromTop (24), juce::Justification::centredLeft, true);
+    g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+    g.drawText (title, area.removeFromTop (20), juce::Justification::centredLeft, true);
     g.setColour (colour ("textDim", juce::Colours::grey));
-    g.setFont (juce::FontOptions (13.0f));
-    g.drawText (detail, area.removeFromTop (22), juce::Justification::centredLeft, true);
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText (detail, area.removeFromTop (20), juce::Justification::centredLeft, true);
 
     // Drawn here rather than by a juce::ProgressBar, which only takes a new value on its timer: not while the loop
     // is busy.
