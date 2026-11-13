@@ -64,6 +64,16 @@
     <display_length compare="ge">1024</display_length>
   </requires>
   <releases>
+    <release version="0.1.0~rc.1" date="2026-11-13" type="development">
+      <description>
+        <p>The first release candidate: a polish release with many fixes found by testing everyday use, from
+        undo, automation and exporting to opening, saving and repairing projects, the mixer and plugins.
+        Opening a project shows a progress bar while its plugins load; missing samples are marked; a damaged
+        project opens with what can be read; MP3 export works in the Flatpak. Also new: Spinus Delay,
+        automation clips that show what they move, moving and soloing Playlist tracks, and an Automixer that
+        reaches the loudness you chose.</p>
+      </description>
+    </release>
     <release version="0.1.0~alpha.4" date="2026-10-31" type="development">
       <description>
         <p>The fourth alpha: coding agents such as Claude Code can work on the song open in Spinus through a
