@@ -821,6 +821,35 @@ private:
             aiService->call ("ai.v1.project.tool", juce::var (params), reply);
         };
         host.musicToolsOn = [this] { return aiService != nullptr && aiService->isEnabled(); };
+        host.projects = [&view]
+        {
+            juce::Array<juce::File> all;
+            for (auto& folder : view.getBrowser().getProjects().getFolders())
+                for (auto& project : folder.projects)
+                    all.addIfNotAlreadyThere (project.folder);
+            return all;
+        };
+        host.unsavedChanges = [this] { return document != nullptr && document->hasUnsavedChanges(); };
+        host.newProjectsFolder = [&view] { return view.getNewProjectsFolder(); };
+        host.saveProject = [&view] (const juce::File& folder)
+        {
+            juce::String problem;
+            if (! view.saveProjectTo (folder, &problem))
+                return problem.isNotEmpty() ? problem : juce::String ("Spinus could not save it.");
+            return juce::String();
+        };
+        host.openProject = [&view] (const juce::File& folder)
+        {
+            juce::String problem;
+            if (! view.openProjectFile (folder, &problem))
+                return problem.isNotEmpty() ? problem : juce::String ("Spinus could not open it.");
+            return juce::String();
+        };
+        host.newProject = [&view]
+        {
+            view.startNewProject();
+            return juce::String();
+        };
         return std::make_unique<ai::AgentInterface> (*session, getSettingsFolder(), std::move (host));
     }
 };

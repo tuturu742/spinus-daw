@@ -1088,6 +1088,22 @@ void MainView::showProblem (const juce::String& title, const juce::String& messa
     messageBox (juce::MessageBoxOptions::makeOptionsOk (juce::MessageBoxIconType::WarningIcon, title, message), {});
 }
 
+void MainView::startNewProject()
+{
+    if (document == nullptr)
+        return;
+    document->newProject();
+    hintBar.showMessage ("New project");
+}
+
+juce::File MainView::getNewProjectsFolder() const
+{
+    for (auto& f : browser->getProjects().getFolders())
+        if (! f.missing)
+            return f.folder;
+    return getDefaultProjectsFolder();
+}
+
 juce::File MainView::getDefaultProjectsFolder() const
 {
     if (document != nullptr && ! document->isUntitled())
@@ -1131,7 +1147,7 @@ bool MainView::openDemo (const juce::File& bundled)
     return true;
 }
 
-bool MainView::openProjectFile (const juce::File& file)
+bool MainView::openProjectFile (const juce::File& file, juce::String* problem)
 {
     if (document == nullptr)
         return false;
@@ -1155,7 +1171,10 @@ bool MainView::openProjectFile (const juce::File& file)
     loadingOverlay.finish();
     if (opened.failed())
     {
-        showProblem ("Could not open the project", opened.getErrorMessage());
+        if (problem != nullptr)
+            *problem = opened.getErrorMessage();
+        else
+            showProblem ("Could not open the project", opened.getErrorMessage());
         return false;
     }
 
@@ -1589,7 +1608,7 @@ bool MainView::offerMissingDownloads()
     return true;
 }
 
-bool MainView::saveProjectTo (const juce::File& folder)
+bool MainView::saveProjectTo (const juce::File& folder, juce::String* problem)
 {
     if (document == nullptr)
         return false;
@@ -1600,6 +1619,11 @@ bool MainView::saveProjectTo (const juce::File& folder)
         auto message = r.getErrorMessage().trimEnd();
         if (! message.endsWithChar ('.'))
             message << '.';
+        if (problem != nullptr)
+        {
+            *problem = std::move (message);
+            return false;
+        }
         showProblem ("Could not save the project",
                      message + "\n\nYour work is still open in Spinus. Try File > Save as... (Ctrl+Shift+S) and "
                                "choose another folder, for example one in your Music folder.");
@@ -2558,12 +2582,7 @@ bool MainView::perform (const InvocationInfo& info)
         return true;
 
     case newProject:
-        askToSaveChanges (
-            [this]
-            {
-                document->newProject();
-                hintBar.showMessage ("New project");
-            });
+        askToSaveChanges ([this] { startNewProject(); });
         return true;
     case openProject:
         chooseProjectToOpen();

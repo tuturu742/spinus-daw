@@ -5,6 +5,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## 0.1.0-rc.1 (2026-11-13)
 
+### Coding agents: save, start and open projects
+
+- A coding agent connected to Spinus (Options › AI › Coding agents) can now **save the project**, **start a new
+  one** and **open one of the projects in the Browser**: "save it as Night Drive", "start a new song", "open
+  Summer Demo". A new project it saves goes into the Browser's first folder of projects. It never throws away
+  unsaved work: while the open project has unsaved changes, it can't open another or start a new one until the
+  project is saved. See [Coding agents](docs/user/agents.md).
+
 ### Fixes
 
 - Spinus Tune's top bar now has its own background, tall enough for its buttons and sliders, like the Piano

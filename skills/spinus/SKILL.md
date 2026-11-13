@@ -80,12 +80,18 @@ off or making a new token. Several agents can be connected at once, each in its 
   opened another project.
 - `play`: plays bars (`"9-16"`) or a section by its marker name (`"Chorus"`, `"Chorus 2"` for the second) for
   the user to hear, looped. It sets the song's loop region and song mode. `stop` stops it.
+- `save_project`: saves the open project. An untitled one needs `name`: it's saved as a new project of that name
+  in the user's projects folder.
+- `list_projects` (`find` words): the projects in the Browser, with their folders and which is open.
+- `open_project` (`project`: a name or folder from `list_projects`) and `new_project`: replace the open project.
+  Both are refused while it has unsaved changes: `save_project` first (ask the user if those changes aren't
+  yours). Neither is an undo step. Call `song_summary` after.
 
 **The user's edits come first.** If the user changed the song (or opened another project) since you last looked
 (connected, `song_summary`, `song_overview` or `what_changed`), your next change is refused once, with what they
 did. Check that your change still fits, then call again.
 
-You can't save, open or start a project, or change Spinus's settings: ask the user.
+You can't change Spinus's settings or open projects the Browser doesn't list: ask the user.
 
 **The music tools** need AI turned on in Spinus (**Options › AI**). They run on this computer, with no internet.
 If they're missing from your tools, ask the user to turn AI on; reconnect (`/mcp` in Claude Code) if they still

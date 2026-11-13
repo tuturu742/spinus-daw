@@ -51,6 +51,11 @@ struct Fixture
     std::unique_ptr<ai::AgentInterface> agents;
     juce::var lastContext;
     bool music = true; // AI on, for the harness's stand-in
+    // A stand-in for the project as files: the open project's folder, the Browser's projects, unsaved changes.
+    juce::File openFolder = folder.root.getChildFile ("Song");
+    juce::Array<juce::File> listed;
+    bool unsaved = false;
+    juce::File savedTo { "/nowhere" };
 
     static std::unique_ptr<engine::DeviceFactory> makeDevices (tracktion::Engine& engine)
     {
@@ -62,7 +67,30 @@ struct Fixture
     explicit Fixture (bool withHarness = true)
     {
         ai::AgentInterface::Host h;
-        h.projectFolder = [this] { return folder.root.getChildFile ("Song"); };
+        h.projectFolder = [this] { return openFolder; };
+        h.projects = [this] { return listed; };
+        h.unsavedChanges = [this] { return unsaved; };
+        h.newProjectsFolder = [this] { return folder.root.getChildFile ("Projects"); };
+        h.saveProject = [this] (const juce::File& to)
+        {
+            savedTo = to;
+            if (to != juce::File())
+                openFolder = to;
+            unsaved = false;
+            return juce::String();
+        };
+        h.openProject = [this] (const juce::File& project)
+        {
+            session.loadProject ({});
+            openFolder = project;
+            return juce::String();
+        };
+        h.newProject = [this]
+        {
+            session.loadProject ({});
+            openFolder = juce::File();
+            return juce::String();
+        };
         h.sampleFolders = [] { return juce::Array<juce::File>(); };
         h.context = [] { return object ({ { "project", juce::var (new juce::DynamicObject()) } }); };
         if (withHarness)
@@ -122,6 +150,15 @@ struct Fixture
                  answer.headers["Content-Type"] };
     }
 
+    /** Turns the interface on at a port it can listen on: a random one may be taken by another test, or reserved
+        (Windows keeps blocks of ports for itself), so others are tried. */
+    void listen()
+    {
+        agents->setEnabled (true);
+        for (int i = 0; i < 20 && ! agents->isListening(); ++i)
+            agents->setPort (40000 + juce::Random::getSystemRandom().nextInt (20000));
+    }
+
     static juce::var rpc (const juce::String& method, const juce::var& params = juce::var (new juce::DynamicObject()))
     {
         return object ({ { "jsonrpc", "2.0" }, { "id", 1 }, { "method", method }, { "params", params } });
@@ -152,7 +189,7 @@ TEST_CASE ("The live interface for agents is off until turned on, and needs its 
     CHECK_FALSE (f.agents->isEnabled());
     CHECK (f.request ("POST", Fixture::rpc ("initialize")).status == 403);
 
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     CHECK (f.agents->getToken().length() == 32);
     CHECK (f.request ("POST", Fixture::rpc ("initialize"), {}, "Bearer wrong").status == 401);
@@ -414,7 +451,7 @@ TEST_CASE ("An agent plays a section for the user to hear, looped, and stops", "
 TEST_CASE ("The live interface answers MCP over HTTP on 127.0.0.1", "[ai][agents]")
 {
     Fixture f;
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     const auto port = f.agents->getPort();
     const auto token = f.agents->getToken();
@@ -587,6 +624,64 @@ TEST_CASE ("Another project opened while an agent works: it is told, and the und
     f.agents->undoAgentChanges();
     CHECK (f.session.getHistory().getUndoDescriptions().isEmpty());
     CHECK ((bool)f.call (id, "undo_last", none())["isError"]);
+}
+
+TEST_CASE ("An agent saves the project, starts a new one, and opens one the Browser lists, never over unsaved work",
+           "[ai][agents]")
+{
+    Fixture f;
+    const auto other = f.folder.root.getChildFile ("Mine/Other");
+    f.listed = { f.openFolder, other };
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+
+    const auto list = juce::JSON::parse (said (f.call (id, "list_projects", none())));
+    REQUIRE (list.size() == 2);
+    CHECK (list[0]["name"].toString() == "Song");
+    CHECK ((bool)list[0]["open"]);
+    CHECK_FALSE ((bool)list[1]["open"]);
+    CHECK (juce::JSON::parse (said (f.call (id, "list_projects", object ({ { "find", "oth" } }))))[0]["name"] ==
+           juce::var ("Other"));
+
+    // Unsaved changes: neither opening nor a new project throws them away.
+    f.unsaved = true;
+    for (const auto& [tool, arguments] :
+         { std::pair { "open_project", object ({ { "project", "Other" } }) }, std::pair { "new_project", none() } })
+    {
+        const auto refused = f.call (id, tool, arguments);
+        CHECK ((bool)refused["isError"]);
+        CHECK (said (refused).contains ("save_project first"));
+    }
+    CHECK (f.openFolder.getFileName() == "Song");
+
+    // Saved where it is, then the other project opens; the agent's next change isn't refused as news.
+    CHECK (said (f.call (id, "save_project", none())).startsWith ("Saved"));
+    CHECK (f.savedTo == juce::File());
+    CHECK ((bool)f.call (id, "open_project", object ({ { "project", "Missing" } }))["isError"]);
+    CHECK (said (f.call (id, "open_project", object ({ { "project", "other" } }))).startsWith ("Opened Other"));
+    CHECK (f.openFolder == other);
+    CHECK_FALSE ((bool)f.call (id, "run_commands", tempo (150))["isError"]);
+
+    // A new project needs a name to be saved, one that can be a folder's and isn't taken.
+    f.unsaved = false;
+    CHECK (said (f.call (id, "new_project", none())).startsWith ("Started a new"));
+    CHECK (f.openFolder == juce::File());
+    CHECK ((bool)f.call (id, "save_project", none())["isError"]);
+    CHECK ((bool)f.call (id, "save_project", object ({ { "name", "a/b" } }))["isError"]);
+    REQUIRE (f.folder.root.getChildFile ("Projects/Taken").createDirectory());
+    CHECK ((bool)f.call (id, "save_project", object ({ { "name", "Taken" } }))["isError"]);
+    CHECK_FALSE ((bool)f.call (id, "save_project", object ({ { "name", "New Song" } }))["isError"]);
+    CHECK (f.savedTo == f.folder.root.getChildFile ("Projects/New Song"));
+
+    // The client is told opening and starting replace the open project.
+    const auto tools = f.request ("POST", Fixture::rpc ("tools/list"), id).json["result"]["tools"];
+    std::map<juce::String, juce::var> hints;
+    for (auto& t : *tools.getArray())
+        hints[t["name"].toString()] = t["annotations"];
+    CHECK ((bool)hints["list_projects"]["readOnlyHint"]);
+    CHECK ((bool)hints["open_project"]["destructiveHint"]);
+    CHECK ((bool)hints["new_project"]["destructiveHint"]);
+    CHECK_FALSE ((bool)hints["save_project"]["destructiveHint"]);
 }
 
 TEST_CASE ("play finds sections past the last clip, before the first marker, and of the same name", "[ai][agents]")
@@ -822,7 +917,7 @@ TEST_CASE ("With AI off the agent is told only of the tools it has, and told whe
 TEST_CASE ("The live interface answers a POST without a length with 411, and reads a chunked one", "[ai][agents]")
 {
     Fixture f;
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     const auto port = f.agents->getPort();
     const auto token = f.agents->getToken();
@@ -927,7 +1022,7 @@ HttpReply post (int port, const juce::String& token, const juce::String& session
 TEST_CASE ("Two agents connected at once over HTTP: each one's changes land, none is lost", "[ai][agents]")
 {
     Fixture f;
-    f.agents->setEnabled (true);
+    f.listen();
     REQUIRE (f.agents->isListening());
     const auto port = f.agents->getPort();
     const auto token = f.agents->getToken();

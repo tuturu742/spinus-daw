@@ -110,10 +110,15 @@ the rest. Every change is still one undo step.
   region to the section, and it doesn't put them back afterwards.
 - Rendering to listen takes as long as the song does to render. The agent sees the numbers; you hear the song in
   Spinus as usual.
+- **It can save the project, start a new one, and open one of yours:** "save it", "start a new song", "open
+  Summer Demo". It opens only projects listed in the Browser's **Projects** (the folders of projects you added).
+  A new project it saves goes into the first of those folders, under the name it gives, and shows up there. It
+  never throws away unsaved work: while the open project has unsaved changes, it can't open another project or
+  start a new one until the project is saved. Opening and starting aren't undo steps, like File › Open and
+  File › New.
 
 ## What an agent can't do
 
-- **Save, open or start a project.** You do those in Spinus. Save when you like what the agent made.
 - **Load a Drum Machine kit or a Sampler's samples.** Load them in the device's window, then let the agent work
   with them. A preset that is a kit (such as "Magpie") can't be loaded by an agent either.
 - **Load presets on Spinus's own devices other than 3x Osc.** They have none: the agent changes their settings

@@ -253,7 +253,9 @@ juce::String instructionsFor (bool musicTools)
         " Each change applies at once as one undo step the user can undo. The user may edit the song while you "
         "work, and open another project: what_changed tells you what they did, and a change of yours is refused "
         "once when they changed the song since you last looked. play lets the user hear a section (you don't hear "
-        "it). ";
+        "it). save_project saves the project (and names an untitled one); new_project starts an empty one and "
+        "open_project opens one of the projects list_projects shows (the Browser's): both only when nothing is "
+        "left unsaved. ";
     const juce::String tools =
         musicTools ? "Start with song_overview (or song_summary). Edit with the music tools (write_part, add_part, "
                      "insert_bars, automate, add_effect, send, duck, set_sound, shape_sound) or with run_commands "
@@ -1111,7 +1113,121 @@ juce::var AgentInterface::nativeTools() const
                         { "loop", property ("boolean", "Loop the bars (true when left out)") } }),
               Does::plays));
     tools.add (tool ("stop", "Stop playback (the playhead goes back to where it started).", noInput, Does::plays));
+    if (! host.projects || ! host.openProject || ! host.newProject || ! host.saveProject)
+        return tools;
+    tools.add (tool ("list_projects",
+                     "The projects in Spinus's Browser (Browser > Projects: the folders of projects the user added), "
+                     "each with its name, its folder and whether it is the one open. open_project opens one.",
+                     schema ({ { "find", property ("string", "Words the project's name must have") } }), Does::reads));
+    tools.add (tool ("open_project",
+                     "Open one of the projects list_projects shows, in place of the open one. Refused while the "
+                     "open project has unsaved changes: save_project first (ask the user if those changes aren't "
+                     "yours). Not an undo step.",
+                     schema ({ { "project", property ("string", "The project's name or folder, as list_projects "
+                                                                "shows it") } },
+                             { "project" }),
+                     Does::replaces));
+    tools.add (tool ("new_project",
+                     "Start a new, empty project (untitled) in place of the open one, as File > New does. Refused "
+                     "while the open project has unsaved changes: save_project first. Not an undo step.",
+                     noInput, Does::replaces));
+    tools.add (tool ("save_project",
+                     "Save the open project, as File > Save does. An untitled project needs a name: it is saved "
+                     "as a new project of that name in the user's projects folder, and the Browser lists it.",
+                     schema ({ { "name", property ("string", "The name for an untitled project (a folder of that "
+                                                             "name must not be there yet)") } }),
+                     Does::adds));
     return tools;
+}
+
+juce::var AgentInterface::projectTool (AgentSession& agent, const juce::String& name, const juce::var& arguments)
+{
+    const auto open = host.projectFolder ? host.projectFolder() : juce::File();
+    const auto openName = open == juce::File() ? juce::String ("the untitled project") : open.getFileName();
+    if (name == "list_projects")
+    {
+        const auto words = juce::StringArray::fromTokens (arguments["find"].toString().toLowerCase(), true);
+        juce::Array<juce::var> found;
+        for (auto& folder : host.projects())
+        {
+            bool all = true;
+            for (auto& w : words)
+                all = all && folder.getFileName().toLowerCase().contains (w);
+            if (all)
+                found.add (object ({ { "name", folder.getFileName() },
+                                     { "folder", folder.getFullPathName() },
+                                     { "open", folder == open } }));
+        }
+        if (found.isEmpty())
+            return text (words.isEmpty() ? "The Browser lists no projects: the user adds a folder of projects in "
+                                           "Browser > Projects (+ Add a folder of projects)."
+                                         : "No project in the Browser has those words in its name.");
+        return text (juce::JSON::toString (found));
+    }
+    if (name == "save_project")
+    {
+        auto folder = juce::File();
+        if (open == juce::File())
+        {
+            const auto wanted = arguments["name"].toString().trim();
+            if (wanted.isEmpty())
+                return text ("Not saved: the project is untitled, so it needs a name (save_project with name).", true);
+            if (juce::File::createLegalFileName (wanted) != wanted || wanted.startsWithChar ('.'))
+                return text ("Not saved: \"" + wanted + "\" can't be a folder's name (no / \\ : * ? \" < > |).", true);
+            folder = host.newProjectsFolder().getChildFile (wanted);
+            if (folder.exists())
+                return text ("Not saved: " + folder.getFullPathName() + " is there already. Choose another name.",
+                             true);
+        }
+        if (const auto error = host.saveProject (folder); error.isNotEmpty())
+            return text ("Not saved: " + error, true);
+        const auto saved = host.projectFolder ? host.projectFolder() : folder;
+        return text ("Saved " + saved.getFullPathName() + ".");
+    }
+    // open_project and new_project: never over unsaved work.
+    if (host.unsavedChanges && host.unsavedChanges())
+        return text ("Not done: " + openName +
+                         " has changes that aren't saved. Save them with save_project first "
+                         "(ask the user if those changes aren't yours), then call again.",
+                     true);
+    if (name == "new_project")
+    {
+        if (const auto error = host.newProject(); error.isNotEmpty())
+            return text ("Not done: " + error, true);
+        markSeen (agent);
+        return text ("Started a new, empty project (untitled). save_project with a name keeps it.");
+    }
+    const auto wanted = arguments["project"].toString().trim();
+    juce::Array<juce::File> matches;
+    for (auto& folder : host.projects())
+        if (folder.getFullPathName() == wanted)
+            matches = { folder };
+    if (matches.isEmpty())
+        for (auto& folder : host.projects())
+            if (folder.getFileName().equalsIgnoreCase (wanted))
+                matches.add (folder);
+    if (matches.isEmpty())
+        return text ("Not opened: no project \"" + wanted + "\" in the Browser (list_projects shows them).", true);
+    if (matches.size() > 1)
+    {
+        juce::StringArray folders;
+        for (auto& m : matches)
+            folders.add (m.getFullPathName());
+        return text ("Not opened: several projects are called \"" + wanted +
+                         "\". Give its folder: " + folders.joinIntoString (", ") + ".",
+                     true);
+    }
+    const auto folder = matches.getFirst();
+    if (folder == open)
+        return text (folder.getFileName() + " is open already.");
+    if (const auto error = host.openProject (folder); error.isNotEmpty())
+        return text ("Not opened: " + error, true);
+    if ((host.projectFolder ? host.projectFolder() : folder) != folder)
+        // Its last session ended with unsaved work: Spinus asks the user about the autosave first.
+        return text ("Spinus is asking the user whether to recover unsaved work of " + folder.getFileName() +
+                     " from its last session; it opens when they answer. Call what_changed or song_summary then.");
+    markSeen (agent);
+    return text ("Opened " + folder.getFileName() + ". Call song_summary (or song_overview) to see it.");
 }
 
 void AgentInterface::callTool (const juce::String& sessionId, const juce::String& name, const juce::var& arguments,
@@ -1142,6 +1258,12 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
     {
         session.stop();
         return reply (text ("Stopped."));
+    }
+    if (name == "list_projects" || name == "open_project" || name == "new_project" || name == "save_project")
+    {
+        if (! host.projects || ! host.openProject || ! host.newProject || ! host.saveProject)
+            return reply (text ("Spinus can't open or save projects for agents here.", true));
+        return reply (projectTool (*agent, name, arguments));
     }
     // A change after the user changed the song: refused once, with what they changed (now seen).
     if (name != "undo_last" && changesProject (name))
