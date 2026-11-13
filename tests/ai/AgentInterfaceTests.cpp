@@ -645,7 +645,7 @@ TEST_CASE ("An agent saves the project, starts a new one, and opens one the Brow
 
     // Unsaved changes: neither opening nor a new project throws them away.
     f.unsaved = true;
-    for (auto [tool, arguments] :
+    for (const auto& [tool, arguments] :
          { std::pair { "open_project", object ({ { "project", "Other" } }) }, std::pair { "new_project", none() } })
     {
         const auto refused = f.call (id, tool, arguments);

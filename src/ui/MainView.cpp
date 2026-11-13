@@ -1621,7 +1621,7 @@ bool MainView::saveProjectTo (const juce::File& folder, juce::String* problem)
             message << '.';
         if (problem != nullptr)
         {
-            *problem = message;
+            *problem = std::move (message);
             return false;
         }
         showProblem ("Could not save the project",
