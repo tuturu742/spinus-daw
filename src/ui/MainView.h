@@ -161,9 +161,14 @@ public:
     void showPluginFailure (model::DeviceId);
 
     /** Without questions: used by the menus after any questions, and by tests. Problems are shown in a
-        message box. */
-    bool openProjectFile (const juce::File&);
-    bool saveProjectTo (const juce::File& folder);
+        message box, or with `problem` given (coding agents) put there instead. */
+    bool openProjectFile (const juce::File&, juce::String* problem = nullptr);
+    bool saveProjectTo (const juce::File& folder, juce::String* problem = nullptr);
+    /** File > New after any question: an empty project, untitled (unsaved changes are discarded). */
+    void startNewProject();
+    /** Where an untitled project is saved by default: the first folder of projects in the Browser, else next to
+        the open or last project, else the Music folder. */
+    juce::File getNewProjectsFolder() const;
 
     /** Options → Get free plugins: where the open-source plugins are downloaded to, and where the bundled
         devices look for them (PluginDownloads::getSearchFolders). Not set: the command is disabled. */

@@ -671,7 +671,13 @@ can work on the open project while the user watches and listens.
 - **Tools:**
   - **Spinus's own, always, in C++:** `song_summary` (`cli::summarize`), `run_commands`, `command_help`,
     `list_devices`, `list_presets`, `render` (an offline export measured: mix, sections, stems), `undo_last`,
-    `what_changed`, `play`, `stop`.
+    `what_changed`, `play`, `stop`; and the project as files (owner decision 2026-11-13), when the host gives
+    them (`Host::projects`, `openProject`...; MainView without message boxes): `save_project` (an untitled
+    project needs a name: a new folder in the Browser's first folder of projects), `list_projects` (the
+    Browser's `ProjectList`), `open_project` (only a project listed there) and `new_project`. Opening and
+    starting are refused while the project has unsaved changes (`ProjectDocument::hasUnsavedChanges`), so an
+    agent never discards the user's work; they aren't undo steps, and the agent that did it has seen the new
+    project (`markSeen`), while the others are told as for File › Open.
   - **The project harness's (§12.11), through the local AI service when AI is on:** `ai.v1.project.tools` lists
     them; `ai.v1.project.tool` runs one on the context and returns its steps, which the interface performs. The
     AI service needs no AI connection or internet for these, so an agent works offline; with AI off it still has
@@ -692,7 +698,7 @@ can work on the open project while the user watches and listens.
   `notifications/tools/list_changed` first (if the client accepts `text/event-stream`), once.
 - **run_commands** takes `"as"` labels as `--run` does (turned into step numbers for `Proposal`), and steps
   sent as text. `action` steps (loadKit, loadSamples) are refused: they change a device's sounds outside the
-  undo history, so kits and samples are loaded in Spinus. There is no saving, opening or starting a project.
+  undo history, so kits and samples are loaded in Spinus.
 - **Looking things up** (AI service, listed with the harness's tools, read-only): `search_manual` (the
   assistant's manual search) and `reference_style` (track-creator.json in the service's folder: the references'
   names, never their paths, the summary's plain lines, the user's description and lyrics).

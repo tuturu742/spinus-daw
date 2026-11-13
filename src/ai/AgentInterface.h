@@ -42,7 +42,8 @@ namespace spinus::ai
     time). Opening another project or starting a new one counts as such a change, and the undo point starts again.
 
     Its tools: Spinus's own (the song's summary, commands, devices, a render measured by numbers, undo, what the
-    user changed, playback for the user to hear) always,
+    user changed, playback for the user to hear, and the project as files: saving it, starting a new one and
+    opening one the Browser lists) always,
     and the project harness's (song_overview, write_part, insert_bars, shape_sound, check...) through the local AI
     service when AI is on; neither needs an internet connection. Message thread for everything public; the
     server's own thread hands each request to the message thread and waits. */
@@ -70,6 +71,15 @@ public:
         /** Whether AI is on, so the music tools are offered (the instructions, prompts and tool list follow it).
             Unset: on when listHarnessTools is set. */
         std::function<bool()> musicToolsOn;
+
+        /** The project as files, for list_projects, open_project, new_project and save_project (unset: those
+            tools say they aren't available). Each answers with an error text, empty when done. */
+        std::function<juce::Array<juce::File>()> projects; // the projects the Browser lists (their folders)
+        std::function<bool()> unsavedChanges;              // the open project has changes not saved
+        std::function<juce::File()> newProjectsFolder;     // where an untitled project is saved, by its name
+        std::function<juce::String (const juce::File& folder)> saveProject; // no folder: where it is
+        std::function<juce::String (const juce::File& folder)> openProject;
+        std::function<juce::String()> newProject;
     };
 
     /** `settingsFolder` keeps agent-interface.json (on or off, the port, the token). */
@@ -170,6 +180,8 @@ private:
     /** Playback for the user to hear: bars ("9-16", a section's name; empty: from where it is), looped or not. An
         error text (empty when it plays). */
     juce::String play (const juce::String& bars, bool loop);
+    /** list_projects, open_project, new_project and save_project. */
+    juce::var projectTool (AgentSession&, const juce::String& name, const juce::var& arguments);
 
     /** What the agent has seen of the song: the undo steps when it last looked (connected, read the song or
         asked what changed). */
