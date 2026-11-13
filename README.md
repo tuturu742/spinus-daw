@@ -32,9 +32,23 @@ The bird in the logo is a siskin.
   changes things when you approve; a pattern generator; hum, sing or beatbox to notes; an automixer with before and after;
   and, as an experiment, a song analyzer (tempo, key, stems, and turning stems into patterns and sounds).
   Use your own Anthropic, OpenRouter or local (Ollama) connection.
+- **Coding agents:** turn on Options › AI › Coding agents and a coding agent (Claude Code, Codex, Cursor,
+  or one running a local model) can read and edit the open song live, save it, and start or open projects.
+  Each change is an undo step. See [Coding agents](docs/user/agents.md).
 - **Export** to WAV, FLAC, MP3, Opus and AAC, the whole song, a pattern or stems.
 
 Everything is in the [user manual](docs/user/README.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/user/images/mixer.png" alt="The Mixer: faders for each insert, and the selected insert's effects and sends"></td>
+    <td width="50%"><img src="docs/user/images/automixer.png" alt="The Automixer suggesting an EQ cut and a master loudness change, each with its reason"></td>
+  </tr>
+  <tr>
+    <td align="center">The Mixer, with effects and sends for each insert</td>
+    <td align="center">The Automixer: suggestions with reasons, applied only when you say so</td>
+  </tr>
+</table>
 
 ## Installing
 
