@@ -180,6 +180,7 @@ public:
 
     /** AI: the service behind Options > AI and the assistant panel. */
     void setAiService (ai::AiService*);
+    ai::AiService* getAiService() const noexcept { return aiService; }
     /** The live interface for coding agents: while an agent is connected the top bar shows it, with Disconnect and
         Undo the agent's changes. */
     void setAgentInterface (ai::AgentInterface*);

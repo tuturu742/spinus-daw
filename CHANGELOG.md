@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 The first release: 0.1.0-rc.1 (below) with these fixes and additions.
 
+- **Learn this instrument** is in every channel's menu in the Channel Rack, not only in the Track creator: mark
+  what each key of an instrument does (plays, switches, its modes), or let Spinus listen to every key with the
+  sound the channel has now. It's kept for the instrument everywhere it's used.
 - While a project opens, its name and bar now show in a small card in the bottom right corner, instead of
   covering the whole window.
 - Fixed a rare crash a moment after reversing an audio clip (in Tracktion, the engine Spinus plays with).

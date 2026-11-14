@@ -7,6 +7,7 @@
 #include <set>
 
 #include "Browser.h"
+#include "LearnInstrumentWindow.h"
 #include "DeviceMenu.h"
 #include "MainView.h"
 #include "SliderDrag.h"
@@ -17,6 +18,10 @@
 #include "engine/BundledDevices.h"
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
+#include "plugins/HostLibraries.h"
+#include "session/InstrumentPresets.h"
+#include "session/ProgramFolder.h"
+#include "session/SoundIndex.h"
 #include "session/SlicesToPattern.h"
 
 namespace spinus::ui
@@ -319,6 +324,7 @@ private:
         menu.addSeparator();
         menu.addItem (frozen ? "Open instrument window (unfreeze to edit)" : "Open instrument window",
                       hasInstrument && ! frozen, false, [this] { rack.showInstrumentWindow (id); });
+        menu.addItem ("Learn this instrument...", hasInstrument, false, [this] { rack.learnInstrument (id); });
         {
             // FL's Replace: the same instruments as the rack's "+" menu.
             juce::PopupMenu replace;
@@ -1044,6 +1050,54 @@ bool ChannelRack::showInstrumentWindow (model::ChannelId channel)
 {
     auto* c = session.getProject().findChannel (channel);
     return c != nullptr && c->instrument && session.showDeviceWindow (c->instrument->id);
+}
+
+bool ChannelRack::learnInstrument (model::ChannelId channel)
+{
+    const auto* c = session.getProject().findChannel (channel);
+    if (c == nullptr || ! c->instrument)
+        return false;
+    const auto device = *c->instrument;
+    const auto key = InstrumentPresets::libraryOf (device);
+
+    // Listen to every key loads the instrument in the helper program, with the sound the channel has now.
+    std::optional<LearnInstrumentWindow::Listening> listening;
+    for (auto& source : findSoundSources (session.getDeviceList()))
+    {
+        if (source.key != key)
+            continue;
+        LearnInstrumentWindow::Listening l;
+        l.helper.helper = getHelperProgram ("spinus-plugin-scanner");
+        l.helper.hostLibraries = plugins::getHostLibraries();
+        l.source = source;
+        if (auto* plugin = dynamic_cast<tracktion::ExternalPlugin*> (session.getAdapter().getDevicePlugin (device.id)))
+            if (auto* instance = plugin->getAudioPluginInstance())
+            {
+                juce::MemoryBlock state;
+                instance->getStateInformation (state);
+                const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                      .getChildFile ("spinus-learn-" + key + ".state");
+                if (state.getSize() > 0 && file.replaceWithData (state.getData(), state.getSize()))
+                    l.state = file;
+            }
+        listening = std::move (l);
+        break;
+    }
+
+    auto* view = findParentComponentOfClass<MainView>();
+    LearnInstrumentWindow::open (
+        SoundIndex::getDefaultFolder(), key, model::getDeviceDisplayName (device), getTopLevelComponent(),
+        [safe = juce::Component::SafePointer<ChannelRack> (this), name = c->name] (std::optional<PlayableKeys> keys)
+        {
+            if (safe == nullptr)
+                return;
+            if (auto* v = safe->findParentComponentOfClass<MainView>())
+                v->getHintBar().showMessage (keys.has_value()
+                                                 ? name + " plays " + keys->describe() + "."
+                                                 : name + " plays any note: which keys play is not known.");
+        },
+        std::move (listening), view != nullptr ? view->getAiService() : nullptr);
+    return true;
 }
 
 bool ChannelRack::slicesToPattern (model::ChannelId channel)

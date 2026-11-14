@@ -10,7 +10,7 @@ the first one (**+ Add channel**, or drag an instrument in from the [Browser](br
 | Part | What it does |
 |---|---|
 | Green light | Click to mute or unmute the channel. |
-| Name | Click to select the channel for the Piano Roll (it gets a blue outline). Double-click to open the instrument's window. The name button is drawn in the channel's colour. Right-click for options: **Rename...**, **Colour**, **Group** (see below), Open instrument window, **Replace instrument** (see below), Create automation clip (volume, pan, or an instrument setting; see [Automation clips](playlist.md#automation-clips)), **Slices to pattern** for a [Beat Slicer](beat-slicer.md) with a loop, **Freeze** / **Unfreeze** (play the channel as audio to save CPU, see [Freeze](freeze.md); a frozen channel shows a blue snowflake), Delete channel (its mixer insert goes too, with its effects, unless another channel plays into it or another insert sends to it; Ctrl+Z brings both back). |
+| Name | Click to select the channel for the Piano Roll (it gets a blue outline). Double-click to open the instrument's window. The name button is drawn in the channel's colour. Right-click for options: **Rename...**, **Colour**, **Group** (see below), Open instrument window, **Learn this instrument...** (see below), **Replace instrument** (see below), Create automation clip (volume, pan, or an instrument setting; see [Automation clips](playlist.md#automation-clips)), **Slices to pattern** for a [Beat Slicer](beat-slicer.md) with a loop, **Freeze** / **Unfreeze** (play the channel as audio to save CPU, see [Freeze](freeze.md); a frozen channel shows a blue snowflake), Delete channel (its mixer insert goes too, with its effects, unless another channel plays into it or another insert sends to it; Ctrl+Z brings both back). |
 | Two knobs | Volume and pan. Drag to change; double-click to reset. |
 | Steps | Each box is a sixteenth note. Click a box to add a note (C5), click again to remove it. Boxes are grouped by beat. There is one bar of steps in the pattern's time signature: 16 in 4/4, 12 in 3/4 or 6/8. |
 | **Triplet steps** | Switches the current pattern's boxes to sixteenth-note triplets: six per beat, 24 in a 4/4 bar, for shuffles and triplet hi-hats. Click again for sixteenths. Your notes stay where they are; ones that no longer fit the boxes show as a note picture. |
@@ -28,6 +28,17 @@ appears next to **Swing**: show **All channels**, one group, or the channels **N
 **Group › Send group "Drums" through a new mixer bus** adds a mixer insert named after the group and
 plays the group's channels through it: one fader and one set of effects for all the drums (see the
 [Mixer](mixer.md)). It is one undo step.
+
+## Learn this instrument
+
+Many sampled instruments, guitars and basses especially, use some keys as switches: a low key changes the
+guitar to palm mutes instead of playing a note, and a strummer mode plays chords from its own keys. Right-click
+a channel's name › **Learn this instrument...** to tell Spinus what each key of its instrument does: which keys
+play, which switch what it plays, and its modes. Spinus can also listen to every key itself (with the sound the
+channel has now), ask the plugin, or read its manual with the AI. What you set is kept for that instrument, on
+every channel and in every project that uses it, and you can export it as a file to share. The window is the same
+as in the Track creator; [Learn this instrument](track-creator.md#sounds-for-each-part) there explains it in
+full. Spinus's own synths and the free ones it gets come with what it knows of them.
 
 ## Replace instrument
 

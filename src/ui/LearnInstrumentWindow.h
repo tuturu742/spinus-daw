@@ -161,8 +161,8 @@ public:
         juce::File state;
     };
 
-    /** Opens (or brings to the front) the window for `instrument` (the sound index's key). Without `listening`,
-        Listen to every key says it needs the instrument chosen for a part. */
+    /** Opens (or brings to the front) the window for `instrument` (InstrumentPresets::libraryOf, the sound index's
+        key). Without `listening`, Listen to every key says it can't load the instrument. */
     static void open (const juce::File& indexFolder, const juce::String& instrument, const juce::String& name,
                       juce::Component* near, Saved saved, std::optional<Listening> listening = {},
                       ai::AiService* service = nullptr);
