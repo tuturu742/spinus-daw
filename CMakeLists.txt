@@ -34,6 +34,7 @@ foreach (dep JUCE tracktion_engine Catch2 clap fst)
 endforeach()
 
 add_subdirectory (external/JUCE EXCLUDE_FROM_ALL)
+include (cmake/SpinusTracktionPatches.cmake)
 # Register only the Tracktion modules; their bundled JUCE submodule is not used.
 add_subdirectory (external/tracktion_engine/modules EXCLUDE_FROM_ALL)
 
