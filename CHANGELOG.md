@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The assistant's and outside agents' music tools keep notes on keys a learned instrument plays: `write_part` moves
+  a note on a key that doesn't play by octaves onto one that does (a switch key named in the notes, such as
+  `palm-mute`, is written on purpose), `song_overview` lists each part's modes and switch keys, and `check` warns
+  about notes on keys that don't play.
 - **Learn this instrument** is in every channel's menu in the Channel Rack, not only in the Track creator: mark
   what each key of an instrument does (plays, switches, its modes), or let Spinus listen to every key with the
   sound the channel has now. It's kept for the instrument everywhere it's used.

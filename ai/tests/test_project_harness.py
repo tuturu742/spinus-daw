@@ -520,3 +520,57 @@ def test_a_part_changes_instrument_keeping_its_notes() -> None:
     h = harness()
     text, failed = h.call("set_sound", {"part": "Bass", "instrument": "3x Osc"})
     assert not failed and [s["command"] for s in h.steps] == ["channel.replaceInstrument"], text
+
+
+GUITAR_KEYS = {
+    "modes": [
+        {
+            "name": "Normal",
+            "voices": "one",
+            "plays": [[40, 91]],
+            "playsInWords": "E2 to G6",
+            "switches": [{"key": 12, "note": "C1", "what": "palm mute"}],
+        },
+        {"name": "Strummer", "enter": "the Strummer button", "goodFor": "strummed rhythm", "plays": [[60, 72]]},
+    ]
+}
+
+
+def test_notes_go_on_keys_a_learned_instrument_plays() -> None:
+    h = harness(instrumentKeys={"31": GUITAR_KEYS})
+    overview = json.loads(h.call("song_overview", {})[0])
+    parts = {p["name"]: p for p in overview["parts"]}
+    assert parts["Bass"]["keys"] == [
+        "Normal (one note at a time): plays E2 to G6; switches: palm-mute (C1)",
+        "Strummer (strummed rhythm; entered with the Strummer button): plays C5 to C6",
+    ]
+    assert "keys" not in parts["Pad"]
+
+    # The bass's A1s are below what it plays: check says so.
+    issues, _ = h.call("check", {})
+    assert "Bass, Verse: 16 notes on keys its instrument doesn't play as notes, e.g. A2" in issues
+
+    # A note below moves up by octaves; a named switch stays where it is, on purpose.
+    text, failed = h.call("write_part", {"part": "Bass", "bars": "1", "notes": "0 28 4 100; 4 palm-mute 1 100; 8 50 4"})
+    assert not failed, text
+    assert "1 notes were on keys 3x Osc doesn't play as notes and moved by octaves onto ones it does" in text
+    written = [s for s in h.steps if s["command"] == "pattern.setNotes"][-1]["parameters"]["notes"]
+    assert sorted(n["pitch"] for n in written) == [12, 40, 50]
+    read, _ = h.call("read_part", {"part": "Bass", "bars": "1"})
+    assert "palm-mute" in read
+
+
+def test_a_part_added_with_a_learned_instrument_keeps_to_its_keys() -> None:
+    guitar = {
+        "name": "Strings Guitar",
+        "type": "instrument",
+        "available": True,
+        "device": {"kind": "plugin", "plugin": {"name": "Strings Guitar", "format": "VST3", "file": "/x.vst3"}},
+        "keys": GUITAR_KEYS,
+    }
+    h = ProjectHarness({"project": song(), "devices": [*DEVICES, guitar]})
+    assert not h.call("add_part", {"name": "Rhythm", "instrument": "Strings Guitar"})[1]
+    text, failed = h.call("write_part", {"part": "Rhythm", "bars": "1", "notes": "0 100 4"})
+    assert not failed and "moved by octaves" in text
+    written = [s for s in h.steps if s["command"] == "pattern.setNotes"][-1]["parameters"]["notes"]
+    assert [n["pitch"] for n in written] == [88]
