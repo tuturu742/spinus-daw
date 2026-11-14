@@ -1137,3 +1137,56 @@ TEST_CASE ("The Piano Roll's toolbar never takes the keyboard focus from the gri
     check (r.roll);
     CHECK (r.roll.getChildComponent (0)->getWantsKeyboardFocus()); // the grid keeps it
 }
+
+TEST_CASE ("Keys the instrument does not play are shaded and its switch keys named", "[ui][pianoroll]")
+{
+    Roll r;
+    const auto folder = juce::File::createTempFile ("roll-profiles").getChildFile ("sounds");
+    REQUIRE (folder.createDirectory());
+    r.roll.setProfilesFolder (folder);
+    REQUIRE (r.rack.addChannel ("spinus.3x-osc", "Guitar"));
+    r.roll.handleUpdateNowIfNeeded();
+
+    // Spinus's own synth plays every key.
+    REQUIRE (r.roll.getKeyJobs() != nullptr);
+    CHECK (r.roll.keyPlays (24));
+    CHECK (r.roll.describeKey (60) == "C5");
+
+    // As learned: E2 to G6 play, C1 switches to palm mutes, C9 does nothing.
+    InstrumentProfiles::Mode mode;
+    mode.setKeys (40, 91, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+    mode.setKeys (12, 12, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+    mode.setKeys (108, 108, { InstrumentProfiles::Job::unused, {}, InstrumentProfiles::Source::user });
+    InstrumentProfiles profiles (folder);
+    profiles.set ("stock-spinus.3x-osc", InstrumentProfiles::Profile { { mode }, {} });
+    REQUIRE (profiles.save());
+    REQUIRE (r.rack.addChannel ("spinus.3x-osc", "Guitar 2"));
+    r.roll.handleUpdateNowIfNeeded();
+
+    REQUIRE (r.roll.getKeyJobs() != nullptr);
+    CHECK (r.roll.keyPlays (40));
+    CHECK (r.roll.keyPlays (91));
+    CHECK_FALSE (r.roll.keyPlays (39));
+    CHECK_FALSE (r.roll.keyPlays (12));
+    CHECK (r.roll.describeKey (12) == "C1: switch, palm mute");
+    CHECK (r.roll.describeKey (108) == "C9: does not play");
+    CHECK (r.roll.describeKey (30) == "F#2: does not play"); // not learned, outside what plays
+    CHECK (r.roll.describeKey (60) == "C5");
+
+    // An instrument Spinus knows nothing of: every key may play.
+    REQUIRE (r.rack.addChannel ("spinus.sampler", "Hits"));
+    r.roll.handleUpdateNowIfNeeded();
+    CHECK (r.roll.getKeyJobs() == nullptr);
+    CHECK (r.roll.keyPlays (12));
+    CHECK (r.roll.describeKey (12) == "C1");
+
+    // Painted with the shading (no crash at any key height).
+    juce::Image image (juce::Image::ARGB, 760, 420, true);
+    juce::Graphics g (image);
+    r.session.setSelectedChannel (r.session.getProject().channels[1].id);
+    r.session.dispatchPendingMessages();
+    r.roll.handleUpdateNowIfNeeded();
+    CHECK (r.roll.getKeyJobs() != nullptr);
+    r.roll.paintEntireComponent (g, true);
+    folder.getParentDirectory().deleteRecursively();
+}

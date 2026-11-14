@@ -8,6 +8,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Coding agents' colours are their own: `spinus --run` and the music tools (`add_part`, `write_part`, `automate`)
   no longer colour channels, patterns or Playlist tracks by themselves. The Spinus skills tell agents which colour
   each family gets, and a pattern that holds several families is no longer guessed at.
+- The Piano Roll greys the keys an instrument doesn't play as notes and names its switch keys ("palm mute"), once
+  Spinus knows them (Learn this instrument).
 - **Learn this instrument** is in every channel's menu in the Channel Rack, not only in the Track creator: mark
   what each key of an instrument does (plays, switches, its modes), or let Spinus listen to every key with the
   sound the channel has now. It's kept for the instrument everywhere it's used.
