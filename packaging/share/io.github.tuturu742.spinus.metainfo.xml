@@ -64,6 +64,13 @@
     <display_length compare="ge">1024</display_length>
   </requires>
   <releases>
+    <release version="0.1.0" date="2026-11-14" type="stable">
+      <description>
+        <p>The first release of Spinus: the release candidate's polish, plus a smaller card while a project opens,
+        a fix for a rare crash after reversing an audio clip, and coding agents that save into the Browser's
+        folders and give the songs they build Spinus's colour scheme.</p>
+      </description>
+    </release>
     <release version="0.1.0~rc.1" date="2026-11-13" type="development">
       <description>
         <p>The first release candidate: a polish release with many fixes found by testing everyday use, from
