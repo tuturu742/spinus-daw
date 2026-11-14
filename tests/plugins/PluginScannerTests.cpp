@@ -73,7 +73,7 @@ TEST_CASE ("A plugin that crashes or hangs while loading is reported, not fatal"
                .contains ("missing"));
 }
 
-TEST_CASE ("A full scan skips unchanged files and known problems; retry rescans", "[plugins][scanner]")
+TEST_CASE ("A full scan skips unchanged files and known problems; retry rescans", "[plugins][scanner][serial]")
 {
     TempFolder temp;
     REQUIRE (brokenDir().getChildFile ("crash.clap").copyFileTo (temp.root.getChildFile ("crash.clap")));
