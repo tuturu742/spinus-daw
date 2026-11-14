@@ -2,6 +2,7 @@
 
 #include "TimelineControls.h"
 #include "Workspace.h"
+#include "session/InstrumentProfiles.h"
 #include "session/Session.h"
 
 #include <set>
@@ -188,6 +189,20 @@ public:
     void showScaleMenu();
 
     //==============================================================================
+    // The instrument's keys (Learn this instrument): the keys it does not play as notes are shaded, on the
+    // keyboard and across the grid, and its switch keys are named ("palm mute").
+    /** What each key of the shown channel's instrument does as it opens (its profile's first mode), or nullptr
+        when Spinus does not know which keys play. */
+    const InstrumentProfiles::Mode* getKeyJobs() const noexcept { return keyJobs ? &*keyJobs : nullptr; }
+    /** Whether the key plays as a note (true when that is not known). */
+    bool keyPlays (int pitch) const;
+    /** "C1: switch, palm mute", "C5", "C9: does not play". */
+    juce::String describeKey (int pitch) const;
+    /** The sound index's folder, beside which the profiles are kept (SoundIndex::getDefaultFolder() by default;
+        tests use another). */
+    void setProfilesFolder (const juce::File&);
+
+    //==============================================================================
     // Suggestions.
     /** The shown suggestion's notes for the edited channel in the current pattern, or nullptr. */
     const std::vector<model::Note>* getSuggestedNotes() const;
@@ -302,6 +317,9 @@ private:
     class SuggestionBar;
 
     void reloadNotes();
+    /** Reads the shown instrument's profile again when the instrument or the profiles file changed (`always`:
+        even when neither did). */
+    void reloadKeyJobs (bool always = false);
     bool commit (std::vector<model::Note> newNotes, const juce::String& description);
     bool ensurePattern();
     model::Ticks getPatternLength() const;
@@ -344,6 +362,11 @@ private:
     std::vector<model::Note> paintedNotes (model::Ticks from, model::Ticks to, const std::vector<int>& pitches) const;
     bool followSongKey = true;
     std::optional<model::Key> chosenKey;
+    juce::File profilesFolder;
+    juce::String keyJobsInstrument;
+    juce::Time keyJobsRead;
+    std::optional<InstrumentProfiles::Mode> keyJobs;
+    int keyJobsCheck = 0; // timer ticks since the profiles file was last looked at
 
     model::Ticks snap = 240;
     Snap snapChoice = Snap::step;
