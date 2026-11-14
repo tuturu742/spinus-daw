@@ -51,8 +51,8 @@ or give one another port.
 What the music tools make looks like a song built by hand:
 - **Short patterns:** a part that repeats is one short pattern (1, 2 or 4 bars) placed again and again on the
   Playlist, not one long pattern.
-- **Family colours:** each new part goes in its family's Channel Rack group (Drums, Bass, Guitars...). All its
-  family's parts share one colour, which their patterns and Playlist tracks take too.
+- **Family groups:** each new part goes in its family's Channel Rack group (Drums, Bass, Guitars...). Spinus
+  colours nothing by itself: the agent chooses colours (the Spinus skills give each family's colour).
 - **Automation:** a part's automation goes on a track right under the part's own track, in its group, so folding
   the part's track hides its automation too.
 
