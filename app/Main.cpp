@@ -831,6 +831,14 @@ private:
         };
         host.unsavedChanges = [this] { return document != nullptr && document->hasUnsavedChanges(); };
         host.newProjectsFolder = [&view] { return view.getNewProjectsFolder(); };
+        host.projectFolders = [&view]
+        {
+            juce::Array<juce::File> all;
+            for (auto& folder : view.getBrowser().getProjects().getFolders())
+                if (! folder.missing)
+                    all.add (folder.folder);
+            return all;
+        };
         host.saveProject = [&view] (const juce::File& folder)
         {
             juce::String problem;

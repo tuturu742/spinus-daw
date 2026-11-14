@@ -74,9 +74,10 @@ public:
 
         /** The project as files, for list_projects, open_project, new_project and save_project (unset: those
             tools say they aren't available). Each answers with an error text, empty when done. */
-        std::function<juce::Array<juce::File>()> projects; // the projects the Browser lists (their folders)
-        std::function<bool()> unsavedChanges;              // the open project has changes not saved
-        std::function<juce::File()> newProjectsFolder;     // where an untitled project is saved, by its name
+        std::function<juce::Array<juce::File>()> projects;       // the projects the Browser lists (their folders)
+        std::function<bool()> unsavedChanges;                    // the open project has changes not saved
+        std::function<juce::File()> newProjectsFolder;           // where an untitled project is saved, by its name
+        std::function<juce::Array<juce::File>()> projectFolders; // the folders of projects the user added (there)
         std::function<juce::String (const juce::File& folder)> saveProject; // no folder: where it is
         std::function<juce::String (const juce::File& folder)> openProject;
         std::function<juce::String()> newProject;
@@ -182,6 +183,7 @@ private:
     juce::String play (const juce::String& bars, bool loop);
     /** list_projects, open_project, new_project and save_project. */
     juce::var projectTool (AgentSession&, const juce::String& name, const juce::var& arguments);
+    juce::Array<juce::File> projectFolders() const;
 
     /** What the agent has seen of the song: the undo steps when it last looked (connected, read the song or
         asked what changed). */

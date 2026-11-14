@@ -54,6 +54,7 @@ struct Fixture
     // A stand-in for the project as files: the open project's folder, the Browser's projects, unsaved changes.
     juce::File openFolder = folder.root.getChildFile ("Song");
     juce::Array<juce::File> listed;
+    juce::Array<juce::File> roots { folder.root.getChildFile ("Projects"), folder.root.getChildFile ("Mine") };
     bool unsaved = false;
     juce::File savedTo { "/nowhere" };
 
@@ -71,6 +72,7 @@ struct Fixture
         h.projects = [this] { return listed; };
         h.unsavedChanges = [this] { return unsaved; };
         h.newProjectsFolder = [this] { return folder.root.getChildFile ("Projects"); };
+        h.projectFolders = [this] { return roots; };
         h.saveProject = [this] (const juce::File& to)
         {
             savedTo = to;
@@ -635,13 +637,16 @@ TEST_CASE ("An agent saves the project, starts a new one, and opens one the Brow
     f.agents->setEnabled (true);
     const auto id = f.connect();
 
-    const auto list = juce::JSON::parse (said (f.call (id, "list_projects", none())));
+    const auto answer = juce::JSON::parse (said (f.call (id, "list_projects", none())));
+    CHECK (answer["folders"].size() == 2);
+    CHECK (answer["folders"][1].toString() == f.roots[1].getFullPathName());
+    const auto& list = answer["projects"];
     REQUIRE (list.size() == 2);
     CHECK (list[0]["name"].toString() == "Song");
     CHECK ((bool)list[0]["open"]);
     CHECK_FALSE ((bool)list[1]["open"]);
-    CHECK (juce::JSON::parse (said (f.call (id, "list_projects", object ({ { "find", "oth" } }))))[0]["name"] ==
-           juce::var ("Other"));
+    CHECK (juce::JSON::parse (said (f.call (
+               id, "list_projects", object ({ { "find", "oth" } }))))["projects"][0]["name"] == juce::var ("Other"));
 
     // Unsaved changes: neither opening nor a new project throws them away.
     f.unsaved = true;
@@ -657,6 +662,7 @@ TEST_CASE ("An agent saves the project, starts a new one, and opens one the Brow
     // Saved where it is, then the other project opens; the agent's next change isn't refused as news.
     CHECK (said (f.call (id, "save_project", none())).startsWith ("Saved"));
     CHECK (f.savedTo == juce::File());
+    CHECK ((bool)f.call (id, "save_project", object ({ { "folder", "Album" } }))["isError"]); // it has one
     CHECK ((bool)f.call (id, "open_project", object ({ { "project", "Missing" } }))["isError"]);
     CHECK (said (f.call (id, "open_project", object ({ { "project", "other" } }))).startsWith ("Opened Other"));
     CHECK (f.openFolder == other);
@@ -672,6 +678,30 @@ TEST_CASE ("An agent saves the project, starts a new one, and opens one the Brow
     CHECK ((bool)f.call (id, "save_project", object ({ { "name", "Taken" } }))["isError"]);
     CHECK_FALSE ((bool)f.call (id, "save_project", object ({ { "name", "New Song" } }))["isError"]);
     CHECK (f.savedTo == f.folder.root.getChildFile ("Projects/New Song"));
+
+    // Or in a folder of projects the Browser has, or a new folder in one (an album), never outside them.
+    const auto saveIn = [&] (const juce::String& where)
+    {
+        f.openFolder = juce::File();
+        return f.call (id, "save_project", object ({ { "name", "Cue 1" }, { "folder", where } }));
+    };
+    CHECK_FALSE ((bool)saveIn ("Ashen Vigil/Act 1")["isError"]);
+    CHECK (f.savedTo == f.folder.root.getChildFile ("Projects/Ashen Vigil/Act 1/Cue 1"));
+    CHECK_FALSE ((bool)saveIn (f.roots[1].getFullPathName())["isError"]);
+    CHECK (f.savedTo == f.folder.root.getChildFile ("Mine/Cue 1"));
+    CHECK_FALSE ((bool)saveIn (f.roots[1].getChildFile ("Album").getFullPathName())["isError"]);
+    CHECK (f.savedTo == f.folder.root.getChildFile ("Mine/Album/Cue 1"));
+    f.savedTo = juce::File ("/nowhere");
+    REQUIRE (f.folder.root.getChildFile ("Mine/Other/Other.spn").create());
+    for (const auto& where :
+         { f.folder.root.getChildFile ("Elsewhere").getFullPathName(), juce::String ("../Elsewhere"),
+           f.roots[0].getFullPathName() + "/../Elsewhere", juce::String ("a/b/c/d/e"), juce::String (".hidden"),
+           f.folder.root.getChildFile ("Mine/Other/In").getFullPathName() })
+    {
+        INFO (where);
+        CHECK ((bool)saveIn (where)["isError"]);
+    }
+    CHECK (f.savedTo == juce::File ("/nowhere"));
 
     // The client is told opening and starting replace the open project.
     const auto tools = f.request ("POST", Fixture::rpc ("tools/list"), id).json["result"]["tools"];

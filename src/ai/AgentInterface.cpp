@@ -253,7 +253,8 @@ juce::String instructionsFor (bool musicTools)
         " Each change applies at once as one undo step the user can undo. The user may edit the song while you "
         "work, and open another project: what_changed tells you what they did, and a change of yours is refused "
         "once when they changed the song since you last looked. play lets the user hear a section (you don't hear "
-        "it). save_project saves the project (and names an untitled one); new_project starts an empty one and "
+        "it). save_project saves the project (and names an untitled one, in a folder of projects list_projects "
+        "shows or a new folder in one); new_project starts an empty one and "
         "open_project opens one of the projects list_projects shows (the Browser's): both only when nothing is "
         "left unsaved. ";
     const juce::String tools =
@@ -1117,7 +1118,8 @@ juce::var AgentInterface::nativeTools() const
         return tools;
     tools.add (tool ("list_projects",
                      "The projects in Spinus's Browser (Browser > Projects: the folders of projects the user added), "
-                     "each with its name, its folder and whether it is the one open. open_project opens one.",
+                     "each with its name, its folder and whether it is the one open, and those folders of projects "
+                     "(where save_project can save). open_project opens a project.",
                      schema ({ { "find", property ("string", "Words the project's name must have") } }), Does::reads));
     tools.add (tool ("open_project",
                      "Open one of the projects list_projects shows, in place of the open one. Refused while the "
@@ -1133,11 +1135,76 @@ juce::var AgentInterface::nativeTools() const
                      noInput, Does::replaces));
     tools.add (tool ("save_project",
                      "Save the open project, as File > Save does. An untitled project needs a name: it is saved "
-                     "as a new project of that name in the user's projects folder, and the Browser lists it.",
+                     "as a new project of that name in a folder of projects list_projects shows (the first, or "
+                     "folder), and the Browser lists it.",
                      schema ({ { "name", property ("string", "The name for an untitled project (a folder of that "
-                                                             "name must not be there yet)") } }),
+                                                             "name must not be there yet)") },
+                               { "folder", property ("string", "For an untitled project: where to put it, one of "
+                                                               "list_projects' folders or a folder inside one, made "
+                                                               "if it isn't there ('Album/Act 1' is inside the "
+                                                               "first)") } }),
                      Does::adds));
     return tools;
+}
+
+namespace
+{
+bool isFolderName (const juce::String& name)
+{
+    return name.isNotEmpty() && juce::File::createLegalFileName (name) == name && ! name.startsWithChar ('.');
+}
+
+struct FolderToSaveIn
+{
+    juce::File folder;
+    juce::String error;
+};
+
+/** `where` (a full path, or a path inside the first of `roots`) when it is one of `roots` or a folder in one, not
+    too deep for the Browser's search and not inside a project. */
+FolderToSaveIn folderToSaveIn (const juce::String& where, const juce::Array<juce::File>& roots)
+{
+    if (roots.isEmpty())
+        return { {},
+                 "the Browser has no folder of projects to save in. The user adds one in Browser > Projects (+ "
+                 "Add a folder of projects)." };
+    const auto folder = juce::File::isAbsolutePath (where) ? juce::File (where) : roots.getFirst().getChildFile (where);
+    juce::StringArray names;
+    for (auto& r : roots)
+        names.add (r.getFullPathName());
+    for (auto& root : roots)
+    {
+        if (folder != root && ! folder.isAChildOf (root))
+            continue;
+        // Each folder from the root down: a real name (no ".."), and not a project's (a project in a project).
+        const auto parts = juce::StringArray::fromTokens (folder.getRelativePathFrom (root), "/\\", "");
+        if (folder == root)
+            return { folder, {} };
+        if (parts.size() > 4)
+            return { {}, where + " is too deep in " + root.getFullPathName() + ": 4 folders at most." };
+        auto at = root;
+        for (auto& part : parts)
+        {
+            if (! isFolderName (part))
+                return { {}, "\"" + part + "\" can't be a folder's name (no / \\ : * ? \" < > |, no leading dot)." };
+            at = at.getChildFile (part);
+            if (at.existsAsFile() ||
+                (at.isDirectory() && at.getNumberOfChildFiles (juce::File::findFiles, "*.spn") > 0))
+                return { {}, at.getFullPathName() + " is a project, not a folder of projects." };
+        }
+        return { folder, {} };
+    }
+    return { {},
+             where + " isn't in a folder of projects in the Browser (" + names.joinIntoString (", ") +
+                 "). The user adds folders in Browser > Projects." };
+}
+} // namespace
+
+juce::Array<juce::File> AgentInterface::projectFolders() const
+{
+    if (host.projectFolders)
+        return host.projectFolders();
+    return {};
 }
 
 juce::var AgentInterface::projectTool (AgentSession& agent, const juce::String& name, const juce::var& arguments)
@@ -1158,11 +1225,14 @@ juce::var AgentInterface::projectTool (AgentSession& agent, const juce::String& 
                                      { "folder", folder.getFullPathName() },
                                      { "open", folder == open } }));
         }
-        if (found.isEmpty())
+        juce::Array<juce::var> roots;
+        for (auto& root : projectFolders())
+            roots.add (root.getFullPathName());
+        if (found.isEmpty() && roots.isEmpty())
             return text (words.isEmpty() ? "The Browser lists no projects: the user adds a folder of projects in "
                                            "Browser > Projects (+ Add a folder of projects)."
                                          : "No project in the Browser has those words in its name.");
-        return text (juce::JSON::toString (found));
+        return text (juce::JSON::toString (object ({ { "projects", found }, { "folders", roots } })));
     }
     if (name == "save_project")
     {
@@ -1172,13 +1242,25 @@ juce::var AgentInterface::projectTool (AgentSession& agent, const juce::String& 
             const auto wanted = arguments["name"].toString().trim();
             if (wanted.isEmpty())
                 return text ("Not saved: the project is untitled, so it needs a name (save_project with name).", true);
-            if (juce::File::createLegalFileName (wanted) != wanted || wanted.startsWithChar ('.'))
+            if (! isFolderName (wanted))
                 return text ("Not saved: \"" + wanted + "\" can't be a folder's name (no / \\ : * ? \" < > |).", true);
-            folder = host.newProjectsFolder().getChildFile (wanted);
+            auto parent = host.newProjectsFolder();
+            if (const auto where = arguments["folder"].toString().trim(); where.isNotEmpty())
+            {
+                const auto found = folderToSaveIn (where, projectFolders());
+                if (found.error.isNotEmpty())
+                    return text ("Not saved: " + found.error, true);
+                parent = found.folder;
+            }
+            folder = parent.getChildFile (wanted);
             if (folder.exists())
                 return text ("Not saved: " + folder.getFullPathName() + " is there already. Choose another name.",
                              true);
         }
+        else if (arguments["folder"].toString().isNotEmpty())
+            return text ("Not saved: folder is for an untitled project. This one is saved in " +
+                             open.getFullPathName() + " (save_project without folder saves it there).",
+                         true);
         if (const auto error = host.saveProject (folder); error.isNotEmpty())
             return text ("Not saved: " + error, true);
         const auto saved = host.projectFolder ? host.projectFolder() : folder;

@@ -3,6 +3,11 @@
 What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
 feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
+## Unreleased
+
+- A coding agent can save a new project in any of the Browser's folders of projects, or in a new folder inside
+  one ("save it as Cue 1 in Ashen Vigil"), so an album's songs stay together. It can't save anywhere else.
+
 ## 0.1.0-rc.1 (2026-11-13)
 
 ### Coding agents: save, start and open projects
