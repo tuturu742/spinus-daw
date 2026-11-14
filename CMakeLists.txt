@@ -7,7 +7,8 @@ project (spinus
          LANGUAGES C CXX)
 
 # The version people see: PROJECT_VERSION plus a pre-release suffix ("-alpha.1"), empty for a final release.
-set (SPINUS_VERSION_SUFFIX "" CACHE STRING "Pre-release suffix of the version, e.g. -alpha.1")
+# Not a cache variable: an old build folder would keep the suffix it was first made with.
+set (SPINUS_VERSION_SUFFIX "")
 set (SPINUS_VERSION "${PROJECT_VERSION}${SPINUS_VERSION_SUFFIX}")
 
 set (CMAKE_CXX_STANDARD 20)
