@@ -22,8 +22,7 @@
    "command": "channel.set",
    "parameters": {
     "channel": "$1.channel",
-    "group": "Synths",
-    "colour": "#ff5c8dd6"
+    "group": "Synths"
    }
   },
   {
@@ -62,29 +61,15 @@
    }
   },
   {
-   "command": "pattern.set",
-   "parameters": {
-    "pattern": "$4.pattern",
-    "colour": "#ff5c8dd6"
-   }
-  },
-  {
    "command": "lane.add",
    "parameters": {
     "name": "Pads"
    }
   },
   {
-   "command": "lane.set",
-   "parameters": {
-    "lane": "$8.lane",
-    "colour": "#ff5c8dd6"
-   }
-  },
-  {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$8.lane",
+    "lane": "$7.lane",
     "pattern": "$4.pattern",
     "start": 2880,
     "length": 2880
@@ -93,7 +78,7 @@
   {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$8.lane",
+    "lane": "$7.lane",
     "pattern": "$4.pattern",
     "start": 5760,
     "length": 2880
@@ -108,7 +93,7 @@
   {
    "command": "pattern.setNotes",
    "parameters": {
-    "pattern": "$12.pattern",
+    "pattern": "$10.pattern",
     "channel": 9,
     "notes": []
    }
@@ -116,7 +101,7 @@
   {
    "command": "pattern.setLength",
    "parameters": {
-    "pattern": "$12.pattern",
+    "pattern": "$10.pattern",
     "length": 15360
    }
   },
@@ -137,7 +122,7 @@
   {
    "command": "pattern.setNotes",
    "parameters": {
-    "pattern": "$16.pattern",
+    "pattern": "$14.pattern",
     "channel": 9,
     "notes": [
      {
@@ -164,15 +149,8 @@
   {
    "command": "pattern.setLength",
    "parameters": {
-    "pattern": "$16.pattern",
+    "pattern": "$14.pattern",
     "length": 2880
-   }
-  },
-  {
-   "command": "pattern.set",
-   "parameters": {
-    "pattern": "$16.pattern",
-    "colour": "#ff5c8dd6"
    }
   },
   {
@@ -182,17 +160,10 @@
    }
   },
   {
-   "command": "lane.set",
-   "parameters": {
-    "lane": "$20.lane",
-    "colour": "#ff5c8dd6"
-   }
-  },
-  {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$20.lane",
-    "pattern": "$16.pattern",
+    "lane": "$17.lane",
+    "pattern": "$14.pattern",
     "start": 0,
     "length": 2880
    }
@@ -221,21 +192,21 @@
   {
    "command": "clip.set",
    "parameters": {
-    "clip": "$11.clip",
+    "clip": "$9.clip",
     "start": 11520
    }
   },
   {
    "command": "clip.set",
    "parameters": {
-    "clip": "$23.clip",
+    "clip": "$19.clip",
     "start": 11520
    }
   },
   {
    "command": "clip.set",
    "parameters": {
-    "clip": "$24.clip",
+    "clip": "$20.clip",
     "start": 11520
    }
   },
@@ -250,7 +221,7 @@
    "command": "clip.addPattern",
    "parameters": {
     "lane": 12,
-    "pattern": "$12.pattern",
+    "pattern": "$10.pattern",
     "start": 5760,
     "length": 5760,
     "offset": 0
@@ -308,7 +279,7 @@
   {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$8.lane",
+    "lane": "$7.lane",
     "pattern": "$4.pattern",
     "start": 8640,
     "length": 2880,
@@ -318,8 +289,8 @@
   {
    "command": "clip.addPattern",
    "parameters": {
-    "lane": "$20.lane",
-    "pattern": "$16.pattern",
+    "lane": "$17.lane",
+    "pattern": "$14.pattern",
     "start": 5760,
     "length": 2880,
     "offset": 0
@@ -350,15 +321,14 @@
   {
    "command": "lane.set",
    "parameters": {
-    "lane": "$35.lane",
-    "group": "$8.lane",
-    "colour": "#ff5c8dd6"
+    "lane": "$31.lane",
+    "group": "$7.lane"
    }
   },
   {
    "command": "lane.move",
    "parameters": {
-    "lane": "$35.lane",
+    "lane": "$31.lane",
     "index": 3
    }
   },
@@ -383,7 +353,7 @@
   {
    "command": "device.setParameters",
    "parameters": {
-    "device": "$39.device",
+    "device": "$35.device",
     "text": {
      "Amount": "40%"
     }

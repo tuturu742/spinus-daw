@@ -36,8 +36,9 @@ tools:
 Every change applies at once as one undo step, and the user hears it in Spinus. The craft below still applies;
 check and render after each big change. Tell the user what you changed.
 
-- Add parts with `add_part`: it gives each one its family's Channel Rack group and colour, and `write_part`
-  and `automate` give its patterns and Playlist tracks the same colour.
+- Add parts with `add_part`: it puts each one in its family's Channel Rack group. Spinus colours nothing by
+  itself: pass the family's `colour` to `add_part` (the spinus skill's "Laying out a song" lists them), then
+  colour each part's patterns and Playlist tracks yourself with `run_commands` (`pattern.set`, `lane.set`).
 - For several songs (an album), make each one with `new_project`, then `save_project` with a `folder` for
   the album (`"Album name"`, made inside the user's projects folder), so they all show in Spinus's Browser.
   `open_project` goes back to one. Both are refused over unsaved changes: save first, and never over
@@ -118,8 +119,7 @@ up while it's small:
    Otherwise, fake the space: longer releases, the delay bus, and a widened bus with the Stereo Utility.
 3. **Channels:** each with its instrument and sound (a factory preset, then parameter changes), its own
    insert routed to its family bus, and its family's colour and group (the spinus skill's "Laying out a
-   song" lists them; all the guitars share one colour). `--run` gives what a script leaves in Spinus's
-   default colours its family's, guessed from its name and instrument, but set them yourself to be sure.
+   song" lists them; all the guitars share one colour). Set them yourself: Spinus colours nothing by itself.
 4. **Patterns:** short loops, one per part and musical idea, 1, 2, 4 or at most 8 whole bars, named "Chorus -
    Bass". A part that repeats over a 16-bar section is a 2- or 4-bar pattern placed four or eight times, not a
    16-bar pattern of copies; a fill or a change is its own short pattern (`pattern.clone`, then edit it). Give
