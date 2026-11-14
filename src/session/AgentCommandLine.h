@@ -47,7 +47,9 @@ struct RunOptions
 };
 
 /** Runs the steps on the session's project; `say` gets one JSON line per step ({step, command or action, ok,
-    result or error}). 0 when every step worked, 2 when one failed, 1 when `steps` is not a list of steps. */
+    result or error}). Then what the script added and left in Spinus's default colours gets its family's colour
+    (and a channel its family's group), as the music tools give them, with a {"coloured": ...} line. 0 when every
+    step worked, 2 when one failed, 1 when `steps` is not a list of steps. */
 int runSteps (Session&, const juce::var& steps, const RunOptions&, const Say& say);
 
 /** What the open project holds, for --check: tempo, key, length, channels, inserts (effects, sends,
