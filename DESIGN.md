@@ -900,6 +900,9 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   audio clips that follow the project's tempo and slicing by transients (§11.3); OB-Xf's own patch menu
   listing its factory patches.
 - **The Track creator's downbeat** (`bar_starts`) bug.
+- **No Surge XT submodule:** tests and development builds use the same pinned, checksummed Surge XT release
+  users download (cached in CI), instead of compiling Surge from `external/surge`, which then goes (owner
+  decision 2026-11-14). Tests then run the build users run, and the repository and clean builds get lighter.
 
 ### Later
 
