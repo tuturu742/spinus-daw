@@ -157,19 +157,26 @@ if (SPINUS_BUILD_BUNDLED_PLUGINS)
 endif()
 
 include (${CMAKE_CURRENT_SOURCE_DIR}/../external/Catch2/extras/Catch.cmake)
+# CI runs the tests in parallel. Tests that measure time ([perf]) or that a busy display upsets ([serial]) run on
+# their own, after the others.
+set (spinus_test_properties)
+set (spinus_discovery)
+set (spinus_parallel_properties)
 if (SPINUS_ENABLE_ASAN)
     # JUCE loads libX11 at run time and unloads it at exit, before LeakSanitizer reports, so leaks in
     # X11's own caches would show as "unknown module" and could not be suppressed. Linking it keeps it
     # loaded, so tests/lsan.supp can name it.
     find_library (SPINUS_X11_LIBRARY X11 REQUIRED)
     target_link_libraries (spinus_tests PRIVATE ${SPINUS_X11_LIBRARY})
-    catch_discover_tests (spinus_tests PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
+    set (spinus_test_properties ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
+    set (spinus_parallel_properties PROPERTIES ${spinus_test_properties})
 elseif (WIN32)
     # Listed when ctest runs, not after linking: a cross-build cannot run the tests while building.
-    catch_discover_tests (spinus_tests DISCOVERY_MODE PRE_TEST)
-else()
-    catch_discover_tests (spinus_tests)
+    set (spinus_discovery DISCOVERY_MODE PRE_TEST)
 endif()
+catch_discover_tests (spinus_tests TEST_SPEC "~[perf]~[serial]" ${spinus_discovery} ${spinus_parallel_properties})
+catch_discover_tests (spinus_tests TEST_SPEC "[perf],[serial]" ${spinus_discovery}
+                      PROPERTIES RUN_SERIAL TRUE ${spinus_test_properties})
 
 #==============================================================================
 # pluginval on the bundled plugins (VST3 builds; pluginval cannot load CLAP).

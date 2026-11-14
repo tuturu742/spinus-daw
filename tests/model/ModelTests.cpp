@@ -287,7 +287,7 @@ TEST_CASE ("An audio track's recording input and arm are saved, and left out whe
     CHECK (! toJsonText (p).contains ("record"));
 }
 
-TEST_CASE ("A song of many instruments becomes project text quickly, with plain line breaks", "[model]")
+TEST_CASE ("A song of many instruments becomes project text quickly, with plain line breaks", "[model][perf]")
 {
     // Line breaks were changed after writing, copying the whole text once per line: saving a song the Analyzer
     // made into many instruments never finished (its plugin states were written, its project file never was).
