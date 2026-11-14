@@ -117,7 +117,7 @@ TEST_CASE ("Command line: a script's steps run as commands, and a failed step st
         f.run (
             R"([{"command": "channel.add", "params": {"nope": 1}}, {"command": "channel.add", "params": {"name": "After"}}])",
             said, true) == 2);
-    REQUIRE (said.size() == 2);
+    REQUIRE (said.size() == 3); // the last: the channel it coloured
     CHECK_FALSE ((bool)said[0]["ok"]);
     CHECK ((bool)said[1]["ok"]); // --keep-going
     CHECK (f.session.getProject().channels.size() == 2);
@@ -378,4 +378,60 @@ TEST_CASE ("Command line: check says which channels nothing plays", "[cli]")
     REQUIRE (summary["unusedChannels"].size() == 1);
     CHECK (summary["unusedChannels"][0].toString() == "Forgotten");
     CHECK (summary["problems"].size() == 0); // a warning, not a problem
+}
+
+TEST_CASE ("Command line: what a script adds without colours gets its family's colour and group", "[cli]")
+{
+    Fixture f;
+    std::vector<juce::var> said;
+    REQUIRE (f.run (R"([
+        {"command": "channel.add", "params": {"name": "Beat", "instrument": {"kind": "stock", "stockType": "spinus.drum-machine"}}, "as": "drums"},
+        {"command": "channel.add", "params": {"name": "Sub Bass", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}, "as": "bass"},
+        {"command": "channel.add", "params": {"name": "Bass 2", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}, "as": "bass2"},
+        {"command": "channel.add", "params": {"name": "Mine", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}, "as": "mine"},
+        {"command": "channel.set", "params": {"channel": "$mine.channel", "colour": "#ff123456", "group": "Mine"}},
+        {"command": "pattern.add", "params": {"name": "Drums", "length": 3840}, "as": "beat"},
+        {"command": "pattern.setNotes", "params": {"pattern": "$beat.pattern", "channel": "$drums.channel", "notes": [{"start": 0, "length": 240, "pitch": 60, "velocity": 0.9}]}},
+        {"command": "pattern.add", "params": {"name": "Both", "length": 3840}, "as": "both"},
+        {"command": "pattern.setNotes", "params": {"pattern": "$both.pattern", "channel": "$drums.channel", "notes": [{"start": 0, "length": 240, "pitch": 60, "velocity": 0.9}]}},
+        {"command": "pattern.setNotes", "params": {"pattern": "$both.pattern", "channel": "$bass.channel", "notes": [{"start": 0, "length": 240, "pitch": 36, "velocity": 0.9}]}},
+        {"command": "lane.add", "params": {"name": "Drums"}, "as": "lane"},
+        {"command": "clip.addPattern", "params": {"lane": "$lane.lane", "pattern": "$beat.pattern", "start": 0}},
+        {"command": "lane.add", "params": {"name": "Drums automation"}, "as": "auto"},
+        {"command": "lane.set", "params": {"lane": "$auto.lane", "group": "$lane.lane"}}
+    ])",
+                    said) == 0);
+    const auto& p = f.session.getProject();
+    const auto pattern = [&] (const char* name)
+    { return std::find_if (p.patterns.begin(), p.patterns.end(), [&] (auto& x) { return x.name == name; })->colour; };
+    const auto lane = [&] (const char* name)
+    {
+        return std::find_if (p.playlist.lanes.begin(), p.playlist.lanes.end(), [&] (auto& x) { return x.name == name; })
+            ->colour;
+    };
+    REQUIRE (p.channels.size() == 4);
+    CHECK (p.channels[0].group == "Drums");
+    CHECK (p.channels[0].colour == 0xffd65c5c);
+    CHECK (p.channels[1].group == "Bass");
+    CHECK (p.channels[1].colour == 0xffd68a4a);
+    CHECK (p.channels[2].colour == p.channels[1].colour); // one colour per family
+    CHECK (p.channels[3].group == "Mine");                // the script's own colour and group are kept
+    CHECK (p.channels[3].colour == 0xff123456);
+    CHECK (pattern ("Drums") == 0xffd65c5c);
+    CHECK (pattern ("Both") == model::Pattern().colour); // two families: left alone
+    CHECK (lane ("Drums") == 0xffd65c5c);
+    CHECK (lane ("Drums automation") == 0xffd65c5c); // grouped under the drums track
+    REQUIRE (! said.empty());
+    CHECK (said.back()["coloured"]["channels"].size() == 3);
+    CHECK ((int)said.back()["coloured"]["patterns"] == 1);
+    CHECK ((int)said.back()["coloured"]["tracks"] == 2);
+
+    // A later script's channel of a family takes that family's colour; earlier parts aren't touched again.
+    said.clear();
+    REQUIRE (
+        f.run (
+            R"([{"command": "channel.add", "params": {"name": "Kick", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}}])",
+            said) == 0);
+    CHECK (f.session.getProject().channels[4].colour == 0xffd65c5c);
+    CHECK (said.back()["coloured"]["channels"].size() == 1);
 }

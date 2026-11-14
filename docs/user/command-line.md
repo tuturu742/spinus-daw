@@ -59,6 +59,14 @@ as if you had done it yourself. A step that fails stops the script:
 nothing after it runs, and nothing is saved. Add `--keep-going` to run the rest anyway and save what
 worked.
 
+After the steps, the channels, patterns and Playlist tracks the script added and left in Spinus's default
+colours get the colours of their family, as Spinus's music tools give them: the drums one colour, the
+basses another, and so on, guessed from each channel's name and instrument ("Kick", "Sub Bass", "Pad").
+A channel also goes in its family's Channel Rack group, a pattern takes its channels' colour when they share
+one, and a track takes the colour of what it plays (or of the track it is grouped under). Colours and groups
+the script set itself are kept. A last line, `{"coloured": {"channels": [...], "patterns": 2, "tracks": 3}}`,
+says what changed.
+
 Times are in **ticks**: 960 per quarter note, so a 4/4 bar is 3840. Notes are MIDI numbers: the Piano Roll's
 C5 is 60.
 
