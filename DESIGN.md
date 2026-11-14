@@ -894,6 +894,25 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   - **Profiles shipped as files,** in the same format as an exported profile, for all of Spinus's own
     instruments (the Drum Machine's pads named, the Sampler, Beat Slicer, 3x Osc) and the free open-source
     instruments it offers (Surge XT, Odin 2, OB-Xf, Six Sines), replacing the four written into the code today.
+- **The Analyzer builds songs the way a producer would** (§12.7; owner decision 2026-11-14), in this order, each
+  a small step, the Analyzer staying experimental:
+  1. **Patterns by section and loop.** Bars are compared by harmony, loudness and the notes found, on the beats
+     already detected, to find the song's sections (intro, verse, chorus, bridge); each section's notes become
+     a pattern, and a section that comes back reuses its pattern on the Playlist. Inside a stem, the shortest
+     repeat (drums and bass often loop every 1, 2 or 4 bars) is one short pattern placed again; a bar that
+     differs (a fill) becomes a variant pattern, so no note is lost. No new model.
+  2. **Rhythm, lead and solo.** One separated stem often holds several parts (two guitars). Its notes are split
+     by how they are played: chords and steady strumming are the rhythm part, single higher, freer lines the
+     lead, a lead heard in one section only the solo; each goes on a channel of its own. Parts that take turns
+     split well; parts playing at the same moment only roughly (said in the panel).
+  3. **Volume and pan automation** from each stem's loudness and stereo position over time (fades, swells,
+     drops, moves); tempo changes once tempo automation exists (below).
+  4. **Filter automation, approximate:** brightness over time as a filter's cutoff, labelled as a guess at the
+     effect, not the producer's own moves.
+
+  Test songs: the owner's own songs (made with Suno, and recordings of their old band whose original files are
+  lost), used on the owner's computer only, never committed; the tests in the repository use short generated
+  audio.
 - **What rc.1 left partly done:** automating send levels and the tempo; automation that belongs to a pattern
   and plays wherever it is placed; **finding missing audio files** a project points to (relocating them, a
   folder at a time); and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI

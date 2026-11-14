@@ -118,6 +118,22 @@ stripe on the scale's notes.
 
 It only changes what you see: notes can still go anywhere, and the song's key stays as it is.
 
+## Keys the instrument doesn't play
+
+Many sampled instruments use some keys for other jobs: a low C turns a guitar to palm mutes, a strummer's
+keys play chords. Once Spinus knows an instrument's keys (**Learn this instrument...** in the channel's menu
+in the [Channel Rack](channel-rack.md)), the Piano Roll shows them:
+
+![A guitar's keys: switch keys named, the keys below its range greyed](images/piano-roll-keys.png)
+
+- Keys the instrument doesn't play as notes are greyed on the keyboard and shaded across the grid.
+- Switch keys (and keys with another job) are tinted and named on the keyboard, for example "palm mute".
+- Point at a key on the keyboard and the hint bar at the bottom says what it does: "C1: switch, palm mute".
+
+Spinus's own synths and the free ones it gets play every key, so nothing is shaded for them. With an
+instrument Spinus doesn't know yet, nothing is shaded either. Notes can still go on any key: a note on a
+switch key changes the instrument instead of sounding.
+
 ## Generate
 
 Let the AI write notes for you, or change them. Click **Generate** at the top right of the Piano Roll
