@@ -113,8 +113,10 @@ the rest. Every change is still one undo step.
 - **It can save the project, start a new one, and open one of yours:** "save it", "start a new song", "open
   Summer Demo". It opens only projects listed in the Browser's **Projects** (the folders of projects you added).
   A new project it saves goes into the first of those folders, under the name it gives, and shows up there. It
-  never throws away unsaved work: while the open project has unsaved changes, it can't open another project or
-  start a new one until the project is saved. Opening and starting aren't undo steps, like File › Open and
+  can also save into another of those folders, or into a new folder inside one ("save it as Cue 1 in Ashen
+  Vigil" makes the folder Ashen Vigil for an album's songs), but never anywhere else. It never throws away
+  unsaved work: while the open project has unsaved changes, it can't open another project or start a new one
+  until the project is saved. Opening and starting aren't undo steps, like File › Open and
   File › New.
 
 ## What an agent can't do
