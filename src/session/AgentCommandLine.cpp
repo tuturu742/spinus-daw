@@ -322,7 +322,9 @@ void colourByFamily (Session& session, const std::set<uint32_t>& oldChannels, co
     for (auto& c : session.getProject().channels)
         if (c.colour != model::Channel().colour)
             chosen.emplace (familyOf (c).group, c.colour);
-    for (auto c : session.getProject().channels)
+    // Copies: each command can replace the project they're in.
+    const auto addedChannels = session.getProject().channels;
+    for (auto& c : addedChannels)
     {
         if (oldChannels.count (c.id.value) > 0 || c.colour != model::Channel().colour)
             continue;
@@ -342,7 +344,8 @@ void colourByFamily (Session& session, const std::set<uint32_t>& oldChannels, co
                 return c.colour;
         return std::nullopt;
     };
-    for (auto p : session.getProject().patterns)
+    const auto addedPatterns = session.getProject().patterns;
+    for (auto& p : addedPatterns)
     {
         if (oldPatterns.count (p.id.value) > 0 || p.colour != model::Pattern().colour)
             continue;
@@ -357,7 +360,8 @@ void colourByFamily (Session& session, const std::set<uint32_t>& oldChannels, co
         }
     }
 
-    for (auto lane : session.getProject().playlist.lanes)
+    const auto addedLanes = session.getProject().playlist.lanes;
+    for (auto& lane : addedLanes)
     {
         if (oldLanes.count (lane.id.value) > 0 || lane.colour != model::Lane().colour)
             continue;
