@@ -125,6 +125,10 @@ public:
     /** Opens the channel's instrument window (FL: clicking the channel button). */
     bool showInstrumentWindow (model::ChannelId);
 
+    /** Learn this instrument (InstrumentProfiles) for the channel's instrument, without the Track creator: its
+        profile is found by the instrument itself, and Listen to every key plays its sound as it is set up now. */
+    bool learnInstrument (model::ChannelId);
+
     /** Writes the channel's Beat Slicer slices as notes (see spinus::slicesToPattern). */
     bool slicesToPattern (model::ChannelId);
 

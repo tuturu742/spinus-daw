@@ -941,9 +941,9 @@ void LearnInstrumentWindow::listen (int enterKey)
         return;
     if (! listening.has_value())
     {
-        panel->setHeard (std::nullopt, "choose this instrument for a part first (Sounds for each part), then open "
-                                       "Learn this instrument from its menu there: Spinus listens to it with that "
-                                       "sound.");
+        panel->setHeard (std::nullopt, "Spinus can't load this instrument to listen to it here (it isn't "
+                                       "installed on this computer, or it plays only the samples it's given): mark "
+                                       "its keys by hand.");
         return;
     }
     stopping->store (false);

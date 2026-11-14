@@ -7,6 +7,7 @@
 #include "engine/EngineHost.h"
 #include "model/ModelJson.h"
 #include "ui/ChannelRack.h"
+#include "ui/LearnInstrumentWindow.h"
 #include "ui/Theme.h"
 
 using namespace spinus;
@@ -565,4 +566,33 @@ TEST_CASE ("An empty Channel Rack says how to add the first instrument", "[ui][c
     r.session.getHistory().undo();
     r.rack.updateNow();
     CHECK (r.rack.getEmptyMessage().isVisible());
+}
+
+TEST_CASE ("Learn this instrument opens from a channel's menu, without the Track creator", "[ui][channelrack]")
+{
+    Rack r;
+    REQUIRE (r.rack.addChannel ("spinus.3x-osc", "Lead"));
+    const auto lead = r.lastChannel();
+    REQUIRE (r.rack.addChannel ("spinus.sampler", "Sampler"));
+    const auto sampler = r.lastChannel();
+
+    // Found by the instrument itself: 3x Osc's profile comes with Spinus.
+    REQUIRE (r.rack.learnInstrument (lead));
+    REQUIRE (LearnInstrumentWindow::getNumOpen() == 1);
+    auto* learn = LearnInstrumentWindow::lastOpened();
+    REQUIRE (learn != nullptr);
+    CHECK (learn->describeKey (36).contains ("(comes with Spinus)"));
+    LearnInstrumentWindow::closeAll();
+
+    // The Sampler plays only the samples it is given: its keys are marked by hand.
+    REQUIRE (r.rack.learnInstrument (sampler));
+    learn = LearnInstrumentWindow::lastOpened();
+    REQUIRE (learn != nullptr);
+    REQUIRE (learn->onListen != nullptr);
+    learn->onListen (-1);
+    CHECK (learn->getHeardText().contains ("mark its keys by hand"));
+    LearnInstrumentWindow::closeAll();
+    CHECK (LearnInstrumentWindow::getNumOpen() == 0);
+
+    CHECK_FALSE (r.rack.learnInstrument (model::ChannelId { 999 }));
 }
