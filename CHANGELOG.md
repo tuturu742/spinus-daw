@@ -8,6 +8,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Fixed a rare crash a moment after reversing an audio clip (in Tracktion, the engine Spinus plays with).
 - A coding agent can save a new project in any of the Browser's folders of projects, or in a new folder inside
   one ("save it as Cue 1 in Ashen Vigil"), so an album's songs stay together. It can't save anywhere else.
+- Songs a coding agent builds from the command line (`--run`) get Spinus's colour scheme: each channel, pattern
+  and Playlist track it leaves uncoloured takes its family's colour (drums, bass, pads...) and Channel Rack group.
+- The Spinus skills for coding agents now say to work in the open Spinus through its live interface (MCP), even
+  for a long job like an album, and to use the command line only without it.
 
 ## 0.1.0-rc.1 (2026-11-13)
 

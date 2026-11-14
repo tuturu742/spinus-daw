@@ -181,7 +181,8 @@ Make it look like a song a person built in Spinus, so the user can find their wa
   | FX | FX | `#ffa8a8a8` |
   | Textures | Textures | `#ff7fa88a` |
 
-  If the user already gave a family a colour, use theirs.
+  If the user already gave a family a colour, use theirs. MCP's `add_part` and `--run` (for what a script
+  leaves in Spinus's default colours, guessed from names and instruments) do this for you.
 - **Solo and order:** `lane.set` with `"solo": true` solos a Playlist track (while any track is soloed, only
   soloed tracks and the tracks grouped under them play); `lane.move` moves a track, with the tracks grouped under
   it, to another `index`. Leave nothing soloed when you hand the song back, unless the user asked.

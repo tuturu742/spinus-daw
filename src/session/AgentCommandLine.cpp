@@ -257,6 +257,139 @@ juce::var deviceSummary (const model::Device& d)
                      { "name", model::getDeviceDisplayName (d) },
                      { "bypassed", d.bypassed } });
 }
+
+/** A part's family: its Channel Rack group and the colour its channel, patterns and Playlist tracks share, as
+    the music tools give them (the AI service's FAMILIES and ROLE_WORDS, and the spinus skill's table). */
+struct Family
+{
+    juce::String group;
+    juce::uint32 colour;
+};
+
+const std::vector<std::pair<Family, std::vector<const char*>>>& families()
+{
+    static const std::vector<std::pair<Family, std::vector<const char*>>> list {
+        { { "Drums", 0xffd65c5c },
+          { "drum", "kick", "snare", "hat", "clap", "perc", "cymbal", "crash", "tom", "beat", "kit", "shaker" } },
+        { { "Bass", 0xffd68a4a }, { "bass", "sub", "808" } },
+        { { "Guitars", 0xffd6b84a }, { "guitar", "gtr" } },
+        { { "Arps", 0xff5c8ad6 }, { "arp" } },
+        { { "Textures", 0xff7fa88a }, { "texture", "rain", "crackle", "vinyl", "ambience", "field" } },
+        { { "Pads", 0xff8a7cd6 }, { "pad", "string", "choir", "atmos", "drone" } },
+        { { "Keys", 0xff5cb8d6 }, { "key", "piano", "organ", "rhodes", "chord", "stab", "pluck", "bell" } },
+        { { "Leads", 0xff5cd6a0 }, { "lead", "melody", "hook", "vocal", "vox", "solo", "flute", "brass" } },
+        { { "FX", 0xffa8a8a8 }, { "fx", "riser", "impact", "sweep", "noise", "downlifter", "swell", "boom" } },
+    };
+    return list;
+}
+
+/** By its group if it has one of the families', else by the words in its name, group and instrument. */
+Family familyOf (const model::Channel& c)
+{
+    for (auto& [family, words] : families())
+        if (c.group.equalsIgnoreCase (family.group))
+            return family;
+    if (c.instrument &&
+        (c.instrument->stockType == "spinus.drum-machine" || c.instrument->stockType == "spinus.beat-slicer"))
+        return families().front().first;
+    const auto text = (c.name + " " + c.group + " " + (c.instrument ? model::getDeviceDisplayName (*c.instrument) : ""))
+                          .toLowerCase();
+    for (auto& [family, words] : families())
+        for (auto* word : words)
+            if (text.contains (word))
+                return family;
+    return c.audioTrack ? Family { "Audio", 0xffb07cc0 } : Family { "Synths", 0xff6c9fd6 };
+}
+
+/** Gives what the script added and left in Spinus's default colours its family's colour, as add_part does: a
+    channel its family's group and colour (the colour of a family's earlier channel, which the user may have
+    chosen), a pattern its channels' colour when they share one, and a Playlist track the colour of what it plays
+    (or of the track it is grouped under). Each change is a command. Says what changed, if anything. */
+void colourByFamily (Session& session, const std::set<uint32_t>& oldChannels, const std::set<uint32_t>& oldPatterns,
+                     const std::set<uint32_t>& oldLanes, const Say& say)
+{
+    const auto perform = [&] (const char* command, const juce::var& params)
+    {
+        juce::String error;
+        if (auto made = commands::CommandRegistry::get().create (command, params, error))
+            session.getHistory().perform (std::move (made));
+    };
+    const auto hex = [] (juce::uint32 colour) { return "#" + juce::Colour (colour).toString(); };
+    juce::StringArray channels;
+    int patterns = 0, lanes = 0;
+
+    std::map<juce::String, juce::uint32> chosen; // a family's colour, from a channel that has one
+    for (auto& c : session.getProject().channels)
+        if (c.colour != model::Channel().colour)
+            chosen.emplace (familyOf (c).group, c.colour);
+    for (auto c : session.getProject().channels)
+    {
+        if (oldChannels.count (c.id.value) > 0 || c.colour != model::Channel().colour)
+            continue;
+        const auto family = familyOf (c);
+        const auto colour = chosen.emplace (family.group, family.colour).first->second;
+        auto params = object ({ { "channel", (int)c.id.value }, { "colour", hex (colour) } });
+        if (c.group.isEmpty())
+            params.getDynamicObject()->setProperty ("group", family.group);
+        perform ("channel.set", params);
+        channels.add (c.name);
+    }
+
+    const auto channelColour = [&] (model::ChannelId id) -> std::optional<juce::uint32>
+    {
+        for (auto& c : session.getProject().channels)
+            if (c.id == id && c.colour != model::Channel().colour)
+                return c.colour;
+        return std::nullopt;
+    };
+    for (auto p : session.getProject().patterns)
+    {
+        if (oldPatterns.count (p.id.value) > 0 || p.colour != model::Pattern().colour)
+            continue;
+        std::set<juce::uint32> colours;
+        for (auto& [channel, notes] : p.notes)
+            if (! notes.empty())
+                colours.insert (channelColour (channel).value_or (0));
+        if (colours.size() == 1 && *colours.begin() != 0)
+        {
+            perform ("pattern.set", object ({ { "pattern", (int)p.id.value }, { "colour", hex (*colours.begin()) } }));
+            ++patterns;
+        }
+    }
+
+    for (auto lane : session.getProject().playlist.lanes)
+    {
+        if (oldLanes.count (lane.id.value) > 0 || lane.colour != model::Lane().colour)
+            continue;
+        const auto& project = session.getProject();
+        std::set<juce::uint32> colours;
+        for (auto& clip : project.playlist.clips)
+        {
+            if (clip.lane != lane.id)
+                continue;
+            if (const auto* played = std::get_if<model::PatternClip> (&clip.content))
+            {
+                const auto* p = project.findPattern (played->pattern);
+                colours.insert (p != nullptr && p->colour != model::Pattern().colour ? p->colour : 0);
+            }
+            else if (const auto* audio = std::get_if<model::AudioClip> (&clip.content))
+                colours.insert (channelColour (audio->channel).value_or (0));
+        }
+        if (colours.empty() && lane.group.isValid())
+            if (const auto* above = project.findLane (lane.group);
+                above != nullptr && above->colour != model::Lane().colour)
+                colours.insert (above->colour);
+        if (colours.size() == 1 && *colours.begin() != 0)
+        {
+            perform ("lane.set", object ({ { "lane", (int)lane.id.value }, { "colour", hex (*colours.begin()) } }));
+            ++lanes;
+        }
+    }
+
+    if (! channels.isEmpty() || patterns > 0 || lanes > 0)
+        say (line (object (
+            { { "coloured", object ({ { "channels", channels }, { "patterns", patterns }, { "tracks", lanes } }) } })));
+}
 } // namespace
 
 //==============================================================================
@@ -310,6 +443,13 @@ int runSteps (Session& session, const juce::var& steps, const RunOptions& option
         say (line (object ({ { "ok", false }, { "error", "the script must be a JSON list of steps" } })));
         return 1;
     }
+    std::set<uint32_t> oldChannels, oldPatterns, oldLanes;
+    for (auto& c : session.getProject().channels)
+        oldChannels.insert (c.id.value);
+    for (auto& p : session.getProject().patterns)
+        oldPatterns.insert (p.id.value);
+    for (auto& lane : session.getProject().playlist.lanes)
+        oldLanes.insert (lane.id.value);
     std::map<juce::String, juce::var> results;
     bool failed = false;
     for (int i = 0; i < list->size(); ++i)
@@ -382,6 +522,8 @@ int runSteps (Session& session, const juce::var& steps, const RunOptions& option
         if ((i + 1) % 50 == 0)
             settle (1);
     }
+    if (! failed || options.keepGoing)
+        colourByFamily (session, oldChannels, oldPatterns, oldLanes, say);
     session.getEdit().dispatchPendingUpdatesSynchronously();
     settle (50);
     return failed ? 2 : 0;
