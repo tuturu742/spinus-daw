@@ -88,7 +88,8 @@ jobs:
       - name: Unit tests
         # A window manager inside the virtual display: detaching panels into their own windows needs
         # the window-manager properties that a desktop always provides.
-        run: xvfb-run -a sh -c 'openbox & sleep 1; ctest --preset ${{ matrix.preset }}'
+        # Several at once (as on Windows): one at a time took most of the ASan job.
+        run: xvfb-run -a sh -c 'openbox & sleep 1; ctest --preset ${{ matrix.preset }} --parallel $(nproc)'
 
       - name: App starts and reports its version
         run: xvfb-run -a ./build/${{ matrix.preset }}/spinus --version
@@ -98,6 +99,7 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           files=$(git ls-files 'app/*.cpp' 'src/*.cpp' 'tests/*.cpp')
-          # GCC-only warning flags and -Werror in the compile database must not trip clang.
-          clang-tidy -p build/${{ matrix.preset }} --quiet \
-            --extra-arg=-Wno-unknown-warning-option --extra-arg=-Wno-error $files
+          # GCC-only warning flags and -Werror in the compile database must not trip clang. On every core,
+          # a few files per run; xargs fails the step if any run finds something.
+          printf '%s\n' $files | xargs -P "$(nproc)" -n 4 clang-tidy -p build/${{ matrix.preset }} --quiet \
+            --extra-arg=-Wno-unknown-warning-option --extra-arg=-Wno-error

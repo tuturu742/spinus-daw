@@ -60,11 +60,25 @@ jobs:
             "$nsis" | Out-File -FilePath $env:GITHUB_PATH -Append
           }
 
+      # A compiler cache kept between runs (as ccache on Linux): files that didn't change aren't compiled again.
+      - name: Compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Configure
-        run: cmake --preset windows -DSPINUS_BUILD_TESTS=ON
+        run: >-
+          cmake --preset windows -DSPINUS_BUILD_TESTS=ON
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        env:
+          SCCACHE_GHA_ENABLED: "true"
 
       - name: Build
         run: cmake --build --preset windows -- -k 0 # report every error, not only the first
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+
+      - name: Compiler cache use
+        if: always()
+        run: sccache --show-stats
 
       - name: AI service environment (for the self-test)
         working-directory: ai
