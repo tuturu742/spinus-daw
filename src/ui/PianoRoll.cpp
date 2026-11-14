@@ -8,6 +8,8 @@
 #include "model/ModelJson.h"
 #include "model/Scales.h"
 #include "MainView.h"
+#include "session/InstrumentPresets.h"
+#include "session/SoundIndex.h"
 
 namespace spinus::ui
 {
@@ -76,6 +78,14 @@ public:
             if (key && pitch % 12 == key->tonic)
             {
                 g.setColour (theme.get ("accent").withAlpha (0.12f));
+                g.fillRect (0.0f, y, w, (float)roll.keyHeight);
+            }
+            // A key the instrument does not play as a note: shaded, a switch key tinted.
+            if (! roll.keyPlays (pitch))
+            {
+                const bool switches = roll.getKeyJobs()->keys[(size_t)pitch].job == InstrumentProfiles::Job::switches;
+                g.setColour (switches ? theme.get ("accentAlt").withAlpha (0.14f)
+                                      : juce::Colours::black.withAlpha (0.32f));
                 g.fillRect (0.0f, y, w, (float)roll.keyHeight);
             }
             if (pitch % 12 == 0)
@@ -671,6 +681,24 @@ public:
                     g.setColour (juce::Colours::transparentBlack);
                 g.fillRect (stripe);
             }
+            if (! roll.keyPlays (pitch))
+            {
+                // Not played as a note: greyed; a switch or special key tinted and named.
+                const auto& k = roll.getKeyJobs()->keys[(size_t)pitch];
+                const bool named =
+                    k.job == InstrumentProfiles::Job::switches || k.job == InstrumentProfiles::Job::special;
+                g.setColour (named ? theme.get ("accentAlt").withAlpha (0.55f)
+                                   : juce::Colour (0xff7a7a7a).withAlpha (0.75f));
+                g.fillRect (r);
+                if (named && roll.keyHeight >= 9)
+                {
+                    g.setColour (juce::Colours::white);
+                    g.setFont (juce::FontOptions (juce::jmin (10.0f, (float)roll.keyHeight - 1.0f)));
+                    g.drawText (k.what.isNotEmpty() ? k.what : InstrumentProfiles::jobName (k.job),
+                                r.withTrimmedLeft (2.0f).withTrimmedRight (pitch % 12 == 0 ? 22.0f : 2.0f),
+                                juce::Justification::centredLeft, true);
+                }
+            }
             g.setColour (juce::Colours::black.withAlpha (0.3f));
             g.drawHorizontalLine ((int)r.getBottom() - 1, 0.0f, (float)getWidth());
             if (pitch % 12 == 0)
@@ -682,6 +710,12 @@ public:
         }
         g.setColour (theme.get ("border"));
         g.drawVerticalLine (getWidth() - 1, 0.0f, (float)getHeight());
+    }
+
+    void mouseMove (const juce::MouseEvent& e) override
+    {
+        // The hint bar says what the key under the mouse does.
+        setHelpText ("Key " + roll.describeKey (roll.yToPitch ((float)e.y)));
     }
 
 private:
@@ -1514,8 +1548,68 @@ void PianoRoll::reloadNotes()
                      ": click to add a note, drag to move, drag the right edge to "
                      "resize, right-click to delete. Alt: no snap. Wheel: scroll, Ctrl+wheel: zoom");
 
+    reloadKeyJobs();
     updateScrollBars();
     repaint();
+}
+
+void PianoRoll::setProfilesFolder (const juce::File& folder)
+{
+    profilesFolder = folder;
+    reloadKeyJobs (true);
+}
+
+void PianoRoll::reloadKeyJobs (bool always)
+{
+    const auto* channel = session.getProject().findChannel (session.getSelectedChannel());
+    const auto instrument = channel != nullptr && channel->instrument
+                                ? InstrumentPresets::libraryOf (*channel->instrument)
+                                : juce::String();
+    const auto folder = profilesFolder != juce::File() ? profilesFolder : SoundIndex::getDefaultFolder();
+    const auto modified = InstrumentProfiles::fileIn (folder).getLastModificationTime();
+    if (! always && instrument == keyJobsInstrument && modified == keyJobsRead)
+        return;
+    keyJobsInstrument = instrument;
+    keyJobsRead = modified;
+
+    std::optional<InstrumentProfiles::Mode> jobs;
+    if (instrument.isNotEmpty())
+    {
+        InstrumentProfiles profiles (folder);
+        profiles.load();
+        if (auto profile = profiles.get (instrument); profile && ! profile->modes.empty())
+            if (profile->modes.front().playable())
+                jobs = profile->modes.front();
+    }
+    if (jobs != keyJobs)
+    {
+        keyJobs = std::move (jobs);
+        repaint();
+    }
+}
+
+bool PianoRoll::keyPlays (int pitch) const
+{
+    return ! keyJobs || pitch < 0 || pitch > 127 || keyJobs->keys[(size_t)pitch].job == InstrumentProfiles::Job::plays;
+}
+
+juce::String PianoRoll::describeKey (int pitch) const
+{
+    auto name = noteName (pitch);
+    if (! keyJobs || keyPlays (pitch))
+        return name;
+    const auto& key = keyJobs->keys[(size_t)pitch];
+    switch (key.job)
+    {
+    case InstrumentProfiles::Job::switches:
+    case InstrumentProfiles::Job::special:
+        return name + ": " + InstrumentProfiles::jobName (key.job) + (key.what.isNotEmpty() ? ", " + key.what : "");
+    case InstrumentProfiles::Job::unknown:
+    case InstrumentProfiles::Job::unused:
+    case InstrumentProfiles::Job::plays:
+        break;
+    }
+    return name + ": does not play";
 }
 
 bool PianoRoll::ensurePattern()
@@ -2396,6 +2490,13 @@ bool PianoRoll::keyPressed (const juce::KeyPress& key)
 
 void PianoRoll::timerCallback()
 {
+    // Learn this instrument may change the profiles at any time: look about once a second.
+    if (++keyJobsCheck >= 30)
+    {
+        keyJobsCheck = 0;
+        reloadKeyJobs();
+    }
+
     double ticks = -1.0;
     if (session.isPlaying() && session.getMode() == Session::Mode::pattern)
     {

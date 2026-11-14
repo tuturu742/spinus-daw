@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The Piano Roll greys the keys an instrument doesn't play as notes and names its switch keys ("palm mute"), once
+  Spinus knows them (Learn this instrument).
 - **Learn this instrument** is in every channel's menu in the Channel Rack, not only in the Track creator: mark
   what each key of an instrument does (plays, switches, its modes), or let Spinus listen to every key with the
   sound the channel has now. It's kept for the instrument everywhere it's used.
