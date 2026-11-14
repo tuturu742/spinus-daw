@@ -9,6 +9,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 out=$(mkdir -p "${1:-$root/build/appimage}" && cd "${1:-$root/build/appimage}" && pwd)
 mkdir -p "$out/work"
+# The container sees the source read-only: apply Spinus's Tracktion fixes here first.
+cmake -P "$root/cmake/SpinusTracktionPatches.cmake"
 
 podman build -t spinus-appimage-builder -f "$here/Containerfile" "$here"
 podman run --rm --userns=keep-id \

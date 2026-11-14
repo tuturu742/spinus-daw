@@ -7,6 +7,7 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - While a project opens, its name and bar now show in a small card in the bottom right corner, instead of
   covering the whole window.
+- Fixed a rare crash a moment after reversing an audio clip (in Tracktion, the engine Spinus plays with).
 - A coding agent can save a new project in any of the Browser's folders of projects, or in a new folder inside
   one ("save it as Cue 1 in Ashen Vigil"), so an album's songs stay together. It can't save anywhere else.
 
