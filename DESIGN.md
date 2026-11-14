@@ -878,20 +878,22 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
     place);
   - each note's volume and formant (the voice's character), as Drift and Vibrato are set today;
   - **Edit notes** in the audio clip's right-click menu, besides the double-click.
-- **Instrument learning** (design proposal of 2026-11-07, decisions of 2026-11-08 and 2026-11-14): a profile per
-  instrument of its playing modes, and for each mode the keys that play, the switch keys (articulations) and
-  special keys (chords, strum patterns), what the mode is good for, and whether it plays chords. Learned on the
-  user's computer by probing every key out of process, from the plugin's own key-switch report where it has
-  one, and from manuals (PDF files or web pages, several per instrument, each tied to the plugin version) read
-  by the AI as a proposal the user applies; the user's word always wins, and every fact says where it came
-  from. It replaces Notes it plays (which becomes the normal mode's range) and the per-instrument range limits
-  in Later. The pattern generator, the AI writer, the assistant and outside agents (MCP and `--run`) read it:
-  they pick a mode per part, write in its language and never land on a switch key by accident. **Profiles are
-  files that can be exported and imported**, and Spinus ships profiles for its own instruments and for the
-  free open-source plugins it offers (Surge XT, Odin 2, OB-Xf, Six Sines...). A profile holds facts only, never
-  text copied from a manual. Built in seven steps, one PR each: profiles and the window; probing; the
-  plugin's report; reading manuals; songwriting picks modes; chord-trigger (strummer) modes; sharing and the
-  shipped profiles.
+- **Instrument learning for the whole DAW.** Learn this instrument (§12.10: an instrument's modes, and per mode
+  which keys play, switch articulations or do something else, learned from probing, the plugin's own report, the
+  manual and the user; profiles exported and imported as files) shipped in rc.1, but only inside the
+  experimental Track creator, keyed by its sound index. In 0.2.0 it becomes part of Spinus itself (owner
+  decision 2026-11-14):
+  - **Learn this instrument from any channel's instrument menu,** without the Track creator or its sound index:
+    a profile is found by the instrument (the plugin, or Spinus's own device) itself.
+  - **The Piano Roll shows it:** keys that don't play are shaded, and switch keys carry their names ("palm
+    mute").
+  - **Everything that writes notes reads it:** the pattern generator, the assistant's music harness, outside
+    agents (MCP: the song summary lists each part's modes and keys, and `write_part` keeps notes on keys that
+    play) and `--run`'s check (notes on switch keys). They pick a mode per part and never land on a switch key by
+    accident.
+  - **Profiles shipped as files,** in the same format as an exported profile, for all of Spinus's own
+    instruments (the Drum Machine's pads named, the Sampler, Beat Slicer, 3x Osc) and the free open-source
+    instruments it offers (Surge XT, Odin 2, OB-Xf, Six Sines), replacing the four written into the code today.
 - **What rc.1 left partly done:** automating send levels and the tempo; automation that belongs to a pattern
   and plays wherever it is placed; **finding missing audio files** a project points to (relocating them, a
   folder at a time); and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI
