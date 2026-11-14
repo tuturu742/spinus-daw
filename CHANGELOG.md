@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The assistant, outside agents (`song_summary`) and `spinus --check` are told what a learned instrument's keys do:
+  its modes, the keys that play and its switch keys.
 - **Learn this instrument** is in every channel's menu in the Channel Rack, not only in the Track creator: mark
   what each key of an instrument does (plays, switches, its modes), or let Spinus listen to every key with the
   sound the channel has now. It's kept for the instrument everywhere it's used.

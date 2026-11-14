@@ -2,6 +2,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "ai/AgentInterface.h"
+#include "ai/ProjectContext.h"
+#include "session/InstrumentProfiles.h"
 #include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
 #include "engine/DeviceFactory.h"
@@ -1134,4 +1136,37 @@ TEST_CASE ("Two agents connected at once over HTTP: each one's changes land, non
     CHECK (names.size() == 2 * changesEach);
     CHECK (f.agents->getAgentCount() == 2);
     CHECK (f.agents->getAgentChanges() == 2 * changesEach);
+}
+
+TEST_CASE ("The music tools are told what a learned instrument's keys do", "[agents][instruments]")
+{
+    Fixture f;
+    juce::String error;
+    auto add = commands::CommandRegistry::get().create (
+        "channel.add",
+        juce::JSON::parse (R"({"name": "Guitar", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}})"),
+        error);
+    REQUIRE (add != nullptr);
+    REQUIRE (f.session.getHistory().perform (std::move (add)).wasOk());
+    const auto index = f.folder.root.getChildFile ("sounds");
+    InstrumentProfiles::Mode mode;
+    mode.setKeys (40, 91, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+    mode.setKeys (12, 12, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+    InstrumentProfiles profiles (index);
+    profiles.set ("stock-spinus.3x-osc", InstrumentProfiles::Profile { { mode }, {} });
+    REQUIRE (profiles.save());
+
+    ai::ContextOptions options;
+    options.deviceChoices = false;
+    options.profilesFolder = index;
+    const auto context = ai::projectContext (f.session, options);
+    const auto device = juce::String ((int)f.session.getProject().channels.back().instrument->id.value);
+    CHECK (context["instrumentKeys"][juce::Identifier (device)]["modes"][0]["switches"][0]["what"].toString() ==
+           "palm mute");
+    // And 3x Osc in the list of what can be added carries them too.
+    bool listed = false;
+    for (auto& d : *context["devices"].getArray())
+        if (d["device"]["stockType"].toString() == "spinus.3x-osc")
+            listed = d["keys"]["modes"].size() == 1;
+    CHECK (listed);
 }

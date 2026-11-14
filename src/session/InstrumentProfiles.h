@@ -136,6 +136,11 @@ public:
     /** The keys the instrument plays as it opens (its first mode's), if they are known. */
     std::optional<PlayableKeys> playable (const juce::String& instrument) const;
 
+    /** What the assistant and outside agents are told of an instrument's keys: per mode its name, how to enter it,
+        what it suits, chords or one note, the keys that play (as runs, and in words: "E2 to G6") and its switch
+        and special keys by number, name and job. Void when it plays every key in one mode (nothing to tell). */
+    static juce::var describeForAgents (const Profile&);
+
     static juce::String jobName (Job);
     static juce::String sourceName (Source);
     /** A profile as JSON, and back (a profile file's entry); nullopt when it holds no mode. */

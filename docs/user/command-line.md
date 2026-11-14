@@ -171,6 +171,13 @@ Each channel says whether anything plays it (`"used"`): a clip on the Playlist o
 notes for it, or an audio clip on it. `unusedChannels` lists the ones nothing plays. That isn't a problem
 (the exit code stays 0), but it's often a mistake in a script.
 
+A channel whose instrument Spinus has learned (**Learn this instrument...** in the channel's menu) also has
+`keys`: each of the instrument's modes, with how to enter it, the keys that play (`plays`, as runs of key
+numbers, and `playsInWords`: "E2 to G6") and its `switches` and `special` keys by number, name and what they
+do ("palm mute"). Write notes only on keys that play: a note on a switch key changes the instrument instead of
+sounding. Instruments that play every key (Spinus's own synths, Surge XT, OB-Xf, Odin 2) have no `keys`.
+Outside agents get the same in `song_summary`.
+
 ## Rendering
 
 `spinus --render <project> --out <file>` writes the song as WAV (24-bit), FLAC, Opus or MP3, by the file's

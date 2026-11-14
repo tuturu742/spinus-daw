@@ -54,8 +54,11 @@ int runSteps (Session&, const juce::var& steps, const RunOptions&, const Say& sa
 
 /** What the open project holds, for --check: tempo, key, length, channels, inserts (effects, sends,
     sidechains), patterns, lanes, clips, markers, and what is missing here (devices, audio files) under
-    `problems`. `projectFolder` is where its audio/ folder is (none for an unsaved project). */
-juce::var summarize (Session&, const juce::File& projectFolder);
+    `problems`. `projectFolder` is where its audio/ folder is (none for an unsaved project). A channel whose
+    instrument Spinus has learned (Learn this instrument) has `keys`: its modes, the keys that play and its switch
+    keys (InstrumentProfiles::describeForAgents), from the profiles beside `profilesFolder` (the sound index's
+    folder; SoundIndex::getDefaultFolder() when empty). */
+juce::var summarize (Session&, const juce::File& projectFolder, const juce::File& profilesFolder = {});
 
 /** A device for --describe: its parameters (ID, name, the value it shows at 0, 0.25, 0.5, 0.75 and 1, and for
     a choice or switch every value by name, `choices`), its
