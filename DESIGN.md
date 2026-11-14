@@ -847,7 +847,7 @@ shipped, except the delay send (moved to rc.1, below):
 - Also: **Replace instrument** in the Channel Rack (`channel.replaceInstrument`), and plugin settings as text
   for every plugin format.
 
-### Next: 0.1.0-rc.1
+### 0.1.0-rc.1 (2026-11-13) and 0.1.0
 
 Features freeze, then polish until it is presentable to strangers; rc.2 and later follow if needed. The
 owner tests on Linux and Windows.
@@ -866,14 +866,45 @@ owner tests on Linux and Windows.
 
 ### Planned: 0.2.0
 
-- **Spinus Tune's note editor at Newtone's level** (owner decision 2026-10-31; §12.6). Editing a recorded
-  clip's notes stays a Spinus feature, not an effect: the edit is non-destructive (the recording is never
-  changed, the tuned clip is rendered in the background) and can be readjusted at any time. Added:
+Owner decision 2026-11-14 (distribution, below in Later, waits):
+
+- **Spinus Plugins goes public** with Linux and Windows CI, and **more plugins**: Psaltria finished (its
+  presets, clap-validator, the Windows build), then the next ones in `PLUGINS.md`. Get free plugins offers them.
+- **Spinus Tune moves to Spinus Plugins** (see Later for how), and **its note editor reaches Newtone's
+  level** (owner decision 2026-10-31; §12.6). Editing a recorded clip's notes stays a Spinus feature, not an
+  effect: the edit is non-destructive (the recording is never changed, the tuned clip is rendered in the
+  background) and can be readjusted at any time. Added:
   - moving notes in time and changing their length (time-stretching each note, its neighbours kept in
     place);
   - each note's volume and formant (the voice's character), as Drift and Vibrato are set today;
   - **Edit notes** in the audio clip's right-click menu, besides the double-click.
-- **Spinus Tune moves to Spinus Plugins** (see Later).
+- **Instrument learning for the whole DAW.** Learn this instrument (§12.10: an instrument's modes, and per mode
+  which keys play, switch articulations or do something else, learned from probing, the plugin's own report, the
+  manual and the user; profiles exported and imported as files) shipped in rc.1, but only inside the
+  experimental Track creator, keyed by its sound index. In 0.2.0 it becomes part of Spinus itself (owner
+  decision 2026-11-14):
+  - **Learn this instrument from any channel's instrument menu,** without the Track creator or its sound index:
+    a profile is found by the instrument (the plugin, or Spinus's own device) itself.
+  - **The Piano Roll shows it:** keys that don't play are shaded, and switch keys carry their names ("palm
+    mute").
+  - **Everything that writes notes reads it:** the pattern generator, the assistant's music harness, outside
+    agents (MCP: the song summary lists each part's modes and keys, and `write_part` keeps notes on keys that
+    play) and `--run`'s check (notes on switch keys). They pick a mode per part and never land on a switch key by
+    accident.
+  - **Profiles shipped as files,** in the same format as an exported profile, for all of Spinus's own
+    instruments (the Drum Machine's pads named, the Sampler, Beat Slicer, 3x Osc) and the free open-source
+    instruments it offers (Surge XT, Odin 2, OB-Xf, Six Sines), replacing the four written into the code today.
+- **What rc.1 left partly done:** automating send levels and the tempo; automation that belongs to a pattern
+  and plays wherever it is placed; **finding missing audio files** a project points to (relocating them, a
+  folder at a time); and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI
+  out (§10.2).
+- **Known issues:** the short crackles when Spinus starts or a project opens; presets in the Browser (§8.1);
+  audio clips that follow the project's tempo and slicing by transients (§11.3); OB-Xf's own patch menu
+  listing its factory patches.
+- **The Track creator's downbeat** (`bar_starts`) bug.
+- **No Surge XT submodule:** tests and development builds use the same pinned, checksummed Surge XT release
+  users download (cached in CI), instead of compiling Surge from `external/surge`, which then goes (owner
+  decision 2026-11-14). Tests then run the build users run, and the repository and clean builds get lighter.
 
 ### Later
 
@@ -883,7 +914,7 @@ owner tests on Linux and Windows.
   makes no sound and passes audio through; it can sit on any insert or as an instrument without notes.
 - **Flathub:** publish the Flatpak there. **Windows:** a signed installer.
 - **The track analyzer out of experimental** (§12.7), and AMD graphics cards for the analysis engine on Windows.
-- **Spinus Plugins** (after 0.1.0): new open-source instruments and effects for sounds that open source
+- **Spinus Plugins** (from 0.2.0): new open-source instruments and effects for sounds that open source
   doesn't cover well yet, in their own repository ([spinus-plugins](https://github.com/tuturu742/spinus-plugins),
   GPL-3.0-or-later). They are built as CLAP, VST3 and LV2 for Linux and Windows, so they work in any DAW.
   Each comes with a synth-match profile and tagged presets. Spinus offers them under Get free plugins.
@@ -906,17 +937,13 @@ owner tests on Linux and Windows.
   - Before the move, spinus-plugins is public and its CI builds and tests on Linux and Windows.
 - **Automation editor with finer control.**
 - An MPE switch for VST3/LV2 synths; recording MPE controllers' per-note bends and pressure.
-- Presets in the Browser (§8.1).
-- Audio clips: tempo-sync to the project and slicing by transients (§11.3).
-- Plugins in a separate process: their windows on Windows, sidechain inputs, MIDI out (§10.2); the
-  Analyzer's synth match tries in a separate process, as the Track creator's already are, so a crashing synth
+- The Analyzer's synth match tries in a separate process, as the Track creator's already are, so a crashing synth
   cannot take Spinus down (§12.7).
 - **Remove everything installed for Windows plugins** (§10.3): removing a plugin takes it out of Spinus,
   but what its installer added to Spinus's Windows folder (sample libraries, helper apps such as a
   vendor's download manager) stays; one button clears it.
 - CLAP builds of Spinus's own devices (§11).
-- Hum to pattern: "detect tempo from my take" (§12.8); per-instrument range limits in the pattern
-  generator; a dedicated symbolic-music model for grooves (§12.4).
+- Hum to pattern: "detect tempo from my take" (§12.8); a dedicated symbolic-music model for grooves (§12.4).
 - Automixer: pan, reverb send and sidechain suggestions (§12.5).
 - Track creator's song (§12.10): the songs' other grooves (only the main one is written), meters other than
   the songs' most common, pre-choruses and key changes, the LLM writing or varying notes (it varies the plan
