@@ -167,28 +167,29 @@ def test_a_loop_is_one_short_pattern_reused_and_trimmed_to_fit() -> None:
     valid(h.steps)
 
 
-def test_parts_share_their_familys_colour_and_automation_goes_in_the_parts_group() -> None:
+def test_parts_go_in_their_familys_group_uncoloured_and_automation_goes_in_the_parts_group() -> None:
     h = harness()
     assert not h.call("add_part", {"name": "Rhythm Guitar", "instrument": "3x osc"})[1]
     assert not h.call("add_part", {"name": "Lead Guitar", "instrument": "3x osc"})[1]
     looks = [s["parameters"] for s in h.steps if s["command"] == "channel.set"]
     assert looks[0]["group"] == looks[1]["group"] == "Guitars"
-    assert looks[0]["colour"] == looks[1]["colour"]
+    assert "colour" not in looks[0] and "colour" not in looks[1]  # nothing coloured unless asked
     assert not h.call("add_part", {"name": "Drums", "instrument": "3x osc", "colour": "#112233"})[1]
     assert h.steps[-1]["parameters"]["colour"] == "#ff112233"
-    # Its pattern and Playlist track take its colour.
+    # Its pattern and Playlist track aren't coloured either.
     assert not h.call("write_part", {"part": "Lead Guitar", "bars": "1-4", "notes": "0 E4 8", "loop_bars": 1})[1]
-    colour = looks[1]["colour"]
-    assert any(s["command"] == "pattern.set" and s["parameters"]["colour"] == colour for s in h.steps)
-    assert any(s["command"] == "lane.set" and s["parameters"].get("colour") == colour for s in h.steps)
-    # Its automation goes right under its track, in its group and colour; more of it goes on the same track.
+    assert not any(s["command"] == "pattern.set" for s in h.steps)
+    assert not any("colour" in s["parameters"] for s in h.steps if s["command"] == "lane.set")
+    # Its automation goes right under its track, in its group; more of it goes on the same track.
     lanes_before = len(h.project["playlist"]["lanes"])
     points = [{"bar": 1, "value": "-12 dB"}, {"bar": 4, "value": "0 dB"}]
     assert not h.call("automate", {"part": "Lead Guitar", "what": "volume", "points": points})[1]
     guitar_lane = next(x for x in h.project["playlist"]["lanes"] if x["name"] == "Lead Guitar")
     grouped = h.steps[-2]
-    assert grouped["command"] == "lane.set" and grouped["parameters"]["group"] == guitar_lane["id"]
-    assert grouped["parameters"]["colour"] == colour
+    assert grouped["command"] == "lane.set" and grouped["parameters"] == {
+        "lane": grouped["parameters"]["lane"],
+        "group": guitar_lane["id"],
+    }
     assert h.steps[-1]["command"] == "lane.move"
     lanes = [x["name"] for x in h.project["playlist"]["lanes"]]
     assert lanes.index("Lead Guitar volume") == lanes.index("Lead Guitar") + 1

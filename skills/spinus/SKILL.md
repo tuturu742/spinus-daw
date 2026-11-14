@@ -103,14 +103,14 @@ don't appear.
 |---|---|
 | Read | `song_overview` (call it first: sections, parts, roles, sounds, mixer), `read_part` |
 | Notes | `write_part` (a part over some bars; with `loop_bars`, a short pattern repeated on the Playlist), `motif`, `place_motif` (transpose, invert, octave, rhythm, displace) |
-| Form | `add_part` (an instrument found by words, a preset, a family, a colour: by default its family's group and colour), `insert_bars` (makes room and adds a marker; `copy_from` fills it), `copy_bars` |
+| Form | `add_part` (an instrument found by words, a preset, a family, a colour: by default its family's group and no colour), `insert_bars` (makes room and adds a marker; `copy_from` fills it), `copy_bars` |
 | Sound | `set_sound` (a preset and/or named settings), `shape_sound` ("pluckier", "brighter", "warmer", "wider"…) |
 | Mix | `add_effect` (to a part, a bus or `master`), `send` (to "Reverb", "Delay" or any insert), `duck` (sidechain), `bus`, `automate` (bars from 1, values like "-12 dB", "30% L", "1.2 kHz") |
 | Test | `check`: out-of-key notes, masking parts, a muddy low end, unused parts, sections off 4-bar phrases, the master limiter, loudness per section after a render |
 
 Give `write_part` a `loop_bars` (1, 2 or 4) whenever a part repeats: it makes one short pattern and repeats it
 as clips, and writing the same loop again later plays that pattern again. `automate` puts the automation on a
-track right under the part's own, in its Playlist group and colour.
+track right under the part's own, in its Playlist group.
 
 A good loop:
 1. Read with `song_overview`.
@@ -181,8 +181,9 @@ Make it look like a song a person built in Spinus, so the user can find their wa
   | FX | FX | `#ffa8a8a8` |
   | Textures | Textures | `#ff7fa88a` |
 
-  If the user already gave a family a colour, use theirs. MCP's `add_part` and `--run` (for what a script
-  leaves in Spinus's default colours, guessed from names and instruments) do this for you.
+  If the user already gave a family a colour, use theirs. Spinus colours nothing by itself (not MCP's tools,
+  not `--run`): set every colour yourself. A pattern holding parts of several families: give it the colour of
+  the part that leads it, or leave Spinus's default.
 - **Solo and order:** `lane.set` with `"solo": true` solos a Playlist track (while any track is soloed, only
   soloed tracks and the tracks grouped under them play); `lane.move` moves a track, with the tracks grouped under
   it, to another `index`. Leave nothing soloed when you hand the song back, unless the user asked.

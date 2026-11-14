@@ -350,19 +350,21 @@ TEST_CASE ("The project harness's edits apply in Spinus as one undo step", "[ai]
     REQUIRE (kick != nullptr);
     REQUIRE (reverb != nullptr);
     CHECK (kick->sends.size() == 1);
-    // Pads in its family's colour, its loop's pattern and track too; its automation in its group, right below it.
+    // Pads in its family's group, nothing coloured (the agent colours on purpose); its automation in its group,
+    // right below it.
     const auto& pads = project.channels.back();
     CHECK (pads.group == "Synths");
     const auto& lanes = project.playlist.lanes;
     const auto padsLane = std::find_if (lanes.begin(), lanes.end(), [] (const auto& l) { return l.name == "Pads"; });
     REQUIRE (padsLane != lanes.end());
-    CHECK (padsLane->colour == pads.colour);
+    CHECK (pads.colour == model::Channel().colour);
+    CHECK (padsLane->colour == model::Lane().colour);
     REQUIRE (padsLane + 1 != lanes.end());
     CHECK ((padsLane + 1)->name == "Pads volume");
     CHECK ((padsLane + 1)->group == padsLane->id);
-    CHECK ((padsLane + 1)->colour == pads.colour);
+    CHECK ((padsLane + 1)->colour == model::Lane().colour);
     CHECK (std::any_of (project.patterns.begin(), project.patterns.end(),
-                        [&] (const auto& p) { return p.name == "Pads 2" && p.colour == pads.colour; }));
+                        [] (const auto& p) { return p.name == "Pads 2" && p.colour == model::Pattern().colour; }));
     CHECK (history.undo());
     auto undone = history.getProject();
     undone.nextId = example().nextId; // IDs are not handed out again after an undo
