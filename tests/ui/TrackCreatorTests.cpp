@@ -1747,7 +1747,7 @@ TEST_CASE ("Track creator: a new song in the style of real songs (SPINUS_REALMUS
 #if defined(SPINUS_PLUGIN_SCANNER)
 TEST_CASE ("Track creator: Save this sound keeps an instrument's sound as the user set it, measured, chosen, added "
            "and remembered with the parts list",
-           "[ui][trackcreator][sounds]")
+           "[ui][trackcreator][sounds][serial]")
 {
     TempFolder t;
     EngineHost host { { .openAudioDevice = false } };
