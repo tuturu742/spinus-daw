@@ -32,10 +32,14 @@ public:
         }
     }
     bool isOk() const { return stream.openedOk(); }
-    void write (const juce::String& key, const juce::var& value)
+    void write (const juce::String& key, const juce::var& value) { write ({ { key.toRawUTF8(), value } }); }
+
+    /** One line of several properties. */
+    void write (std::initializer_list<std::pair<const char*, juce::var>> properties)
     {
         auto* o = new juce::DynamicObject();
-        o->setProperty (key, value);
+        for (const auto& [key, value] : properties)
+            o->setProperty (key, value);
         stream.writeText (
             juce::JSON::toString (juce::var (o), juce::JSON::FormatOptions {}.withSpacing (juce::JSON::Spacing::none)) +
                 "\n",
@@ -229,7 +233,7 @@ int runInstrument (const juce::var& request, Lines& out)
         if (known != nullptr && known->hasProperty (preset.id) &&
             known->getProperty (preset.id).toString() == preset.version)
             continue;
-        out.write ("begin", preset.id);
+        out.write ({ { "begin", preset.id }, { "name", preset.name } }); // named, should it crash the helper
         juce::var sound;
         juce::String problem;
         if (preset.id.isNotEmpty()) // not the instrument's own sound as it opens

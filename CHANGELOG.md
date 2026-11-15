@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The sound index says what each of its problems is: **Show sounds** lists every problem it counts (a plugin that
+  didn't load, a preset that crashed or froze it, a preset that didn't load), with the instrument, the preset and
+  why. Search `problem` there to see only those.
 - Learn this instrument: **Forget this instrument** clears the manuals list too. The forgotten manuals stayed in the
   list, and **Remove** did nothing on them.
 - The Sampler and Six Sines come with what Spinus knows of their keys, like 3x Osc, Surge XT, OB-Xf and Odin 2.

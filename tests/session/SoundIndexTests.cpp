@@ -568,10 +568,60 @@ TEST_CASE ("Sound index: presets that crash or hang the helper are left out", "[
     CHECK (result.problems == 2);
     CHECK (findSound (entry, "Crashes") == nullptr);
     CHECK (findSound (entry, "Hangs") == nullptr);
-    // Not tried again.
+    // Not tried again; why is kept, and Show sounds lists both with it.
     SoundIndex again (temp.folder);
     again.load();
     CHECK (again.instruments.at (source.key).problemPresets.size() == 2);
+    juce::StringArray problems;
+    for (const auto& row : again.rows())
+        if (row.role == "problem")
+            problems.add (row.name + ": " + row.detail);
+    CHECK (problems.size() == again.summarize().problems);
+    CHECK (problems.joinIntoString ("\n").contains ("Crashes: the instrument crashed on this preset"));
+    CHECK (problems.joinIntoString ("\n").contains ("Hangs: the instrument stopped answering on this preset"));
+}
+
+TEST_CASE ("Sound index: every problem it counts is listed, with why", "[sounds][index]")
+{
+    TempFolder temp;
+    SoundIndex index (temp.folder);
+    SoundIndex::Instrument broken;
+    broken.source = threeOsc();
+    broken.source.key = "plugin-broken";
+    broken.source.name = "Broken Synth";
+    broken.problem = "Broken Synth crashed while loading";
+    index.instruments[broken.source.key] = broken;
+    SoundIndex::Instrument crashy;
+    crashy.source = threeOsc();
+    crashy.problemPresets.add ("program:3:Wobble");
+    crashy.problemDetails["program:3:Wobble"] = { "Wobble", "stopped answering" };
+    auto* failed = new juce::DynamicObject();
+    failed->setProperty ("id", "file:abc/Leads/Saw.fxp");
+    failed->setProperty ("name", "Saw");
+    failed->setProperty ("problem", "its file could not be read");
+    crashy.sounds.add (juce::var (failed));
+    index.instruments[crashy.source.key] = crashy;
+    for (auto& [key, i] : index.instruments)
+        REQUIRE (index.saveInstrument (i));
+    REQUIRE (index.saveIndex());
+
+    SoundIndex again (temp.folder);
+    again.load();
+    CHECK (again.instruments.at (crashy.source.key).problemDetails.at ("program:3:Wobble").why == "stopped answering");
+    juce::StringArray problems;
+    for (const auto& row : again.rows())
+        if (row.role == "problem")
+            problems.add (row.name + " (" + row.source + "): " + row.detail);
+    CHECK (again.summarize().problems == 3);
+    REQUIRE (problems.size() == 3);
+    CHECK (problems.contains ("Broken Synth (Broken Synth): Broken Synth crashed while loading (no sound of it is measured)"));
+    CHECK (problems.contains ("Wobble (3x Osc): the instrument stopped answering on this preset, so it is left out"));
+    CHECK (problems.contains ("Saw (3x Osc): its file could not be read"));
+
+    CHECK (SoundIndex::presetNameFromId ("program:12:Big: Pad") == "Big: Pad");
+    CHECK (SoundIndex::presetNameFromId ("file:1a2b/Basses/Fingered.amhstate") == "Basses/Fingered.amhstate");
+    CHECK (SoundIndex::presetNameFromId ("odin2/Init") == "Init");
+    CHECK (SoundIndex::presetNameFromId ("plugin|Lead 4") == "Lead 4");
 }
 
 TEST_CASE ("Sound index: a sound an older helper found silent is measured again, and sounds now",

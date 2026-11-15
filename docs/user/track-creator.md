@@ -344,7 +344,9 @@ extension (an AIFF called .wav) is still read.
   preset files, new or changed samples. Removed ones leave the index.
 - **Plugins can't crash Spinus here**: the listening happens in a separate helper program. A preset that
   makes it crash or freeze is skipped and counted as a problem; so is a plugin that doesn't load (it is
-  tried again once it's updated).
+  tried again once it's updated) and a preset that doesn't load. To see what each problem is, click **Show
+  sounds** and search `problem`: each says which instrument and preset, and what went wrong ("the instrument
+  crashed on this preset, so it is left out").
 - **Measured again by a newer Spinus:** when a newer version of Spinus listens better (it now waits for
   instruments that load their sounds slowly, as big sampled guitars and basses do), the plugins an older
   version found silent, or that failed, are listened to again at the next update. The ones that worked are
