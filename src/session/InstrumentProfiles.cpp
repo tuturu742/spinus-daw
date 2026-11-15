@@ -2,6 +2,8 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include <algorithm>
+
 namespace spinus
 {
 
@@ -114,6 +116,68 @@ InstrumentProfiles::InstrumentProfiles (const juce::File& indexFolder)
 
 juce::String InstrumentProfiles::jobName (Job job) { return jobNames[(int)job]; }
 juce::String InstrumentProfiles::sourceName (Source source) { return sourceNames[(int)source]; }
+
+juce::var InstrumentProfiles::describeForAgents (const Profile& profile)
+{
+    const auto hasJob = [] (const Mode& mode, Job job)
+    { return std::any_of (mode.keys.begin(), mode.keys.end(), [job] (const Key& k) { return k.job == job; }); };
+    if (profile.modes.empty())
+        return {};
+    if (const auto& only = profile.modes.front(); profile.modes.size() == 1)
+        if (const auto keys = only.playable();
+            keys && keys->keys.all() && ! hasJob (only, Job::switches) && ! hasJob (only, Job::special))
+            return {};
+
+    juce::Array<juce::var> modes;
+    for (const auto& mode : profile.modes)
+    {
+        auto* m = new juce::DynamicObject();
+        m->setProperty ("name", mode.name);
+        if (mode.enter.isNotEmpty())
+            m->setProperty ("enter", mode.enter);
+        if (mode.enterKey >= 0)
+            m->setProperty ("enterKey", mode.enterKey);
+        if (mode.goodFor.isNotEmpty())
+            m->setProperty ("goodFor", mode.goodFor);
+        if (mode.voices != Voices::unknown)
+            m->setProperty ("voices", voicesNames[(int)mode.voices]);
+        if (const auto keys = mode.playable())
+        {
+            juce::Array<juce::var> runs;
+            for (int n = 0; n < 128; ++n)
+                if (keys->plays (n))
+                {
+                    int end = n;
+                    while (keys->plays (end + 1))
+                        ++end;
+                    runs.add (juce::Array<juce::var> { n, end });
+                    n = end;
+                }
+            m->setProperty ("plays", runs);
+            m->setProperty ("playsInWords", keys->describe());
+        }
+        for (const auto job : { Job::switches, Job::special })
+        {
+            juce::Array<juce::var> list;
+            for (int n = 0; n < 128; ++n)
+                if (const auto& key = mode.keys[(size_t)n]; key.job == job)
+                {
+                    auto* k = new juce::DynamicObject();
+                    k->setProperty ("key", n);
+                    k->setProperty ("note", keyName (n));
+                    if (key.what.isNotEmpty())
+                        k->setProperty ("what", key.what);
+                    list.add (juce::var (k));
+                }
+            if (! list.isEmpty())
+                m->setProperty (job == Job::switches ? "switches" : "special", list);
+        }
+        modes.add (juce::var (m));
+    }
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("modes", modes);
+    return juce::var (o);
+}
 
 juce::var InstrumentProfiles::toVar (const Profile& profile)
 {

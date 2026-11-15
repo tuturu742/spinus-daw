@@ -2,7 +2,10 @@
 
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
+#include "session/InstrumentPresets.h"
+#include "session/InstrumentProfiles.h"
 #include "session/Session.h"
+#include "session/SoundIndex.h"
 
 namespace spinus::ai
 {
@@ -40,6 +43,22 @@ juce::var projectContext (Session& session, const ContextOptions& options)
     if (options.insert.isValid())
         selection->setProperty ("insert", (int)options.insert.value);
     context->setProperty ("selection", juce::var (selection));
+
+    // What each learned instrument's keys do (Learn this instrument), so notes go on keys that play.
+    InstrumentProfiles profiles (options.profilesFolder != juce::File() ? options.profilesFolder
+                                                                        : SoundIndex::getDefaultFolder());
+    profiles.load();
+    const auto keysOf = [&] (const model::Device& device) -> juce::var
+    {
+        const auto profile = profiles.get (InstrumentPresets::libraryOf (device));
+        return profile ? InstrumentProfiles::describeForAgents (*profile) : juce::var();
+    };
+    auto* instrumentKeys = new juce::DynamicObject();
+    for (auto& channel : project.channels)
+        if (channel.instrument)
+            if (auto keys = keysOf (*channel.instrument); ! keys.isVoid())
+                instrumentKeys->setProperty (juce::String ((int)channel.instrument->id.value), keys);
+    context->setProperty ("instrumentKeys", juce::var (instrumentKeys));
 
     // Device names as Spinus shows them (the project file only has types), and each device's settings as they
     // show now.
@@ -97,6 +116,9 @@ juce::var projectContext (Session& session, const ContextOptions& options)
                                 { "format", entry.badge.isNotEmpty() ? entry.badge : juce::String ("Spinus") },
                                 { "available", entry.available },
                                 { "device", device } });
+        if (entry.instrument)
+            if (auto keys = keysOf (entry.device); ! keys.isVoid())
+                listed.getDynamicObject()->setProperty ("keys", keys);
         // An effect of Spinus's or a free one that picks its kind by name (a type "Chorus", "Phaser"...): those
         // names, so a chorus is found in it. Not for the computer's own plugins (each would be loaded to see).
         if (options.deviceChoices && ! entry.instrument && entry.available &&

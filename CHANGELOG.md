@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The assistant, outside agents (`song_summary`) and `spinus --check` are told what a learned instrument's keys do:
+  its modes, the keys that play and its switch keys.
 - Coding agents' colours are their own: `spinus --run` and the music tools (`add_part`, `write_part`, `automate`)
   no longer colour channels, patterns or Playlist tracks by themselves. The Spinus skills tell agents which colour
   each family gets, and a pattern that holds several families is no longer guessed at.

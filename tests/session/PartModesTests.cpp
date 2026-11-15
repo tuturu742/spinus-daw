@@ -343,3 +343,44 @@ TEST_CASE ("Part modes: a chord mode plays the song's chords on its chord keys, 
         CHECK (partmodes::apply (chorded ("{}"), lead)["modes"]["gtr"]["mode"].toString() == "Normal");
     }
 }
+
+TEST_CASE ("Instrument profiles: what agents are told of an instrument's keys", "[instruments][profiles]")
+{
+    // An instrument that plays every key in one mode: nothing to tell.
+    const auto osc = InstrumentProfiles::bundled ("stock-spinus.3x-osc");
+    REQUIRE (osc.has_value());
+    CHECK (InstrumentProfiles::describeForAgents (osc.value()).isVoid());
+    CHECK (InstrumentProfiles::describeForAgents ({}).isVoid());
+
+    // A guitar: E2 to G6 play, C1 switches to palm mutes; a Strummer mode entered with D1, C3 to B3 chords.
+    using J = InstrumentProfiles::Job;
+    InstrumentProfiles::Mode normal, strummer;
+    normal.setKeys (40, 91, { J::plays, {}, InstrumentProfiles::Source::user });
+    normal.setKeys (12, 12, { J::switches, "palm mute", InstrumentProfiles::Source::user });
+    normal.voices = InstrumentProfiles::Voices::one;
+    strummer.name = "Strummer";
+    strummer.enter = "the Strummer button";
+    strummer.enterKey = 14;
+    strummer.goodFor = "strummed rhythm";
+    strummer.setKeys (36, 47, { J::special, "chord", InstrumentProfiles::Source::user });
+    strummer.setKeys (60, 72, { J::plays, {}, InstrumentProfiles::Source::user });
+    const auto told = InstrumentProfiles::describeForAgents ({ { normal, strummer }, {} });
+    REQUIRE (told["modes"].size() == 2);
+    const auto first = told["modes"][0];
+    CHECK (first["name"].toString() == "Normal");
+    CHECK (first["voices"].toString() == "one");
+    CHECK (juce::JSON::toString (first["plays"], true) == "[[40, 91]]");
+    CHECK (first["playsInWords"].toString() == PlayableKeys::between (40, 91).describe());
+    REQUIRE (first["switches"].size() == 1);
+    CHECK ((int)first["switches"][0]["key"] == 12);
+    CHECK (first["switches"][0]["note"].toString() == "C1");
+    CHECK (first["switches"][0]["what"].toString() == "palm mute");
+    CHECK_FALSE (first.hasProperty ("special"));
+    const auto second = told["modes"][1];
+    CHECK (second["enter"].toString() == "the Strummer button");
+    CHECK ((int)second["enterKey"] == 14);
+    CHECK (second["goodFor"].toString() == "strummed rhythm");
+    CHECK_FALSE (second.hasProperty ("voices"));
+    CHECK (second["special"].size() == 12);
+    CHECK (juce::JSON::toString (second["plays"], true) == "[[60, 72]]");
+}

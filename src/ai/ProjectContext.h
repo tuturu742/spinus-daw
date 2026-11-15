@@ -29,6 +29,10 @@ struct ContextOptions
     /** Each free or Spinus effect's `modes`: its settings that pick its kind by name ({"FX Type": ["Delay",
         "Chorus"...]}), read from a copy of it the first time (Session::getDeviceChoices). */
     bool deviceChoices = true;
+    /** Where the instrument profiles are (the sound index's folder; SoundIndex::getDefaultFolder() when empty):
+        `instrumentKeys` gives, by device id, what each learned instrument's keys do, and each instrument that can
+        be added has its `keys` (InstrumentProfiles::describeForAgents). */
+    juce::File profilesFolder;
 };
 
 juce::var projectContext (Session&, const ContextOptions&);
