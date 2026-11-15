@@ -1160,7 +1160,9 @@ TEST_CASE ("The music tools are told what a learned instrument's keys do", "[age
     options.deviceChoices = false;
     options.profilesFolder = index;
     const auto context = ai::projectContext (f.session, options);
-    const auto device = juce::String ((int)f.session.getProject().channels.back().instrument->id.value);
+    const auto& instrument = f.session.getProject().channels.back().instrument;
+    REQUIRE (instrument.has_value());
+    const auto device = juce::String ((int)instrument.value().id.value);
     CHECK (context["instrumentKeys"][juce::Identifier (device)]["modes"][0]["switches"][0]["what"].toString() ==
            "palm mute");
     // And 3x Osc in the list of what can be added carries them too.

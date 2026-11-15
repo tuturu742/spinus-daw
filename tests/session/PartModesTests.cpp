@@ -347,7 +347,9 @@ TEST_CASE ("Part modes: a chord mode plays the song's chords on its chord keys, 
 TEST_CASE ("Instrument profiles: what agents are told of an instrument's keys", "[instruments][profiles]")
 {
     // An instrument that plays every key in one mode: nothing to tell.
-    CHECK (InstrumentProfiles::describeForAgents (*InstrumentProfiles::bundled ("stock-spinus.3x-osc")).isVoid());
+    const auto osc = InstrumentProfiles::bundled ("stock-spinus.3x-osc");
+    REQUIRE (osc.has_value());
+    CHECK (InstrumentProfiles::describeForAgents (osc.value()).isVoid());
     CHECK (InstrumentProfiles::describeForAgents ({}).isVoid());
 
     // A guitar: E2 to G6 play, C1 switches to palm mutes; a Strummer mode entered with D1, C3 to B3 chords.
