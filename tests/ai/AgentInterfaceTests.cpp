@@ -3,6 +3,7 @@
 
 #include "ai/AgentInterface.h"
 #include "ai/ProjectContext.h"
+#include "session/EffectProfiles.h"
 #include "session/InstrumentProfiles.h"
 #include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
@@ -1170,5 +1171,47 @@ TEST_CASE ("The music tools are told what a learned instrument's keys do", "[age
     for (auto& d : *context["devices"].getArray())
         if (d["device"]["stockType"].toString() == "spinus.3x-osc")
             listed = d["keys"]["modes"].size() == 1;
+    CHECK (listed);
+}
+
+TEST_CASE ("The music tools are told what a learned effect suits and what its settings do", "[agents][effects]")
+{
+    Fixture f;
+    juce::String error;
+    auto add = commands::CommandRegistry::get().create (
+        "insert.addEffect",
+        juce::JSON::parse (R"({"insert": )" + juce::String ((int)model::masterInsertId.value) +
+                           R"(, "device": {"kind": "stock", "stockType": "spinus.filter"}})"),
+        error);
+    REQUIRE (add != nullptr);
+    REQUIRE (f.session.getHistory().perform (std::move (add)).wasOk());
+    const auto index = f.folder.root.getChildFile ("sounds");
+    EffectProfiles::Profile profile;
+    profile.goodFor = "taming harsh highs";
+    profile.settings.push_back ({ "cutoff", "Cutoff", "where the highs start to fall", "2 kHz", "12 kHz", true });
+    EffectProfiles profiles (index);
+    profiles.set ("stock-spinus.filter", profile);
+    REQUIRE (profiles.save());
+
+    ai::ContextOptions options;
+    options.deviceChoices = false;
+    options.profilesFolder = index;
+    const auto context = ai::projectContext (f.session, options);
+    const auto device = juce::String ((int)f.session.getProject().mixer.master.effects.front().device.id.value);
+    CHECK (context["effectGoodFor"][juce::Identifier (device)].toString() == "taming harsh highs");
+    juce::var cutoff;
+    for (auto& p : *context["deviceParameters"][juce::Identifier (device)].getArray())
+        if (p["id"].toString() == "cutoff")
+            cutoff = p;
+    REQUIRE (cutoff.isObject());
+    CHECK (cutoff["what"].toString() == "where the highs start to fall");
+    CHECK (cutoff["safeRange"].toString() == "2 kHz to 12 kHz");
+    CHECK ((bool)cutoff["matters"]);
+    CHECK (cutoff["range"].toString().contains (" to "));
+    // And Filter in the list of what can be added says what it suits.
+    bool listed = false;
+    for (auto& d : *context["devices"].getArray())
+        if (d["device"]["stockType"].toString() == "spinus.filter")
+            listed = d["goodFor"].toString() == "taming harsh highs";
     CHECK (listed);
 }

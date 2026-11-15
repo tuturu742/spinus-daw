@@ -84,6 +84,10 @@ so the assistant and coding agents would have to guess.
   it fills the settings you haven't set yourself, and your own words stay.
 - It is kept in Spinus's settings folder, beside the [sound index](track-creator.md#your-sounds), and works
   the same for Spinus's own effects and any plugin.
+- The assistant's music tools and coding agents ([MCP and `--run`](command-line.md)) read it: what an effect is
+  good for (so asking for "drum glue" can find the compressor you taught that), and for each setting what it
+  does, its safe range and whether it matters, listed first. They still propose; nothing changes until you
+  **Apply**.
 
 ### Typing values
 

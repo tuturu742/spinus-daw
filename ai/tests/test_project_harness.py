@@ -345,6 +345,52 @@ def test_a_plugin_with_many_settings_is_read_in_pages_and_by_name() -> None:
     )
 
 
+def test_a_learned_effect_says_what_it_suits_and_what_its_settings_do() -> None:
+    project = song()
+    squash = {"id": 60, "kind": "plugin", "plugin": {"name": "Bus Squasher", "format": "LV2", "identifier": "urn:sq"}}
+    next(i for i in project["mixer"]["inserts"] if i["id"] == 50)["effects"].append({"device": squash})
+    learned = {
+        **device("Bus Squasher", "effect", "x"),
+        "device": {k: v for k, v in squash.items() if k != "id"},
+        "goodFor": "glue on drum buses",
+    }
+    h = ProjectHarness(
+        {
+            "project": project,
+            "devices": [*DEVICES, learned],
+            "effectGoodFor": {"60": "glue on drum buses"},
+            "deviceParameters": {
+                "60": [
+                    {"id": "p7", "name": "Param 7", "text": "40 %", "what": "dry to wet"},
+                    {"id": "p1", "name": "Thresh", "text": "-12 dB", "what": "where it starts to squash",
+                     "safeRange": "-30 dB to -6 dB", "range": "-60 dB to 0 dB", "matters": True},
+                    {"id": "p3", "name": "Attack", "text": "10 ms"},
+                ]
+            },
+        }
+    )  # fmt: skip
+    read = json.loads(h.call("sound_settings", {"part": "Bass", "effect": "Bus Squasher"})[0])
+    assert read["goodFor"] == "glue on drum buses"
+    assert list(read["settings"]) == ["Thresh", "Param 7", "Attack"]  # what matters first
+    assert read["settings"]["Thresh"] == {
+        "now": "-12 dB",
+        "what": "where it starts to squash",
+        "safeRange": "-30 dB to -6 dB",
+        "range": "-60 dB to 0 dB",
+        "matters": True,
+    }
+    assert read["settings"]["Attack"] == "10 ms"  # nothing learned of it
+    found = json.loads(h.call("sound_settings", {"part": "Bass", "effect": "Bus Squasher", "find": "wet"})[0])
+    assert list(found["settings"]) == ["Param 7"]  # found by what it does
+    overview = json.loads(h.call("song_overview", {})[0])
+    bass = next(i for i in overview["mixer"] if "Bus Squasher" in i["effects"])
+    assert bass["goodFor"] == {"Bus Squasher": "glue on drum buses"}
+    # Asked for by what it suits, when no effect has that name or mode.
+    assert h.call("add_effect", {"to": "Pad", "effect": "tape glue"})[1]  # not every word is in it
+    text, failed = h.call("add_effect", {"to": "Pad", "effect": "drum glue"})
+    assert not failed and text == "Added Bus Squasher to Pad.", text
+
+
 def test_the_checks_find_masking_and_a_missing_limiter() -> None:
     issues = harness().call("check", {})[0]
     assert "Keys and Pad, Verse: both held in the same register" in issues

@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The assistant and coding agents read what you taught Spinus in **Learn this effect...**: what an effect is good
+  for, and for each setting what it does, its safe range and whether it matters most. An effect can be asked for
+  by what it suits ("drum glue") as well as by its name.
 - **Update sound index** listens to several instruments at once (up to 4, half your processor cores), each in a
   helper of its own, so an update with many instruments finishes sooner. Windows plugins still go one at a time.
 - **Learn this effect...** in an effect's right-click menu in the Mixer: every setting with the range the plugin
