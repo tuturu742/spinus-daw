@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The assistant's and outside agents' music tools keep notes on keys a learned instrument plays: `write_part` moves
+  a note on a key that doesn't play by octaves onto one that does (a switch key named in the notes, such as
+  `palm-mute`, is written on purpose), `song_overview` lists each part's modes and switch keys, and `check` warns
+  about notes on keys that don't play.
 - The assistant, outside agents (`song_summary`) and `spinus --check` are told what a learned instrument's keys do:
   its modes, the keys that play and its switch keys.
 - Coding agents' colours are their own: `spinus --run` and the music tools (`add_part`, `write_part`, `automate`)

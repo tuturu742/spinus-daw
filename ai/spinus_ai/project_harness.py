@@ -92,6 +92,23 @@ def scale_of(key: dict[str, Any]) -> set[int]:
     return {(int(key["tonic"]) + i) % 12 for i in SCALES.get(str(key.get("scale")), SCALES["major"])}
 
 
+def fit_key(pitch: int, plays: set[int]) -> int:
+    """A note moved by octaves onto a key that plays, as few as it takes (up before down when as far), or the
+    nearest key that plays when no octave of it does (InstrumentProfiles' PlayableKeys::fit)."""
+    if not plays or pitch in plays:
+        return pitch
+    for octaves in range(1, 11):
+        for candidate in (pitch + 12 * octaves, pitch - 12 * octaves):
+            if candidate in plays:
+                return candidate
+    return min(plays, key=lambda k: (abs(k - pitch), -k))
+
+
+def switch_word(what: str) -> str:
+    """A switch key's name as one word, to write it as a note's pitch: "palm mute" -> "palm-mute"."""
+    return re.sub(r"\s+", "-", what.strip().lower())
+
+
 def note_name(pitch: int) -> str:
     """FL's naming: MIDI 60 is C5."""
     return f"{NOTE_NAMES[pitch % 12]}{pitch // 12}"
@@ -451,6 +468,11 @@ class ProjectHarness:
             str(k): int(v) for k, v in (context.get("deviceParameterCounts") or {}).items() if isinstance(v, int)
         }
         self.measured: dict[str, Any] = dict(context.get("measured") or {})
+        # Device ID -> what a learned instrument's keys do (InstrumentProfiles::describeForAgents).
+        self.instrument_keys: dict[str, dict[str, Any]] = {
+            str(k): v for k, v in (context.get("instrumentKeys") or {}).items() if isinstance(v, dict)
+        }
+        self.moved = 0  # notes the last parse moved onto keys that play
         self.steps: list[dict[str, Any]] = []
         self.changes: list[str] = []  # in words, one per edit
         self.motifs: dict[str, dict[str, Any]] = {}
@@ -674,12 +696,51 @@ class ProjectHarness:
         out.sort(key=lambda p: (p.start, p.pitch))
         return out
 
+    def keys_of(self, channel: dict[str, Any]) -> dict[str, Any] | None:
+        """What the part's instrument's keys do, if Spinus has learned them: by its device, or for a part added
+        here, from the instrument it was added with."""
+        device = channel.get("instrument") or {}
+        if str(device.get("id")) in self.instrument_keys:
+            return self.instrument_keys[str(device.get("id"))]
+        bare = {k: v for k, v in device.items() if k not in ("id", "parameters", "bypassed")}
+        for listed in self.devices:
+            keys = listed.get("keys")
+            if isinstance(keys, dict) and bare and listed.get("device") == bare:
+                return keys
+        return None
+
+    def plays(self, channel: dict[str, Any]) -> set[int]:
+        """The keys the part's instrument plays as notes as it opens (its first mode's); empty when not known."""
+        keys = self.keys_of(channel)
+        modes = (keys or {}).get("modes") or []
+        if not modes or not isinstance(modes[0], dict):
+            return set()
+        out: set[int] = set()
+        for run in modes[0].get("plays") or []:
+            if isinstance(run, list) and len(run) == 2:
+                out.update(range(int(run[0]), int(run[1]) + 1))
+        return out
+
+    def switch_keys(self, channel: dict[str, Any]) -> dict[str, int]:
+        """The first mode's switch and special keys by name ("palm-mute": 12), to write one on purpose."""
+        keys = self.keys_of(channel)
+        modes = (keys or {}).get("modes") or []
+        if not modes or not isinstance(modes[0], dict):
+            return {}
+        out: dict[str, int] = {}
+        for k in [*(modes[0].get("switches") or []), *(modes[0].get("special") or [])]:
+            if isinstance(k, dict) and k.get("what"):
+                out.setdefault(switch_word(str(k["what"])), int(k.get("key", 0)))
+        return out
+
     def drum_map(self, channel: dict[str, Any]) -> dict[str, int]:
         return PADS if (channel.get("instrument") or {}).get("stockType") == "spinus.drum-machine" else GM
 
     def notation(self, channel: dict[str, Any], notes: list[Placed], origin: int) -> str:
         names = (
-            {v: k for k, v in reversed(list(self.drum_map(channel).items()))} if self.role(channel) == "drums" else {}
+            {v: k for k, v in reversed(list(self.drum_map(channel).items()))}
+            if self.role(channel) == "drums"
+            else {v: k for k, v in reversed(list(self.switch_keys(channel).items()))}
         )
         out = []
         for n in notes:
@@ -693,6 +754,11 @@ class ProjectHarness:
         """Notes (ticks from the range's start) from the notation, the loop repeated over `span` ticks."""
         drums = self.role(channel) == "drums"
         mapping = self.drum_map(channel)
+        # A learned instrument: a note on a key that doesn't play moves by octaves onto one that does, unless it
+        # names a switch key ("palm-mute"), which is written on purpose.
+        plays = set() if drums else self.plays(channel)
+        switches = {} if drums else self.switch_keys(channel)
+        self.moved = 0
         loop: list[dict[str, Any]] = []
         bad: list[str] = []
         for raw in re.split(r"[;\n]+", text or ""):
@@ -712,7 +778,11 @@ class ProjectHarness:
                 bad.append(raw.strip())
                 continue
             word = fields[1].lower()
-            pitch = mapping.get(word) if word in mapping else pitch_of(fields[1])
+            named_switch = word in switches
+            pitch = switches[word] if named_switch else mapping.get(word) if word in mapping else pitch_of(fields[1])
+            if pitch is not None and plays and not named_switch and pitch not in plays:
+                pitch = fit_key(int(pitch), plays)
+                self.moved += 1
             if pitch is None or not all(math.isfinite(v) for v in (step, length, velocity)) or step < 0 or length <= 0:
                 bad.append(raw.strip())
                 continue
@@ -915,6 +985,8 @@ class ProjectHarness:
                     "notes": len(notes),
                 }
             )
+            if keys := self.keys_of(c):
+                parts[-1]["keys"] = self.keys_in_words(keys)
         inserts = []
         for i in self.inserts():
             target = self.insert(i.get("output"))
@@ -944,6 +1016,33 @@ class ProjectHarness:
                 "mixer": inserts,
             }
         )
+
+    @staticmethod
+    def keys_in_words(keys: dict[str, Any]) -> list[str]:
+        """Each mode in a line: 'Normal (one note at a time): plays E2 to G6; switches: palm-mute (C1)'."""
+        out = []
+        for mode in keys.get("modes") or []:
+            if not isinstance(mode, dict):
+                continue
+            head = str(mode.get("name") or "Normal")
+            voices = {"chords": "chords", "one": "one note at a time"}.get(str(mode.get("voices")))
+            how = [x for x in (voices, str(mode.get("goodFor") or "")) if x]
+            if mode.get("enter"):
+                how.append(f"entered with {mode['enter']}")
+            line = head + (f" ({'; '.join(how)})" if how else "")
+            runs = [r for r in mode.get("plays") or [] if isinstance(r, list) and len(r) == 2]
+            said = ", ".join(f"{note_name(int(a))} to {note_name(int(b))}" for a, b in runs)
+            line += f": plays {mode.get('playsInWords') or said or 'keys not known'}"
+            for kind in ("switches", "special"):
+                named = [
+                    f"{switch_word(str(k.get('what') or kind))} ({k.get('note')})"
+                    for k in mode.get(kind) or []
+                    if isinstance(k, dict)
+                ]
+                if named:
+                    line += f"; {kind}: {', '.join(named)}"
+            out.append(line)
+        return out
 
     def tool_read_part(self, part: str, bars: str) -> str:
         channel = self.part(part)
@@ -1015,11 +1114,20 @@ class ProjectHarness:
             name = f"{channel.get('name')} {first}" + (f"-{last_of_loop}" if last_of_loop > first else "")
             self.put(channel, start, parsed, span, name, loop)
         self.changes.append(f"{channel.get('name')}: {len(parsed)} notes in bars {first}-{last}")
+        moved = ""
+        if self.moved:
+            plays = self.plays(channel)
+            moved = (
+                f" {self.moved} notes were on keys {self.device_name(channel.get('instrument'))} doesn't play as notes "
+                f"and moved by octaves onto ones it does ({note_name(min(plays))} to {note_name(max(plays))}); "
+                "name a switch key to write one on purpose"
+            )
         return (
             f"{channel.get('name')}: {len(parsed)} notes in bars {first}-{last}"
             + (f" ({loop_bars_text})" if looped and parsed else "")
             + (f", {removed} old ones taken out" if removed else "")
             + "."
+            + (moved + "." if moved else "")
         )
 
     def tool_motif(self, name: str, notes: str, bars: int) -> str:
@@ -1529,9 +1637,19 @@ class ProjectHarness:
                         f"{s['name']}: plays in {keynames.key_name(best_tonic, best_scale)}, not the song's key "
                         "(fine for a key change on purpose)"
                     )
-            for name, (_c, notes) in pitched.items():
+            for name, (c, notes) in pitched.items():
                 if not notes:
                     continue
+                if plays := self.plays(c):
+                    named = set(self.switch_keys(c).values())
+                    off = [n for n in notes if n.pitch not in plays and n.pitch not in named]
+                    if off:
+                        out.append(
+                            f"{name}, {s['name']}: {len(off)} notes on keys its instrument doesn't play as notes, e.g. "
+                            + ", ".join(f"{note_name(n.pitch)} at {self.bar_of(n.start)}" for n in off[:3])
+                            + " (they switch or do nothing: move them into "
+                            + f"{note_name(min(plays))} to {note_name(max(plays))})"
+                        )
                 if here is not None:
                     outside = [n for n in notes if n.pitch % 12 not in here]
                     if len(outside) > max(2, len(notes) // 8):
