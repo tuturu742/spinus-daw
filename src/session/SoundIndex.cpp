@@ -13,7 +13,9 @@
 
 #include <SpinusVersion.h>
 
+#include <mutex>
 #include <set>
+#include <thread>
 
 namespace spinus
 {
@@ -942,12 +944,13 @@ SoundIndexer::Run SoundIndexer::runHelper (const Options& options, const juce::v
 
 namespace
 {
-/** Measures one instrument's new and changed presets, restarting the helper after a crash or hang. */
-void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, const SoundSource& source,
-                      const std::function<bool()>& shouldStop, SoundIndexer::Progress& progress,
-                      const std::function<void (const SoundIndexer::Progress&)>& report, SoundIndexer::Result& result)
+/** Measures one instrument's new and changed presets into `entry`, restarting the helper after a crash or hang.
+    `tell` gets what it is on, and `true` when a sound was measured. Touches nothing else of `index` but its own
+    file, so several run at once (each with its own entry). */
+void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, const SoundIndexer::Options& options,
+                      const SoundSource& source, const std::function<bool()>& shouldStop,
+                      const std::function<void (const juce::String&, bool)>& tell, SoundIndexer::Result& result)
 {
-    auto& entry = index.instruments[source.key];
     if (entry.source.fingerprint != source.fingerprint)
     {
         // A new or changed plugin: everything measured again.
@@ -974,8 +977,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
         at[entry.sounds[i]["id"].toString()] = i;
     std::optional<std::set<juce::String>> listed;
     int sinceSaved = 0;
-    progress.current = source.name;
-    report (progress);
+    tell (source.name, false);
 
     // The user's saved sounds for it (Save this sound): measured as presets of its own, by their state.
     juce::Array<juce::var> saved;
@@ -1045,9 +1047,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
                         entry.sounds.add (sound);
                     }
                     ++result.soundsMeasured;
-                    ++progress.sounds;
-                    progress.current = source.name + ": " + sound["name"].toString();
-                    report (progress);
+                    tell (source.name + ": " + sound["name"].toString(), true);
                     // Long ones are kept as they go, so a stop (or a crash of Spinus) loses little.
                     if (++sinceSaved >= 50)
                     {
@@ -1117,7 +1117,23 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
     index.saveInstrument (entry);
     ++result.instrumentsVisited;
 }
+
+void add (SoundIndexer::Result& to, const SoundIndexer::Result& r)
+{
+    to.instrumentsVisited += r.instrumentsVisited;
+    to.soundsMeasured += r.soundsMeasured;
+    to.soundsRemoved += r.soundsRemoved;
+    to.samplesMeasured += r.samplesMeasured;
+    to.samplesRemoved += r.samplesRemoved;
+    to.problems += r.problems;
+    to.cancelled = to.cancelled || r.cancelled;
+}
 } // namespace
+
+int SoundIndexer::helpersFor (const Options& options)
+{
+    return options.helpers > 0 ? options.helpers : juce::jlimit (1, 4, juce::SystemStats::getNumCpus() / 2);
+}
 
 SoundIndexer::Result SoundIndexer::update (SoundIndex& index, const Options& options,
                                            const std::vector<SoundSource>& sources,
@@ -1158,23 +1174,74 @@ SoundIndexer::Result SoundIndexer::update (SoundIndex& index, const Options& opt
             if (! index.instruments.contains (file.getFileNameWithoutExtension()))
                 file.deleteFile();
 
+    // Several instruments at once, each in a helper of its own (a helper plays on one core). Windows plugins
+    // (yabridge) go one at a time, all by the first worker: many under Wine at once is asking for trouble. The
+    // workers only touch the index under the lock: each measures a copy of its instrument's entry and puts it back.
+    std::vector<const SoundSource*> anyWorker, firstWorker;
+    for (const auto* s : visits)
+        (s->badge == "WIN" ? firstWorker : anyWorker).push_back (s);
+    const auto workers = (size_t)juce::jlimit (1, juce::jmax (1, (int)visits.size()), helpersFor (options));
+    std::mutex lock;
+    std::vector<juce::String> current (workers);
+    size_t nextAny = 0, nextFirst = 0;
     Progress progress;
     progress.stage = "instruments";
     progress.total = (int)visits.size();
     report (progress);
-    for (const auto* source : visits)
+    auto showCurrent = [&]
     {
-        if (stop())
-        {
-            result.cancelled = true;
-            break;
-        }
-        visitInstrument (index, options, *source, shouldStop, progress, report, result);
-        ++progress.done;
+        juce::StringArray on;
+        for (const auto& c : current)
+            if (c.isNotEmpty())
+                on.add (c);
+        progress.current = on.joinIntoString (" | ");
         report (progress);
-        index.saveIndex();
-        if (result.cancelled)
-            break;
+    };
+    auto work = [&] (size_t worker)
+    {
+        auto tell = [&] (const juce::String& what, bool measured)
+        {
+            const std::scoped_lock l (lock);
+            current[worker] = what;
+            if (measured)
+                ++progress.sounds;
+            showCurrent();
+        };
+        for (;;)
+        {
+            const SoundSource* source = nullptr;
+            SoundIndex::Instrument entry;
+            {
+                const std::scoped_lock l (lock);
+                if (result.cancelled || stop())
+                {
+                    result.cancelled = true;
+                    return;
+                }
+                if (worker == 0 && nextFirst < firstWorker.size())
+                    source = firstWorker[nextFirst++];
+                else if (nextAny < anyWorker.size())
+                    source = anyWorker[nextAny++];
+                else
+                    return;
+                entry = index.instruments[source->key];
+            }
+            Result visited;
+            visitInstrument (index, entry, options, *source, shouldStop, tell, visited);
+            const std::scoped_lock l (lock);
+            index.instruments[source->key] = std::move (entry);
+            add (result, visited);
+            current[worker].clear();
+            ++progress.done;
+            showCurrent();
+            index.saveIndex();
+        }
+    };
+    {
+        std::vector<std::jthread> others;
+        for (size_t w = 1; w < workers; ++w)
+            others.emplace_back (work, w);
+        work (0);
     }
 
     // The role guess, learnt again from the presets whose names say their role.
@@ -1290,11 +1357,9 @@ SoundIndexer::Result SoundIndexer::updateInstrument (SoundIndex& index, const Op
                                                      const SoundSource& source, const std::function<bool()>& shouldStop)
 {
     Result result;
-    Progress progress;
-    progress.stage = "instruments";
-    progress.total = 1;
     ++running;
-    visitInstrument (index, options, source, shouldStop, progress, [] (const Progress&) {}, result);
+    visitInstrument (
+        index, index.instruments[source.key], options, source, shouldStop, [] (const juce::String&, bool) {}, result);
     --running;
     index.saveIndex();
     return result;
