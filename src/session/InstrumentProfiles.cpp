@@ -1,4 +1,5 @@
 #include "InstrumentProfiles.h"
+#include "PartModes.h"
 #include "SpinusProfiles.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -156,6 +157,32 @@ juce::var InstrumentProfiles::describeForAgents (const Profile& profile)
                 }
             m->setProperty ("plays", runs);
             m->setProperty ("playsInWords", keys->describe());
+        }
+        else if (partmodes::isChordMode (mode))
+        {
+            // It plays chords held on its chord keys, strummed by its pattern keys (as partmodes::apply writes them).
+            const auto zone = partmodes::chordKeysOf (mode);
+            m->setProperty ("chordKeys", juce::Array<juce::var> { zone.low, zone.high });
+            juce::Array<juce::var> patterns;
+            for (const auto& [what, key] : zone.patterns)
+            {
+                auto* p = new juce::DynamicObject();
+                p->setProperty ("key", key);
+                p->setProperty ("note", keyName (key));
+                p->setProperty ("what", what);
+                patterns.add (juce::var (p));
+            }
+            m->setProperty ("patterns", patterns);
+            m->setProperty ("howToPlay",
+                            "chords, not single notes: hold each chord on the chord keys " + keyName (zone.low) +
+                                " to " + keyName (zone.high) + " (its root at or above " + keyName (zone.low) +
+                                ", the other notes stacked above it, an octave lower when they would go past " +
+                                keyName (zone.high) + ")" +
+                                (zone.patterns.empty()
+                                     ? juce::String()
+                                     : ", and press a pattern key with each chord, from just after it starts to "
+                                       "just before the next, to play it") +
+                                "; enter the mode first");
         }
         for (const auto job : { Job::switches, Job::special })
         {

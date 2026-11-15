@@ -171,7 +171,9 @@ A channel whose instrument Spinus has learned (**Learn this instrument...** in t
 `keys`: each of the instrument's modes, with how to enter it, the keys that play (`plays`, as runs of key
 numbers, and `playsInWords`: "E2 to G6") and its `switches` and `special` keys by number, name and what they
 do ("palm mute"). Write notes only on keys that play: a note on a switch key changes the instrument instead of
-sounding. Instruments that play every key (Spinus's own synths, Surge XT, OB-Xf, Odin 2) have no `keys`.
+sounding. A mode that plays chords from chord keys (a guitar's strummer) has no `plays`: it has `chordKeys` (the
+lowest and highest), its `patterns` (the keys that play the chord held, by number, name and what they do) and
+`howToPlay`, which says how to hold each chord and press a pattern key with it. Instruments that play every key (Spinus's own synths, Surge XT, OB-Xf, Odin 2) have no `keys`.
 Outside agents get the same in `song_summary`.
 
 ## Rendering
