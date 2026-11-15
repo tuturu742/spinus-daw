@@ -395,4 +395,14 @@ void BeatSlicerProcessor::setStateInformation (const void* data, int sizeInBytes
     publish();
 }
 
+std::optional<juce::String> BeatSlicerProcessor::getNameForMidiNoteNumber (int note, int)
+{
+    if (! hasLoop())
+        return std::nullopt;
+    for (size_t i = 0; i < keys.size(); ++i)
+        if (keys[i] == note)
+            return "Slice " + juce::String ((int)i + 1);
+    return std::nullopt;
+}
+
 } // namespace spinus::dsp

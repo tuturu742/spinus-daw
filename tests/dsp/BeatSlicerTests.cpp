@@ -163,6 +163,11 @@ TEST_CASE ("Each slice can play from a key of its own choosing; keys follow adde
     slicer.setSliceKey (0, 63);
     CHECK (slicer.getSliceKeys() == std::vector<int> { 63, 61, 48, 60 });
     CHECK (slicer.getSliceNotes()[2].note == 48); // Slices to pattern uses the chosen keys
+    // It names them for Learn this instrument's Ask the plugin; a key with no slice has no name.
+    CHECK (slicer.getNameForMidiNoteNumber (48, 1) == std::optional<juce::String> ("Slice 3"));
+    CHECK (slicer.getNameForMidiNoteNumber (63, 1) == std::optional<juce::String> ("Slice 1"));
+    CHECK_FALSE (slicer.getNameForMidiNoteNumber (62, 1).has_value());
+    CHECK_FALSE (BeatSlicerProcessor().getNameForMidiNoteNumber (60, 1).has_value()); // no loop
 
     // A new slice takes the lowest free key from C5; removing one drops its key; the state keeps them.
     slicer.addSlicePoint (12000);

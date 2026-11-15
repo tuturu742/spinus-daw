@@ -1,0 +1,23 @@
+{
+  "kind": "spinus.instrument-profile",
+  "version": 1,
+  "instrument": "OB-Xf",
+  "for": "ob-xf",
+  "profile": {
+    "modes": [
+      {
+        "name": "Normal",
+        "goodFor": "analog-style basses, brass, leads and pads",
+        "voices": "chords",
+        "keys": [
+          {
+            "from": 0,
+            "to": 127,
+            "job": "plays",
+            "source": "bundled"
+          }
+        ]
+      }
+    ]
+  }
+}

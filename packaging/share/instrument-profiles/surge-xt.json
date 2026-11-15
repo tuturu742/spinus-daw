@@ -1,0 +1,23 @@
+{
+  "kind": "spinus.instrument-profile",
+  "version": 1,
+  "instrument": "Surge XT",
+  "for": "surge-xt",
+  "profile": {
+    "modes": [
+      {
+        "name": "Normal",
+        "goodFor": "any synth part: basses, leads, pads, plucks, arps",
+        "voices": "chords",
+        "keys": [
+          {
+            "from": 0,
+            "to": 127,
+            "job": "plays",
+            "source": "bundled"
+          }
+        ]
+      }
+    ]
+  }
+}

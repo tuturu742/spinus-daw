@@ -128,8 +128,10 @@ public:
     std::optional<Profile> get (const juce::String& instrument) const;
     /** Whether the user has a profile of their own for it (not only the bundled one). */
     bool hasOwn (const juce::String& instrument) const { return profiles.contains (instrument); }
-    /** The profile Spinus ships for one of its own instruments or the free ones it gets (3x Osc, Surge XT, OB-Xf,
-        Odin 2: one Normal mode, every key plays; Source::bundled), by the sound index's key; none for others. */
+    /** The profile Spinus ships for one of its own instruments or the free ones it gets, by the instrument's key
+        (InstrumentPresets::libraryOf); none for others. They are files in packaging/share/instrument-profiles,
+        each as an exported profile (toShared) with the key it is `for`, built into Spinus; their keys are
+        Source::bundled. */
     static std::optional<Profile> bundled (const juce::String& instrument);
     /** Sets the instrument's profile (nullopt, or one with no modes: forgotten). Not saved until save(). */
     void set (const juce::String& instrument, std::optional<Profile>);
