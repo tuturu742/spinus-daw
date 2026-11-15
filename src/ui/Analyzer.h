@@ -261,6 +261,7 @@ private:
     void handleAsyncUpdate() override;                               // the decoder finished
     void changeListenerCallback (juce::ChangeBroadcaster*) override; // the device list changed
     void checkReady (const std::function<void()>& then, const juce::StringArray& alsoNeeded = {});
+    void lookForEngine();
     /** The model files the window's choices need: the beat model, Basic Pitch, the separation model the Stems
         box names, and CLAP when a stem is to be replicated with sounds compared by ear. */
     juce::StringArray neededModels() const;
@@ -358,7 +359,13 @@ private:
     std::map<juce::String, model::Device> stemInstruments; // what plays the stems with Sounds::instrument
     bool needsShowModels = false;                          // needsText lists missing model files (not another problem)
     std::function<void()> resume; // what was asked for when model files were missing: done once they are there
-    bool clapWanted = false;      // the notes being made compare sounds by ear (CLAP)
+    // What was asked for when the analysis engine was missing: done once it is installed (Options > AI), which is
+    // looked for now and then while the Analyzer says so.
+    std::function<void()> afterEngine;
+    juce::StringArray afterEngineNeeds;
+    bool lookingForEngine = false;
+    juce::TimedCallback engineWatch { [this] { lookForEngine(); } };
+    bool clapWanted = false; // the notes being made compare sounds by ear (CLAP)
     juce::int64 downloadSize = 0;
     double progress = -1.0;
     std::optional<Rhythm> rhythm;
