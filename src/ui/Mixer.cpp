@@ -4,11 +4,14 @@
 #include "SliderDrag.h"
 
 #include "DeviceMenu.h"
+#include "LearnEffectWindow.h"
 #include "Theme.h"
 #include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
 #include "model/ModelJson.h"
 #include "model/Validation.h"
+#include "session/InstrumentPresets.h"
+#include "session/SoundIndex.h"
 
 namespace spinus::ui
 {
@@ -983,6 +986,13 @@ private:
             });
         menu.addSubMenu ("Replace effect", replace);
         menu.addSeparator();
+        menu.addItem ("Learn this effect...",
+                      [this, device]
+                      {
+                          LearnEffectWindow::open (SoundIndex::getDefaultFolder(),
+                                                   InstrumentPresets::libraryOf (device), effectName (device, false),
+                                                   mixer.session.getDeviceParameterTexts (device.id), this);
+                      });
         menu.addSubMenu ("Create automation clip", makeAutomateParameterMenu (mixer, mixer.session, device.id));
         if (device.kind == model::Device::Kind::plugin && mixer.session.getSandboxList() != nullptr)
         {

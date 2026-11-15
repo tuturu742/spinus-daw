@@ -49,7 +49,7 @@ really does.
 | Double-click an effect | Opens the effect's window (its own controls). |
 | Green light | Click to bypass the effect (it turns grey) or turn it back on. |
 | Dragging a slot | Drag an effect onto another slot to change the order. |
-| Right-click an effect | Open window, Bypass, Move up, Move down, Move to another insert, **Copy to insert** (the same effect with the same settings on another insert, also the ones you turned in its window), **Replace effect** (another effect in the same slot, from the same list as Add effect; its dry/wet stays, automation clips of the old effect's settings are removed and the message bar says how many, and Ctrl+Z brings it back), Remove. |
+| Right-click an effect | Open window, Bypass, Move up, Move down, Move to another insert, **Copy to insert** (the same effect with the same settings on another insert, also the ones you turned in its window), **Replace effect** (another effect in the same slot, from the same list as Add effect; its dry/wet stays, automation clips of the old effect's settings are removed and the message bar says how many, and Ctrl+Z brings it back), **Learn this effect...** (see [below](#learn-this-effect)), Remove. |
 | **Out:** | Where the insert's sound goes: the Master or another insert (for example, all drums into a "Drums" insert). |
 | **Sends** | Send some of the sound to another insert as well, typically a reverb insert. **+ Send** adds one; the knob sets how much (point at it to see the level; all the way down is silence); **x** removes it. In the **+ Send** list, the insert the sound already plays into (usually the Master) is greyed out, since a send there would only make it louder, and so are inserts that would make a feedback loop. |
 
@@ -64,6 +64,26 @@ really does.
 - Every change can be undone with **Ctrl+Z**. One fader or knob drag is one undo step, and undoing the
   removal of an effect brings it back with its settings.
 - Add installed plugins from the [Browser](browser.md) (**F8**): double-click one with an insert selected, or drag it onto a slot.
+
+### Learn this effect
+
+Right-click an effect and choose **Learn this effect...** to tell Spinus what its settings do. Plugins often
+give their settings short or meaningless names ("Thresh", "Param 7") and say nothing about what is sensible,
+so the assistant and coding agents would have to guess.
+
+![Learn this effect](images/learn-effect.png)
+
+- The window lists every setting with the range the plugin reports (read from the plugin itself, no AI
+  needed). Click a cell to write **what it does** and a **safe range**, written as the plugin shows values
+  ("-30 dB", "50 ms"). Tick **Matters** on the few settings that shape the sound most.
+- **Good for**: what the effect suits ("plate reverb, best for vocals and snares").
+- **Search the settings** finds a setting by its name or by what you wrote (plugins can have hundreds).
+- **Save** keeps it, for this effect wherever you use it, in every project. **Forget this effect** removes
+  what Spinus knew of it.
+- **Export...** saves it as a file to share (facts only, no manuals' text). **Import...** reads such a file:
+  it fills the settings you haven't set yourself, and your own words stay.
+- It is kept in Spinus's settings folder, beside the [sound index](track-creator.md#your-sounds), and works
+  the same for Spinus's own effects and any plugin.
 
 ### Typing values
 
