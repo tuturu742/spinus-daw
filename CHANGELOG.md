@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The Analyzer builds a replicated song the way a producer would: it finds the sections (markers on the ruler:
+  Intro, Verse 1, Chorus 1...), puts each stem on its own track, and turns its notes into short patterns: a
+  loop is one pattern placed again, a fill a pattern of its own, and a section that comes back reuses its
+  patterns. Before, every stem's notes were in one long pattern.
 - **Options › Sound index** shows the whole sound index in one window: which instruments it measures (tick your
   own plugins there), what it measured of each and what went wrong, every sound with search and your own roles,
   and the sample folders; with Update, Stop, Measure again, Forget its sounds and Delete. Right-click an

@@ -174,10 +174,13 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
         const auto& project = session.getProject();
         REQUIRE (project.channels.size() == 2);
         CHECK (project.channels[0].name == "Bass (Test Song)");
-        REQUIRE (project.patterns.size() == 1);
-        CHECK (project.patterns[0].name == "Analysis: Test Song");
+        // Patterns by section, one track per stem.
+        REQUIRE (! project.patterns.empty());
+        CHECK (project.patterns[0].name.startsWith ("Bass: "));
         CHECK (! project.patterns[0].notes.empty());
-        CHECK (project.playlist.clips.size() == 1);
+        CHECK (project.playlist.lanes.size() == 2);
+        CHECK (! project.playlist.clips.empty());
+        CHECK (! project.playlist.markers.empty());
         CHECK (session.getHistory().getUndoDescriptions().strings.getLast() == "Notes from Test Song");
     }
 
@@ -192,7 +195,7 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
         CHECK (project.channels[0].name == "Drums (Test Song)");
         REQUIRE (project.channels[0].instrument.has_value());
         CHECK (project.channels[0].instrument.value_or (model::Device {}).stockType == "spinus.drum-machine");
-        REQUIRE (project.patterns.size() == 1);
+        REQUIRE (! project.patterns.empty());
         CHECK (! project.patterns[0].notes.empty()); // the clicks
     }
 
@@ -215,8 +218,8 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
         juce::StringArray lanes;
         for (auto& lane : project.playlist.lanes)
             lanes.add (lane.name);
-        CHECK (lanes.joinIntoString (", ") == "Other stem (Test Song), Vocals stem (Test Song), Notes (Test Song)");
-        CHECK (project.playlist.clips.size() == 3);
+        CHECK (lanes.joinIntoString (", ") == "Other stem (Test Song), Vocals stem (Test Song), Drums (Test Song)");
+        CHECK (project.playlist.clips.size() >= 3);
         CHECK (analyzer.getStatusText().contains ("and 2 stems as audio"));
         CHECK (session.getHistory().getUndoDescriptions() == juce::StringArray { "Stems of Test Song" });
         session.getHistory().undo();
@@ -253,7 +256,7 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
         CHECK (pieces.at ("bass")[0].note == 60);
         CHECK (pieces.at ("bass")[0].name == "Test Song - phrase 1");
         CHECK (pieces.contains ("drums"));
-        REQUIRE (project.patterns.size() == 1);
+        REQUIRE (! project.patterns.empty());
         CHECK (! project.patterns[0].notes.empty());
     }
 
@@ -335,7 +338,7 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
             const auto instrument = made.channels[0].instrument.value_or (model::Device {});
             CHECK (instrument.kind == model::Device::Kind::plugin);
             CHECK (instrument.plugin.name == "Some Guitar");
-            REQUIRE (made.patterns.size() == 1);
+            REQUIRE (! made.patterns.empty());
             CHECK (! made.patterns[0].notes.empty());
         }
     }
@@ -615,7 +618,7 @@ TEST_CASE ("Analyzer: many instruments, replicated and tuned, added in one undo 
         CHECK (channels["Bass (Test Song)"] == "spinus.3x-osc");
         CHECK (channels["Drums (Test Song)"] == "spinus.drum-machine");
         CHECK (channels.contains ("Lead-vocal stem (Test Song)"));
-        CHECK (project.playlist.lanes.size() == 7);
+        CHECK (project.playlist.lanes.size() == 9); // six stems as audio, three stems' notes
         CHECK (session.getHistory().getUndoDescriptions() == juce::StringArray { "Stems of Test Song" });
         session.getHistory().undo();
         CHECK (session.getProject().channels.empty());

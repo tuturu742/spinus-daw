@@ -236,6 +236,8 @@ add_library (spinus_core STATIC
     session/Session.cpp
     session/SlicesToPattern.cpp
     session/StemSamples.cpp
+    session/SongSections.cpp
+    session/SongSections.h
     session/SongPreparation.cpp
     session/AnalysisLibrary.cpp
     session/AnalysisLibrary.h
