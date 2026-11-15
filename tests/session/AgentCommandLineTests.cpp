@@ -7,6 +7,7 @@
 #include "engine/EngineHost.h"
 #include "model/Model.h"
 #include "session/AgentCommandLine.h"
+#include "session/InstrumentProfiles.h"
 #include "session/ProjectDocument.h"
 #include "session/Session.h"
 
@@ -403,4 +404,31 @@ TEST_CASE ("Command line: colours are only what the script sets", "[cli]")
     CHECK (p.channels[1].group == "Mine");
     CHECK (p.patterns.back().colour == model::Pattern().colour);
     CHECK (p.playlist.lanes.back().colour == model::Lane().colour);
+}
+
+TEST_CASE ("The summary tells what a learned instrument's keys do", "[cli][instruments]")
+{
+    TempFolder t;
+    const auto index = t.root.getChildFile ("sounds");
+    Fixture f;
+    std::vector<juce::var> said;
+    REQUIRE (
+        f.run (
+            R"([{"command": "channel.add", "params": {"name": "Guitar", "instrument": {"kind": "stock", "stockType": "spinus.3x-osc"}}}])",
+            said) == 0);
+
+    // As shipped, 3x Osc plays every key: nothing to tell.
+    CHECK_FALSE (cli::summarize (f.session, {}, index)["channels"][0].hasProperty ("keys"));
+
+    InstrumentProfiles::Mode mode;
+    mode.setKeys (40, 91, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+    mode.setKeys (12, 12, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+    InstrumentProfiles profiles (index);
+    profiles.set ("stock-spinus.3x-osc", InstrumentProfiles::Profile { { mode }, {} });
+    REQUIRE (profiles.save());
+
+    const auto keys = cli::summarize (f.session, {}, index)["channels"][0]["keys"];
+    REQUIRE (keys["modes"].size() == 1);
+    CHECK (keys["modes"][0]["switches"][0]["what"].toString() == "palm mute");
+    CHECK (juce::JSON::toString (keys["modes"][0]["plays"], true) == "[[40, 91]]");
 }

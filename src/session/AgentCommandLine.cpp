@@ -12,8 +12,11 @@
 #include "engine/ParameterIds.h"
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
+#include "session/InstrumentPresets.h"
+#include "session/InstrumentProfiles.h"
 #include "session/PluginPresets.h"
 #include "session/Session.h"
+#include "session/SoundIndex.h"
 
 #include <tracktion_engine/tracktion_engine.h>
 
@@ -388,7 +391,7 @@ int runSteps (Session& session, const juce::var& steps, const RunOptions& option
 }
 
 //==============================================================================
-juce::var summarize (Session& session, const juce::File& projectFolder)
+juce::var summarize (Session& session, const juce::File& projectFolder, const juce::File& profilesFolder)
 {
     const auto& p = session.getProject();
     const auto barTicks = p.settings.timeSignature.barTicks();
@@ -414,6 +417,8 @@ juce::var summarize (Session& session, const juce::File& projectFolder)
     for (auto& clip : p.launcher.clips)
         playedBy (clip.content);
 
+    InstrumentProfiles profiles (profilesFolder != juce::File() ? profilesFolder : SoundIndex::getDefaultFolder());
+    profiles.load();
     juce::Array<juce::var> channels, unused;
     for (auto& c : p.channels)
     {
@@ -435,6 +440,10 @@ juce::var summarize (Session& session, const juce::File& projectFolder)
                                 { "insert", (int)c.targetInsert.value },
                                 { "volumeDb", c.volumeDb },
                                 { "used", used.count (c.id) > 0 } }));
+        if (c.instrument)
+            if (const auto profile = profiles.get (InstrumentPresets::libraryOf (*c.instrument)))
+                if (auto keys = InstrumentProfiles::describeForAgents (*profile); ! keys.isVoid())
+                    channels.getReference (channels.size() - 1).getDynamicObject()->setProperty ("keys", keys);
         if (used.count (c.id) == 0)
             unused.add (c.name);
     }
