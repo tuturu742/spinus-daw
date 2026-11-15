@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/FileDialog.h"
+
 #include "Workspace.h"
 #include "session/Session.h"
 
@@ -129,6 +131,18 @@ public:
         profile is found by the instrument itself, and Listen to every key plays its sound as it is set up now. */
     bool learnInstrument (model::ChannelId);
 
+    /** Whether the channel's instrument can take preset files (PresetFolders): a plugin, not VST2 (its state is a
+        bank format Spinus does not write). */
+    bool canUsePresetFiles (model::ChannelId) const;
+    /** Starts or stops using a folder of the channel's instrument's preset files (Preset files in its menu), for
+        every channel and project with that instrument: its presets for agents and scripts (list_presets,
+        device.loadPreset) and the Track creator. False when it can't (not a folder, or not such an instrument). */
+    bool usePresetFolder (model::ChannelId, const juce::File& folder, bool use);
+    /** The folders of preset files chosen for the channel's instrument. */
+    juce::Array<juce::File> getPresetFolders (model::ChannelId) const;
+    /** Where the sound index lives, beside which preset folders are kept (tests); the default index's otherwise. */
+    void setIndexFolder (const juce::File& folder) { indexFolder = folder; }
+
     /** Writes the channel's Beat Slicer slices as notes (see spinus::slicesToPattern). */
     bool slicesToPattern (model::ChannelId);
 
@@ -179,6 +193,9 @@ private:
     int playingStep = -1;
     bool wasRendering = false;
     std::vector<model::DeviceId> stoppedDevices, missingDevices;
+    juce::File indexFolder;
+    std::unique_ptr<core::FileDialog> folderChooser;
+    juce::File getIndexFolder() const;
 };
 
 } // namespace spinus::ui

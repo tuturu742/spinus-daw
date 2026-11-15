@@ -17,6 +17,10 @@ namespace pluginPresets
 /** Every preset of the device's plugin, its own first; none (and `problem` says why) when it can't be loaded. */
 std::vector<InstrumentPreset> find (Session&, const model::Device&, juce::String& problem);
 
+/** Forgets the presets found for the device's plugin, so the next find() reads them again (its preset folders
+    changed). */
+void forgetFound (const model::Device&);
+
 /** The preset `said` names: by its name (any case), as "Category/Name", else the only one whose name holds all the
     words. None when no preset or more than one fits. */
 const InstrumentPreset* match (const std::vector<InstrumentPreset>&, const juce::String& said);
