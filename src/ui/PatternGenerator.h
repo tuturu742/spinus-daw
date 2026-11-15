@@ -36,8 +36,13 @@ public:
     /** Asks for a pattern for the current pattern; the result arrives as a suggestion. */
     juce::Result generate (const Request&);
 
-    /** The parameters of ai.v1.pattern.generate for a request (tests). */
+    /** The parameters of ai.v1.pattern.generate for a request (tests). Each channel to write carries its
+        instrument's learned keys (InstrumentProfiles::describeForAgents) as `keys`, so its notes stay on keys
+        it plays. */
     juce::var describe (const Request&) const;
+
+    /** Where the learned instruments' profiles are read from (tests); the sound index's folder by default. */
+    void setProfilesFolder (const juce::File& folder) { profilesFolder = folder; }
 
     bool isBusy() const noexcept { return job.isNotEmpty() || waiting; }
 
@@ -62,6 +67,7 @@ private:
     juce::String job;
     bool waiting = false; // for the job's ID
     std::function<void (const juce::var&)> whenDone;
+    juce::File profilesFolder;
 
     JUCE_DECLARE_NON_COPYABLE (PatternGenerator)
 };

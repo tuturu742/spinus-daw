@@ -15,6 +15,7 @@ from typing import Any
 
 import httpx
 
+from . import instrument_keys
 from .assistant import NoConnection, Say, complete_with_fallback
 from .connections import ConnectionStore
 from .gateway import Message, Request, Text, Tool
@@ -75,7 +76,10 @@ WRITE_PATTERN = Tool(
                                 "properties": {
                                     "step": {"type": "number", "description": "Start, in sixteenths (0 = first)"},
                                     "length": {"type": "number", "description": "Length in sixteenths"},
-                                    "note": {"type": "string", "description": "Note name (C4 = middle C) or pad name"},
+                                    "note": {
+                                        "type": "string",
+                                        "description": "Note name (C4 = middle C), pad name or switch key name",
+                                    },
                                     "velocity": {"type": "number", "description": "0 to 1"},
                                 },
                                 "required": ["step", "length", "note"],
@@ -108,6 +112,7 @@ class Target:
     instrument: str = ""
     pads: list[Pad] = field(default_factory=list)  # a drum machine's pads; empty for pitched instruments
     notes: list[dict[str, Any]] = field(default_factory=list)  # its notes now (for adjusting)
+    keys: dict[str, Any] | None = None  # what a learned instrument's keys do (spinus_ai/instrument_keys.py)
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> Target:
@@ -117,6 +122,7 @@ class Target:
             str(data.get("instrument", "")),
             [Pad(str(p["name"]), int(p["note"])) for p in data.get("pads", [])],
             list(data.get("notes", [])),
+            data["keys"] if isinstance(data.get("keys"), dict) else None,
         )
 
 
@@ -241,8 +247,17 @@ def describe(settings: Settings) -> str:
     for t in settings.targets:
         kind = f"drums; pads: {', '.join(p.name for p in t.pads)}" if t.pads else "pitched"
         lines.append(f"- channel {t.channel}: '{t.name}' ({t.instrument or 'instrument'}, {kind})")
+        if t.keys and not t.pads:
+            lines += [f"  its keys: {line}" for line in instrument_keys.in_words(t.keys, note_name)]
+            lines.append(
+                "  Keep its notes on keys it plays as it opens; write a switch key by its name as the note "
+                "(palm-mute), only when the request wants it."
+                if instrument_keys.switch_keys(t.keys)
+                else "  Keep its notes on keys it plays as it opens."
+            )
         if settings.adjust:
-            lines.append(f"  its notes now (step:note/length): {describe_notes(t.notes, t.pads)}")
+            named = t.pads or [Pad(word, key) for word, key in instrument_keys.switch_keys(t.keys).items()]
+            lines.append(f"  its notes now (step:note/length): {describe_notes(t.notes, named)}")
     if settings.context:
         lines += ["", "The other channels in the pattern (step:note/length), to fit with:"]
         for c in settings.context:
@@ -283,6 +298,10 @@ def finish(tool_input: dict[str, Any], settings: Settings, rng: random.Random) -
         if target is None or not isinstance(part.get("notes"), list):
             continue
 
+        # A learned instrument: a note on a key that doesn't play moves by octaves onto one that does, unless it
+        # names a switch key ("palm-mute"), which is written on purpose.
+        plays = set() if target.pads else instrument_keys.plays(target.keys)
+        switches = {} if target.pads else instrument_keys.switch_keys(target.keys)
         notes: dict[tuple[int, int], dict[str, Any]] = {}
         for raw in part["notes"]:
             try:
@@ -294,10 +313,14 @@ def finish(tool_input: dict[str, Any], settings: Settings, rng: random.Random) -
             text = str(raw.get("note", ""))
             if target.pads:
                 pitch = find_pad(text, target.pads)
+            elif instrument_keys.switch_word(text) in switches:
+                pitch = switches[instrument_keys.switch_word(text)]
             else:
                 pitch = parse_note(text)
                 if pitch is not None and settings.key:
                     pitch = nearest_in_key(pitch, settings.key)
+                if pitch is not None and plays:
+                    pitch = instrument_keys.fit_key(pitch, plays)
             if pitch is None:
                 continue
 

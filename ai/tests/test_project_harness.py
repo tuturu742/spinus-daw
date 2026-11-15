@@ -529,7 +529,7 @@ GUITAR_KEYS = {
             "name": "Normal",
             "voices": "one",
             "plays": [[40, 91]],
-            "playsInWords": "E2 to G6",
+            "playsInWords": "E3 to G7",
             "switches": [{"key": 12, "note": "C1", "what": "palm mute"}],
         },
         {"name": "Strummer", "enter": "the Strummer button", "goodFor": "strummed rhythm", "plays": [[60, 72]]},
@@ -542,7 +542,7 @@ def test_notes_go_on_keys_a_learned_instrument_plays() -> None:
     overview = json.loads(h.call("song_overview", {})[0])
     parts = {p["name"]: p for p in overview["parts"]}
     assert parts["Bass"]["keys"] == [
-        "Normal (one note at a time): plays E2 to G6; switches: palm-mute (C1)",
+        "Normal (one note at a time): plays E3 to G7; switches: palm-mute (C1)",
         "Strummer (strummed rhythm; entered with the Strummer button): plays C5 to C6",
     ]
     assert "keys" not in parts["Pad"]
