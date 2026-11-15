@@ -672,6 +672,7 @@ void LearnInstrumentPanel::forget()
     forgotten = true;
     profile = Profile { { InstrumentProfiles::Mode {} } };
     showMode (0);
+    updateManuals(); // its manuals are forgotten too
 }
 
 void LearnInstrumentPanel::save()

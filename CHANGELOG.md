@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Learn this instrument: **Forget this instrument** clears the manuals list too. The forgotten manuals stayed in the
+  list, and **Remove** did nothing on them.
 - The Sampler and Six Sines come with what Spinus knows of their keys, like 3x Osc, Surge XT, OB-Xf and Odin 2.
   These shipped profiles are now files in the same format as an exported profile
   (`packaging/share/instrument-profiles`), built into Spinus.

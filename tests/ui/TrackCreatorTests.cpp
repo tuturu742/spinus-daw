@@ -2184,3 +2184,43 @@ TEST_CASE ("Learn this instrument screenshot for the manual", "[.screenshot][man
     }
     juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
 }
+
+TEST_CASE ("Learn this instrument: the manual shown is removed by Remove, and Forget empties the list",
+           "[ui][instruments][manuals]")
+{
+    LearnInstrumentPanel panel ("Bass", std::nullopt);
+    panel.setSize (1100, 700);
+    for (const auto* page : { "https://example.org/main-panel.pdf", "https://example.org/fx-panel.pdf",
+                              "https://example.org/bass-amp.pdf", "https://example.org/guitar-strummer.pdf" })
+        panel.addManual (page);
+    REQUIRE (panel.getManuals().size() == 4);
+
+    juce::ComboBox* box = nullptr;
+    juce::Button* remove = nullptr;
+    for (auto* child : panel.getChildren())
+    {
+        if (auto* b = dynamic_cast<juce::ComboBox*> (child); b != nullptr && b->getTooltip().contains ("manuals"))
+            box = b;
+        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getButtonText() == "Remove")
+            remove = b;
+    }
+    REQUIRE (box != nullptr);
+    REQUIRE (remove != nullptr);
+    CHECK (box->getNumItems() == 4);
+    CHECK (box->getText() == "example.org/guitar-strummer.pdf"); // the one just added is shown
+
+    // Pick another in the list and remove it: that one goes.
+    box->setSelectedItemIndex (1, juce::sendNotificationSync);
+    remove->triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    REQUIRE (panel.getManuals().size() == 3);
+    CHECK (panel.getManuals()[1].source == "https://example.org/bass-amp.pdf");
+    CHECK (box->getNumItems() == 3);
+
+    // Forget: no manual left, in the list too.
+    panel.forget();
+    CHECK (panel.getManuals().empty());
+    CHECK (box->getNumItems() == 0);
+    CHECK (box->getTextWhenNothingSelected() == "No manual yet");
+    CHECK_FALSE (remove->isEnabled());
+}
