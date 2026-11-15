@@ -1,0 +1,28 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Spectrum Analyzer",
+  "for": "stock-bundled.lsp.analyzer",
+  "profile": {
+    "goodFor": "looking at the frequency content of a sound; it does not change the sound",
+    "settings": [
+      {
+        "id": "",
+        "name": "Reactivity",
+        "what": "how smooth the display is",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Analyse 1",
+        "what": "shows the first input",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://lsp-plug.in/?page=manuals"
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Spinus Limiter",
+  "for": "stock-spinus.limiter",
+  "profile": {
+    "goodFor": "the last effect on the Master: louder without going over a ceiling",
+    "settings": [
+      {
+        "id": "input",
+        "name": "Input gain",
+        "what": "how hard it is driven: more is louder and more squashed",
+        "low": "0.0 dB",
+        "high": "8.0 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "ceiling",
+        "name": "Ceiling",
+        "what": "the highest level it lets out",
+        "low": "-2.0 dB",
+        "high": "-0.3 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "release",
+        "name": "Release",
+        "what": "how fast it recovers; too fast distorts, too slow pumps",
+        "low": "20.0 ms",
+        "high": "200 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "true_peak",
+        "name": "True peak",
+        "what": "also catches peaks between samples (safer for streaming)",
+        "source": "bundled"
+      }
+    ]
+  }
+}

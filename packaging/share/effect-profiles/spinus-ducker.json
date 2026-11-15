@@ -1,0 +1,42 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Sidechain Ducker",
+  "for": "stock-spinus.ducker",
+  "profile": {
+    "goodFor": "pumping: turning a pad, bass or the music down on every kick, or on a beat grid without a sidechain",
+    "settings": [
+      {
+        "id": "amount",
+        "name": "Amount",
+        "what": "how far the sound is turned down on each hit",
+        "low": "30%",
+        "high": "90%",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "release",
+        "name": "Release",
+        "what": "how fast it comes back up; around a beat's length pumps in time",
+        "low": "100 ms",
+        "high": "500 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "trigger",
+        "name": "Trigger",
+        "what": "what turns it down: the sidechain input or a beat grid",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "curve",
+        "name": "Curve",
+        "what": "the shape of the recovery: lower comes back slowly then fast",
+        "source": "bundled"
+      }
+    ]
+  }
+}

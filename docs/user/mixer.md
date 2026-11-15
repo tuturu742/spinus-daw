@@ -77,6 +77,9 @@ so the assistant and coding agents would have to guess.
   needed). Click a cell to write **what it does** and a **safe range**, written as the plugin shows values
   ("-30 dB", "50 ms"). Tick **Matters** on the few settings that shape the sound most.
 - **Good for**: what the effect suits ("plate reverb, best for vocals and snares").
+- Spinus's own effects and the [free effects](free-plugins.md) (the LSP effects and the Dragonfly reverbs) come
+  already described: what each is good for, what its main settings do, safe ranges and the ones that matter.
+  Change anything you like; your words replace them. **Forget this effect** brings back what Spinus ships.
 - **Search the settings** finds a setting by its name or by what you wrote (plugins can have hundreds).
 - **Read the manual**: add the effect's manuals under **Manuals** (type a web page's address and click **Add**,
   or **Choose file...** for a PDF on this computer), then click **Read the manual**. The AI you set up in

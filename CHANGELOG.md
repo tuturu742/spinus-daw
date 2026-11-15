@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Spinus's own effects and the free LSP and Dragonfly effects come already described in **Learn this effect...**:
+  what each is good for, what its main settings do, safe ranges and the ones that matter most, so the assistant
+  and coding agents know them from the start. Your own words replace them.
 - **Options › Sound index** shows the whole sound index in one window: which instruments it measures (tick your
   own plugins there), what it measured of each and what went wrong, every sound with search and your own roles,
   and the sample folders; with Update, Stop, Measure again, Forget its sounds and Delete. Right-click an

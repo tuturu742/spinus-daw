@@ -1,0 +1,64 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Spinus Gate",
+  "for": "stock-spinus.gate",
+  "profile": {
+    "goodFor": "silencing noise and spill between notes: drums, noisy guitars and vocals",
+    "settings": [
+      {
+        "id": "threshold",
+        "name": "Threshold",
+        "what": "level below which it closes",
+        "low": "-60.0 dB",
+        "high": "-20.0 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "range",
+        "name": "Range",
+        "what": "how far it turns down when closed: Silent, or only a few dB for a gentler gate",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "release",
+        "name": "Release",
+        "what": "how fast it closes after the sound falls",
+        "low": "20.0 ms",
+        "high": "500 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "attack",
+        "name": "Attack",
+        "what": "how fast it opens",
+        "low": "0.10 ms",
+        "high": "10.0 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "hold",
+        "name": "Hold",
+        "what": "how long it stays open before closing",
+        "low": "0.00 ms",
+        "high": "100 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "hysteresis",
+        "name": "Hysteresis",
+        "what": "how far below the threshold it must fall to close; stops chattering",
+        "source": "bundled"
+      },
+      {
+        "id": "sidechain",
+        "name": "Sidechain",
+        "what": "open by its own sound or by another channel's",
+        "source": "bundled"
+      }
+    ]
+  }
+}

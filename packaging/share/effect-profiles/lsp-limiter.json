@@ -1,0 +1,81 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Limiter",
+  "for": "stock-bundled.lsp.limiter",
+  "profile": {
+    "goodFor": "the last effect on the Master: a peak ceiling and loudness",
+    "settings": [
+      {
+        "id": "",
+        "name": "Threshold",
+        "what": "the highest level it lets through; with Gain boost on, lower is louder",
+        "low": "-12 dB",
+        "high": "0 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Gain boost",
+        "what": "adds back the level the threshold takes, so lowering it makes the track louder",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Release time",
+        "what": "how fast it recovers",
+        "low": "2 ms",
+        "high": "20 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Lookahead",
+        "what": "how far ahead it looks for peaks (adds delay)",
+        "low": "1 ms",
+        "high": "10 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Attack time",
+        "what": "how fast it reacts (no longer than Lookahead)",
+        "low": "1 ms",
+        "high": "10 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Operating mode",
+        "what": "the shape of the gain reduction",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Oversampling",
+        "what": "higher catches peaks between samples, at more CPU",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Automatic level regulation",
+        "what": "a slow compressor before the limiter that evens out the level",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Stereo linking",
+        "what": "limits both sides together; keep at 100%",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://lsp-plug.in/?page=manuals"
+      }
+    ]
+  }
+}

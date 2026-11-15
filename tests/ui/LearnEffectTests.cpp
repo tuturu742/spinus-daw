@@ -251,3 +251,57 @@ TEST_CASE ("Learn this effect screenshot for the manual", "[.screenshot][manual]
     }
     juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
 }
+
+TEST_CASE ("Shipped effect profiles: every one reads, and Spinus's own name settings its effects have",
+           "[effects][profiles]")
+{
+    for (const auto* key : { "stock-spinus.compressor", "stock-spinus.delay", "stock-bundled.lsp.compressor",
+                             "stock-bundled.dragonfly.hall", "stock-bundled.dragonfly.early" })
+    {
+        INFO (key);
+        const auto shipped = EffectProfiles::bundled (key);
+        REQUIRE (shipped.has_value());
+        CHECK (shipped.value().goodFor.isNotEmpty());
+        CHECK (std::any_of (shipped.value().settings.begin(), shipped.value().settings.end(),
+                            [] (const EffectProfiles::Setting& s)
+                            { return s.matters && s.source == EffectProfiles::Source::bundled; }));
+    }
+    CHECK_FALSE (EffectProfiles::bundled ("plugin-abc").has_value());
+
+    // A shipped plugin's setting found by its name, whatever id the plugin gives it.
+    const auto hall = EffectProfiles::bundled ("stock-bundled.dragonfly.hall").value();
+    REQUIRE (hall.find ("12345", "decay") != nullptr);
+    CHECK (hall.find ("12345", "decay")->matters);
+    CHECK (hall.find ("12345", "Not a setting") == nullptr);
+
+    // The user's own profile wins over the shipped one.
+    TempFolder t;
+    EffectProfiles profiles (t.root.getChildFile ("ai/sounds"));
+    CHECK (profiles.get ("stock-spinus.delay").value().goodFor.contains ("echoes"));
+    profiles.set ("stock-spinus.delay", EffectProfiles::Profile { "my slapback", {}, {} });
+    CHECK (profiles.get ("stock-spinus.delay").value().goodFor == "my slapback");
+
+    // Spinus's own: every setting a shipped profile names is one the effect reports, by id and name.
+    EngineHost host { { .openAudioDevice = false } };
+    auto devices = std::make_unique<engine::DefaultDeviceFactory>();
+    engine::registerSpinusDevices (*devices, host.getEngine());
+    Session session { host.getEngine(), std::move (devices) };
+    Mixer mixer (session);
+    for (const auto* type :
+         { "spinus.filter", "spinus.ducker", "spinus.stereo-utility", "spinus.tune", "spinus.loudness-meter",
+           "spinus.eq", "spinus.compressor", "spinus.limiter", "spinus.gate", "spinus.delay" })
+    {
+        INFO (type);
+        REQUIRE (mixer.addEffect (model::masterInsertId, type));
+        const auto& device = session.getProject().mixer.master.effects.back().device;
+        const auto shipped = EffectProfiles::bundled (InstrumentPresets::libraryOf (device));
+        REQUIRE (shipped.has_value());
+        const auto reported = session.getDeviceParameterTexts (device.id);
+        for (const auto& s : shipped.value().settings)
+        {
+            INFO (s.id);
+            CHECK (std::any_of (reported.begin(), reported.end(),
+                                [&] (const Session::ParameterText& p) { return p.id == s.id && p.name == s.name; }));
+        }
+    }
+}
