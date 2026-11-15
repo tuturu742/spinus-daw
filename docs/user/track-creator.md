@@ -339,8 +339,9 @@ extension (an AIFF called .wav) is still read.
 
 - It runs **in the background**, so you can keep working; the line under **Sounds you have** shows how far
   it is. **Stop** stops it: what was done is kept, and the next update carries on from there.
-- The first time takes a while (Surge XT alone has about 3,000 presets: about 20 minutes on a fast
-  computer). After that, **only what is new or changed** is listened to: a new plugin, an updated one, new
+- Spinus listens to **several instruments at once** (up to 4, depending on how many processor cores your
+  computer has), each in a helper of its own; Windows plugins go one at a time. The first time still takes a
+  while (Surge XT alone has about 3,000 presets: about 20 minutes on a fast computer). After that, **only what is new or changed** is listened to: a new plugin, an updated one, new
   preset files, new or changed samples. Removed ones leave the index.
 - **Plugins can't crash Spinus here**: the listening happens in a separate helper program. A preset that
   makes it crash or freeze is skipped and counted as a problem; so is a plugin that doesn't load (it is

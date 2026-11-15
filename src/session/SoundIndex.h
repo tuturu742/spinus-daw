@@ -225,10 +225,10 @@ private:
     juce::File root;
 };
 
-/** Brings the sound index up to date in the background: each instrument that needs it is loaded in the
+/** Brings the sound index up to date in the background: each instrument that needs it is loaded in a
     helper process (spinus-plugin-scanner --sound-index, SoundRender), which plays the test notes with every
-    new or changed preset; then the new or changed sample files are measured there too, a batch per run.
-    Removed instruments, presets and files leave the index.
+    new or changed preset, several instruments at once (helpersFor(); Windows plugins one at a time); then the new or
+   changed sample files are measured there too, a batch per run. Removed instruments, presets and files leave the index.
 
     A helper that crashes or stops answering (nothing new for `soundTimeoutMs`, or `loadTimeoutMs` while the
     plugin loads) is killed; the preset or file it was on is noted as a problem and skipped, and the helper
@@ -248,6 +248,7 @@ public:
         int loadTimeoutMs = 60000, soundTimeoutMs = 30000;
         int samplesPerRun = 200;
         int retries = 8;
+        int helpers = 0; // instruments measured at once, each in its own helper (0: helpersFor() picks)
     };
 
     struct Progress
@@ -286,6 +287,10 @@ public:
         as it is. Saves the index. */
     static Result updateInstrument (SoundIndex&, const Options&, const SoundSource&,
                                     const std::function<bool()>& shouldStop);
+
+    /** How many instruments an update measures at once: `helpers`, or half the processor cores, at most 4
+        (each helper holds a plugin and its samples in memory). */
+    static int helpersFor (const Options&);
 
     /** One run of the helper: `onLine` gets each line it writes. `stuckOn` is the last "begin" without its
         result when it crashed or hung. */
