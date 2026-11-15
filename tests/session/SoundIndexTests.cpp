@@ -614,7 +614,8 @@ TEST_CASE ("Sound index: every problem it counts is listed, with why", "[sounds]
             problems.add (row.name + " (" + row.source + "): " + row.detail);
     CHECK (again.summarize().problems == 3);
     REQUIRE (problems.size() == 3);
-    CHECK (problems.contains ("Broken Synth (Broken Synth): Broken Synth crashed while loading (no sound of it is measured)"));
+    CHECK (problems.contains (
+        "Broken Synth (Broken Synth): Broken Synth crashed while loading (no sound of it is measured)"));
     CHECK (problems.contains ("Wobble (3x Osc): the instrument stopped answering on this preset, so it is left out"));
     CHECK (problems.contains ("Saw (3x Osc): its file could not be read"));
 

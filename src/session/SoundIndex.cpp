@@ -650,11 +650,12 @@ std::vector<SoundIndex::Row> SoundIndex::rows() const
         {
             const auto found = i.problemDetails.find (id);
             const auto known = found != i.problemDetails.end();
-            result.push_back ({ known && found->second.name.isNotEmpty() ? found->second.name : presetNameFromId (id),
-                                i.source.name, "problem",
-                                "the instrument " + (known && found->second.why.isNotEmpty() ? found->second.why
-                                                                                              : juce::String ("crashed")) +
-                                    " on this preset, so it is left out" });
+            result.push_back (
+                { known && found->second.name.isNotEmpty() ? found->second.name : presetNameFromId (id), i.source.name,
+                  "problem",
+                  "the instrument " +
+                      (known && found->second.why.isNotEmpty() ? found->second.why : juce::String ("crashed")) +
+                      " on this preset, so it is left out" });
         }
         for (const auto& s : i.sounds)
         {

@@ -127,10 +127,10 @@ public:
             juce::String name, why; // why: "crashed", "stopped answering"
         };
         std::map<juce::String, ProblemPreset> problemDetails; // by preset id, for the ones in problemPresets
-        juce::String problem;             // the instrument itself did not load
-        bool complete = false;            // every preset measured (not stopped part way)
-        bool presetFiles = false;         // its presets are files (more may come): listed again at each update
-        int measuredWith = 0;             // the helperRevision that measured it (0: older than revision 2)
+        juce::String problem;                                 // the instrument itself did not load
+        bool complete = false;                                // every preset measured (not stopped part way)
+        bool presetFiles = false; // its presets are files (more may come): listed again at each update
+        int measuredWith = 0;     // the helperRevision that measured it (0: older than revision 2)
         juce::Time updated;
 
         /** It did not load, a preset crashed or hung the helper, or a sound was silent. */
