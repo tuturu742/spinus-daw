@@ -2,6 +2,7 @@
 
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
+#include "session/EffectProfiles.h"
 #include "session/InstrumentPresets.h"
 #include "session/InstrumentProfiles.h"
 #include "session/Session.h"
@@ -60,8 +61,14 @@ juce::var projectContext (Session& session, const ContextOptions& options)
                 instrumentKeys->setProperty (juce::String ((int)channel.instrument->id.value), keys);
     context->setProperty ("instrumentKeys", juce::var (instrumentKeys));
 
+    // What each learned effect is good for and what its settings do (Learn this effect).
+    EffectProfiles effectProfiles (options.profilesFolder != juce::File() ? options.profilesFolder
+                                                                          : SoundIndex::getDefaultFolder());
+    effectProfiles.load();
+    auto* effectGoodFor = new juce::DynamicObject();
+
     // Device names as Spinus shows them (the project file only has types), and each device's settings as they
-    // show now.
+    // show now, with what a learned effect's settings do.
     auto* names = new juce::DynamicObject();
     auto* parameters = new juce::DynamicObject();
     auto* counts = new juce::DynamicObject();
@@ -73,11 +80,25 @@ juce::var projectContext (Session& session, const ContextOptions& options)
             return;
         juce::Array<juce::var> list;
         const auto all = session.getDeviceParameterTexts (device.id);
+        const auto learned = effectProfiles.get (InstrumentPresets::libraryOf (device));
+        if (learned.has_value() && learned.value().goodFor.isNotEmpty())
+            effectGoodFor->setProperty (key, learned.value().goodFor);
         for (auto& p : all)
         {
             if (list.size() >= mostParameters)
                 break;
-            list.add (object ({ { "id", p.id }, { "name", p.name }, { "text", p.text } }));
+            auto entry = object ({ { "id", p.id }, { "name", p.name }, { "text", p.text } });
+            if (const auto* s = learned.has_value() ? learned.value().find (p.id) : nullptr)
+            {
+                // Its range as the plugin shows it too, so a value can be chosen inside it.
+                const auto told = EffectProfiles::describeForAgents ({ {}, { *s }, {} });
+                if (const auto& one = told["settings"][0]; one.isObject())
+                    for (const auto* field : { "what", "safeRange", "matters" })
+                        if (one.hasProperty (field))
+                            entry.getDynamicObject()->setProperty (field, one[field]);
+                entry.getDynamicObject()->setProperty ("range", p.low + " to " + p.high);
+            }
+            list.add (entry);
         }
         if (! list.isEmpty())
             parameters->setProperty (key, list);
@@ -98,6 +119,7 @@ juce::var projectContext (Session& session, const ContextOptions& options)
     context->setProperty ("deviceNames", juce::var (names));
     context->setProperty ("deviceParameters", juce::var (parameters));
     context->setProperty ("deviceParameterCounts", juce::var (counts));
+    context->setProperty ("effectGoodFor", juce::var (effectGoodFor));
 
     // What can be added: Spinus's devices, the free plugins and the installed plugins, each with the device
     // JSON the commands take (so a model never guesses an ID).
@@ -117,8 +139,13 @@ juce::var projectContext (Session& session, const ContextOptions& options)
                                 { "available", entry.available },
                                 { "device", device } });
         if (entry.instrument)
+        {
             if (auto keys = keysOf (entry.device); ! keys.isVoid())
                 listed.getDynamicObject()->setProperty ("keys", keys);
+        }
+        else if (const auto learned = effectProfiles.get (InstrumentPresets::libraryOf (entry.device));
+                 learned.has_value() && learned.value().goodFor.isNotEmpty())
+            listed.getDynamicObject()->setProperty ("goodFor", learned.value().goodFor);
         // An effect of Spinus's or a free one that picks its kind by name (a type "Chorus", "Phaser"...): those
         // names, so a chorus is found in it. Not for the computer's own plugins (each would be loaded to see).
         if (options.deviceChoices && ! entry.instrument && entry.available &&

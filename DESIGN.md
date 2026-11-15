@@ -903,8 +903,11 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   1. **Learn this effect...** in an effect slot's menu (`ui/LearnEffectWindow`): the plugin's own settings with
      the values at the ends of their ranges (`Session::getDeviceParameterTexts`, read without AI), edited by the
      user, with a search.
-  2. Everything that sets effects reads it: the assistant's context, outside agents (MCP and `--run`) and the
-     Automixer.
+  2. Everything that sets effects reads it: the music tools' context (`ai::projectContext`: `effectGoodFor`, and
+     what/safeRange/matters/range on a learned setting in `deviceParameters`; `goodFor` on an effect that can be
+     added, so `add_effect` finds one by what it suits) and the `--run` song summary (`learned` on an effect).
+     The Automixer sets only Spinus's own effects by their ids, so it has nothing to read yet; it will when it
+     sets plugin effects.
   3. **Read the manual** and web pages for an effect, through the user's AI connection, as a proposal to Apply.
   4. Profiles shipped as files for Spinus's own effects and the free ones it offers.
   5. Later: listening, test signals through the effect to learn what a setting does to the sound.

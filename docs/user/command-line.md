@@ -156,7 +156,8 @@ A pan's text is `"30% L"`, `"20% R"` or `"C"` (the middle). As `value`, a pan is
 ## Checking a project
 
 `spinus --check <project>` prints the project's tempo, key, length in bars and seconds, its channels
-(instrument, the Drum Machine's kit, how many samples a Sampler has), its inserts (effects, sends, where a
+(instrument, the Drum Machine's kit, how many samples a Sampler has), its inserts (effects, with what a
+[learned effect](mixer.md#learn-this-effect) is good for and what its settings do under `learned`, sends, where a
 sidechain comes from), its patterns (bars, how many notes), lanes with their clips (each clip's number, the bar it starts on, its
 length in bars and what it plays: a pattern, an audio file or automation), how many clips of each kind, and
 markers. Under `problems`

@@ -31,7 +31,10 @@ struct ContextOptions
     bool deviceChoices = true;
     /** Where the instrument profiles are (the sound index's folder; SoundIndex::getDefaultFolder() when empty):
         `instrumentKeys` gives, by device id, what each learned instrument's keys do, and each instrument that can
-        be added has its `keys` (InstrumentProfiles::describeForAgents). */
+        be added has its `keys` (InstrumentProfiles::describeForAgents). The effect profiles beside them (Learn this
+        effect) give `effectGoodFor` by device id, `goodFor` on each effect that can be added, and on a learned
+        effect's settings in `deviceParameters` what each does, its safe range, whether it matters and the
+        plugin's own range. */
     juce::File profilesFolder;
 };
 

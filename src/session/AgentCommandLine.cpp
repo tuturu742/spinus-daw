@@ -13,6 +13,7 @@
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
 #include "session/InstrumentPresets.h"
+#include "session/EffectProfiles.h"
 #include "session/InstrumentProfiles.h"
 #include "session/PluginPresets.h"
 #include "session/Session.h"
@@ -419,6 +420,8 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
 
     InstrumentProfiles profiles (profilesFolder != juce::File() ? profilesFolder : SoundIndex::getDefaultFolder());
     profiles.load();
+    EffectProfiles effectProfiles (profilesFolder != juce::File() ? profilesFolder : SoundIndex::getDefaultFolder());
+    effectProfiles.load();
     juce::Array<juce::var> channels, unused;
     for (auto& c : p.channels)
     {
@@ -453,7 +456,13 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
     {
         juce::Array<juce::var> effects, sends, sidechains;
         for (auto& e : in.effects)
+        {
             effects.add (deviceSummary (e.device));
+            // What a learned effect is good for and what its settings do (Learn this effect).
+            if (const auto profile = effectProfiles.get (InstrumentPresets::libraryOf (e.device)))
+                if (auto learned = EffectProfiles::describeForAgents (profile.value()); ! learned.isVoid())
+                    effects.getReference (effects.size() - 1).getDynamicObject()->setProperty ("learned", learned);
+        }
         for (auto& s : in.sends)
             sends.add (object ({ { "to", (int)s.target.value }, { "levelDb", s.levelDb } }));
         for (auto& s : in.sidechainSources)
