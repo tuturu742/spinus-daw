@@ -575,3 +575,30 @@ def test_a_part_added_with_a_learned_instrument_keeps_to_its_keys() -> None:
     assert not failed and "moved by octaves" in text
     written = [s for s in h.steps if s["command"] == "pattern.setNotes"][-1]["parameters"]["notes"]
     assert [n["pitch"] for n in written] == [88]
+
+
+def test_a_chord_mode_is_described_by_its_chord_and_pattern_keys() -> None:
+    from spinus_ai.instrument_keys import in_words
+    from spinus_ai.project_harness import note_name
+
+    keys = {
+        "modes": [
+            {"name": "Normal", "plays": [[40, 84]]},
+            {
+                "name": "Strummer",
+                "enter": "the C#6 key",
+                "chordKeys": [36, 59],
+                "patterns": [{"key": 60, "what": "pattern: SEQ 1"}, {"key": 61, "what": "pattern: SEQ 2"}],
+                "special": [{"key": 85, "what": "strum time"}],
+            },
+            {"name": "Odd", "switches": [{"key": 24, "what": "mute"}]},
+            {"name": "Empty"},
+        ]
+    }
+    lines = in_words(keys, note_name)
+    assert lines[1].startswith(
+        "Strummer (entered with the C#6 key): plays chords held on C3 to B4, played by pressing a pattern key with "
+        "each chord: pattern: SEQ 1 (C5), pattern: SEQ 2 (C#5)"
+    )
+    assert lines[2] == "Odd: no key plays a note by itself; switches: mute (C2)"
+    assert lines[3] == "Empty: keys not known"

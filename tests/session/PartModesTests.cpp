@@ -403,4 +403,23 @@ TEST_CASE ("Instrument profiles: what agents are told of an instrument's keys", 
     CHECK_FALSE (second.hasProperty ("voices"));
     CHECK (second["special"].size() == 12);
     CHECK (juce::JSON::toString (second["plays"], true) == "[[60, 72]]");
+
+    // A chord mode (no key plays a note by itself; chord keys and pattern keys): told how to play it.
+    InstrumentProfiles::Mode chords;
+    chords.name = "Strummer";
+    chords.enterKey = 97;
+    chords.setKeys (
+        36, 59,
+        { J::special, "chord keys: they recognise the chord played on them", InstrumentProfiles::Source::manual });
+    chords.setKeys (60, 60, { J::special, "pattern: SEQ 1", InstrumentProfiles::Source::manual });
+    chords.setKeys (61, 61, { J::special, "pattern: SEQ 2", InstrumentProfiles::Source::manual });
+    const auto strum = InstrumentProfiles::describeForAgents ({ { normal, chords }, {} })["modes"][1];
+    CHECK_FALSE (strum.hasProperty ("plays"));
+    CHECK (juce::JSON::toString (strum["chordKeys"], true) == "[36, 59]");
+    REQUIRE (strum["patterns"].size() == 2);
+    CHECK ((int)strum["patterns"][1]["key"] == 61);
+    CHECK (strum["patterns"][1]["what"].toString() == "pattern: SEQ 2");
+    CHECK (strum["howToPlay"].toString().startsWith (
+        "chords, not single notes: hold each chord on the chord keys C3 to B4 (its root at or above C3"));
+    CHECK (strum["howToPlay"].toString().contains ("press a pattern key with each chord"));
 }

@@ -69,7 +69,19 @@ def in_words(keys: dict[str, Any], note_name: Callable[[int], str]) -> list[str]
         line = head + (f" ({'; '.join(how)})" if how else "")
         runs = [r for r in mode.get("plays") or [] if isinstance(r, list) and len(r) == 2]
         said = ", ".join(f"{note_name(int(a))} to {note_name(int(b))}" for a, b in runs)
-        line += f": plays {said or 'keys not known'}"
+        chord_keys = mode.get("chordKeys")
+        if said:
+            line += f": plays {said}"
+        elif isinstance(chord_keys, list) and len(chord_keys) == 2:
+            line += f": plays chords held on {note_name(int(chord_keys[0]))} to {note_name(int(chord_keys[1]))}"
+            patterns = [p for p in mode.get("patterns") or [] if isinstance(p, dict)]
+            if patterns:
+                listed = ", ".join(f"{p.get('what')} ({note_name(int(p.get('key', 0)))})" for p in patterns)
+                line += f", played by pressing a pattern key with each chord: {listed}"
+        elif mode.get("switches") or mode.get("special"):
+            line += ": no key plays a note by itself"
+        else:
+            line += ": keys not known"
         for kind in ("switches", "special"):
             named = [
                 f"{switch_word(str(k.get('what') or kind))} ({note_name(int(k.get('key', 0)))})"
