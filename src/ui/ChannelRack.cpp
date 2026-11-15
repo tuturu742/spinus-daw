@@ -358,9 +358,10 @@ private:
                                    if (safe != nullptr)
                                        safe->usePresetFolder (id, folder, false);
                                });
-            menu.addSubMenu ("Preset files" + (chosen.isEmpty()      ? juce::String()
-                                               : chosen.size() == 1 ? juce::String (" (1 folder)")
-                                                                    : " (" + juce::String (chosen.size()) + " folders)"),
+            menu.addSubMenu ("Preset files" + (chosen.isEmpty() ? juce::String()
+                                               : chosen.size() == 1
+                                                   ? juce::String (" (1 folder)")
+                                                   : " (" + juce::String (chosen.size()) + " folders)"),
                              files);
         }
         {
