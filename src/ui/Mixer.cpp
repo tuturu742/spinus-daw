@@ -989,9 +989,11 @@ private:
         menu.addItem ("Learn this effect...",
                       [this, device]
                       {
+                          auto* view = findParentComponentOfClass<MainView>();
                           LearnEffectWindow::open (SoundIndex::getDefaultFolder(),
                                                    InstrumentPresets::libraryOf (device), effectName (device, false),
-                                                   mixer.session.getDeviceParameterTexts (device.id), this);
+                                                   mixer.session.getDeviceParameterTexts (device.id), this,
+                                                   view != nullptr ? view->getAiService() : nullptr);
                       });
         menu.addSubMenu ("Create automation clip", makeAutomateParameterMenu (mixer, mixer.session, device.id));
         if (device.kind == model::Device::Kind::plugin && mixer.session.getSandboxList() != nullptr)

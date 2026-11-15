@@ -129,6 +129,58 @@ TEST_CASE ("Learn this effect: settings as the plugin reports them, edited, sear
     CHECK (panel.importShared (juce::var ("nope"), "bad.json").contains ("could not be read"));
 }
 
+TEST_CASE ("Learn this effect: the manual's reading proposed, applied around what the user set",
+           "[ui][effects][profiles]")
+{
+    // The service's answer.
+    const auto answer = juce::JSON::parse (R"({
+        "goodFor": "glue on drum buses",
+        "settings": [{"id": "p1", "what": "where it starts to squash", "low": "-30 dB", "high": "-6 dB", "matters": true},
+                     {"id": "p2", "what": "dry to wet", "low": "", "high": "", "matters": false},
+                     {"id": "p3", "what": "", "low": "", "high": "", "matters": false}],
+        "notes": "Slow attacks keep the punch.", "by": "claude-test",
+        "read": [{"source": "a.pdf", "pages": 3}, {"source": "https://gone.example.org", "problem": "the page answered 404."}]})");
+    const auto reading = EffectProfiles::readingFrom (answer);
+    REQUIRE (reading.has_value());
+    CHECK (reading.value().goodFor == "glue on drum buses");
+    REQUIRE (reading.value().settings.size() == 2); // p3 says nothing
+    CHECK (reading.value().settings[0].source == EffectProfiles::Source::manual);
+    CHECK (reading.value().problems.size() == 1);
+    CHECK_FALSE (EffectProfiles::readingFrom (juce::JSON::parse (R"({"settings": []})")).has_value());
+
+    LearnEffectPanel panel ("Bus Squasher", compressorSettings(), std::nullopt);
+    panel.addManual ("www.example.org/squasher");
+    panel.addManual ("not a file");
+    panel.addManual ("https://example.org/other");
+    REQUIRE (panel.getManuals().size() == 2);
+    CHECK (panel.getManuals()[0].source == "https://www.example.org/squasher");
+    CHECK (panel.getMessage().contains ("Choose file"));
+    panel.removeManual (1);
+    CHECK (panel.getManuals().size() == 1);
+
+    panel.setWhat (1, "my own words"); // the user's: stays
+    panel.setReading (reading);
+    CHECK (panel.hasReading());
+    CHECK (panel.getMessage().contains ("Apply fills 1 setting"));
+    CHECK (panel.getMessage().contains ("Not read"));
+    CHECK (panel.getProfile().find ("p1") == nullptr); // nothing taken before Apply
+    CHECK (panel.applyReading() == 1);
+    CHECK_FALSE (panel.hasReading());
+    const auto profile = panel.getProfile();
+    CHECK (profile.goodFor == "glue on drum buses");
+    REQUIRE (profile.find ("p1") != nullptr);
+    CHECK (profile.find ("p1")->low == "-30 dB");
+    CHECK (profile.find ("p1")->name == "Thresh");
+    CHECK (profile.find ("p2")->what == "my own words");
+    REQUIRE (profile.manuals.size() == 1); // kept with the profile
+
+    panel.setReading (reading);
+    panel.discardReading();
+    CHECK_FALSE (panel.hasReading());
+    panel.setReading (std::nullopt, "the AI could not be reached.");
+    CHECK (panel.getMessage() == "The manual was not read: the AI could not be reached.");
+}
+
 TEST_CASE ("Learn this effect: a real effect's settings and their ranges, saved beside the sound index",
            "[ui][effects][profiles]")
 {
@@ -187,8 +239,9 @@ TEST_CASE ("Learn this effect screenshot for the manual", "[.screenshot][manual]
         profile.settings.push_back ({ "p3", "Attack", "how fast it reacts; slower keeps the punch", "1 ms", "50 ms" });
         profile.settings.push_back ({ "p5", "Param 5", "make-up gain", "0 dB", "12 dB" });
         profile.settings.push_back ({ "p6", "Param 6", "dry to wet (parallel compression)", {}, {} });
+        profile.manuals.push_back ({ "/home/me/Manuals/Bus Compressor.pdf", {} });
         LearnEffectPanel panel ("a bus compressor", settings, profile);
-        panel.setSize (900, 420);
+        panel.setSize (900, 460);
         const auto file =
             juce::File (SPINUS_TEST_FILES_DIR).getParentDirectory().getChildFile ("docs/user/images/learn-effect.png");
         file.deleteFile();
