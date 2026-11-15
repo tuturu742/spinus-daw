@@ -1,8 +1,9 @@
-"""Reading an instrument's manuals (Learn this instrument's Read the manual): the text of each manual (a PDF
-through pypdf, a web page, a text file), the passages about keys and modes, and the AI's reading of them as a
-proposal: the instrument's modes, how to enter each, what each suits and what its key zones do. Spinus shows it
-for the user to Apply. Only facts come back (key numbers, names, a few words); the manual's text is sent to the
-AI the user chose and kept nowhere.
+"""Reading an instrument's or an effect's manuals (Learn this instrument's and Learn this effect's Read the
+manual): the text of each manual (a PDF through pypdf, a web page, a text file), the passages that matter, and
+the AI's reading of them as a proposal. For an instrument: its modes, how to enter each, what each suits and what
+its key zones do. For an effect: what it is good for, and for each of its settings (as the plugin names them)
+what it does, a safe range and whether it matters most. Spinus shows it for the user to Apply. Only facts come
+back (key numbers, names, a few words); the manual's text is sent to the AI the user chose and kept nowhere.
 
 Manuals number octaves differently (middle C, MIDI note 60, is C3 in many, C4 in others), so the AI says which
 the manual uses when the manual says it, and every key comes back as a MIDI note number."""
@@ -12,6 +13,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
@@ -198,9 +200,9 @@ def score(passage: str) -> float:
     return (words + 3 * notes) / (1 + len(passage) / 400)
 
 
-def relevant(documents: list[Document], budget: int = MOST_CHARS) -> str:
+def relevant(documents: list[Document], budget: int = MOST_CHARS, scorer: Callable[[str], float] = score) -> str:
     """The manuals' text for the AI: the start of each (what the instrument is), then the passages that say most
-    about keys and modes, in their order, up to `budget` characters in all."""
+    (about keys and modes, by default), in their order, up to `budget` characters in all."""
     blocks: list[tuple[int, int, str]] = []  # (document, position, text)
     used = 0
     chosen: list[tuple[float, int, int, str]] = []
@@ -209,7 +211,7 @@ def relevant(documents: list[Document], budget: int = MOST_CHARS) -> str:
         blocks.append((d, -1, overview))
         used += len(overview)
         passages = [p.strip() for p in re.split(r"\n\s*\n|\f", doc.text[OVERVIEW_CHARS:]) if p.strip()]
-        chosen += [(score(p), d, i, p) for i, p in enumerate(passages)]
+        chosen += [(scorer(p), d, i, p) for i, p in enumerate(passages)]
     for s, d, i, p in sorted(chosen, key=lambda c: -c[0]):
         if s <= 0 or used + len(p) > budget:
             continue
@@ -360,21 +362,11 @@ def checked_reading(answer: dict[str, Any]) -> dict[str, Any] | None:
     return {"modes": modes, "middleC": middle_c, "middleCSaid": said, "notes": words(answer.get("notes"), 300)}
 
 
-async def read_manuals(
-    client: httpx.AsyncClient,
-    connections: ConnectionStore,
-    routing: Routing,
-    usage_log: UsageLog,
-    instrument: str,
-    manuals: list[dict[str, Any]],
-    say: Say,
-) -> dict[str, Any]:
-    """The AI's reading of an instrument's manuals: {modes, middleC, middleCSaid, notes, read: [{source, title,
-    pages, chars} or {source, problem}], by}. NoConnection without an AI connection; ManualError when no manual
-    could be read or the AI's answer says nothing usable."""
-    routes = routing.resolve("patterns")
-    if not routes:
-        raise NoConnection("No AI connection is set up.")
+async def read_documents(
+    client: httpx.AsyncClient, manuals: list[dict[str, Any]], say: Say
+) -> tuple[list[Document], list[dict[str, Any]]]:
+    """The manuals that could be read, and for each listed one {source, title, pages, chars} or {source, problem}.
+    ManualError when none could be read."""
     documents: list[Document] = []
     read: list[dict[str, Any]] = []
     listed = manuals[:MOST_MANUALS]
@@ -392,12 +384,30 @@ async def read_manuals(
     if not documents:
         problems = "; ".join(f"{Path(r['source']).name or r['source']}: {r['problem']}" for r in read)
         raise ManualError(f"No manual could be read ({problems})." if problems else "Add a manual first.")
+    await say({"kind": "progress", "done": len(listed), "total": len(listed) + 1, "step": "The AI is reading..."})
+    return documents, read
 
-    async def no_text(_: str) -> None:
-        pass
 
-    step = "The AI is reading the manual..."
-    await say({"kind": "progress", "done": len(listed), "total": len(listed) + 1, "step": step})
+async def no_text(_: str) -> None:
+    pass
+
+
+async def read_manuals(
+    client: httpx.AsyncClient,
+    connections: ConnectionStore,
+    routing: Routing,
+    usage_log: UsageLog,
+    instrument: str,
+    manuals: list[dict[str, Any]],
+    say: Say,
+) -> dict[str, Any]:
+    """The AI's reading of an instrument's manuals: {modes, middleC, middleCSaid, notes, read: [{source, title,
+    pages, chars} or {source, problem}], by}. NoConnection without an AI connection; ManualError when no manual
+    could be read or the AI's answer says nothing usable."""
+    routes = routing.resolve("patterns")
+    if not routes:
+        raise NoConnection("No AI connection is set up.")
+    documents, read = await read_documents(client, manuals, say)
     request = Request(
         routes[0].model,
         SYSTEM,
@@ -412,3 +422,163 @@ async def read_manuals(
         if use.name == "read_manual" and (reading := checked_reading(use.input)) is not None:
             return {**reading, "read": read, "by": answered_by(completion.model, failed)}
     raise ManualError("The AI found nothing about modes or keys in the manual.")
+
+
+# --- An effect's manual -----------------------------------------------------------------------------------------
+
+MOST_SETTINGS = 400  # of an effect's settings, the ones the AI is told of
+
+# Generic words that mark a passage about an effect's settings (no vendor's names).
+EFFECT_WORDS = (
+    "threshold",
+    "ratio",
+    "attack",
+    "release",
+    "gain",
+    "mix",
+    "wet",
+    "dry",
+    "drive",
+    "frequency",
+    "cutoff",
+    "resonance",
+    "decay",
+    "pre-delay",
+    "feedback",
+    "depth",
+    "rate",
+    "knee",
+    "range",
+    "parameter",
+    "knob",
+    "control",
+    "db",
+    "hz",
+    " ms",
+)
+
+EFFECT_SYSTEM = (
+    "You read the manuals of an audio effect (a compressor, EQ, reverb, delay, saturator, filter...) for a music "
+    "program whose assistant sets effects for the user. You are given the effect's settings as the plugin names "
+    "them, with the range each reports. Say only what the manuals say: what the effect is good for, and for the "
+    "settings the manual explains, what each does in a few plain words, a safe range for musical results when "
+    "the manual suggests one (values written the way the plugin shows them, such as '-30 dB' or '50 ms'), and "
+    "which few settings shape the sound most. Refer to settings by their id from the list only; leave out "
+    "settings the manual doesn't explain. Answer with the read_effect_manual tool."
+)
+
+READ_EFFECT_MANUAL = Tool(
+    "read_effect_manual",
+    "What the manuals say about the effect and its settings.",
+    {
+        "type": "object",
+        "properties": {
+            "goodFor": {"type": "string", "description": "What the effect suits, in a few words"},
+            "settings": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "The setting's id from the list"},
+                        "what": {"type": "string", "description": "What it does, in a few plain words"},
+                        "low": {"type": "string", "description": "A safe range's low end, as the plugin shows values"},
+                        "high": {"type": "string", "description": "Its high end; empty for either end: any"},
+                        "matters": {"type": "boolean", "description": "One of the few that shape the sound most"},
+                    },
+                    "required": ["id"],
+                },
+            },
+            "notes": {"type": "string", "description": "Anything the user should know, in one sentence"},
+        },
+        "required": ["settings"],
+    },
+)
+
+
+def effect_scorer(names: list[str]) -> Callable[[str], float]:
+    """How much a passage says about the effect's settings: their names and generic words, per its length."""
+    wanted = [n.lower() for n in names if len(n) >= 3]
+
+    def scored(passage: str) -> float:
+        lower = passage.lower()
+        found = sum(lower.count(w) for w in EFFECT_WORDS) + 3 * sum(1 for n in wanted if n in lower)
+        return found / (1 + len(passage) / 400)
+
+    return scored
+
+
+def checked_effect_reading(answer: dict[str, Any], settings: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The AI's answer as Spinus takes it: only settings the effect has (by id, once each), every field a few
+    words; None when it says nothing usable."""
+    known = {str(s.get("id")) for s in settings}
+    said: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for s in answer.get("settings") or []:
+        if not isinstance(s, dict) or str(s.get("id")) not in known or str(s.get("id")) in seen:
+            continue
+        setting: dict[str, Any] = {
+            "id": str(s["id"]),
+            "what": words(s.get("what"), 120),
+            "low": words(s.get("low"), 24),
+            "high": words(s.get("high"), 24),
+            "matters": s.get("matters") is True,
+        }
+        if setting["what"] or setting["low"] or setting["high"] or setting["matters"]:
+            seen.add(setting["id"])
+            said.append(setting)
+    good_for = words(answer.get("goodFor"), 160)
+    if not said and not good_for:
+        return None
+    return {"goodFor": good_for, "settings": said, "notes": words(answer.get("notes"), 300)}
+
+
+async def read_effect_manuals(
+    client: httpx.AsyncClient,
+    connections: ConnectionStore,
+    routing: Routing,
+    usage_log: UsageLog,
+    effect: str,
+    settings: list[dict[str, Any]],
+    manuals: list[dict[str, Any]],
+    say: Say,
+) -> dict[str, Any]:
+    """The AI's reading of an effect's manuals: {goodFor, settings: [{id, what, low, high, matters}], notes, read,
+    by}. NoConnection without an AI connection; ManualError when no manual could be read or the answer says
+    nothing usable."""
+    routes = routing.resolve("patterns")
+    if not routes:
+        raise NoConnection("No AI connection is set up.")
+    documents, read = await read_documents(client, manuals, say)
+    listed = settings[:MOST_SETTINGS]
+    lines = [
+        f"{s.get('id')} | {s.get('name')} | {s.get('low')} to {s.get('high')}"
+        if s.get("low") or s.get("high")
+        else f"{s.get('id')} | {s.get('name')}"
+        for s in listed
+    ]
+    text = relevant(documents, scorer=effect_scorer([str(s.get("name") or "") for s in listed]))
+    request = Request(
+        routes[0].model,
+        EFFECT_SYSTEM,
+        [
+            Message(
+                "user",
+                [
+                    Text(
+                        f"The effect: {effect}\n\nIts settings (id | name | range):\n"
+                        + "\n".join(lines)
+                        + f"\n\n{text}"
+                    )
+                ],
+            )
+        ],
+        [READ_EFFECT_MANUAL],
+        None,
+    )
+    failed: list[str] = []
+    completion, index = await complete_with_fallback(client, connections, routes, 0, request, no_text, say, failed)
+    usage_log.add(routes[index].connection.id, "patterns", completion.usage)
+    for use in completion.tool_uses:
+        if use.name == "read_effect_manual" and (reading := checked_effect_reading(use.input, listed)) is not None:
+            return {**reading, "read": read, "by": answered_by(completion.model, failed)}
+    raise ManualError("The AI found nothing about this effect's settings in the manual.")

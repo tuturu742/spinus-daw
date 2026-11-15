@@ -908,7 +908,10 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
      added, so `add_effect` finds one by what it suits) and the `--run` song summary (`learned` on an effect).
      The Automixer sets only Spinus's own effects by their ids, so it has nothing to read yet; it will when it
      sets plugin effects.
-  3. **Read the manual** and web pages for an effect, through the user's AI connection, as a proposal to Apply.
+  3. **Read the manual** and web pages for an effect, through the user's AI connection, as a proposal to Apply
+     (`ai.v1.effect.readManual`, `spinus_ai.manuals.read_effect_manuals`: the AI is given the plugin's settings
+     by id with their ranges and answers only by those ids; `EffectProfiles::Reading`; Apply fills the settings
+     the user has not set, Source::manual).
   4. Profiles shipped as files for Spinus's own effects and the free ones it offers.
   5. Later: listening, test signals through the effect to learn what a setting does to the sound.
 - **The Analyzer builds songs the way a producer would** (§12.7; owner decision 2026-11-14), in this order, each

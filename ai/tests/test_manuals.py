@@ -15,14 +15,17 @@ from test_service import anthropic_reply, make_service, no_notify, run_job
 from spinus_ai.manuals import (
     Document,
     ManualError,
+    checked_effect_reading,
     checked_reading,
     document_of,
+    effect_scorer,
     midi_of,
     relevant,
     score,
     text_of_html,
     words,
 )
+from spinus_ai.service import RpcError
 
 
 def pdf_with(lines: list[str]) -> bytes:
@@ -218,3 +221,87 @@ async def test_the_job_says_why_when_it_cannot_read(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match=r"No manual could be read \(nowhere.pdf: there is no file"):
         await run_job(service, "ai.v1.instrument.readManual", {"manuals": [{"file": "/nowhere.pdf"}]})
+
+
+COMPRESSOR = [
+    {"id": "p1", "name": "Thresh", "low": "-60 dB", "high": "0 dB"},
+    {"id": "p7", "name": "Param 7", "low": "0 %", "high": "100 %"},
+    {"id": "p3", "name": "Attack"},
+]
+
+
+def test_an_effects_answer_is_checked_against_its_settings() -> None:
+    reading = checked_effect_reading(
+        {
+            "goodFor": "glue on drum buses",
+            "settings": [
+                {"id": "p1", "what": "where it starts to turn down", "low": "-30 dB", "high": "-6 dB", "matters": True},
+                {"id": "p1", "what": "said twice"},  # dropped
+                {"id": "p9", "what": "a setting it lacks"},  # dropped
+                {"id": "p7", "what": "dry to wet", "matters": "yes"},  # matters only when true
+                {"id": "p3"},  # nothing said: dropped
+                "not a setting",
+            ],
+            "notes": "Slow attacks keep the punch.",
+        },
+        COMPRESSOR,
+    )
+    assert reading is not None
+    assert reading["goodFor"] == "glue on drum buses"
+    assert reading["settings"] == [
+        {"id": "p1", "what": "where it starts to turn down", "low": "-30 dB", "high": "-6 dB", "matters": True},
+        {"id": "p7", "what": "dry to wet", "low": "", "high": "", "matters": False},
+    ]
+    assert checked_effect_reading({"settings": [{"id": "p9", "what": "x"}]}, COMPRESSOR) is None
+
+
+def test_passages_naming_an_effects_settings_are_chosen() -> None:
+    scored = effect_scorer(["Thresh", "Param 7", "Q"])
+    assert scored("Turn Thresh down until the meter shows 3 dB of reduction.") > scored("Thanks for buying!")
+    assert scored("Q") == scored("x")  # too short a name to look for
+
+
+async def test_the_job_reads_an_effects_manual_and_proposes_settings(tmp_path: Path) -> None:
+    asked: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "example.org":
+            return httpx.Response(
+                200,
+                content=b"<html><body><p>Thresh sets the level where compression starts.</p></body></html>",
+                headers={"content-type": "text/html"},
+            )
+        asked.append(json.loads(request.content))
+        answer = {
+            "goodFor": "glue on drum buses",
+            "settings": [{"id": "p1", "what": "where it starts to squash", "low": "-30 dB", "high": "-6 dB"}],
+        }
+        reply = anthropic_reply(tool=("read_effect_manual", answer))
+        return httpx.Response(200, content=reply, headers={"content-type": "text/event-stream"})
+
+    service = make_service(tmp_path, handler)
+    with pytest.raises(RuntimeError, match="needs an AI connection"):
+        await run_job(
+            service,
+            "ai.v1.effect.readManual",
+            {"settings": COMPRESSOR, "manuals": [{"url": "https://example.org/manual"}]},
+        )
+    await service.handle(
+        "ai.v1.connections.save", {"name": "Claude", "provider": "anthropic", "key": "sk-test"}, no_notify
+    )
+    result = await run_job(
+        service,
+        "ai.v1.effect.readManual",
+        {"effect": "Bus Squasher", "settings": COMPRESSOR, "manuals": [{"url": "https://example.org/manual"}]},
+    )
+    assert result["goodFor"] == "glue on drum buses"
+    assert result["settings"][0]["id"] == "p1" and result["settings"][0]["low"] == "-30 dB"
+    assert result["by"] == "claude-test"
+    [request] = asked
+    sent = request["messages"][0]["content"][0]["text"]
+    assert "The effect: Bus Squasher" in sent
+    assert "p1 | Thresh | -60 dB to 0 dB" in sent and "p3 | Attack\n" in sent
+    assert "Thresh sets the level where compression starts." in sent
+    assert request["tools"][0]["name"] == "read_effect_manual"
+    with pytest.raises(RpcError, match="settings are missing"):
+        await run_job(service, "ai.v1.effect.readManual", {"manuals": [{"url": "https://example.org/manual"}]})
