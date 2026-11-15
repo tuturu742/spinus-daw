@@ -60,6 +60,18 @@ public:
         (id, name, what it does, safe range, matters). Void when nothing is learned. */
     static juce::var describeForAgents (const Profile&);
 
+    /** The AI's reading of the effect's manuals (Read the manual, the AI service's ai.v1.effect.readManual), as a
+        proposal: what the effect is good for and what the manuals say of its settings (Source::manual). */
+    struct Reading
+    {
+        juce::String goodFor;
+        std::vector<Setting> settings; // by id; the names are the panel's
+        juce::String notes, by;        // the AI's one-sentence note, and which model read it
+        juce::StringArray problems;    // the manuals that could not be read, and why
+    };
+    /** The service's answer as a reading; nullopt when it says nothing. */
+    static std::optional<Reading> readingFrom (const juce::var&);
+
     static juce::var toVar (const Profile&);
     static std::optional<Profile> fromVar (const juce::var&);
     /** A profile as a file to share ({kind: "spinus.effect-profile", version, effect, profile}): only the manuals

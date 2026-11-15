@@ -92,6 +92,34 @@ juce::var EffectProfiles::describeForAgents (const Profile& profile)
     return juce::var (o);
 }
 
+std::optional<EffectProfiles::Reading> EffectProfiles::readingFrom (const juce::var& v)
+{
+    Reading reading;
+    reading.goodFor = v["goodFor"].toString().trim();
+    if (const auto* settings = v["settings"].getArray())
+        for (const auto& r : *settings)
+        {
+            Setting s { r["id"].toString(),
+                        {},
+                        r["what"].toString().trim(),
+                        r["low"].toString().trim(),
+                        r["high"].toString().trim(),
+                        (bool)r["matters"],
+                        Source::manual };
+            if (s.id.isNotEmpty() && ! s.isEmpty())
+                reading.settings.push_back (std::move (s));
+        }
+    if (reading.goodFor.isEmpty() && reading.settings.empty())
+        return std::nullopt;
+    reading.notes = v["notes"].toString();
+    reading.by = v["by"].toString();
+    if (const auto* read = v["read"].getArray())
+        for (const auto& r : *read)
+            if (r["problem"].toString().isNotEmpty())
+                reading.problems.add (r["source"].toString() + ": " + r["problem"].toString());
+    return reading;
+}
+
 juce::var EffectProfiles::toVar (const Profile& profile)
 {
     auto* o = new juce::DynamicObject();

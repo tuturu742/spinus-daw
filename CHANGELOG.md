@@ -10,6 +10,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   and the sample folders; with Update, Stop, Measure again, Forget its sounds and Delete. Right-click an
   instrument, a sample or a sample folder in the Browser for **Refresh sound index** to measure just that
   again. The Track creator keeps a status line with Update and a **Sound index...** button.
+- **Read the manual** in **Learn this effect...**: add an effect's manuals (PDF files or web pages) and the AI
+  proposes what the effect is good for and, for each setting the manual explains, what it does, a safe range and
+  whether it matters most. **Apply** fills the settings you haven't written yourself; nothing is kept until Save.
 - The assistant and coding agents read what you taught Spinus in **Learn this effect...**: what an effect is good
   for, and for each setting what it does, its safe range and whether it matters most. An effect can be asked for
   by what it suits ("drum glue") as well as by its name.

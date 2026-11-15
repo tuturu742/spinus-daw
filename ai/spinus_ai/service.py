@@ -185,6 +185,7 @@ class Service:
             "ai.v1.song.composer": self.song_composer,
             "ai.v1.song.composeStop": self.song_compose_stop,
             "ai.v1.instrument.readManual": self.instrument_read_manual,
+            "ai.v1.effect.readManual": self.effect_read_manual,
         }
         handler = handlers.get(method)
         if handler is None:
@@ -1173,6 +1174,33 @@ class Service:
             try:
                 return await manuals.read_manuals(
                     self.client, self.connections, self.routing, self.usage, instrument, listed, say
+                )
+            except NoConnection as error:
+                raise RpcError(-32000, "Reading a manual needs an AI connection: add one in Options > AI.") from error
+            except manuals.ManualError as error:
+                raise RpcError(-32000, str(error)) from error
+
+        return {"job": self.job(notify, work)}
+
+    async def effect_read_manual(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Learn this effect's Read the manual (spinus_ai.manuals): {effect (its name), settings: [{id, name, low,
+        high}] (as the plugin reports them), manuals: [{file} or {url}]} -> {goodFor, settings: [{id, what, low,
+        high, matters}], notes, read, by}. A proposal: Spinus shows it for the user to Apply."""
+        from . import manuals
+        from .assistant import NoConnection
+
+        listed = params.get("manuals")
+        if not isinstance(listed, list) or not listed or not all(isinstance(m, dict) for m in listed):
+            raise RpcError(-32602, "Add a manual first: a PDF, a web page or a text file.")
+        settings = params.get("settings")
+        if not isinstance(settings, list) or not all(isinstance(s, dict) and s.get("id") for s in settings):
+            raise RpcError(-32602, "The effect's settings are missing.")
+        effect = str(params.get("effect") or "the effect")[:100]
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            try:
+                return await manuals.read_effect_manuals(
+                    self.client, self.connections, self.routing, self.usage, effect, settings, listed, say
                 )
             except NoConnection as error:
                 raise RpcError(-32000, "Reading a manual needs an AI connection: add one in Options > AI.") from error

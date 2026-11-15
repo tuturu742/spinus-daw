@@ -78,6 +78,12 @@ so the assistant and coding agents would have to guess.
   ("-30 dB", "50 ms"). Tick **Matters** on the few settings that shape the sound most.
 - **Good for**: what the effect suits ("plate reverb, best for vocals and snares").
 - **Search the settings** finds a setting by its name or by what you wrote (plugins can have hundreds).
+- **Read the manual**: add the effect's manuals under **Manuals** (type a web page's address and click **Add**,
+  or **Choose file...** for a PDF on this computer), then click **Read the manual**. The AI you set up in
+  [Options > AI](assistant.md) reads them and says what the effect is good for and, for the settings the manual
+  explains, what each does, a safe range and which matter most. It is a proposal: **Apply** fills the settings
+  you haven't written yourself (your own words stay), **Discard** drops it, and nothing is kept until **Save**.
+  Without an AI connection the button is greyed out; everything else works without AI.
 - **Save** keeps it, for this effect wherever you use it, in every project. **Forget this effect** removes
   what Spinus knew of it.
 - **Export...** saves it as a file to share (facts only, no manuals' text). **Import...** reads such a file:
