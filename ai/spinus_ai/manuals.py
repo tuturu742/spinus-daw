@@ -230,7 +230,8 @@ SYSTEM = (
     "music program that writes parts for it. Say only what the manuals say: the instrument's playing modes, how "
     "to enter each, what each suits, whether it plays chords, and what the keys of each mode do: which play "
     "notes, which are key switches (articulation or mode changes such as palm mute, slide, harmonics), which "
-    "have another job (chord keys, strum or pattern keys, mutes, noises) and which do nothing. Give keys as the "
+    "have another job (chord keys, strum or pattern keys, mutes, noises) and which do nothing. List every key the "
+    "manual gives a job, strum keys and pattern keys included, each with its whole rule. Give keys as the "
     "manual names them (note names such as C#6, in the manual's own octave numbering), and say which note the "
     "manual calls middle C (MIDI note 60) when it says so. Leave out what the manuals don't say. Answer with the "
     "read_manual tool."
@@ -338,7 +339,7 @@ def checked_reading(answer: dict[str, Any]) -> dict[str, Any] | None:
                     "from": min(low, high),
                     "to": max(low, high),
                     "job": zone["job"],
-                    "what": words(zone.get("what"), 100),
+                    "what": words(zone.get("what"), 300),
                 }
             )
         enter_key = midi_of(str(mode.get("enterKey") or ""), middle_c)
