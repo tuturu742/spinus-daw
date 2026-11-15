@@ -152,6 +152,11 @@ Let the AI write notes for you, or change them. Click **Generate** at the top ri
 The notes come back as a [suggestion](#suggestions), in the song's key (when it has one) and on the
 grid: **Accept**, **Discard**, **Regenerate** for another try, or **<** **>** through the variations.
 
+For an instrument Spinus has learned (**Learn this instrument**), the notes stay on keys it plays. A note
+written above or below the instrument moves by octaves onto a key that plays, so it never lands on a key
+switch by accident. Its switch keys ("palm mute") are used only when you ask for them, for example "palm-muted
+eighths".
+
 It uses an AI connection from Options › AI...: the assistant's model, or another one chosen with **Use for
 patterns** there. Better models write better music; a request costs about as much as a short
 question to the assistant. Long parts take longer to write and cost more (8 bars with 4 variations take

@@ -4,6 +4,7 @@
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
 #include "ui/AiSettingsDialog.h"
+#include "session/InstrumentProfiles.h"
 #include "ui/PatternGenerator.h"
 
 using namespace spinus;
@@ -59,6 +60,36 @@ struct Song
     ChannelId drums, bass;
 };
 } // namespace
+
+TEST_CASE ("The pattern generator is told what a learned instrument's keys do", "[ui][ai][generator][instruments]")
+{
+    TempFolder t;
+    Song song;
+    ai::AiService service (t.root, t.root.getChildFile ("models"));
+    ui::PatternGenerator generator (song.session, service);
+    generator.setProfilesFolder (t.root.getChildFile ("sounds"));
+    ui::PatternGenerator::Request request;
+    request.channels = { song.bass };
+
+    // Not learned yet: no keys.
+    CHECK (generator.describe (request)["targets"][0]["keys"].isVoid());
+
+    // Learned: E2 to G6 play, C1 switches to palm mutes.
+    InstrumentProfiles::Mode mode;
+    mode.setKeys (40, 91, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+    mode.setKeys (12, 12, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+    InstrumentProfiles profiles (t.root.getChildFile ("sounds"));
+    profiles.set ("stock-spinus.3x-osc", InstrumentProfiles::Profile { { mode }, {} });
+    REQUIRE (profiles.save());
+
+    const auto params = generator.describe (request);
+    const auto keys = params["targets"][0]["keys"]["modes"][0];
+    CHECK ((int)keys["plays"][0][0] == 40);
+    CHECK ((int)keys["plays"][0][1] == 91);
+    CHECK (keys["switches"][0]["what"] == "palm mute");
+    // Channels it only fits with aren't told: their notes are already there.
+    CHECK (params["context"][0]["keys"].isVoid());
+}
 
 TEST_CASE ("The pattern generator is told the song, the channels to write and the ones to fit with",
            "[ui][ai][generator]")

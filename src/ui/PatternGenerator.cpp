@@ -2,6 +2,9 @@
 
 #include "dsp/drums/DrumMachineProcessor.h"
 #include "model/StockDevices.h"
+#include "session/InstrumentPresets.h"
+#include "session/InstrumentProfiles.h"
+#include "session/SoundIndex.h"
 
 namespace spinus::ui
 {
@@ -95,6 +98,8 @@ juce::var PatternGenerator::describe (const Request& request) const
 {
     const auto& project = session.getProject();
     const auto* pattern = project.findPattern (session.getCurrentPattern());
+    InstrumentProfiles profiles (profilesFolder != juce::File() ? profilesFolder : SoundIndex::getDefaultFolder());
+    profiles.load();
 
     auto channelJson = [&] (const model::Channel& c, bool withId)
     {
@@ -102,7 +107,13 @@ juce::var PatternGenerator::describe (const Request& request) const
             object ({ { "name", c.name },
                       { "instrument", c.instrument ? model::getDeviceDisplayName (*c.instrument) : juce::String() } });
         if (withId)
+        {
             o.getDynamicObject()->setProperty ("channel", (int)c.id.value);
+            if (c.instrument)
+                if (const auto profile = profiles.get (InstrumentPresets::libraryOf (*c.instrument)))
+                    if (auto keys = InstrumentProfiles::describeForAgents (*profile); ! keys.isVoid())
+                        o.getDynamicObject()->setProperty ("keys", keys);
+        }
         juce::Array<juce::var> pads;
         for (auto& [name, note] : getPads (session, c.id))
             pads.add (object ({ { "name", name }, { "note", note } }));

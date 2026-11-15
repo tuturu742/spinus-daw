@@ -20,8 +20,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
-from . import keynames
+from . import instrument_keys, keynames
 from .gateway import Tool
+from .instrument_keys import fit_key
 
 TICKS_PER_BEAT = 960
 TICKS_PER_STEP = 240
@@ -90,23 +91,6 @@ class Mistake(ValueError):
 def scale_of(key: dict[str, Any]) -> set[int]:
     """The key's pitch classes (major or minor; another scale counts as major)."""
     return {(int(key["tonic"]) + i) % 12 for i in SCALES.get(str(key.get("scale")), SCALES["major"])}
-
-
-def fit_key(pitch: int, plays: set[int]) -> int:
-    """A note moved by octaves onto a key that plays, as few as it takes (up before down when as far), or the
-    nearest key that plays when no octave of it does (InstrumentProfiles' PlayableKeys::fit)."""
-    if not plays or pitch in plays:
-        return pitch
-    for octaves in range(1, 11):
-        for candidate in (pitch + 12 * octaves, pitch - 12 * octaves):
-            if candidate in plays:
-                return candidate
-    return min(plays, key=lambda k: (abs(k - pitch), -k))
-
-
-def switch_word(what: str) -> str:
-    """A switch key's name as one word, to write it as a note's pitch: "palm mute" -> "palm-mute"."""
-    return re.sub(r"\s+", "-", what.strip().lower())
 
 
 def note_name(pitch: int) -> str:
@@ -711,27 +695,11 @@ class ProjectHarness:
 
     def plays(self, channel: dict[str, Any]) -> set[int]:
         """The keys the part's instrument plays as notes as it opens (its first mode's); empty when not known."""
-        keys = self.keys_of(channel)
-        modes = (keys or {}).get("modes") or []
-        if not modes or not isinstance(modes[0], dict):
-            return set()
-        out: set[int] = set()
-        for run in modes[0].get("plays") or []:
-            if isinstance(run, list) and len(run) == 2:
-                out.update(range(int(run[0]), int(run[1]) + 1))
-        return out
+        return instrument_keys.plays(self.keys_of(channel))
 
     def switch_keys(self, channel: dict[str, Any]) -> dict[str, int]:
         """The first mode's switch and special keys by name ("palm-mute": 12), to write one on purpose."""
-        keys = self.keys_of(channel)
-        modes = (keys or {}).get("modes") or []
-        if not modes or not isinstance(modes[0], dict):
-            return {}
-        out: dict[str, int] = {}
-        for k in [*(modes[0].get("switches") or []), *(modes[0].get("special") or [])]:
-            if isinstance(k, dict) and k.get("what"):
-                out.setdefault(switch_word(str(k["what"])), int(k.get("key", 0)))
-        return out
+        return instrument_keys.switch_keys(self.keys_of(channel))
 
     def drum_map(self, channel: dict[str, Any]) -> dict[str, int]:
         return PADS if (channel.get("instrument") or {}).get("stockType") == "spinus.drum-machine" else GM
@@ -1020,29 +988,7 @@ class ProjectHarness:
     @staticmethod
     def keys_in_words(keys: dict[str, Any]) -> list[str]:
         """Each mode in a line: 'Normal (one note at a time): plays E2 to G6; switches: palm-mute (C1)'."""
-        out = []
-        for mode in keys.get("modes") or []:
-            if not isinstance(mode, dict):
-                continue
-            head = str(mode.get("name") or "Normal")
-            voices = {"chords": "chords", "one": "one note at a time"}.get(str(mode.get("voices")))
-            how = [x for x in (voices, str(mode.get("goodFor") or "")) if x]
-            if mode.get("enter"):
-                how.append(f"entered with {mode['enter']}")
-            line = head + (f" ({'; '.join(how)})" if how else "")
-            runs = [r for r in mode.get("plays") or [] if isinstance(r, list) and len(r) == 2]
-            said = ", ".join(f"{note_name(int(a))} to {note_name(int(b))}" for a, b in runs)
-            line += f": plays {mode.get('playsInWords') or said or 'keys not known'}"
-            for kind in ("switches", "special"):
-                named = [
-                    f"{switch_word(str(k.get('what') or kind))} ({k.get('note')})"
-                    for k in mode.get(kind) or []
-                    if isinstance(k, dict)
-                ]
-                if named:
-                    line += f"; {kind}: {', '.join(named)}"
-            out.append(line)
-        return out
+        return instrument_keys.in_words(keys, note_name)
 
     def tool_read_part(self, part: str, bars: str) -> str:
         channel = self.part(part)

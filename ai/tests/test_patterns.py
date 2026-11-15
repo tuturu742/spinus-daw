@@ -304,3 +304,65 @@ def test_bars_follow_the_time_signature() -> None:
     assert "(2 bars)" in describe(settings)
     old = Settings.from_json({"lengthTicks": 3840, "beatsPerBar": 4, "targets": []})  # older callers
     assert old.bar_steps == 16 and old.signature == "4/4"
+
+
+GUITAR_KEYS = {
+    "modes": [
+        {
+            "name": "Normal",
+            "voices": "one",
+            "plays": [[40, 91]],
+            "switches": [{"key": 24, "note": "C2", "what": "palm mute"}],
+        },
+        {"name": "Strummer", "enter": "the Strummer button", "plays": [[60, 72]]},
+    ]
+}
+
+
+def test_a_learned_instrument_is_described_and_its_notes_kept_on_keys_it_plays() -> None:
+    s = settings(targets=[{"channel": 4, "name": "Guitar", "instrument": "Guitar", "keys": GUITAR_KEYS}])
+    text = describe(s)
+    assert "its keys: Normal (one note at a time): plays E2 to G6; switches: palm-mute (C1)" in text
+    assert "its keys: Strummer (entered with the Strummer button): plays C4 to C5" in text
+    assert "write a switch key by its name as the note (palm-mute)" in text
+
+    variation = finish(
+        {
+            "parts": [
+                {
+                    "channel": 4,
+                    "notes": [
+                        {"step": 0, "length": 1, "note": "palm-mute"},  # the switch, on purpose
+                        {"step": 0, "length": 4, "note": "C1"},  # the switch's key, not named: up to C3
+                        {"step": 4, "length": 1, "note": "E7"},  # above the guitar: down to E6
+                        {"step": 8, "length": 1, "note": "G4"},  # plays
+                    ],
+                }
+            ]
+        },
+        s,
+        random.Random(0),
+    )
+    assert variation is not None
+    assert [(n["start"], n["pitch"]) for n in variation["parts"]["4"]] == [(0, 24), (0, 48), (960, 88), (1920, 67)]
+
+
+def test_adjusting_a_learned_instrument_names_its_switch_notes() -> None:
+    target = {
+        "channel": 4,
+        "name": "Guitar",
+        "keys": GUITAR_KEYS,
+        "notes": [{"start": 0, "length": 120, "pitch": 24}, {"start": 0, "length": 480, "pitch": 52}],
+    }
+    assert "its notes now (step:note/length): 0:palm-mute/0.5 0:E3/2" in describe(
+        settings(targets=[target], adjust=True)
+    )
+
+
+def test_an_instrument_without_learned_keys_writes_any_key() -> None:
+    s = settings(targets=[{"channel": 7, "name": "Bass", "instrument": "3x Osc", "keys": "not an object"}])
+    assert "its keys" not in describe(s)
+    variation = finish(
+        {"parts": [{"channel": 7, "notes": [{"step": 0, "length": 1, "note": "C0"}]}]}, s, random.Random(0)
+    )
+    assert variation is not None and variation["parts"]["7"][0]["pitch"] == 12
