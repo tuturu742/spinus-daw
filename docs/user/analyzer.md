@@ -73,8 +73,19 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    project**: everything chosen is added at once, and one **Ctrl+Z** takes it all away. If something
    cannot be added, nothing is, and the line under the buttons says why ("Nothing was added: ...").
 
-7. **Replicated stems**: each becomes a new channel named after the stem and the song, such as "Bass (<song>)", with its notes in a new
-   pattern "Analysis: <song>", placed on the Playlist at bar 1. Melodic stems play on **3x Osc**; the
+7. **Replicated stems**: each becomes a new channel named after the stem and the song, such as "Bass (<song>)",
+   with its own track on the Playlist. The notes are arranged the way a producer would build the song:
+   - Spinus finds the song's **sections** by comparing its bars (the harmony and rhythm of the stems) and puts
+     a marker at each one on the ruler: Intro, Verse 1, Chorus 1, Verse 2... The busiest part that comes back
+     is taken as the chorus, another that comes back as the verse, a part heard once as the intro, the outro
+     or a bridge. These are guesses: rename the markers if they are wrong.
+   - Each stem's notes become short **patterns**: where a section repeats a loop (drums and bass often repeat
+     every 1, 2 or 4 bars), that loop is one pattern placed again and again ("Drums: Verse loop"); a bar that
+     differs, such as a drum fill, gets a pattern of its own ("Drums: Verse fill"). The same notes anywhere in
+     the song are the same pattern, so a chorus that comes back reuses its patterns: change the pattern once
+     and every chorus changes. No note is left out.
+
+   Melodic stems play on **3x Osc**; the
    drums become steps on a **Drum Machine** (kick, snare, clap, hats, toms, rim, crash and ride on their
    own pads). The notes follow the song's own beats (even when it speeds up or slows down) and snap to
    sixteenths. Swap the instrument for the sound you want.

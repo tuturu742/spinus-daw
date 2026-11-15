@@ -921,11 +921,15 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   5. Later: listening, test signals through the effect to learn what a setting does to the sound.
 - **The Analyzer builds songs the way a producer would** (§12.7; owner decision 2026-11-14), in this order, each
   a small step, the Analyzer staying experimental:
-  1. **Patterns by section and loop.** Bars are compared by harmony, loudness and the notes found, on the beats
-     already detected, to find the song's sections (intro, verse, chorus, bridge); each section's notes become
-     a pattern, and a section that comes back reuses its pattern on the Playlist. Inside a stem, the shortest
-     repeat (drums and bass often loop every 1, 2 or 4 bars) is one short pattern placed again; a bar that
-     differs (a fill) becomes a variant pattern, so no note is lost. No new model.
+  1. **Patterns by section and loop** (done: `session/SongSections`, used by the Analyzer's Add to the project).
+     Bars are compared by the notes found (each stem's pitch classes by duration and onsets on sixteenths; how
+     busy it is stands in for loudness), in 4-bar phrases from the first downbeat; phrases at least 0.7 alike
+     are one kind, a run of one kind is a section, named by repetition and busyness (the busiest repeated kind
+     the chorus, the next the verse, single ones intro, outro or bridge) and marked on the ruler. Inside each
+     section, per stem, the shortest loop of 1, 2 or 4 bars that covers at least half the section is one
+     pattern placed again; the other chunks (fills) are patterns of their own; identical notes anywhere in the
+     song (start, length, pitch) are one pattern, so a returning section reuses its patterns and no note is
+     lost. Each stem gets its own Playlist track. No new model.
   2. **Rhythm, lead and solo.** One separated stem often holds several parts (two guitars). Its notes are split
      by how they are played: chords and steady strumming are the rhythm part, single higher, freer lines the
      lead, a lead heard in one section only the solo; each goes on a channel of its own. Parts that take turns
