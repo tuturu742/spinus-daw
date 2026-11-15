@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Update sound index** is quicker: an instrument whose presets are files (Surge XT's patches, preset folders you
+  chose) is no longer loaded again at every update when none of its files changed, and a silent preset after the
+  first is given 3 seconds to sound instead of 10.
 - Learn this instrument: **Forget this instrument** clears the manuals list too. The forgotten manuals stayed in the
   list, and **Remove** did nothing on them.
 - The Sampler and Six Sines come with what Spinus knows of their keys, like 3x Osc, Surge XT, OB-Xf and Odin 2.
