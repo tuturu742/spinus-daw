@@ -210,8 +210,10 @@ public:
     struct ParameterText
     {
         juce::String id, name, text;
+        juce::String low, high; // the values at the two ends of its range, as the plugin shows them
     };
-    /** A device's automatable parameters with their current values as the plugin shows them, in one pass. */
+    /** A device's automatable parameters with their current values (and the ends of their ranges) as the plugin
+        shows them, in one pass. */
     std::vector<ParameterText> getDeviceParameterTexts (model::DeviceId) const;
 
     /** The choices of a device that picks its kind of sound by name (an effect's type: "Chorus", "Phaser"...):

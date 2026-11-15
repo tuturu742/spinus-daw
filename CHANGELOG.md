@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Learn this effect...** in an effect's right-click menu in the Mixer: every setting with the range the plugin
+  reports, where you can write what it does and a safe range, tick the ones that matter most, and say what the
+  effect is good for; exported and imported as a file. The first step of effect learning: next, the assistant and
+  coding agents read it, and Spinus reads an effect's manual.
 - Exports render on one thread. Tracktion's multi-threaded renderer could, on a busy computer, start a block
   while a helper thread was still finishing the last one: a crash or wrong audio during an export. Exports with
   heavy plugins may take a little longer.

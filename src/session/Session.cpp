@@ -755,8 +755,18 @@ std::vector<Session::ParameterText> Session::getDeviceParameterTexts (model::Dev
     if (auto* plugin = adapter->getDevicePlugin (id))
         for (int i = 0; i < plugin->getNumAutomatableParameters(); ++i)
             if (auto parameter = plugin->getAutomatableParameter (i))
+            {
+                const auto range = parameter->getValueRange();
+                auto shown = [&] (float v)
+                {
+                    const auto label = parameter->getLabel();
+                    auto text = parameter->valueToString (v).trim();
+                    return label.isNotEmpty() && ! text.endsWithIgnoreCase (label) ? text + " " + label : text;
+                };
                 result.push_back ({ parameter->paramID, parameter->getParameterName(),
-                                    parameter->getCurrentValueAsStringWithLabel().trim() });
+                                    parameter->getCurrentValueAsStringWithLabel().trim(), shown (range.getStart()),
+                                    shown (range.getEnd()) });
+            }
     return result;
 }
 
