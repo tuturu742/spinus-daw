@@ -346,7 +346,7 @@ TEST_CASE ("Track creator screenshot for the manual", "[.screenshot][manual]")
                           R"(, "descriptorsVersion": )" + juce::String (sounds::descriptorsVersion) +
                           R"(, "updated": "2026-10-26T14:02:00", "summary": {"instruments": 6, "presets": 3204,
                               "samples": 418, "problems": 0}})");
-    creator.setSoundIndexFolder (sounds);
+    a.session.getSoundIndex().setFolder (sounds);
     const auto album = a.t.root.getChildFile ("Album");
     REQUIRE (album.createDirectory().wasOk());
     const auto first = makeSong (album, "01 Morning Light");
@@ -1045,19 +1045,21 @@ TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATC
 
 //==============================================================================
 #if defined(SPINUS_PLUGIN_SCANNER) && defined(SPINUS_BROKEN_PLUGINS_DIR)
-TEST_CASE ("Track creator: the plugins ticked for the sound index are read back", "[ui][trackcreator][sounds]")
+TEST_CASE ("Sound index service: the plugins ticked for the sound index are read back", "[ui][trackcreator][sounds]")
 {
     // The list once crashed Spinus when read (Choose plugins...): it pointed into a file read already freed.
     TempFolder t;
     EngineHost host { { .openAudioDevice = false } };
     Session session { host.getEngine() };
-    TrackCreator creator (session, nullptr);
-    creator.setSoundIndexFolder (t.root.getChildFile ("sounds"));
-    CHECK (creator.getIncludedPlugins().isEmpty());
+    auto& index = session.getSoundIndex();
+    index.setFolder (t.root.getChildFile ("sounds"));
+    CHECK (index.getIncludedPlugins().isEmpty());
     const juce::StringArray ticked { "plugin-one-with-a-long-key-name-to-leave-the-small-string-buffer",
                                      "plugin-two-with-a-long-key-name-to-leave-the-small-string-buffer" };
-    creator.setIncludedPlugins (ticked);
-    CHECK (creator.getIncludedPlugins() == ticked);
+    index.setIncludedPlugins (ticked);
+    CHECK (index.getIncludedPlugins() == ticked);
+    index.setIncluded (ticked[0], false);
+    CHECK (index.getIncludedPlugins() == juce::StringArray { ticked[1] });
 }
 
 TEST_CASE ("Track creator: the sound index is updated in the background, listed and deleted, without AI",
@@ -1067,18 +1069,21 @@ TEST_CASE ("Track creator: the sound index is updated in the background, listed 
     EngineHost host { { .openAudioDevice = false } };
     Session session { host.getEngine() };
     TrackCreator creator (session, nullptr); // no AI service: the sound index does not need it
+    auto& index = session.getSoundIndex();
     const auto folder = t.root.getChildFile ("sounds");
-    creator.setSoundIndexFolder (folder);
+    index.setFolder (folder);
     SoundIndexer::Options options;
     options.helper = juce::File (SPINUS_PLUGIN_SCANNER);
-    creator.setSoundIndexOptions (options);
+    index.setOptions (options);
     SoundSource synth;
     synth.key = "plugin-test-synth";
     synth.name = synth.pluginName = "Spinus Test Synth";
     synth.format = "CLAP";
+    synth.badge = "CLAP";
     synth.file = juce::File (SPINUS_BROKEN_PLUGINS_DIR).getChildFile ("test-synth.clap").getFullPathName();
     synth.fingerprint = "1";
-    creator.getSoundSources = [synth] { return std::vector<SoundSource> { synth }; };
+    index.getSources = [synth] { return std::vector<SoundSource> { synth }; };
+    index.setIncluded (synth.key, true); // one of the user's plugins: measured once ticked
     const auto samples = t.root.getChildFile ("Samples");
     {
         // A kick: a falling sine, half a second.
@@ -1098,15 +1103,17 @@ TEST_CASE ("Track creator: the sound index is updated in the background, listed 
         REQUIRE (writer != nullptr);
         writer->writeFromAudioSampleBuffer (kick, 0, kick.getNumSamples());
     }
-    creator.getSampleFolders = [samples] { return juce::Array<juce::File> { samples }; };
+    index.getSampleFolders = [samples] { return juce::Array<juce::File> { samples }; };
 
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
     CHECK (creator.getSoundIndexText().contains ("No sound index yet"));
     creator.updateSoundIndex();
     CHECK (creator.isIndexingSounds());
     REQUIRE (waitFor ([&] { return ! creator.isIndexingSounds(); }, 120000));
-    REQUIRE (creator.getLastSoundIndexResult());
-    CHECK (creator.getLastSoundIndexResult().value().soundsMeasured == 6);
-    CHECK (creator.getLastSoundIndexResult().value().samplesMeasured == 1);
+    REQUIRE (index.getLastResult());
+    CHECK (index.getLastResult().value().soundsMeasured == 6);
+    CHECK (index.getLastResult().value().samplesMeasured == 1);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
     CHECK (creator.getSoundIndexText().contains ("1 instrument, 6 presets, 1 sample"));
 
     // The list, with search.

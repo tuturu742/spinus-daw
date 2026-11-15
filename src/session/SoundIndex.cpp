@@ -561,6 +561,15 @@ bool SoundIndex::measureAgain (const juce::String& key)
     return true;
 }
 
+bool SoundIndex::forget (const juce::String& key)
+{
+    if (instruments.erase (key) == 0)
+        return false;
+    instrumentFile (key).deleteFile();
+    saveIndex();
+    return true;
+}
+
 int SoundIndex::measureAgainSilentOrFailed()
 {
     juce::StringArray keys;
@@ -579,6 +588,13 @@ std::vector<SoundIndex::SampleFile> SoundIndex::listSampleFiles (const juce::Arr
     std::map<juce::String, SampleFile> found;
     for (const auto& folder : folders)
     {
+        if (folder.existsAsFile())
+        {
+            if (isSampleFile (folder) && folder.getSize() > 0 && folder.getSize() <= largest)
+                found[folder.getFullPathName()] = { folder, folder.getSize(),
+                                                    folder.getLastModificationTime().toMilliseconds() };
+            continue;
+        }
         if (! folder.isDirectory())
             continue;
         for (const auto& entry : juce::RangedDirectoryIterator (folder, true, "*", juce::File::findFiles))
@@ -775,10 +791,18 @@ bool SoundIndexer::start (std::vector<SoundSource> s, juce::Array<juce::File> f,
                           std::function<void (const Progress&)> onProgress,
                           std::function<void (const Result&)> onFinished)
 {
+    auto whole = [this, s = std::move (s), f = std::move (f)] (SoundIndex& index, const std::function<bool()>& stop,
+                                                               const std::function<void (const Progress&)>& report)
+    { return update (index, options, s, f, stop, report); };
+    return start (std::move (whole), std::move (onProgress), std::move (onFinished));
+}
+
+bool SoundIndexer::start (Job j, std::function<void (const Progress&)> onProgress,
+                          std::function<void (const Result&)> onFinished)
+{
     if (isThreadRunning())
         return false;
-    sources = std::move (s);
-    folders = std::move (f);
+    job = std::move (j);
     progressCallback = std::move (onProgress);
     finishedCallback = std::move (onFinished);
     {
@@ -811,8 +835,8 @@ void SoundIndexer::run()
 {
     SoundIndex index (folder);
     index.load();
-    auto finished = update (
-        index, options, sources, folders, [this] { return threadShouldExit(); },
+    auto finished = job (
+        index, [this] { return threadShouldExit(); },
         [this] (const Progress& p)
         {
             {
@@ -1128,6 +1152,94 @@ void add (SoundIndexer::Result& to, const SoundIndexer::Result& r)
     to.problems += r.problems;
     to.cancelled = to.cancelled || r.cancelled;
 }
+
+/** Measures these sample files in the helper, a batch per run, into `index.samples` (in place of what was
+    measured of them before), and saves them. A file that crashes or hangs the helper is kept as a problem. */
+void measureSamples (SoundIndex& index, const SoundIndexer::Options& options,
+                     const std::vector<SoundIndex::SampleFile>& changed, const std::function<bool()>& shouldStop,
+                     const std::function<void (const SoundIndexer::Progress&)>& report, SoundIndexer::Result& result)
+{
+    auto stop = [&] { return shouldStop && shouldStop(); };
+    std::map<juce::String, size_t> at;
+    for (size_t i = 0; i < index.samples.size(); ++i)
+        at[index.samples[i].path] = i;
+    auto keep = [&] (const SoundIndex::SampleFile& f, const juce::var& info)
+    {
+        SoundIndex::Sample s { f.file.getFullPathName(), f.size, f.modified, info };
+        if (const auto found = at.find (s.path); found != at.end())
+            index.samples[found->second] = std::move (s);
+        else
+        {
+            at[s.path] = index.samples.size();
+            index.samples.push_back (std::move (s));
+        }
+    };
+
+    SoundIndexer::Progress progress;
+    progress.stage = "samples";
+    progress.total = (int)changed.size();
+    report (progress);
+    for (size_t next = 0; next < changed.size();)
+    {
+        if (stop())
+        {
+            result.cancelled = true;
+            break;
+        }
+        const auto count = juce::jmin (changed.size() - next, (size_t)juce::jmax (1, options.samplesPerRun));
+        std::map<juce::String, const SoundIndex::SampleFile*> batch;
+        juce::Array<juce::var> paths;
+        for (size_t i = next; i < next + count; ++i)
+        {
+            batch[changed[i].file.getFullPathName()] = &changed[i];
+            paths.add (changed[i].file.getFullPathName());
+        }
+        size_t handled = 0;
+        const auto run = SoundIndexer::runHelper (
+            options, object ({ { "mode", "samples" }, { "files", paths } }), false,
+            [&] (const juce::var& line)
+            {
+                if (const auto& sample = line["sample"]; sample.isObject())
+                    if (const auto found = batch.find (sample["path"].toString()); found != batch.end())
+                    {
+                        keep (*found->second, sample);
+                        ++handled;
+                        ++result.samplesMeasured;
+                        ++progress.done;
+                        ++progress.sounds;
+                        progress.current = found->second->file.getFileName();
+                        report (progress);
+                    }
+            },
+            shouldStop);
+        if (! run.finished && stop())
+        {
+            result.cancelled = true;
+            break;
+        }
+        if (! run.finished && handled < count)
+        {
+            // The file it was reading is a problem; the batch carries on after it.
+            const auto stuck = batch.find (run.stuckOn);
+            const auto& file = stuck != batch.end() ? *stuck->second : changed[next + handled];
+            const auto why = run.exitCode == -1 ? juce::String ("Spinus's helper program is missing")
+                             : run.hung         ? "Spinus's helper stopped answering while reading it"
+                                                : "Spinus's helper crashed while reading it";
+            core::Logs::warning ("sounds", file.file.getFullPathName() + ": " + why);
+            keep (file, object ({ { "problem", why } }));
+            ++handled;
+            ++result.problems;
+            ++progress.done;
+            if (run.exitCode == -1)
+                break;
+        }
+        next += juce::jmax ((size_t)1, handled);
+        index.saveSamples();
+    }
+    std::sort (index.samples.begin(), index.samples.end(),
+               [] (const SoundIndex::Sample& a, const SoundIndex::Sample& b) { return a.path < b.path; });
+    index.saveSamples();
+}
 } // namespace
 
 int SoundIndexer::helpersFor (const Options& options)
@@ -1266,89 +1378,49 @@ SoundIndexer::Result SoundIndexer::update (SoundIndex& index, const Options& opt
             result.samplesRemoved += (int)(before - index.samples.size());
 
             const auto changed = index.changedSamples (files);
-            std::map<juce::String, size_t> at;
-            for (size_t i = 0; i < index.samples.size(); ++i)
-                at[index.samples[i].path] = i;
-            auto keep = [&] (const SoundIndex::SampleFile& f, const juce::var& info)
-            {
-                SoundIndex::Sample s { f.file.getFullPathName(), f.size, f.modified, info };
-                if (const auto found = at.find (s.path); found != at.end())
-                    index.samples[found->second] = std::move (s);
-                else
-                {
-                    at[s.path] = index.samples.size();
-                    index.samples.push_back (std::move (s));
-                }
-            };
-
-            progress = {};
-            progress.stage = "samples";
-            progress.total = (int)changed.size();
-            report (progress);
-            for (size_t next = 0; next < changed.size();)
-            {
-                if (stop())
-                {
-                    result.cancelled = true;
-                    break;
-                }
-                const auto count = juce::jmin (changed.size() - next, (size_t)juce::jmax (1, options.samplesPerRun));
-                std::map<juce::String, const SoundIndex::SampleFile*> batch;
-                juce::Array<juce::var> paths;
-                for (size_t i = next; i < next + count; ++i)
-                {
-                    batch[changed[i].file.getFullPathName()] = &changed[i];
-                    paths.add (changed[i].file.getFullPathName());
-                }
-                size_t handled = 0;
-                const auto run = runHelper (
-                    options, object ({ { "mode", "samples" }, { "files", paths } }), false,
-                    [&] (const juce::var& line)
-                    {
-                        if (const auto& sample = line["sample"]; sample.isObject())
-                            if (const auto found = batch.find (sample["path"].toString()); found != batch.end())
-                            {
-                                keep (*found->second, sample);
-                                ++handled;
-                                ++result.samplesMeasured;
-                                ++progress.done;
-                                ++progress.sounds;
-                                progress.current = found->second->file.getFileName();
-                                report (progress);
-                            }
-                    },
-                    shouldStop);
-                if (! run.finished && stop())
-                {
-                    result.cancelled = true;
-                    break;
-                }
-                if (! run.finished && handled < count)
-                {
-                    // The file it was reading is a problem; the batch carries on after it.
-                    const auto stuck = batch.find (run.stuckOn);
-                    const auto& file = stuck != batch.end() ? *stuck->second : changed[next + handled];
-                    const auto why = run.exitCode == -1 ? juce::String ("Spinus's helper program is missing")
-                                     : run.hung         ? "Spinus's helper stopped answering while reading it"
-                                                        : "Spinus's helper crashed while reading it";
-                    core::Logs::warning ("sounds", file.file.getFullPathName() + ": " + why);
-                    keep (file, object ({ { "problem", why } }));
-                    ++handled;
-                    ++result.problems;
-                    ++progress.done;
-                    if (run.exitCode == -1)
-                        break;
-                }
-                next += juce::jmax ((size_t)1, handled);
-                index.saveSamples();
-            }
-            std::sort (index.samples.begin(), index.samples.end(),
-                       [] (const SoundIndex::Sample& a, const SoundIndex::Sample& b) { return a.path < b.path; });
-            index.saveSamples();
+            measureSamples (index, options, changed, shouldStop, report, result);
         }
     }
 
     index.updated = juce::Time::getCurrentTime();
+    index.saveIndex();
+    return result;
+}
+
+SoundIndexer::Result SoundIndexer::updateSamples (SoundIndex& index, const Options& options,
+                                                  const juce::Array<juce::File>& filesOrFolders,
+                                                  const std::function<bool()>& shouldStop,
+                                                  const std::function<void (const Progress&)>& onProgress)
+{
+    Result result;
+    auto report = [&] (const Progress& p)
+    {
+        if (onProgress)
+            onProgress (p);
+    };
+    const auto files = SoundIndex::listSampleFiles (filesOrFolders, shouldStop);
+    if (shouldStop && shouldStop())
+        result.cancelled = true;
+    else
+    {
+        // Those inside that are gone leave the index.
+        auto inside = [&] (const juce::String& path)
+        {
+            const juce::File file (path);
+            for (const auto& f : filesOrFolders)
+                if (file == f || file.isAChildOf (f))
+                    return true;
+            return false;
+        };
+        std::set<juce::String> onDisk;
+        for (const auto& f : files)
+            onDisk.insert (f.file.getFullPathName());
+        const auto before = index.samples.size();
+        std::erase_if (index.samples,
+                       [&] (const SoundIndex::Sample& s) { return inside (s.path) && ! onDisk.contains (s.path); });
+        result.samplesRemoved += (int)(before - index.samples.size());
+        measureSamples (index, options, files, shouldStop, report, result);
+    }
     index.saveIndex();
     return result;
 }

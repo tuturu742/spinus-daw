@@ -41,7 +41,8 @@ have; add the plugin again to use the other one.
 - **Double-click an effect** to add it to the insert selected in the Mixer (the Master if none is).
 - **Drag** an instrument onto the Channel Rack, or an effect onto a mixer strip or one of the effect slots
   on the right of the Mixer.
-- Right-click a plugin for the same choices.
+- Right-click a plugin for the same choices. On an instrument, **Refresh sound index** measures its presets
+  again for the [sound index](sound-index.md).
 
 The **+ Add channel** button in the Channel Rack and the empty effect slots in the Mixer list the same
 devices, with installed plugins grouped by maker under **Installed plugins**.
@@ -118,10 +119,11 @@ downloaded or bought.
     longer than 20 seconds becomes an [audio track](audio-tracks.md) instead.
   - **Drag** it onto the Channel Rack (the same), onto the [Playlist](playlist.md) (an audio clip where
     you drop it), or onto [Audio tracks](audio-tracks.md) (a new track from the start of the song).
-  - **Right-click** it for **Add to the Channel Rack**, **Add as an audio track** and **Show in the file
-    manager**.
+  - **Right-click** it for **Add to the Channel Rack**, **Add as an audio track**, **Refresh sound index**
+    (measure it again for the [sound index](sound-index.md)) and **Show in the file manager**.
 - **Remove a folder:** right-click it and choose **Remove from the Browser**. The files stay where they
-  are. **Look again for new files** updates the search after you add samples to a folder.
+  are. **Look again for new files** updates the search after you add samples to a folder, and **Refresh sound
+  index** measures the folder's samples again for the [sound index](sound-index.md).
 
 Samples you use are copied into the project when you save it, so the project still works if you later
 move or delete your library.

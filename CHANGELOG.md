@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Options › Sound index** shows the whole sound index in one window: which instruments it measures (tick your
+  own plugins there), what it measured of each and what went wrong, every sound with search and your own roles,
+  and the sample folders; with Update, Stop, Measure again, Forget its sounds and Delete. Right-click an
+  instrument, a sample or a sample folder in the Browser for **Refresh sound index** to measure just that
+  again. The Track creator keeps a status line with Update and a **Sound index...** button.
 - **Read the manual** in **Learn this effect...**: add an effect's manuals (PDF files or web pages) and the AI
   proposes what the effect is good for and, for each setting the manual explains, what it does, a safe range and
   whether it matters most. **Apply** fills the settings you haven't written yourself; nothing is kept until Save.

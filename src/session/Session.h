@@ -12,6 +12,7 @@
 #include "session/Suggestions.h"
 
 #include <set>
+#include "session/SoundIndexService.h"
 #include "session/Tuner.h"
 #include "plugins/DeviceList.h"
 #include "plugins/SandboxList.h"
@@ -65,6 +66,8 @@ public:
 
     /** What can be added to channels and effect slots (bundled devices, plus the app's scanned plugins). */
     plugins::DeviceList& getDeviceList() noexcept { return deviceList; }
+    /** The sound index (Options › Sound index, the Browser's Refresh sound index, the Track creator). */
+    SoundIndexService& getSoundIndex() noexcept { return soundIndex; }
 
     /** The project and every device's current settings, ready to save. */
     project::ProjectData captureProjectData() const;
@@ -284,6 +287,7 @@ private:
     std::unique_ptr<engine::DeviceFactory> devices;
     std::map<juce::String, std::vector<std::pair<juce::String, juce::StringArray>>> deviceChoices; // by device
     plugins::DeviceList deviceList;
+    SoundIndexService soundIndex { deviceList };
     commands::CommandHistory history;
     Suggestions suggestions { history };
     std::unique_ptr<tracktion::Edit> edit;

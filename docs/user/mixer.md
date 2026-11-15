@@ -88,7 +88,7 @@ so the assistant and coding agents would have to guess.
   what Spinus knew of it.
 - **Export...** saves it as a file to share (facts only, no manuals' text). **Import...** reads such a file:
   it fills the settings you haven't set yourself, and your own words stay.
-- It is kept in Spinus's settings folder, beside the [sound index](track-creator.md#your-sounds), and works
+- It is kept in Spinus's settings folder, beside the [sound index](sound-index.md), and works
   the same for Spinus's own effects and any plugin.
 - The assistant's music tools and coding agents ([MCP and `--run`](command-line.md)) read it: what an effect is
   good for (so asking for "drum glue" can find the compressor you taught that), and for each setting what it

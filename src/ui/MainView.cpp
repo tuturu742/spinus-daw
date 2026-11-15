@@ -4,6 +4,7 @@
 #include "ColourMenu.h"
 
 #include "Analyzer.h"
+#include "SoundIndexWindow.h"
 #include "TrackCreator.h"
 #include "AudioTracks.h"
 #include "AutomationEditor.h"
@@ -540,6 +541,16 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
 
     topBar = std::make_unique<TopBar> (*this);
     browser = std::make_unique<Browser> (session);
+    session.getSoundIndex().getSampleFolders = [this] { return browser->getAllSampleFolders(); };
+    browser->onRefreshSoundIndex = [this] (const juce::String& instrument, const juce::Array<juce::File>& samples)
+    {
+        auto& index = session.getSoundIndex();
+        if (instrument.isNotEmpty() && ! index.refreshInstrument (instrument))
+            hintBar.showMessage ("Spinus can't measure this instrument for the sound index.");
+        if (! samples.isEmpty())
+            index.refreshSamples (samples);
+        hintBar.showMessage (index.getStatusText());
+    };
     browser->onUse = [this] (const plugins::DeviceList::Entry& e) { useDevice (e); };
     browser->onUseSample = [this] (const juce::File& file)
     {
@@ -628,7 +639,6 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
     workspace.setPanelAvailable ("analyzer", false); // experimental: until Options > AI says otherwise
     {
         auto creator = std::make_unique<TrackCreator> (session, nullptr);
-        creator->getSampleFolders = [this] { return browser->getAllSampleFolders(); }; // what the sound index measures
         creator->onSetUpEngine = [this]
         {
             showAiSettings();
@@ -758,6 +768,8 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
 MainView::~MainView()
 {
     shortcuts::forget (commandManager);
+    SoundIndexWindow::close();
+    session.getSoundIndex().getSampleFolders = nullptr;
     layoutKeeper = nullptr;
     if (keepLastLayout)
         layouts->setLast (getCurrentLayout());
@@ -1890,6 +1902,7 @@ juce::PopupMenu MainView::getMenuForIndex (int index, const juce::String&)
         menu.addCommandItem (cm, windowsPlugins); // elsewhere Windows plugins are native ones
 #endif
         menu.addCommandItem (cm, aiSettings);
+        menu.addCommandItem (cm, soundIndex);
         menu.addCommandItem (cm, editShortcuts);
         menu.addSeparator();
         menu.addCommandItem (cm, toggleMetronome);
@@ -2075,6 +2088,7 @@ void MainView::getAllCommands (juce::Array<juce::CommandID>& ids)
                     getFreePlugins,
                     windowsPlugins,
                     aiSettings,
+                    soundIndex,
                     editShortcuts,
                     layout1,
                     layout2,
@@ -2288,6 +2302,11 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
             "Download the free open-source plugins Spinus works with: Surge XT, LSP Plugins, Dragonfly Reverb",
             "Options", 0);
         info.setActive (downloads != nullptr);
+        break;
+    case soundIndex:
+        info.setInfo ("Sound index...",
+                      "What Spinus measured of your instruments and samples: update it, see problems, choose plugins",
+                      "Options", 0);
         break;
     case aiSettings:
         info.setInfo ("AI...", "Turn AI features on or off; connections to model providers or a local model", "Options",
@@ -2579,6 +2598,10 @@ bool MainView::perform (const InvocationInfo& info)
 
     case aiSettings:
         showAiSettings();
+        return true;
+
+    case soundIndex:
+        SoundIndexWindow::show (session.getSoundIndex(), this);
         return true;
 
     case newProject:

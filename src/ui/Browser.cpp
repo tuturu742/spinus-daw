@@ -5,6 +5,7 @@
 #include "dsp/sampler/SamplerProcessor.h"
 #include "project/AudioImport.h"
 #include "project/ProjectFiles.h"
+#include "session/InstrumentPresets.h"
 
 namespace spinus::ui
 {
@@ -941,6 +942,9 @@ void Browser::showRowMenu (int row)
                                  [this, key = entry.key, format] { devices.preferFormat (key, format); });
             menu.addSubMenu ("Use the version", formats);
         }
+        if (entry.instrument && entry.available && onRefreshSoundIndex)
+            menu.addItem ("Refresh sound index (measure its presets again)",
+                          [this, key = InstrumentPresets::libraryOf (entry.device)] { onRefreshSoundIndex (key, {}); });
     }
     else if (r.kind == RowKind::problem)
     {
@@ -978,6 +982,9 @@ void Browser::showRowMenu (int row)
                           if (onSliceSample)
                               onSliceSample (file);
                       });
+        if (onRefreshSoundIndex)
+            menu.addItem ("Refresh sound index (measure it again)",
+                          [this, file] { onRefreshSoundIndex ({}, { file }); });
         menu.addItem ("Show in the file manager", [file] { file.revealToUser(); });
     }
     else if (r.kind == RowKind::folder)
@@ -995,6 +1002,9 @@ void Browser::showRowMenu (int row)
                           sampleIndexValid = false;
                           rebuildRows();
                       });
+        if (onRefreshSoundIndex)
+            menu.addItem ("Refresh sound index (measure its samples again)",
+                          [this, folder] { onRefreshSoundIndex ({}, { folder }); });
         menu.addItem ("Show in the file manager", [folder] { folder.revealToUser(); });
     }
     else if (r.kind == RowKind::section && r.key == "samples")
