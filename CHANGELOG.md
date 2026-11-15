@@ -7,6 +7,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - **Update sound index** listens to several instruments at once (up to 4, half your processor cores), each in a
   helper of its own, so an update with many instruments finishes sooner. Windows plugins still go one at a time.
+- Exports render on one thread. Tracktion's multi-threaded renderer could, on a busy computer, start a block
+  while a helper thread was still finishing the last one: a crash or wrong audio during an export. Exports with
+  heavy plugins may take a little longer.
 - **Update sound index** is quicker: an instrument whose presets are files (Surge XT's patches, preset folders you
   chose) is no longer loaded again at every update when none of its files changed, and a silent preset after the
   first is given 3 seconds to sound instead of 10.

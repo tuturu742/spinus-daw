@@ -12,6 +12,18 @@ class PipeWireInput;
     The Engine is the playback backend only. The Spinus Model is the source of
     truth; the Engine Adapter will compile it into a Tracktion Edit.
 */
+/** While one exists, Tracktion renders on a single thread (an export): its multi-threaded player can let a
+    worker still finishing one block overlap the next when the computer is busy, which breaks the render (a crash,
+    or wrong audio). Live playback keeps its threads, unless its graph is rebuilt meanwhile. Message thread. */
+class SingleThreadedRender
+{
+public:
+    SingleThreadedRender();
+    ~SingleThreadedRender();
+    static bool isActive() noexcept;
+    JUCE_DECLARE_NON_COPYABLE (SingleThreadedRender)
+};
+
 class EngineHost
 {
 public:

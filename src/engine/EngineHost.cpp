@@ -19,10 +19,18 @@ namespace spinus
 
 namespace
 {
+std::atomic<int> singleThreadedRenders { 0 };
+
 class SpinusEngineBehaviour : public tracktion::EngineBehaviour
 {
 public:
     explicit SpinusEngineBehaviour (bool shouldOpenDevice) : openDevice (shouldOpenDevice) {}
+
+    /** One thread while an export renders (SingleThreadedRender); Tracktion's default otherwise. */
+    int getNumberOfCPUsToUseForAudio() override
+    {
+        return SingleThreadedRender::isActive() ? 1 : tracktion::EngineBehaviour::getNumberOfCPUsToUseForAudio();
+    }
 
     bool autoInitialiseDeviceManager() override { return openDevice; }
 
@@ -99,6 +107,10 @@ public:
     PipeWireInput* pipeWireInput = nullptr; // the EngineHost's, while it lives
 };
 } // namespace
+
+SingleThreadedRender::SingleThreadedRender() { ++singleThreadedRenders; }
+SingleThreadedRender::~SingleThreadedRender() { --singleThreadedRenders; }
+bool SingleThreadedRender::isActive() noexcept { return singleThreadedRenders.load() > 0; }
 
 namespace
 {

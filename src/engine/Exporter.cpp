@@ -230,6 +230,7 @@ void ExportJob::start()
     noteStart (settings.stems ? "Export with stems" : "Export",
                plannedFiles.empty() ? juce::File() : plannedFiles.front(), settings);
     running = true;
+    singleThreaded.emplace(); // its renders' players are made later, on each render's first block
     cancelRequested = false;
     current = 0;
     firstStepSamples = 0;
@@ -645,6 +646,7 @@ void ExportJob::finish (const Result& result)
     handle.reset();
     adapter.reset();
     edit.reset();
+    singleThreaded.reset();
 
     // A failed or cancelled export leaves no half-written files behind.
     if (! result.ok)
