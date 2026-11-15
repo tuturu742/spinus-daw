@@ -16,15 +16,8 @@ const Theme& themeOf (const juce::Component& c)
 }
 } // namespace
 
-SoundIndexView::SoundIndexView (const juce::File& folder) : marked (folder)
+SoundIndexView::SoundIndexView (const juce::File& f) : folder (f), marked (f)
 {
-    SoundIndex index (folder);
-    index.load();
-    all = index.rows();
-    marked.load();
-    for (const auto& [key, instrument] : index.instruments)
-        for (const auto& sound : instrument.sounds)
-            ids[instrument.source.name + "\n" + sound["name"].toString()] = { key, sound["id"].toString() };
     intro.setText (
         "What Spinus measured of your instruments' presets and your samples, and the role it guesses "
         "for each (from its name when the name says, otherwise from how it sounds). Search by name, "
@@ -40,27 +33,24 @@ SoundIndexView::SoundIndexView (const juce::File& folder) : marked (folder)
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &count, &searchBox, &list })
         addAndMakeVisible (c);
     setSize (760, 520);
-    search ({});
+    reload();
+}
+
+void SoundIndexView::reload()
+{
+    SoundIndex index (folder);
+    index.load();
+    all = index.rows();
+    marked = UserRoles (folder);
+    marked.load();
+    ids.clear();
+    for (const auto& [key, instrument] : index.instruments)
+        for (const auto& sound : instrument.sounds)
+            ids[instrument.source.name + "\n" + sound["name"].toString()] = { key, sound["id"].toString() };
+    search (searchBox.getText());
 }
 
 SoundIndexView::~SoundIndexView() { list.setModel (nullptr); }
-
-void SoundIndexView::show (const juce::File& folder, juce::Component* near)
-{
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (new SoundIndexView (folder));
-    options.dialogTitle = "Sound index";
-    options.componentToCentreAround = near;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    if (near != nullptr)
-        if (auto* lf = dynamic_cast<SpinusLookAndFeel*> (&near->getLookAndFeel()))
-        {
-            options.dialogBackgroundColour = lf->getTheme().get ("panel");
-            options.content->setLookAndFeel (lf);
-        }
-    options.launchAsync();
-}
 
 juce::String SoundIndexView::describe (const SoundIndex::Row& row)
 {
@@ -76,11 +66,11 @@ void SoundIndexView::search (const juce::String& text)
         const auto haystack =
             (row.name + " " + row.source + " " + row.role + " " + row.detail + (row.sample ? " sample" : " preset"))
                 .toLowerCase();
-        if (std::all_of (words.begin(), words.end(),
-                         [&] (const juce::String& w) { return w.isEmpty() || haystack.contains (w); }))
+        if (std::all_of (words.begin(), words.end(), [&] (const juce::String& w)
+                         { return w.unquoted().isEmpty() || haystack.contains (w.unquoted()); }))
             shown.push_back (row);
     }
-    count.setText (all.empty() ? juce::String ("The sound index is empty: Update sound index in the Track creator.")
+    count.setText (all.empty() ? juce::String ("The sound index is empty: click Update sound index.")
                                : juce::String ((int)shown.size()) + " of " + juce::String ((int)all.size()) + " sounds",
                    juce::dontSendNotification);
     list.updateContent();

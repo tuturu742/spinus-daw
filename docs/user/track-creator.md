@@ -317,63 +317,11 @@ your list of songs.
 
 ## Your sounds
 
-To pick sounds for a new song later, the Track creator first gets to know the sounds you have. Under
-**Sounds you have**, click **Update sound index**. Spinus then listens to:
-
-- **Your instruments' presets**: 3x Osc and the Drum Machine, and the free instruments you downloaded
-  through Spinus (Surge XT, Odin 2, OB-Xf, Six Sines). Your other instrument plugins (CLAP, VST3, LV2,
-  VST2, and Windows plugins added through Spinus) are listened to only if you tick them: click **Your
-  plugins...** and tick the ones you want (click again to untick). This keeps the first update quick, and
-  Spinus loads none of your own plugins unless you ask. Each preset plays a few short test notes, which
-  nobody hears.
-- **Your samples**: the files in the folders you added in the **Browser › Samples** list ("Add a folder of
-  samples"), and the folders inside them. Nothing else on your disk is looked at.
-
-For each sound Spinus notes how it starts and fades, how bright it is, whether it has a clear pitch, which
-notes it plays, whether it plays chords, and what it is probably for: **bass, lead, pad, pluck, keys,
-drums** or **fx**. A sample gets a kind (**kick, snare, clap, hat, cymbal, tom, perc, bass** or
-**other**), and a loop its tempo, length in bars and key where Spinus can tell. A preset or file whose name
-says what it is ("Deep Sub Bass", a "Kicks" folder, "128 BPM", "D#min") is taken at its word. Files that are
-not audio (MIDI files, project files, text, zip archives) are left out; an audio file named with the wrong
-extension (an AIFF called .wav) is still read.
-
-- It runs **in the background**, so you can keep working; the line under **Sounds you have** shows how far
-  it is. **Stop** stops it: what was done is kept, and the next update carries on from there.
-- Spinus listens to **several instruments at once** (up to 4, depending on how many processor cores your
-  computer has), each in a helper of its own; Windows plugins go one at a time. The first time still takes a
-  while (Surge XT alone has about 3,000 presets: about 20 minutes on a fast computer). After that, **only what is new or changed** is listened to: a new plugin, an updated one, new
-  preset files, new or changed samples. Removed ones leave the index.
-- **Plugins can't crash Spinus here**: the listening happens in a separate helper program. A preset that
-  makes it crash or freeze is skipped and counted as a problem; so is a plugin that doesn't load (it is
-  tried again once it's updated) and a preset that doesn't load. To see what each problem is, click **Show
-  sounds** and search `problem`: each says which instrument and preset, and what went wrong ("the instrument
-  crashed on this preset, so it is left out").
-- **Measured again by a newer Spinus:** when a newer version of Spinus listens better (it now waits for
-  instruments that load their sounds slowly, as big sampled guitars and basses do), the plugins an older
-  version found silent, or that failed, are listened to again at the next update. The ones that worked are
-  kept as they were, so the update stays quick.
-- **Measure again**: to listen to a plugin anew yourself, click **Your plugins...**, then **Measure again**
-  and the plugin, or **Measure again every silent or failed one**. Spinus forgets what it heard from it and
-  updates the index at once (an installed plugin you hadn't ticked is ticked for it).
-- Some plugins stay silent until you choose a sound in their own window: a drum player that needs a kit
-  picked first, for example. Set it up once and keep it with [Save this sound](#save-this-sound).
-- **Show sounds...** lists everything Spinus measured, with its guess and a few details ("attack 5 ms,
-  sustained, brightness 820 Hz, C1-C7, chords"), and a search box: type "bass", "pad", "Surge" or "kick
-  sample" to check its guesses. When a name says one thing and the sound another, both are shown ("sounds
-  like pad").
-- It needs no AI connection and no analysis engine, and nothing is sent anywhere. The index is kept in
-  Spinus's settings folder (`~/.config/Spinus DAW/ai/sounds`) and can be deleted in
-  [Saved analyses](#saved-analyses).
-
-**How Spinus guesses a role.** When a preset's name or category says its role, that decides. For the others,
-Spinus learns from your own presets: the ones whose names say "bass", "pad" and so on show it how each role
-sounds, and a preset without such a name gets the role of the presets it sounds most like. (With fewer than
-about 60 named presets, simple rules decide instead.) On Surge XT's own presets, each guessed without its
-name, this gets the role right for 57 % of them, against 44 % with the rules alone; for basses 69 % instead
-of 14 %. Plucks are still often taken for keys or pads.
-
-The guesses are a program's, made from a few test notes: a bass preset that sounds bright can be called a
-lead, and an unusual drum sample "perc" or "other". The next step uses them only as a first sorting.
+To pick sounds for a new song, the Track creator uses the [sound index](sound-index.md): what Spinus measured
+of your instruments' presets and your samples. Under **Sounds you have**, the line says how big it is and how
+far an update is; **Update sound index** brings it up to date (only what is new or changed), **Stop** stops
+it, and **Sound index...** opens **Options › Sound index**, where you choose which of your plugins it
+measures, see its problems and its sounds, and measure an instrument again.
 
 ## Sounds for each part
 
@@ -411,7 +359,7 @@ and drums": those three), or empty. Then:
   bass, "Grand Piano" a piano); otherwise a lead, to change.
 - **Your own roles for your sounds.** Spinus guesses each sound's role; you can set it yourself. In the
   instrument menu (**Other sound...** or **From an instrument**), **Mark it as** gives an instrument a role
-  (for example a plugin whose default sound is a rhythm guitar); in **Show sounds...**, right-click a preset
+  (for example a plugin whose default sound is a rhythm guitar); in **Options › Sound index**, Sounds tab, right-click a preset
   and **Use as** gives that preset one. Your roles come first wherever roles are used (choosing sounds,
   parts from an instrument), are kept beside the sound index, and stay when the index is updated or deleted.
 - **Learn this instrument.** Many sampled instruments (guitars and basses especially) use some keys as switches:

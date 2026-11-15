@@ -83,6 +83,8 @@ public:
     std::function<void (const juce::File&)> onAddSampleAsTrack;
     /** "Open in Beat Slicer" on a sample. */
     std::function<void (const juce::File&)> onSliceSample;
+    /** "Refresh sound index" on an instrument (its sound index key) or on samples (a file, or a folder). */
+    std::function<void (const juce::String& instrument, const juce::Array<juce::File>& samples)> onRefreshSoundIndex;
 
     /** The sample a Browser drag carries, if it carries one. */
     static std::optional<juce::File> sampleFromDrag (const juce::var& description);

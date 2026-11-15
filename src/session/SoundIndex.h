@@ -192,6 +192,8 @@ public:
     /** Forgets what was measured of this instrument (its sounds and problems), so the next update measures it
         all again. Saves the index. False when it is not in the index. */
     bool measureAgain (const juce::String& key);
+    /** This instrument leaves the index (its file too), until an update measures it again. Saves the index. */
+    bool forget (const juce::String& key);
     /** measureAgain for every instrument that is silentOrFailed(). Returns how many. */
     int measureAgainSilentOrFailed();
 
@@ -201,7 +203,7 @@ public:
         juce::int64 size = 0, modified = 0;
     };
     /** The audio files in these folders and the folders inside them (WAV, AIFF, FLAC, Ogg, MP3; at most
-        200 MB each), sorted by path. */
+        200 MB each), sorted by path. A file given in place of a folder is listed when it is one of those. */
     static std::vector<SampleFile> listSampleFiles (const juce::Array<juce::File>& folders,
                                                     const std::function<bool()>& shouldStop = {});
     /** Which of these files are new or changed (path, size and modification time) since they were measured. */
@@ -272,6 +274,11 @@ public:
     /** Starts an update (unless one runs). `onProgress` and `onFinished` are called on the message thread. */
     bool start (std::vector<SoundSource>, juce::Array<juce::File> sampleFolders,
                 std::function<void (const Progress&)> onProgress, std::function<void (const Result&)> onFinished);
+    /** Other work on the index, on the indexer's thread (updateInstrument, updateSamples), with the index loaded
+        from the folder; `shouldStop` and `onProgress` as for update(). */
+    using Job = std::function<Result (SoundIndex&, const std::function<bool()>& shouldStop,
+                                      const std::function<void (const Progress&)>& onProgress)>;
+    bool start (Job, std::function<void (const Progress&)> onProgress, std::function<void (const Result&)> onFinished);
     void cancel();
     bool isRunning() const { return isThreadRunning(); }
     Progress getProgress() const;
@@ -287,6 +294,12 @@ public:
         as it is. Saves the index. */
     static Result updateInstrument (SoundIndex&, const Options&, const SoundSource&,
                                     const std::function<bool()>& shouldStop);
+    /** These sample files, and the ones in these folders, measured again whether they changed or not (the
+        Browser's Refresh sound index); the index's other samples are left as they are. Saves the index. */
+    static Result updateSamples (SoundIndex&, const Options&, const juce::Array<juce::File>& filesOrFolders,
+                                 const std::function<bool()>& shouldStop,
+                                 const std::function<void (const Progress&)>& onProgress);
+    const Options& getOptions() const noexcept { return options; }
 
     /** How many instruments an update measures at once: `helpers`, or half the processor cores, at most 4
         (each helper holds a plugin and its samples in memory). */
@@ -314,8 +327,7 @@ private:
 
     juce::File folder;
     Options options;
-    std::vector<SoundSource> sources;
-    juce::Array<juce::File> folders;
+    Job job;
     std::function<void (const Progress&)> progressCallback;
     std::function<void (const Result&)> finishedCallback;
     mutable std::mutex lock;

@@ -41,10 +41,10 @@ namespace spinus::ui
     files downloaded (unless the library already has what they would find); it says what is missing and
     offers to fix it, like the Analyzer.
 
-    The second step, the sound index (SoundIndex), lives here too: Update sound index measures how the
-    instruments and samples on this computer sound, in the background and in a separate program
-    (SoundIndexer), so later steps can choose the closest sound the user has for each part. It needs neither
-    AI nor the AI service.
+    The sound index (Session::getSoundIndex(), shown in full in Options › Sound index) is updated from here too:
+    it measures how the instruments and samples on this computer sound, in the background and in a separate
+    program, so later steps can choose the closest sound the user has for each part. It needs neither AI nor
+    the AI service.
 
     Message thread only (each song is read and decoded on a thread of its own). */
 class TrackCreator final : public Panel,
@@ -133,38 +133,16 @@ public:
     //==============================================================================
     // The sound index.
 
-    /** The Browser's sample folders (the main window sets this). */
-    std::function<juce::Array<juce::File>()> getSampleFolders;
-    /** The instruments to measure: by default getIndexedSoundSources(). Tests set their own. */
-    std::function<std::vector<SoundSource>()> getSoundSources;
-    /** Where the index is kept (SoundIndex::getDefaultFolder()) and how the helper runs (tests). */
-    void setSoundIndexFolder (const juce::File&);
-    juce::File getSoundIndexFolder() const { return soundIndexFolder; }
-    void setSoundIndexOptions (SoundIndexer::Options o) { soundOptions = std::move (o); }
+    /** Where the index is kept and how the helper runs: the session's sound index (tests set them there). */
+    juce::File getSoundIndexFolder() const { return session.getSoundIndex().getFolder(); }
 
     /** Brings the index up to date in the background (what is new or changed); progress shows in the panel. */
-    void updateSoundIndex();
-    void cancelSoundIndex();
-    bool isIndexingSounds() const noexcept { return indexing; }
+    void updateSoundIndex() { session.getSoundIndex().update(); }
+    void cancelSoundIndex() { session.getSoundIndex().cancel(); }
+    bool isIndexingSounds() const noexcept { return session.getSoundIndex().isUpdating(); }
     juce::String getSoundIndexText() const { return soundsStatus.getText(); }
-    /** The last update's result (tests); none before the first. */
-    const std::optional<SoundIndexer::Result>& getLastSoundIndexResult() const noexcept { return lastSoundResult; }
-    /** Opens the list of indexed sounds, with search. */
+    /** Opens Options › Sound index: the list of sounds and instruments, with search, problems and settings. */
     void showSounds();
-
-    /** Which installed plugins (not Spinus's own or the downloaded ones, always measured) the sound index measures
-        too: by their index key, chosen by the user (none at first), remembered beside the index. */
-    juce::StringArray getIncludedPlugins() const;
-    void setIncludedPlugins (const juce::StringArray& keys);
-    /** Every instrument the Browser lists, and those the index measures: Spinus's own, the downloaded ones and
-        the installed plugins the user ticked. */
-    std::vector<SoundSource> getAllSoundSources() const;
-    std::vector<SoundSource> getIndexedSoundSources() const;
-    /** Opens the menu of installed plugins to tick, with Measure again for those already measured. */
-    void choosePlugins();
-    /** Measure again: forgets what the index has of this instrument (an installed plugin is ticked too) and
-        updates the index, so it is measured anew. An empty key: every silent or failed one. Returns how many. */
-    int measureAgain (const juce::String& key);
 
     //==============================================================================
     // Sounds for each part (milestone 3).
@@ -239,7 +217,7 @@ private:
     void forget();
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void recall();
-    void showSoundSummary (const juce::String& after = {});
+    void showSoundSummary();
 
     Session& session;
     ai::AiService* service = nullptr;
@@ -278,15 +256,11 @@ private:
     juce::TextEditor summaryText;
     std::unique_ptr<core::FileDialog> chooser;
 
-    juce::File soundIndexFolder = SoundIndex::getDefaultFolder();
-    SoundIndexer::Options soundOptions;
-    std::unique_ptr<SoundIndexer> indexer;
-    std::optional<SoundIndexer::Result> lastSoundResult;
-    bool soundSummaryShown = false, indexing = false;
+    bool soundSummaryShown = false;
     juce::Label soundsTitle;
     MessageLabel soundsStatus;
     juce::TextButton updateSoundsButton { "Update sound index" }, stopSoundsButton { "Stop" },
-        showSoundsButton { "Show sounds..." }, pluginsButton { "Your plugins..." };
+        showSoundsButton { "Sound index..." };
     juce::TextButton styleTab { "1. References" }, describeTab { "2. Description" }, soundsTab { "3. Parts" },
         songTab { "4. Write a song" };
     std::unique_ptr<DescribeSongPanel> describer;

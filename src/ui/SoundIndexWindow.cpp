@@ -1,0 +1,529 @@
+#include "SoundIndexWindow.h"
+
+#include "Theme.h"
+#include "WindowStacking.h"
+
+namespace spinus::ui
+{
+
+namespace
+{
+const Theme& themeOf (const juce::Component& c)
+{
+    static const Theme fallback = Theme::dark();
+    auto* lf = dynamic_cast<SpinusLookAndFeel*> (&c.getLookAndFeel());
+    return lf != nullptr ? lf->getTheme() : fallback;
+}
+
+juce::String count (int n, const char* one, const char* many) { return juce::String (n) + " " + (n == 1 ? one : many); }
+} // namespace
+
+//==============================================================================
+/** The Instruments tab: the list, a tick box on each row, and buttons for the selected one. */
+class SoundIndexPage::InstrumentList final : public juce::Component, private juce::ListBoxModel
+{
+public:
+    explicit InstrumentList (SoundIndexPage& p) : page (p)
+    {
+        intro.setText ("Spinus's own instruments and the free ones it downloads are always measured. Tick which of "
+                       "your other plugins it measures too (it loads none of them unless you tick them). Select an "
+                       "instrument to measure it again, forget its sounds or see them.",
+                       juce::dontSendNotification);
+        intro.setJustificationType (juce::Justification::topLeft);
+        list.setModel (this);
+        list.setRowHeight (34);
+        againButton.setTooltip ("Forget what was measured of it and measure all its presets again");
+        againButton.onClick = [this] { page.measureAgain (list.getSelectedRow()); };
+        forgetButton.setTooltip ("Its sounds leave the index, and it is unticked (Spinus's own come back at the next "
+                                 "update)");
+        forgetButton.onClick = [this] { page.forget (list.getSelectedRow()); };
+        showButton.onClick = [this] { page.showSoundsOf (list.getSelectedRow()); };
+        for (auto* c :
+             std::initializer_list<juce::Component*> { &intro, &list, &againButton, &forgetButton, &showButton })
+            addAndMakeVisible (c);
+        updateButtons();
+    }
+
+    void refresh()
+    {
+        list.updateContent();
+        list.repaint();
+        updateButtons();
+    }
+
+    void updateButtons()
+    {
+        const auto row = list.getSelectedRow();
+        const bool chosen = juce::isPositiveAndBelow (row, (int)page.instruments.size());
+        const bool busy = page.index.isUpdating();
+        againButton.setEnabled (chosen && ! busy && page.instruments[(size_t)row].installed);
+        forgetButton.setEnabled (chosen && ! busy);
+        showButton.setEnabled (chosen);
+    }
+
+    void resized() override
+    {
+        auto area = getLocalBounds().reduced (10);
+        intro.setBounds (area.removeFromTop (40));
+        auto buttons = area.removeFromBottom (28);
+        againButton.setBounds (buttons.removeFromLeft (130).reduced (0, 1));
+        buttons.removeFromLeft (6);
+        forgetButton.setBounds (buttons.removeFromLeft (140).reduced (0, 1));
+        buttons.removeFromLeft (6);
+        showButton.setBounds (buttons.removeFromLeft (130).reduced (0, 1));
+        area.removeFromBottom (6);
+        list.setBounds (area);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& theme = themeOf (*this);
+        g.fillAll (theme.get ("panel"));
+        intro.setColour (juce::Label::textColourId, theme.get ("textDim"));
+        list.setColour (juce::ListBox::backgroundColourId, theme.get ("background"));
+    }
+
+private:
+    static constexpr int tickWidth = 28;
+
+    int getNumRows() override { return (int)page.instruments.size(); }
+
+    void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected) override
+    {
+        if (! juce::isPositiveAndBelow (row, (int)page.instruments.size()))
+            return;
+        const auto& theme = themeOf (*this);
+        const auto& r = page.instruments[(size_t)row];
+        if (selected)
+            g.fillAll (theme.get ("accent").withAlpha (0.25f));
+        auto area = juce::Rectangle<int> (0, 0, width, height).reduced (6, 2);
+        auto tick = area.removeFromLeft (tickWidth).withSizeKeepingCentre (14, 14).toFloat();
+        g.setColour (theme.get (r.always ? "textDim" : "text"));
+        g.drawRoundedRectangle (tick, 2.0f, 1.0f);
+        if (r.measured)
+        {
+            juce::Path p;
+            p.startNewSubPath (tick.getX() + 3.0f, tick.getCentreY());
+            p.lineTo (tick.getX() + 6.0f, tick.getBottom() - 3.0f);
+            p.lineTo (tick.getRight() - 3.0f, tick.getY() + 3.0f);
+            g.strokePath (p, juce::PathStrokeType (1.8f));
+        }
+        auto top = area.removeFromTop (area.getHeight() / 2);
+        g.setFont (juce::FontOptions (13.5f));
+        g.setColour (theme.get (r.installed ? "text" : "textDim"));
+        g.drawFittedText (r.source.name, top.removeFromLeft (top.getWidth() * 60 / 100),
+                          juce::Justification::centredLeft, 1);
+        g.setColour (theme.get ("textDim"));
+        g.drawFittedText (r.source.badge + (r.always ? ", always measured" : juce::String()), top,
+                          juce::Justification::centredRight, 1);
+        g.setFont (juce::FontOptions (12.5f));
+        g.setColour (r.problem ? theme.get ("accent") : theme.get ("textDim"));
+        g.drawFittedText (r.state, area, juce::Justification::centredLeft, 1);
+    }
+
+    juce::String getTooltipForRow (int row) override
+    {
+        return juce::isPositiveAndBelow (row, (int)page.instruments.size()) ? page.instruments[(size_t)row].state
+                                                                            : juce::String();
+    }
+
+    void listBoxItemClicked (int row, const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu())
+        {
+            list.selectRow (row);
+            juce::PopupMenu menu;
+            const auto& r = page.instruments[(size_t)row];
+            menu.addSectionHeader (r.source.name);
+            if (! r.always && r.installed)
+                menu.addItem (r.measured ? "Don't measure it" : "Measure it too", ! page.index.isUpdating(), false,
+                              [this, row] { page.toggle (row); });
+            menu.addItem ("Measure again", r.installed && ! page.index.isUpdating(), false,
+                          [this, row] { page.measureAgain (row); });
+            menu.addItem ("Forget its sounds", ! page.index.isUpdating(), false, [this, row] { page.forget (row); });
+            menu.addItem ("Show its sounds", [this, row] { page.showSoundsOf (row); });
+            menu.showMenuAsync (juce::PopupMenu::Options());
+            return;
+        }
+        if (e.x < tickWidth + 6)
+            page.toggle (row);
+    }
+
+    void selectedRowsChanged (int) override { updateButtons(); }
+
+    SoundIndexPage& page;
+    juce::Label intro;
+    juce::ListBox list;
+    juce::TextButton againButton { "Measure again" }, forgetButton { "Forget its sounds" },
+        showButton { "Show its sounds" };
+};
+
+//==============================================================================
+/** The Samples tab: the Browser's sample folders. */
+class SoundIndexPage::FolderList final : public juce::Component, private juce::ListBoxModel
+{
+public:
+    explicit FolderList (SoundIndexPage& p) : page (p)
+    {
+        intro.setText ("The sound index measures the samples in the folders of the Browser's Samples list, and the "
+                       "folders inside them. Add or remove a folder there (right-click Samples). Only new or "
+                       "changed files are measured at each update; Measure again measures a whole folder anew.",
+                       juce::dontSendNotification);
+        intro.setJustificationType (juce::Justification::topLeft);
+        list.setModel (this);
+        list.setRowHeight (34);
+        againButton.onClick = [this] { page.measureFolderAgain (list.getSelectedRow()); };
+        for (auto* c : std::initializer_list<juce::Component*> { &intro, &list, &againButton })
+            addAndMakeVisible (c);
+        updateButtons();
+    }
+
+    void refresh()
+    {
+        list.updateContent();
+        list.repaint();
+        updateButtons();
+    }
+
+    void updateButtons()
+    {
+        againButton.setEnabled (juce::isPositiveAndBelow (list.getSelectedRow(), (int)page.folders.size()));
+    }
+
+    void resized() override
+    {
+        auto area = getLocalBounds().reduced (10);
+        intro.setBounds (area.removeFromTop (40));
+        againButton.setBounds (area.removeFromBottom (28).removeFromLeft (130).reduced (0, 1));
+        area.removeFromBottom (6);
+        list.setBounds (area);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& theme = themeOf (*this);
+        g.fillAll (theme.get ("panel"));
+        intro.setColour (juce::Label::textColourId, theme.get ("textDim"));
+        list.setColour (juce::ListBox::backgroundColourId, theme.get ("background"));
+    }
+
+private:
+    int getNumRows() override { return juce::jmax (1, (int)page.folders.size()); }
+
+    void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected) override
+    {
+        const auto& theme = themeOf (*this);
+        auto area = juce::Rectangle<int> (0, 0, width, height).reduced (8, 2);
+        if (page.folders.empty())
+        {
+            g.setColour (theme.get ("textDim"));
+            g.setFont (juce::FontOptions (13.0f));
+            g.drawFittedText ("No sample folders yet: add one in the Browser (right-click Samples).", area,
+                              juce::Justification::centredLeft, 1);
+            return;
+        }
+        if (! juce::isPositiveAndBelow (row, (int)page.folders.size()))
+            return;
+        const auto& r = page.folders[(size_t)row];
+        if (selected)
+            g.fillAll (theme.get ("accent").withAlpha (0.25f));
+        auto top = area.removeFromTop (area.getHeight() / 2);
+        g.setFont (juce::FontOptions (13.5f));
+        g.setColour (theme.get ("text"));
+        g.drawFittedText (r.folder.getFileName(), top.removeFromLeft (top.getWidth() / 2),
+                          juce::Justification::centredLeft, 1);
+        g.setColour (r.problems > 0 ? theme.get ("accent") : theme.get ("textDim"));
+        g.drawFittedText (count (r.samples, "sample measured", "samples measured") +
+                              (r.problems > 0 ? ", " + count (r.problems, "problem", "problems") : juce::String()),
+                          top, juce::Justification::centredRight, 1);
+        g.setFont (juce::FontOptions (12.0f));
+        g.setColour (theme.get ("textDim"));
+        g.drawFittedText (r.folder.getFullPathName(), area, juce::Justification::centredLeft, 1);
+    }
+
+    void selectedRowsChanged (int) override { updateButtons(); }
+
+    SoundIndexPage& page;
+    juce::Label intro;
+    juce::ListBox list;
+    juce::TextButton againButton { "Measure again" };
+};
+
+//==============================================================================
+SoundIndexPage::SoundIndexPage (SoundIndexService& service) : index (service)
+{
+    status.setJustificationType (juce::Justification::centredLeft);
+    status.setMinimumHorizontalScale (1.0f);
+    updateButton.setTooltip ("Measure what is new or changed: instruments, presets and sample files, in the "
+                             "background and in a separate program");
+    updateButton.onClick = [this] { index.update(); };
+    stopButton.onClick = [this] { index.cancel(); };
+    againButton.setTooltip ("Every instrument that did not load, or had a preset that crashed it or sounded silent, "
+                            "measured anew");
+    againButton.onClick = [this] { index.measureAgain ({}); };
+    deleteButton.setTooltip ("Delete everything measured (your saved sounds, roles and preset folders stay)");
+    deleteButton.onClick = [this] { confirmDelete(); };
+
+    instrumentList = std::make_unique<InstrumentList> (*this);
+    sounds = std::make_unique<SoundIndexView> (index.getFolder());
+    folderList = std::make_unique<FolderList> (*this);
+    tabs.addTab ("Instruments", juce::Colours::transparentBlack, instrumentList.get(), false);
+    tabs.addTab ("Sounds", juce::Colours::transparentBlack, sounds.get(), false);
+    tabs.addTab ("Samples", juce::Colours::transparentBlack, folderList.get(), false);
+    tabs.setTabBarDepth (28);
+    for (auto* c :
+         std::initializer_list<juce::Component*> { &status, &updateButton, &againButton, &deleteButton, &tabs })
+        addAndMakeVisible (c);
+    addChildComponent (stopButton);
+    index.addChangeListener (this);
+    setSize (820, 600);
+    reload();
+}
+
+SoundIndexPage::~SoundIndexPage() { index.removeChangeListener (this); }
+
+void SoundIndexPage::reload()
+{
+    SoundIndex measured (index.getFolder());
+    measured.load();
+
+    instruments.clear();
+    const auto included = index.getIncludedPlugins();
+    std::set<juce::String> listed;
+    auto describe = [] (InstrumentRow& row, const SoundIndex::Instrument& i)
+    {
+        int silent = 0;
+        for (const auto& s : i.sounds)
+            silent += (bool)s["silent"] ? 1 : 0;
+        if (i.problem.isNotEmpty())
+        {
+            row.state = "Did not load: " + i.problem;
+            row.problem = true;
+            return;
+        }
+        row.state = count (i.sounds.size(), "preset measured", "presets measured");
+        if (! i.complete)
+            row.state << " so far (stopped part way: the next update carries on)";
+        if (! i.problemPresets.isEmpty())
+            row.state << "; " << count (i.problemPresets.size(), "preset", "presets")
+                      << " crashed or froze it (search \"problem\" in Sounds)";
+        if (silent > 0)
+            row.state << "; " << count (silent, "is silent", "are silent");
+        row.problem = ! i.problemPresets.isEmpty() || silent > 0;
+    };
+    for (const auto& s : index.getAllSources())
+    {
+        if (! listed.insert (s.key).second)
+            continue;
+        InstrumentRow row;
+        row.source = s;
+        row.always = SoundIndexService::isAlwaysMeasured (s);
+        row.measured = row.always || included.contains (s.key);
+        if (const auto found = measured.instruments.find (s.key); found != measured.instruments.end())
+            describe (row, found->second);
+        else
+            row.state = row.measured ? "Not measured yet: click Update sound index"
+                                     : "Not measured: tick it to measure it at the next update";
+        instruments.push_back (std::move (row));
+    }
+    for (const auto& [key, i] : measured.instruments)
+        if (! listed.contains (key))
+        {
+            InstrumentRow row;
+            row.source = i.source;
+            row.installed = false;
+            describe (row, i);
+            row.state = "No longer installed (leaves the index at the next update): " + row.state;
+            instruments.push_back (std::move (row));
+        }
+    std::stable_sort (instruments.begin(), instruments.end(),
+                      [] (const InstrumentRow& a, const InstrumentRow& b)
+                      {
+                          if (a.measured != b.measured)
+                              return a.measured;
+                          return a.source.name.compareNatural (b.source.name) < 0;
+                      });
+
+    folders.clear();
+    for (const auto& f : index.getSampleFolders ? index.getSampleFolders() : juce::Array<juce::File>())
+    {
+        FolderRow row;
+        row.folder = f;
+        const auto prefix = f.getFullPathName() + juce::File::getSeparatorString();
+        for (const auto& s : measured.samples)
+            if (s.path.startsWith (prefix))
+            {
+                ++row.samples;
+                row.problems += s.info.hasProperty ("problem") ? 1 : 0;
+            }
+        folders.push_back (row);
+    }
+
+    instrumentList->refresh();
+    folderList->refresh();
+    sounds->reload();
+    updateButtons();
+}
+
+void SoundIndexPage::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    // Read again when nothing runs (an update ended, a tick, a forget); while one runs only the status changes.
+    if (! index.isUpdating())
+        reload();
+    updateButtons();
+}
+
+void SoundIndexPage::updateButtons()
+{
+    const bool busy = index.isUpdating();
+    status.setText (index.getStatusText(), juce::dontSendNotification);
+    updateButton.setEnabled (! busy);
+    stopButton.setVisible (busy);
+    againButton.setEnabled (! busy);
+    deleteButton.setEnabled (! busy);
+    instrumentList->updateButtons();
+    resized();
+}
+
+void SoundIndexPage::toggle (int row)
+{
+    if (! juce::isPositiveAndBelow (row, (int)instruments.size()))
+        return;
+    const auto& r = instruments[(size_t)row];
+    if (r.always || ! r.installed)
+        return;
+    index.setIncluded (r.source.key, ! r.measured);
+}
+
+void SoundIndexPage::measureAgain (int row)
+{
+    if (! juce::isPositiveAndBelow (row, (int)instruments.size()) || ! instruments[(size_t)row].installed)
+        return;
+    index.refreshInstrument (instruments[(size_t)row].source.key);
+}
+
+void SoundIndexPage::forget (int row)
+{
+    if (juce::isPositiveAndBelow (row, (int)instruments.size()))
+        index.forget (instruments[(size_t)row].source.key);
+}
+
+void SoundIndexPage::showSoundsOf (int row)
+{
+    if (! juce::isPositiveAndBelow (row, (int)instruments.size()))
+        return;
+    tabs.setCurrentTabIndex (1);
+    sounds->setSearchText ("\"" + instruments[(size_t)row].source.name + "\"");
+    sounds->search (sounds->getSearchText());
+}
+
+void SoundIndexPage::measureFolderAgain (int row)
+{
+    if (juce::isPositiveAndBelow (row, (int)folders.size()))
+        index.refreshSamples ({ folders[(size_t)row].folder });
+}
+
+bool SoundIndexPage::deleteIndex()
+{
+    const bool deleted = index.deleteIndex();
+    reload();
+    return deleted;
+}
+
+void SoundIndexPage::confirmDelete()
+{
+    juce::AlertWindow::showAsync (
+        juce::MessageBoxOptions::makeOptionsOkCancel (
+            juce::MessageBoxIconType::QuestionIcon, "Delete the sound index?",
+            "Everything measured is deleted; the next Update sound index measures it all again (the first time "
+            "takes a while). Your saved sounds, the roles you gave and your preset folders stay.",
+            "Delete", "Cancel", this),
+        [safe = juce::Component::SafePointer (this)] (int result)
+        {
+            if (safe != nullptr && result == 1)
+                safe->deleteIndex();
+        });
+}
+
+void SoundIndexPage::paint (juce::Graphics& g)
+{
+    const auto& theme = themeOf (*this);
+    g.fillAll (theme.get ("panel"));
+    status.setColour (juce::Label::textColourId, theme.get ("text"));
+}
+
+void SoundIndexPage::resized()
+{
+    auto area = getLocalBounds().reduced (10);
+    status.setBounds (area.removeFromTop (40));
+    auto buttons = area.removeFromTop (28);
+    updateButton.setBounds (buttons.removeFromLeft (150).reduced (0, 1));
+    buttons.removeFromLeft (6);
+    if (stopButton.isVisible())
+    {
+        stopButton.setBounds (buttons.removeFromLeft (70).reduced (0, 1));
+        buttons.removeFromLeft (6);
+    }
+    againButton.setBounds (buttons.removeFromLeft (280).reduced (0, 1));
+    deleteButton.setBounds (buttons.removeFromRight (140).reduced (0, 1));
+    area.removeFromTop (8);
+    tabs.setBounds (area);
+}
+
+//==============================================================================
+namespace
+{
+SoundIndexWindow* openWindow = nullptr;
+}
+
+SoundIndexWindow::SoundIndexWindow (SoundIndexService& service)
+    : juce::DocumentWindow ("Sound index", juce::Colours::black, juce::DocumentWindow::closeButton, false)
+{
+    setUsingNativeTitleBar (true);
+    setContentOwned (new SoundIndexPage (service), true);
+    setResizable (true, false);
+    setResizeLimits (560, 380, 4000, 4000);
+    addToDesktop();
+    openWindow = this;
+}
+
+SoundIndexWindow::~SoundIndexWindow()
+{
+    if (openWindow == this)
+        openWindow = nullptr;
+}
+
+void SoundIndexWindow::show (SoundIndexService& service, juce::Component* near)
+{
+    if (openWindow != nullptr)
+    {
+        openWindow->toFront (true);
+        return;
+    }
+    auto* window = new SoundIndexWindow (service);
+    if (near != nullptr)
+    {
+        window->setLookAndFeel (&near->getLookAndFeel());
+        window->centreAroundComponent (near->getTopLevelComponent(), window->getWidth(), window->getHeight());
+        if (near->isOnDesktop() || near->getTopLevelComponent()->isOnDesktop())
+            keepAboveOwner (*window, *near->getTopLevelComponent());
+    }
+    window->setVisible (true);
+}
+
+SoundIndexPage* SoundIndexWindow::getOpenPage()
+{
+    return openWindow != nullptr ? dynamic_cast<SoundIndexPage*> (openWindow->getContentComponent()) : nullptr;
+}
+
+void SoundIndexWindow::close() { delete openWindow; }
+
+void SoundIndexWindow::closeButtonPressed()
+{
+    // Out of the button's own click first.
+    setVisible (false);
+    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<SoundIndexWindow> (this)]
+                                     { delete safe.getComponent(); });
+}
+
+} // namespace spinus::ui

@@ -8,7 +8,7 @@
 namespace spinus::ui
 {
 
-/** The sound index's sounds, to check what Spinus made of them ("Show sounds...", in the Track creator): every
+/** The sound index's sounds, to check what Spinus made of them (the Sounds tab of Options › Sound index): every
     measured preset and sample with where it comes from, its role guess (or a sample's class) and a few of
     its measurements, with a search over all of that ("bass", "pad", "loop"...). Right-click a preset to give it a
     role of your own ("Use as rhythm guitar"), kept beside the index (UserRoles), which the Track creator uses
@@ -19,8 +19,10 @@ public:
     explicit SoundIndexView (const juce::File& folder);
     ~SoundIndexView() override;
 
-    /** Opens it in a window of its own beside `near`. */
-    static void show (const juce::File& folder, juce::Component* near);
+    /** Reads the index again (after an update), keeping the search. */
+    void reload();
+    void setSearchText (const juce::String& text) { searchBox.setText (text, true); }
+    juce::String getSearchText() const { return searchBox.getText(); }
 
     /** Shows only the sounds whose name, source, role or details contain every word of `text`. */
     void search (const juce::String& text);
@@ -44,6 +46,7 @@ private:
     /** A preset row's instrument key and preset id (from the index), or empty. */
     std::pair<juce::String, juce::String> idsOf (const SoundIndex::Row&) const;
 
+    juce::File folder;
     std::vector<SoundIndex::Row> all, shown;
     std::map<juce::String, std::pair<juce::String, juce::String>> ids; // source + name -> instrument, preset
     UserRoles marked;

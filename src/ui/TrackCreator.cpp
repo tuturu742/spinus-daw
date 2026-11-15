@@ -2,7 +2,7 @@
 #include "ai/AnalysisJobs.h"
 
 #include "AnalysisLibraryView.h"
-#include "SoundIndexView.h"
+#include "SoundIndexWindow.h"
 #include "Theme.h"
 #include "session/PartSounds.h"
 #include "session/ProgramFolder.h"
@@ -219,14 +219,9 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
         "(only what is new or changed), in the background and in a separate program");
     updateSoundsButton.onClick = [this] { updateSoundIndex(); };
     stopSoundsButton.onClick = [this] { cancelSoundIndex(); };
-    showSoundsButton.setTooltip ("The sounds measured so far, with the role Spinus guesses for each, and a search");
+    showSoundsButton.setTooltip ("Options > Sound index: the sounds measured so far, with the role Spinus guesses "
+                                 "for each and a search, the problems, and which of your plugins it measures");
     showSoundsButton.onClick = [this] { showSounds(); };
-    soundOptions.helper = getHelperProgram ("spinus-plugin-scanner");
-    soundOptions.hostLibraries = plugins::getHostLibraries();
-    getSoundSources = [this] { return getIndexedSoundSources(); };
-    pluginsButton.setTooltip ("Spinus's own instruments and the free ones it downloads are always measured; tick "
-                              "which of your other installed plugins the sound index measures too");
-    pluginsButton.onClick = [this] { choosePlugins(); };
 
     styleTab.setClickingTogglesState (false);
     soundsTab.setClickingTogglesState (false);
@@ -251,11 +246,11 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
                                                                 c.songs.push_back (
                                                                     { r.digest, r.file.getFileNameWithoutExtension() });
                                                         c.library = getLibrary();
-                                                        c.indexFolder = soundIndexFolder;
+                                                        c.indexFolder = session.getSoundIndex().getFolder();
                                                         c.workFolder = workRoot.getChildFile ("sounds");
-                                                        c.helper = soundOptions;
+                                                        c.helper = session.getSoundIndex().getOptions();
                                                         c.service = service;
-                                                        c.sources = getAllSoundSources();
+                                                        c.sources = session.getSoundIndex().getAllSources();
                                                         return c;
                                                     });
     addChildComponent (*partSounds);
@@ -270,10 +265,10 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
                                                             if (r.status == Status::done)
                                                                 c.songs.add (r.file);
                                                         c.sounds = partSounds->makePlan();
-                                                        c.indexFolder = soundIndexFolder;
+                                                        c.indexFolder = session.getSoundIndex().getFolder();
                                                         c.parts = partSounds->getParts();
                                                         c.partsFromPage = true;
-                                                        c.helper = soundOptions;
+                                                        c.helper = session.getSoundIndex().getOptions();
                                                         return c;
                                                     });
     songWriter->onMix = [this] (const juce::File& reference)
@@ -296,12 +291,12 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
     projectLoads = session.getProjectLoadCount();
     projectFolder = session.getProjectFolder();
     session.addChangeListener (this);
+    session.getSoundIndex().addChangeListener (this);
     addChildComponent (*describer);
     addAndMakeVisible (styleTab);
     addAndMakeVisible (describeTab);
     addAndMakeVisible (soundsTab);
     addAndMakeVisible (songTab);
-    addAndMakeVisible (pluginsButton);
 
     for (auto* c : std::initializer_list<juce::Component*> { &intro, &addButton, &folderButton, &removeButton,
                                                              &clearButton, &list, &status, &summaryTitle, &summaryText,
@@ -320,9 +315,9 @@ TrackCreator::TrackCreator (Session& s, ai::AiService* a)
 TrackCreator::~TrackCreator()
 {
     session.removeChangeListener (this);
+    session.getSoundIndex().removeChangeListener (this);
     songWriter = nullptr; // stops its rendering, before its work folder goes
     partSounds = nullptr; // stops what it runs, before its work folder goes
-    indexer = nullptr;    // stops the update (its helper is killed)
     *alive = false;
     *run = false;
     task = nullptr;
@@ -353,8 +348,13 @@ juce::File TrackCreator::getProjectFile() const
     return projectFolder != juce::File() ? projectFolder.getChildFile ("track-creator.json") : juce::File();
 }
 
-void TrackCreator::changeListenerCallback (juce::ChangeBroadcaster*)
+void TrackCreator::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
+    if (source == &session.getSoundIndex())
+    {
+        showSoundSummary();
+        return;
+    }
     if (session.getProjectLoadCount() != projectLoads)
     {
         // Another project (New, Open): its own state, or none.
@@ -397,224 +397,23 @@ void TrackCreator::forget()
 
 void TrackCreator::showLibrary()
 {
-    AnalysisLibraryView::show (getLibrary(), this, soundIndexFolder,
+    AnalysisLibraryView::show (getLibrary(), this, session.getSoundIndex().getFolder(),
                                [safe = juce::Component::SafePointer (this)]
                                {
                                    if (safe != nullptr)
-                                       safe->showSoundSummary ("The sound index was deleted.");
+                                       safe->showSoundSummary();
                                });
 }
 
 //==============================================================================
-void TrackCreator::setSoundIndexFolder (const juce::File& folder)
-{
-    soundIndexFolder = folder;
-    showSoundSummary();
-}
-
-void TrackCreator::showSoundSummary (const juce::String& after)
+void TrackCreator::showSoundSummary()
 {
     soundSummaryShown = true;
-    const auto s = SoundIndex::readSummary (soundIndexFolder);
-    juce::String text;
-    if (s.updated == juce::Time())
-        text = "No sound index yet. Update sound index measures the presets of your instruments and the samples in "
-               "your Browser's sample folders, so the next steps can choose the closest sounds you have.";
-    else
-    {
-        auto count = [] (int n, const char* one, const char* many)
-        { return juce::String (n) + " " + (n == 1 ? one : many); };
-        text = "Sound index: " + count (s.instruments, "instrument", "instruments") + ", " +
-               count (s.presets, "preset", "presets") + ", " + count (s.samples, "sample", "samples") + "; updated " +
-               s.updated.formatted ("%d %b %Y %H:%M") +
-               (s.problems > 0 ? " (" + count (s.problems, "problem", "problems") +
-                                     ": Show sounds and search \"problem\" says what each is)"
-                               : juce::String()) +
-               ".";
-    }
-    if (after.isNotEmpty())
-        text = after + " " + text;
-    soundsStatus.setText (text, juce::dontSendNotification);
+    soundsStatus.setText (session.getSoundIndex().getStatusText(), juce::dontSendNotification);
     updateButtons();
 }
 
-void TrackCreator::updateSoundIndex()
-{
-    if (isIndexingSounds())
-        return;
-    indexer = std::make_unique<SoundIndexer> (soundIndexFolder, soundOptions);
-    indexing = true;
-    const auto sources = getSoundSources ? getSoundSources() : std::vector<SoundSource>();
-    const auto folders = getSampleFolders ? getSampleFolders() : juce::Array<juce::File>();
-    const bool started = indexer->start (
-        sources, folders,
-        [this] (const SoundIndexer::Progress& p)
-        {
-            if (p.stage.isEmpty())
-                return;
-            const auto stage = p.stage == "samples" ? juce::String ("samples") : juce::String ("instruments");
-            soundsStatus.setText (
-                "Updating the sound index: " + stage + " " + juce::String (juce::jmin (p.done + 1, p.total)) + " of " +
-                    juce::String (p.total) + (p.current.isNotEmpty() ? " (" + p.current + ")" : juce::String()) + ", " +
-                    juce::String (p.sounds) + " measured so far...",
-                juce::dontSendNotification);
-        },
-        [this] (const SoundIndexer::Result& r)
-        {
-            indexing = false;
-            lastSoundResult = r;
-            const auto measured = r.soundsMeasured + r.samplesMeasured, removed = r.soundsRemoved + r.samplesRemoved;
-            juce::String after =
-                r.cancelled ? "Stopped; what was measured is kept, Update carries on from there."
-                            : "Updated: " + juce::String (measured) + " sounds measured" +
-                                  (removed > 0 ? ", " + juce::String (removed) + " gone" : juce::String()) + ".";
-            showSoundSummary (after);
-        });
-    if (! started)
-        indexing = false;
-    if (! started)
-        soundsStatus.setText ("The sound index could not be updated now.", juce::dontSendNotification);
-    updateButtons();
-}
-
-void TrackCreator::cancelSoundIndex()
-{
-    if (indexer != nullptr)
-        indexer->cancel(); // reports the stop through its finished callback
-}
-
-void TrackCreator::showSounds() { SoundIndexView::show (soundIndexFolder, this); }
-
-juce::StringArray TrackCreator::getIncludedPlugins() const
-{
-    juce::StringArray keys;
-    // Kept in a variable: the array lives in the parsed file, which must outlive the loop.
-    const auto file = juce::JSON::parse (soundIndexFolder.getChildFile ("plugins.json"));
-    if (const auto* saved = file["include"].getArray())
-        for (const auto& k : *saved)
-            keys.add (k.toString());
-    return keys;
-}
-
-void TrackCreator::setIncludedPlugins (const juce::StringArray& keys)
-{
-    juce::Array<juce::var> chosen;
-    for (const auto& k : keys)
-        chosen.add (k);
-    soundIndexFolder.createDirectory();
-    soundIndexFolder.getChildFile ("plugins.json")
-        .replaceWithText (juce::JSON::toString (object ({ { "include", chosen } })) + "\n");
-}
-
-std::vector<SoundSource> TrackCreator::getAllSoundSources() const { return findSoundSources (session.getDeviceList()); }
-
-std::vector<SoundSource> TrackCreator::getIndexedSoundSources() const
-{
-    // Spinus's own and the downloaded ones (they have a stock type); an installed plugin only when ticked, so
-    // the first update measures what Spinus brings, quickly, and loads none of the user's plugins unasked.
-    const auto included = getIncludedPlugins();
-    auto sources = getAllSoundSources();
-    std::erase_if (sources,
-                   [&] (const SoundSource& s) { return s.stockType.isEmpty() && ! included.contains (s.key); });
-    return sources;
-}
-
-void TrackCreator::choosePlugins()
-{
-    juce::PopupMenu menu;
-    menu.addSectionHeader ("Measure these plugins too (Spinus's own and the downloaded ones always are)");
-    const auto included = getIncludedPlugins();
-    int count = 0;
-    for (const auto& s : getAllSoundSources())
-    {
-        if (s.stockType.isNotEmpty())
-            continue;
-        ++count;
-        menu.addItem (s.name + " (" + s.badge + ")", true, included.contains (s.key),
-                      [safe = juce::Component::SafePointer (this), key = s.key]
-                      {
-                          if (safe == nullptr)
-                              return;
-                          auto keys = safe->getIncludedPlugins();
-                          if (keys.contains (key))
-                              keys.removeString (key);
-                          else
-                              keys.add (key);
-                          safe->setIncludedPlugins (keys);
-                          safe->soundsStatus.setText ("Update sound index measures " + juce::String (keys.size()) +
-                                                          (keys.size() == 1 ? " plugin" : " plugins") +
-                                                          " of yours besides Spinus's own and the downloaded ones.",
-                                                      juce::dontSendNotification);
-                      });
-    }
-    if (count == 0)
-        menu.addItem ("No other instrument plugins are installed", false, false, [] {});
-
-    // Measure again: an instrument measured before (silent, say, or one that failed) measured anew.
-    SoundIndex index (soundIndexFolder);
-    index.load();
-    juce::PopupMenu again;
-    int failed = 0;
-    for (const auto& [key, instrument] : index.instruments)
-    {
-        const bool bad = instrument.silentOrFailed();
-        failed += bad ? 1 : 0;
-        again.addItem (instrument.source.name + (instrument.problem.isNotEmpty() ? " (did not load)"
-                                                 : bad                           ? " (silent or failed sounds)"
-                                                                                 : juce::String()),
-                       ! isIndexingSounds(), false,
-                       [safe = juce::Component::SafePointer (this), key]
-                       {
-                           if (safe != nullptr)
-                               safe->measureAgain (key);
-                       });
-    }
-    if (! index.instruments.empty())
-    {
-        menu.addSeparator();
-        menu.addItem ("Measure again every silent or failed one (" + juce::String (failed) + ")",
-                      failed > 0 && ! isIndexingSounds(), false,
-                      [safe = juce::Component::SafePointer (this)]
-                      {
-                          if (safe != nullptr)
-                              safe->measureAgain ({});
-                      });
-        menu.addSubMenu ("Measure again", again, ! isIndexingSounds());
-    }
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&pluginsButton));
-}
-
-int TrackCreator::measureAgain (const juce::String& key)
-{
-    if (isIndexingSounds())
-        return 0;
-    SoundIndex index (soundIndexFolder);
-    index.load();
-    juce::StringArray keys;
-    if (key.isNotEmpty())
-    {
-        if (index.instruments.count (key) > 0)
-            keys.add (key);
-    }
-    else
-        for (const auto& [k, instrument] : index.instruments)
-            if (instrument.silentOrFailed())
-                keys.add (k);
-    if (keys.isEmpty())
-        return 0;
-
-    // An installed plugin is measured only when ticked: ticked now, so the update reaches it.
-    auto included = getIncludedPlugins();
-    for (const auto& k : keys)
-    {
-        index.measureAgain (k);
-        if (index.instruments[k].source.stockType.isEmpty())
-            included.addIfNotAlreadyThere (k);
-    }
-    setIncludedPlugins (included);
-    updateSoundIndex();
-    return keys.size();
-}
+void TrackCreator::showSounds() { SoundIndexWindow::show (session.getSoundIndex(), this); }
 
 void TrackCreator::showPage (Page shown)
 {
@@ -1431,8 +1230,8 @@ void TrackCreator::updateButtons()
     downloadButton.setEnabled (! busy);
     if (! needsText.isVisible())
         engineButton.setVisible (false);
-    updateSoundsButton.setEnabled (! indexing);
-    stopSoundsButton.setVisible (indexing);
+    updateSoundsButton.setEnabled (! isIndexingSounds());
+    stopSoundsButton.setVisible (isIndexingSounds());
     resized();
 }
 
@@ -1475,8 +1274,6 @@ void TrackCreator::resized()
         updateSoundsButton.setBounds (r.removeFromLeft (150).reduced (0, 1));
         r.removeFromLeft (6);
         showSoundsButton.setBounds (r.removeFromLeft (130).reduced (0, 1));
-        r.removeFromLeft (6);
-        pluginsButton.setBounds (r.removeFromLeft (120).reduced (0, 1));
         r.removeFromLeft (6);
         if (stopSoundsButton.isVisible())
             stopSoundsButton.setBounds (r.removeFromLeft (70).reduced (0, 1));

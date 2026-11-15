@@ -247,6 +247,8 @@ add_library (spinus_core STATIC
     session/SoundDescriptors.h
     session/SoundIndex.cpp
     session/SoundIndex.h
+    session/SoundIndexService.cpp
+    session/SoundIndexService.h
     session/SoundRender.cpp
     session/SoundRender.h
     session/PartSounds.cpp
@@ -303,6 +305,8 @@ add_library (spinus_core STATIC
     ui/AnalysisLibraryView.h
     ui/SoundIndexView.cpp
     ui/SoundIndexView.h
+    ui/SoundIndexWindow.cpp
+    ui/SoundIndexWindow.h
     ui/TrackCreator.h
     ui/AudioTracks.cpp
     ui/AudioTracks.h

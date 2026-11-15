@@ -43,6 +43,7 @@ A page for every feature of Spinus. The assistant reads these pages too, so you 
 - [Exporting audio](export.md): WAV, FLAC, MP3, Opus and AAC, the song or a pattern, stems
 - [The assistant and AI settings](assistant.md): asking about your song, proposals, connections, local models
 - [The Analyzer](analyzer.md) (experimental): a song's tempo, key and stems
+- [The sound index](sound-index.md): what Spinus measured of your instruments and samples, to choose sounds for you
 - [The Track creator](track-creator.md) (experimental): what songs you like have in common (tempo, key, chords, grooves, sections), sounds for each part, and a new song in their style
 - [The Automixer](automixer.md): suggested mix changes with reasons, applied in one step, before and after
 - [The Launcher](launcher.md): launch patterns and audio clips live, in scenes (Ableton-style)
