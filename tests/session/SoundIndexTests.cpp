@@ -708,6 +708,46 @@ TEST_CASE ("Sound index: an instrument that crashes or hangs while loading is a 
         CHECK_FALSE (index.needsVisit (s)); // not again until it changes
 }
 
+TEST_CASE ("Sound index: several instruments are measured at once, each in its own helper", "[sounds][index][helper]")
+{
+    TempFolder temp;
+    SoundIndex index (temp.folder);
+    const auto misbehaving = testSynth ("misbehaving-synth.clap", "Spinus Misbehaving Synth");
+    auto options = helperOptions();
+    options.helpers = 3;
+    bool together = false;
+    int lastSounds = 0;
+    bool countsUp = true;
+    const auto result = SoundIndexer::update (index, options, { threeOsc(), testSynth(), misbehaving }, {}, {},
+                                              [&] (const SoundIndexer::Progress& p)
+                                              {
+                                                  if (p.stage != "instruments")
+                                                      return;
+                                                  together = together || p.current.contains (" | ");
+                                                  countsUp = countsUp && p.sounds >= lastSounds;
+                                                  lastSounds = p.sounds;
+                                              });
+    CHECK (together);
+    CHECK (countsUp);
+    CHECK_FALSE (result.cancelled);
+    CHECK (result.instrumentsVisited == 3);
+    CHECK (result.problems == 2); // the misbehaving synth's two presets, as when measured alone
+    CHECK (index.instruments.at ("plugin-test-synth.clap").sounds.size() == 6);
+    CHECK (index.instruments.at (misbehaving.key).sounds.size() == 6);
+    CHECK (index.instruments.at (misbehaving.key).problemPresets.size() == 2);
+    CHECK (index.instruments.at (threeOsc().key).complete);
+    CHECK (result.soundsMeasured == lastSounds);
+
+    // All three are in the saved index, and none needs measuring again.
+    SoundIndex again (temp.folder);
+    again.load();
+    CHECK (again.instruments.size() == 3);
+    for (const auto& s : { threeOsc(), testSynth(), misbehaving })
+        CHECK_FALSE (again.needsVisit (s));
+    CHECK (SoundIndexer::helpersFor ({}) >= 1);
+    CHECK (SoundIndexer::helpersFor ({}) <= 4);
+}
+
 TEST_CASE ("Sound index: cancelled, it carries on from where it stopped", "[sounds][index][helper]")
 {
     TempFolder temp;
