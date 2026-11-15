@@ -1,0 +1,54 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Stereo Utility",
+  "for": "stock-spinus.stereo-utility",
+  "profile": {
+    "goodFor": "level, panning and stereo width: narrowing a bass, widening a pad, checking a mix in mono",
+    "settings": [
+      {
+        "id": "width",
+        "name": "Width",
+        "what": "stereo width: 0% is mono, above 100% wider",
+        "low": "0%",
+        "high": "150%",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "pan",
+        "name": "Pan",
+        "what": "where it sits left to right",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "gain",
+        "name": "Gain",
+        "what": "level",
+        "low": "-24.0 dB",
+        "high": "12.0 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "mono",
+        "name": "Mono",
+        "what": "folds it to mono",
+        "source": "bundled"
+      },
+      {
+        "id": "invert_left",
+        "name": "Invert left",
+        "what": "flips the left channel's polarity (for fixing phase problems)",
+        "source": "bundled"
+      },
+      {
+        "id": "invert_right",
+        "name": "Invert right",
+        "what": "flips the right channel's polarity",
+        "source": "bundled"
+      }
+    ]
+  }
+}

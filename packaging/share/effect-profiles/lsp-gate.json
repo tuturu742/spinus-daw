@@ -1,0 +1,84 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Gate",
+  "for": "stock-bundled.lsp.gate",
+  "profile": {
+    "goodFor": "silencing bleed and noise between hits: drums, noisy guitars and vocals",
+    "settings": [
+      {
+        "id": "",
+        "name": "Curve threshold",
+        "what": "level at which the gate opens",
+        "low": "-60 dB",
+        "high": "-20 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Reduction",
+        "what": "how far it turns down when closed",
+        "low": "-40 dB",
+        "high": "-6 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Attack",
+        "what": "how fast it opens",
+        "low": "0.5 ms",
+        "high": "10 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Release",
+        "what": "how fast it closes",
+        "low": "30 ms",
+        "high": "300 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Hold time",
+        "what": "how long it stays open after the sound falls",
+        "low": "0 ms",
+        "high": "100 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Curve zone size",
+        "what": "how wide the fade below the threshold is",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Hysteresis",
+        "what": "a separate closing threshold that stops it chattering",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Makeup gain",
+        "what": "level added after the gate",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Dry/Wet balance",
+        "what": "dry to gated",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://lsp-plug.in/?page=manuals"
+      }
+    ]
+  }
+}

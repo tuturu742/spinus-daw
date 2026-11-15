@@ -9,6 +9,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   Intro, Verse 1, Chorus 1...), puts each stem on its own track, and turns its notes into short patterns: a
   loop is one pattern placed again, a fill a pattern of its own, and a section that comes back reuses its
   patterns. Before, every stem's notes were in one long pattern.
+- Spinus's own effects and the free LSP and Dragonfly effects come already described in **Learn this effect...**:
+  what each is good for, what its main settings do, safe ranges and the ones that matter most, so the assistant
+  and coding agents know them from the start. Your own words replace them.
 - **Options › Sound index** shows the whole sound index in one window: which instruments it measures (tick your
   own plugins there), what it measured of each and what went wrong, every sound with search and your own roles,
   and the sample folders; with Update, Stop, Measure again, Forget its sounds and Delete. Right-click an

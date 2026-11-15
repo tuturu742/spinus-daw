@@ -1,0 +1,91 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Hall Reverb",
+  "for": "stock-bundled.dragonfly.hall",
+  "profile": {
+    "goodFor": "big, lush spaces for strings, pads and ballad vocals; best on a send bus",
+    "settings": [
+      {
+        "id": "",
+        "name": "Decay",
+        "what": "how long the tail lasts",
+        "low": "1 s",
+        "high": "4 s",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Late Level",
+        "what": "level of the reverb tail",
+        "low": "10 %",
+        "high": "40 %",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Size",
+        "what": "size of the hall",
+        "low": "15 m",
+        "high": "45 m",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Dry Level",
+        "what": "level of the original sound; 0 on a send bus",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Early Level",
+        "what": "level of the first reflections",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Predelay",
+        "what": "gap before the reverb starts; keeps vocals clear",
+        "low": "0 ms",
+        "high": "40 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "High Cut",
+        "what": "darkens the reverb",
+        "low": "4000 Hz",
+        "high": "10000 Hz",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Low Cut",
+        "what": "removes rumble from the reverb",
+        "low": "50 Hz",
+        "high": "150 Hz",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Width",
+        "what": "stereo width of the reverb",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Modulation",
+        "what": "slow movement in the tail that makes it less metallic",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://michaelwillis.github.io/dragonfly-reverb"
+      }
+    ]
+  }
+}

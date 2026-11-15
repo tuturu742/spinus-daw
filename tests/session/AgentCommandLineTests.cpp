@@ -444,7 +444,9 @@ TEST_CASE ("The summary tells what a learned effect suits and what its settings 
                         juce::String ((int)model::masterInsertId.value) +
                         R"(, "device": {"kind": "stock", "stockType": "spinus.filter"}}}])",
                     said) == 0);
-    CHECK_FALSE (cli::summarize (f.session, {}, index)["inserts"][0]["effects"][0].hasProperty ("learned"));
+    // As shipped: what Spinus knows of its own Filter.
+    CHECK (cli::summarize (f.session, {}, index)["inserts"][0]["effects"][0]["learned"]["goodFor"].toString().contains (
+        "sweeps"));
 
     EffectProfiles::Profile profile;
     profile.goodFor = "taming harsh highs";

@@ -1,0 +1,88 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Compressor",
+  "for": "stock-bundled.lsp.compressor",
+  "profile": {
+    "goodFor": "evening out vocals, bass and buses; parallel compression with Dry/Wet",
+    "settings": [
+      {
+        "id": "",
+        "name": "Attack threshold",
+        "what": "level above which it starts turning the sound down",
+        "low": "-30 dB",
+        "high": "-6 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Ratio",
+        "what": "how strongly it turns down above the threshold",
+        "low": "1.5",
+        "high": "8",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Attack time",
+        "what": "how fast it reacts; slower lets each hit's start through",
+        "low": "1 ms",
+        "high": "50 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Release time",
+        "what": "how fast it lets go",
+        "low": "40 ms",
+        "high": "400 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Knee",
+        "what": "how gently it starts: lower (more negative) is smoother",
+        "low": "-12 dB",
+        "high": "-3 dB",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Makeup gain",
+        "what": "level added back after compressing",
+        "low": "0 dB",
+        "high": "12 dB",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Compression mode",
+        "what": "Down compresses loud parts (the usual); Up and Boost raise quiet parts",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Sidechain mode",
+        "what": "how the level is measured: peak, RMS (average) and others",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Dry/Wet balance",
+        "what": "dry to compressed: below 100% is parallel compression",
+        "low": "50 %",
+        "high": "100 %",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://lsp-plug.in/?page=manuals"
+      }
+    ]
+  }
+}

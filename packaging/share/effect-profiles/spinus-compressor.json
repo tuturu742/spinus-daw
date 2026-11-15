@@ -1,0 +1,88 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Spinus Compressor",
+  "for": "stock-spinus.compressor",
+  "profile": {
+    "goodFor": "evening out levels and adding punch: vocals, bass, drum buses, gentle glue on a mix",
+    "settings": [
+      {
+        "id": "threshold",
+        "name": "Threshold",
+        "what": "level above which it starts turning the sound down",
+        "low": "-36.0 dB",
+        "high": "-6.0 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "ratio",
+        "name": "Ratio",
+        "what": "how strongly it turns down above the threshold",
+        "low": "1.5:1",
+        "high": "8.0:1",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "attack",
+        "name": "Attack",
+        "what": "how fast it reacts; slower lets the start of each hit through for punch",
+        "low": "1.00 ms",
+        "high": "50.0 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "release",
+        "name": "Release",
+        "what": "how fast it lets go",
+        "low": "40.0 ms",
+        "high": "400 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "knee",
+        "name": "Knee",
+        "what": "how gently it starts: higher is smoother",
+        "low": "0.0 dB",
+        "high": "12.0 dB",
+        "source": "bundled"
+      },
+      {
+        "id": "makeup",
+        "name": "Makeup",
+        "what": "level added back after compressing",
+        "low": "0.0 dB",
+        "high": "12.0 dB",
+        "source": "bundled"
+      },
+      {
+        "id": "auto_makeup",
+        "name": "Auto makeup",
+        "what": "adds the level back by itself",
+        "source": "bundled"
+      },
+      {
+        "id": "mix",
+        "name": "Mix",
+        "what": "dry to compressed: below 100% is parallel compression",
+        "low": "30%",
+        "high": "100%",
+        "source": "bundled"
+      },
+      {
+        "id": "detector",
+        "name": "Detector",
+        "what": "peak reacts to every hit, RMS to the average level",
+        "source": "bundled"
+      },
+      {
+        "id": "sidechain",
+        "name": "Sidechain",
+        "what": "compress by its own sound or by another channel's",
+        "source": "bundled"
+      }
+    ]
+  }
+}

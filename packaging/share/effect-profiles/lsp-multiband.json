@@ -1,0 +1,84 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Multiband Compressor",
+  "for": "stock-bundled.lsp.multiband",
+  "profile": {
+    "goodFor": "bus or Master glue that tames one frequency range without touching the others; each band's settings end in its number",
+    "settings": [
+      {
+        "id": "",
+        "name": "Ratio 1",
+        "what": "band 1's compression strength; 1 means none, so raise it to compress",
+        "low": "1.5",
+        "high": "4",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Attack threshold 1",
+        "what": "level above which band 1 is turned down",
+        "low": "-30 dB",
+        "high": "-10 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Attack time 1",
+        "what": "how fast band 1 reacts",
+        "low": "5 ms",
+        "high": "50 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Release time 1",
+        "what": "how fast band 1 lets go",
+        "low": "50 ms",
+        "high": "300 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Makeup gain 1",
+        "what": "level added back to band 1",
+        "low": "0 dB",
+        "high": "6 dB",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Compression band enable 3",
+        "what": "switches on the band that starts at split 3 (bands 3, 5 and 7 are on at first)",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Split frequency 3",
+        "what": "where band 3 starts",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Compressor mode",
+        "what": "Classic, Modern or Linear Phase",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Dry/Wet balance",
+        "what": "dry to compressed",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://lsp-plug.in/?page=manuals"
+      }
+    ]
+  }
+}

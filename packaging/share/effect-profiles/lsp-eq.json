@@ -1,0 +1,69 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Parametric EQ",
+  "for": "stock-bundled.lsp.eq",
+  "profile": {
+    "goodFor": "tone shaping with up to 16 bands: cutting mud, rumble and harshness, adding air; each band's settings end in its number (0 to 15)",
+    "settings": [
+      {
+        "id": "",
+        "name": "Filter type 0",
+        "what": "band 0's kind: Off, Bell, Hi-pass, shelves, Lo-pass, Notch...; every band starts Off",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Frequency 0",
+        "what": "band 0's frequency (each band has its own)",
+        "low": "20 Hz",
+        "high": "18000 Hz",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Gain 0",
+        "what": "band 0's boost or cut (not for pass and notch filters)",
+        "low": "-12 dB",
+        "high": "6 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Quality factor 0",
+        "what": "band 0's width: higher is narrower",
+        "low": "0.5",
+        "high": "4",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Filter slope 0",
+        "what": "how steep band 0's pass or shelf filter is",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Equalizer mode",
+        "what": "IIR (no added delay) is the usual; the others add latency",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Output gain",
+        "what": "level after the EQ",
+        "low": "-12 dB",
+        "high": "6 dB",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://lsp-plug.in/?page=manuals"
+      }
+    ]
+  }
+}

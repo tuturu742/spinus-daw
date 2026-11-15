@@ -88,7 +88,7 @@ juce::var projectContext (Session& session, const ContextOptions& options)
             if (list.size() >= mostParameters)
                 break;
             auto entry = object ({ { "id", p.id }, { "name", p.name }, { "text", p.text } });
-            if (const auto* s = learned.has_value() ? learned.value().find (p.id) : nullptr)
+            if (const auto* s = learned.has_value() ? learned.value().find (p.id, p.name) : nullptr)
             {
                 // Its range as the plugin shows it too, so a value can be chosen inside it.
                 const auto told = EffectProfiles::describeForAgents ({ {}, { *s }, {} });

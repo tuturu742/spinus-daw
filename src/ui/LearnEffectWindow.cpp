@@ -56,6 +56,16 @@ private:
 };
 
 //==============================================================================
+namespace
+{
+/** A learned setting's row: by id, else by name (a shipped or shared profile from another host). */
+bool matches (const auto& row, const EffectProfiles::Setting& s)
+{
+    return row.plugin.id == s.id || (s.name.isNotEmpty() && row.plugin.name.equalsIgnoreCase (s.name));
+}
+} // namespace
+
+//==============================================================================
 LearnEffectPanel::LearnEffectPanel (const juce::String& effectName, std::vector<Session::ParameterText> settings,
                                     std::optional<EffectProfiles::Profile> profile)
     : name (effectName)
@@ -66,9 +76,10 @@ LearnEffectPanel::LearnEffectPanel (const juce::String& effectName, std::vector<
         row.learned.id = row.plugin.id;
         row.learned.name = row.plugin.name;
         if (profile.has_value())
-            if (const auto* known = profile->find (row.plugin.id))
+            if (const auto* known = profile->find (row.plugin.id, row.plugin.name))
             {
                 row.learned = *known;
+                row.learned.id = row.plugin.id;     // a shipped profile may name it only
                 row.learned.name = row.plugin.name; // as the plugin names it now
             }
         rows.push_back (std::move (row));
@@ -76,7 +87,8 @@ LearnEffectPanel::LearnEffectPanel (const juce::String& effectName, std::vector<
     // Learned settings the plugin no longer reports stay (an older version had them), at the end.
     if (profile.has_value())
         for (const auto& s : profile->settings)
-            if (std::none_of (rows.begin(), rows.end(), [&] (const Row& r) { return r.plugin.id == s.id; }))
+            if (s.id.isNotEmpty() &&
+                std::none_of (rows.begin(), rows.end(), [&] (const Row& r) { return r.plugin.id == s.id; }))
                 rows.push_back ({ { s.id, s.name, {}, {}, {} }, s });
 
     if (profile.has_value())
@@ -269,7 +281,7 @@ int LearnEffectPanel::countFills (const std::vector<EffectProfiles::Setting>& se
     int count = 0;
     for (const auto& s : settings)
     {
-        const auto found = std::find_if (rows.begin(), rows.end(), [&] (const Row& r) { return r.plugin.id == s.id; });
+        const auto found = std::find_if (rows.begin(), rows.end(), [&] (const Row& r) { return matches (r, s); });
         // Not a setting this version of the effect has, or one the user set: their word wins.
         if (found != rows.end() && (found->learned.isEmpty() || found->learned.source != EffectProfiles::Source::user))
             ++count;
@@ -282,11 +294,12 @@ int LearnEffectPanel::fill (const std::vector<EffectProfiles::Setting>& settings
     int filled = 0;
     for (const auto& s : settings)
     {
-        auto found = std::find_if (rows.begin(), rows.end(), [&] (const Row& r) { return r.plugin.id == s.id; });
+        auto found = std::find_if (rows.begin(), rows.end(), [&] (const Row& r) { return matches (r, s); });
         if (found == rows.end() ||
             (! found->learned.isEmpty() && found->learned.source == EffectProfiles::Source::user))
             continue;
         found->learned = s;
+        found->learned.id = found->plugin.id;
         found->learned.name = found->plugin.name;
         ++filled;
     }

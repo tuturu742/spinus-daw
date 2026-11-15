@@ -1,0 +1,24 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Loudness Meter",
+  "for": "stock-spinus.loudness-meter",
+  "profile": {
+    "goodFor": "measuring how loud a mix is against a target, on the Master; it doesn't change the sound",
+    "settings": [
+      {
+        "id": "target",
+        "name": "Target",
+        "what": "the loudness aimed for: streaming services or louder club and CD masters",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "reset_on_play",
+        "name": "Start again on Play",
+        "what": "starts measuring again each time playback starts",
+        "source": "bundled"
+      }
+    ]
+  }
+}

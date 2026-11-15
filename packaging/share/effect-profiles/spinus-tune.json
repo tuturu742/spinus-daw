@@ -1,0 +1,54 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Spinus Tune",
+  "for": "stock-spinus.tune",
+  "profile": {
+    "goodFor": "pitch correction for vocals: gentle tightening, or a hard robotic effect with a fast retune speed",
+    "settings": [
+      {
+        "id": "key",
+        "name": "Key",
+        "what": "the song's key the notes are corrected to",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "scale",
+        "name": "Scale",
+        "what": "which notes of the key are allowed; chromatic allows all 12",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "retune",
+        "name": "Retune speed",
+        "what": "how fast a note is pulled to pitch: slow is natural, Robot is the hard effect",
+        "low": "10 ms",
+        "high": "100 ms",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "humanize",
+        "name": "Humanize",
+        "what": "leaves long notes a little freer so they sound less processed",
+        "low": "0%",
+        "high": "50%",
+        "source": "bundled"
+      },
+      {
+        "id": "formants",
+        "name": "Formants",
+        "what": "keeps the voice's character when the pitch moves, or lets it follow",
+        "source": "bundled"
+      },
+      {
+        "id": "mix",
+        "name": "Mix",
+        "what": "dry to corrected",
+        "source": "bundled"
+      }
+    ]
+  }
+}
