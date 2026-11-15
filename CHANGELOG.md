@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Exports render on one thread. Tracktion's multi-threaded renderer could, on a busy computer, start a block
+  while a helper thread was still finishing the last one: a crash or wrong audio during an export. Exports with
+  heavy plugins may take a little longer.
 - **Preset files** is in every plugin channel's menu in the Channel Rack, not only in the Track creator: choose
   the folder where an instrument keeps its preset files, and the assistant and coding agents can list and load
   them.
