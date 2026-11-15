@@ -25,10 +25,12 @@ SoundIndexView::SoundIndexView (const juce::File& folder) : marked (folder)
     for (const auto& [key, instrument] : index.instruments)
         for (const auto& sound : instrument.sounds)
             ids[instrument.source.name + "\n" + sound["name"].toString()] = { key, sound["id"].toString() };
-    intro.setText ("What Spinus measured of your instruments' presets and your samples, and the role it guesses "
-                   "for each (from its name when the name says, otherwise from how it sounds). Search by name, "
-                   "instrument, role or anything shown; right-click a preset to give it a role of your own.",
-                   juce::dontSendNotification);
+    intro.setText (
+        "What Spinus measured of your instruments' presets and your samples, and the role it guesses "
+        "for each (from its name when the name says, otherwise from how it sounds). Search by name, "
+        "instrument, role or anything shown (\"problem\" lists what went wrong, and why); right-click a preset to "
+        "give it a role of your own.",
+        juce::dontSendNotification);
     intro.setJustificationType (juce::Justification::topLeft);
     count.setJustificationType (juce::Justification::centredLeft);
     searchBox.setTextToShowWhenEmpty ("Search (for example: bass, pad, guitar, loop, kick)", juce::Colours::grey);

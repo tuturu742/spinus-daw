@@ -313,6 +313,9 @@ void SoundIndex::load()
             if (const auto* bad = v["problemPresets"].getArray())
                 for (const auto& b : *bad)
                     i.problemPresets.add (b.toString());
+            if (const auto* details = v["problemDetails"].getDynamicObject())
+                for (const auto& [id, d] : details->getProperties())
+                    i.problemDetails[id.toString()] = { d["name"].toString(), d["why"].toString() };
             const auto file = juce::JSON::parse (instrumentFile (i.source.key));
             if ((int)file["version"] == version && file["key"].toString() == i.source.key)
             {
@@ -355,6 +358,11 @@ bool SoundIndex::saveIndex() const
         for (const auto& b : i.problemPresets)
             bad.add (b);
         o->setProperty ("problemPresets", bad);
+        auto* details = new juce::DynamicObject();
+        for (const auto& [id, d] : i.problemDetails)
+            if (i.problemPresets.contains (id))
+                details->setProperty (id, object ({ { "name", d.name }, { "why", d.why } }));
+        o->setProperty ("problemDetails", juce::var (details));
         o->setProperty ("sounds", i.sounds.size());
         o->setProperty ("measuredWith", i.measuredWith);
         o->setProperty ("updated", i.updated.toISO8601 (true));
@@ -427,6 +435,8 @@ SoundIndex::Summary SoundIndex::summarize() const
         for (const auto& sound : i.sounds)
             if (! sound.hasProperty ("problem"))
                 ++s.presets;
+            else
+                ++s.problems; // it didn't load
     }
     for (const auto& sample : samples)
     {
@@ -541,6 +551,7 @@ bool SoundIndex::measureAgain (const juce::String& key)
     auto& i = found->second;
     i.sounds.clear();
     i.problemPresets.clear();
+    i.problemDetails.clear();
     i.problem.clear();
     i.complete = false;
     saveInstrument (i);
@@ -647,10 +658,37 @@ int SoundIndex::learnRoles()
     return changed;
 }
 
+juce::String SoundIndex::presetNameFromId (const juce::String& id)
+{
+    if (id.startsWith ("program:")) // program:<number>:<name>
+        return id.fromFirstOccurrenceOf (":", false, false).fromFirstOccurrenceOf (":", false, false);
+    if (id.startsWith ("file:")) // file:<folder>/<path in it>
+        return id.fromFirstOccurrenceOf ("/", false, false);
+    if (id.contains ("|")) // <where>|<what the plugin loads>
+        return id.fromLastOccurrenceOf ("|", false, false);
+    if (juce::File::isAbsolutePath (id))
+        return juce::File (id).getFileNameWithoutExtension();
+    return id.fromLastOccurrenceOf ("/", false, false);
+}
+
 std::vector<SoundIndex::Row> SoundIndex::rows() const
 {
     std::vector<Row> result;
     for (const auto& [key, i] : instruments)
+    {
+        if (i.problem.isNotEmpty())
+            result.push_back ({ i.source.name, i.source.name, "problem", i.problem + " (no sound of it is measured)" });
+        for (const auto& id : i.problemPresets)
+        {
+            const auto found = i.problemDetails.find (id);
+            const auto known = found != i.problemDetails.end();
+            result.push_back (
+                { known && found->second.name.isNotEmpty() ? found->second.name : presetNameFromId (id), i.source.name,
+                  "problem",
+                  "the instrument " +
+                      (known && found->second.why.isNotEmpty() ? found->second.why : juce::String ("crashed")) +
+                      " on this preset, so it is left out" });
+        }
         for (const auto& s : i.sounds)
         {
             Row row;
@@ -684,6 +722,7 @@ std::vector<SoundIndex::Row> SoundIndex::rows() const
             }
             result.push_back (row);
         }
+    }
     for (const auto& sample : samples)
     {
         Row row;
@@ -862,7 +901,10 @@ SoundIndexer::Run SoundIndexer::runHelper (const Options& options, const juce::v
             run.started = true;
             lastNews = juce::Time::getMillisecondCounterHiRes();
             if (v.hasProperty ("begin"))
+            {
                 run.stuckOn = v["begin"].toString();
+                run.stuckOnName = v["name"].toString();
+            }
             if (v.hasProperty ("sound") || v.hasProperty ("sample") || v.hasProperty ("rendered"))
                 run.stuckOn.clear();
             if (v.hasProperty ("done"))
@@ -911,6 +953,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
         // A new or changed plugin: everything measured again.
         entry.sounds.clear();
         entry.problemPresets.clear();
+        entry.problemDetails.clear();
     }
     else if (entry.measuredWith != SoundIndex::helperRevision && entry.silentOrFailed())
     {
@@ -919,6 +962,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
             if ((bool)entry.sounds[i]["silent"] || entry.sounds[i].hasProperty ("problem"))
                 entry.sounds.remove (i);
         entry.problemPresets.clear();
+        entry.problemDetails.clear();
     }
     entry.measuredWith = SoundIndex::helperRevision;
     entry.source = source;
@@ -1038,6 +1082,7 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
             // That preset is left out; the rest are measured in a new helper.
             core::Logs::warning ("sounds", source.name + " " + why + " on the preset " + run.stuckOn);
             entry.problemPresets.addIfNotAlreadyThere (run.stuckOn);
+            entry.problemDetails[run.stuckOn] = { run.stuckOnName, why };
             ++result.problems;
             continue;
         }

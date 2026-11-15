@@ -91,8 +91,8 @@ std::vector<SoundSource> findSoundSources (const plugins::DeviceList&);
     differs):
     - `index.json`: `{kind: "spinus.sound-index", version, descriptorsVersion, updated, roleExamples, instruments:
       [{key, name, format, file, pluginName, uniqueId, stockType, badge, fingerprint, complete, presetFiles,
-      problem, problemPresets, sounds (how many), measuredWith, updated}], sampleFolders, summary: {instruments,
-   presets, samples, problems}}`;
+      presetFolders, presetFilesStamp, problem, problemPresets, problemDetails: {id: {name, why}}, sounds (how
+      many), measuredWith, updated}], sampleFolders, summary: {instruments, presets, samples, problems}}`;
     - `instruments/<key>.json`: `{version, key, sounds: [{id, version, name, category, role, roleFrom,
       soundRole, soundRoleFrom, ruleRole, silent, tracksPitch, polyphonic, low, high, width, registerLevels,
       registerBrightness, sound: {descriptors}, drumMap}]}`;
@@ -126,12 +126,17 @@ public:
         SoundSource source;
         juce::Array<juce::var> sounds;    // one per preset
         juce::StringArray problemPresets; // presets that crashed or hung the helper: skipped
-        juce::String problem;             // the instrument itself did not load
-        bool complete = false;            // every preset measured (not stopped part way)
-        bool presetFiles = false;         // its presets are files (more may come): listed again when they change
-        juce::StringArray presetFolders;  // the folders its preset files are in (the helper says)
-        juce::String presetFilesStamp;    // presetFilesStamp() of them when it was measured
-        int measuredWith = 0;             // the helperRevision that measured it (0: older than revision 2)
+        struct ProblemPreset
+        {
+            juce::String name, why; // why: "crashed", "stopped answering"
+        };
+        std::map<juce::String, ProblemPreset> problemDetails; // by preset id, for the ones in problemPresets
+        juce::String problem;                                 // the instrument itself did not load
+        bool complete = false;                                // every preset measured (not stopped part way)
+        bool presetFiles = false;        // its presets are files (more may come): listed again when they change
+        juce::StringArray presetFolders; // the folders its preset files are in (the helper says)
+        juce::String presetFilesStamp;   // presetFilesStamp() of them when it was measured
+        int measuredWith = 0;            // the helperRevision that measured it (0: older than revision 2)
         juce::Time updated;
 
         /** It did not load, a preset crashed or hung the helper, or a sound was silent. */
@@ -205,10 +210,15 @@ public:
     /** One flat list of every sound (for the panel's list and search): instrument presets and samples. */
     struct Row
     {
-        juce::String name, source, role, detail; // role: the role or the sample's class
+        juce::String name, source, role, detail; // role: the role or the sample's class; "problem": detail says why
         bool sample = false;
     };
+    /** Every sound measured, and every problem: a preset that didn't load, crashed or hung the helper, an instrument
+        that didn't load, a sample that couldn't be read. As many problems as summarize() counts. */
     std::vector<Row> rows() const;
+
+    /** A preset's name for people, from its id (the helper names a preset that crashed it only by its id). */
+    static juce::String presetNameFromId (const juce::String& id);
 
 private:
     juce::File instrumentFile (const juce::String& key) const;
@@ -284,7 +294,7 @@ public:
         bool finished = false; // it wrote "done"
         bool started = false;  // it wrote anything at all ("presets", or a first "begin")
         bool hung = false;
-        juce::String stuckOn;
+        juce::String stuckOn, stuckOnName; // the preset's id, and its name when the helper said it
         int exitCode = 0;
     };
     static Run runHelper (const Options&, const juce::var& request, bool withHostLibraries,

@@ -427,7 +427,8 @@ void TrackCreator::showSoundSummary (const juce::String& after)
         text = "Sound index: " + count (s.instruments, "instrument", "instruments") + ", " +
                count (s.presets, "preset", "presets") + ", " + count (s.samples, "sample", "samples") + "; updated " +
                s.updated.formatted ("%d %b %Y %H:%M") +
-               (s.problems > 0 ? " (" + count (s.problems, "problem", "problems") + ", see Show sounds)"
+               (s.problems > 0 ? " (" + count (s.problems, "problem", "problems") +
+                                     ": Show sounds and search \"problem\" says what each is)"
                                : juce::String()) +
                ".";
     }
