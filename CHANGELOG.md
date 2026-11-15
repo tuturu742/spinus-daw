@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Preset files** is in every plugin channel's menu in the Channel Rack, not only in the Track creator: choose
+  the folder where an instrument keeps its preset files, and the assistant and coding agents can list and load
+  them.
 - Learn this instrument: **Forget this instrument** clears the manuals list too. The forgotten manuals stayed in the
   list, and **Remove** did nothing on them.
 - The Sampler and Six Sines come with what Spinus knows of their keys, like 3x Osc, Surge XT, OB-Xf and Odin 2.

@@ -20,6 +20,8 @@
 #include "model/StockDevices.h"
 #include "plugins/HostLibraries.h"
 #include "session/InstrumentPresets.h"
+#include "session/PluginPresets.h"
+#include "session/PresetFolders.h"
 #include "session/ProgramFolder.h"
 #include "session/SoundIndex.h"
 #include "session/SlicesToPattern.h"
@@ -325,6 +327,43 @@ private:
         menu.addItem (frozen ? "Open instrument window (unfreeze to edit)" : "Open instrument window",
                       hasInstrument && ! frozen, false, [this] { rack.showInstrumentWindow (id); });
         menu.addItem ("Learn this instrument...", hasInstrument, false, [this] { rack.learnInstrument (id); });
+        if (rack.canUsePresetFiles (id))
+        {
+            // Many instruments keep their presets as files in a folder no host can list.
+            const auto chosen = rack.getPresetFolders (id);
+            juce::PopupMenu files;
+            files.addItem ("Add a folder of its preset files...",
+                           [safe = juce::Component::SafePointer<ChannelRack> (&rack), id = id]
+                           {
+                               if (safe == nullptr)
+                                   return;
+                               safe->folderChooser = std::make_unique<core::FileDialog> (
+                                   "Choose a folder of the instrument's preset files",
+                                   juce::File::getSpecialLocation (juce::File::userDocumentsDirectory));
+                               safe->folderChooser->launchAsync (
+                                   (int)((unsigned)juce::FileBrowserComponent::openMode |
+                                         (unsigned)juce::FileBrowserComponent::canSelectDirectories),
+                                   [safe, id] (const core::FileDialog& c)
+                                   {
+                                       if (safe != nullptr && c.getResult().isDirectory())
+                                           safe->usePresetFolder (id, c.getResult(), true);
+                                   });
+                           });
+            if (! chosen.isEmpty())
+                files.addSeparator();
+            for (const auto& folder : chosen)
+                files.addItem ("Stop using " + folder.getFullPathName(),
+                               [safe = juce::Component::SafePointer<ChannelRack> (&rack), id = id, folder]
+                               {
+                                   if (safe != nullptr)
+                                       safe->usePresetFolder (id, folder, false);
+                               });
+            menu.addSubMenu ("Preset files" + (chosen.isEmpty() ? juce::String()
+                                               : chosen.size() == 1
+                                                   ? juce::String (" (1 folder)")
+                                                   : " (" + juce::String (chosen.size()) + " folders)"),
+                             files);
+        }
         {
             // FL's Replace: the same instruments as the rack's "+" menu.
             juce::PopupMenu replace;
@@ -1097,6 +1136,53 @@ bool ChannelRack::learnInstrument (model::ChannelId channel)
                                                  : name + " plays any note: which keys play is not known.");
         },
         std::move (listening), view != nullptr ? view->getAiService() : nullptr);
+    return true;
+}
+
+juce::File ChannelRack::getIndexFolder() const
+{
+    return indexFolder != juce::File() ? indexFolder : SoundIndex::getDefaultFolder();
+}
+
+bool ChannelRack::canUsePresetFiles (model::ChannelId channel) const
+{
+    const auto* c = session.getProject().findChannel (channel);
+    return c != nullptr && c->instrument && c->instrument->kind == model::Device::Kind::plugin &&
+           c->instrument->plugin.format != "VST";
+}
+
+juce::Array<juce::File> ChannelRack::getPresetFolders (model::ChannelId channel) const
+{
+    const auto* c = session.getProject().findChannel (channel);
+    if (c == nullptr || ! c->instrument)
+        return {};
+    PresetFolders chosen (getIndexFolder());
+    chosen.load();
+    return chosen.get (InstrumentPresets::libraryOf (*c->instrument));
+}
+
+bool ChannelRack::usePresetFolder (model::ChannelId channel, const juce::File& folder, bool use)
+{
+    if (! canUsePresetFiles (channel))
+        return false;
+    const auto device = session.getProject().findChannel (channel)->instrument.value();
+    PresetFolders chosen (getIndexFolder());
+    chosen.load();
+    if (use && ! chosen.add (InstrumentPresets::libraryOf (device), folder))
+        return false;
+    if (! use)
+        chosen.remove (InstrumentPresets::libraryOf (device), folder);
+    if (! chosen.save())
+        return false;
+    pluginPresets::forgetFound (device); // read again, with or without this folder
+
+    const auto files = use ? (int)InstrumentPresets::findStateFiles ({ folder }).size() : 0;
+    if (auto* view = findParentComponentOfClass<MainView>())
+        view->getHintBar().showMessage (
+            ! use        ? "Spinus no longer uses the preset files in " + folder.getFileName() + "."
+            : files == 0 ? "There are no preset files in " + folder.getFileName() + "."
+                         : juce::String (files) + " preset files in " + folder.getFileName() +
+                               ": agents and the assistant can load them now (list_presets).");
     return true;
 }
 
