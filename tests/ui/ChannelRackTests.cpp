@@ -6,6 +6,7 @@
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
 #include "model/ModelJson.h"
+#include "session/PresetFolders.h"
 #include "ui/ChannelRack.h"
 #include "ui/LearnInstrumentWindow.h"
 #include "ui/Theme.h"
@@ -595,4 +596,42 @@ TEST_CASE ("Learn this instrument opens from a channel's menu, without the Track
     CHECK (LearnInstrumentWindow::getNumOpen() == 0);
 
     CHECK_FALSE (r.rack.learnInstrument (model::ChannelId { 999 }));
+}
+
+TEST_CASE ("Preset files: a folder of a plugin's preset files is chosen from a channel's menu", "[ui][channelrack]")
+{
+    Rack r;
+    const auto root = juce::File::createTempFile ("preset-files");
+    r.rack.setIndexFolder (root.getChildFile ("sounds"));
+    const auto folder = root.getChildFile ("Bass presets");
+    REQUIRE (folder.createDirectory());
+    REQUIRE (folder.getChildFile ("Fingered.amhstate").replaceWithText ("<state/>"));
+    REQUIRE (folder.getChildFile ("Picked.amhstate").replaceWithText ("<state/>"));
+
+    model::Device bass;
+    bass.kind = model::Device::Kind::plugin;
+    bass.plugin = { "VST3", "Sampled Bass", "Someone", "/nonexistent/Sampled Bass.vst3", 1234 };
+    REQUIRE (r.rack.addChannelWith (bass, "Bass"));
+    const auto channel = r.lastChannel();
+    bass.plugin.format = "VST";
+    REQUIRE (r.rack.addChannelWith (bass, "Bass (VST2)"));
+    const auto vst2 = r.lastChannel();
+    REQUIRE (r.rack.addChannel ("spinus.3x-osc", "Lead"));
+    const auto own = r.lastChannel();
+
+    CHECK (r.rack.canUsePresetFiles (channel));
+    CHECK_FALSE (r.rack.canUsePresetFiles (vst2)); // VST2 keeps its state in a bank format
+    CHECK_FALSE (r.rack.canUsePresetFiles (own));  // Spinus's own: no preset files
+    CHECK_FALSE (r.rack.usePresetFolder (own, folder, true));
+
+    CHECK (r.rack.getPresetFolders (channel).isEmpty());
+    REQUIRE (r.rack.usePresetFolder (channel, folder, true));
+    REQUIRE (r.rack.getPresetFolders (channel).size() == 1);
+    CHECK (r.rack.getPresetFolders (channel)[0] == folder);
+    CHECK (PresetFolders::fileIn (root.getChildFile ("sounds")).existsAsFile()); // kept for every project
+    CHECK_FALSE (r.rack.usePresetFolder (channel, root.getChildFile ("nothing here"), true));
+
+    REQUIRE (r.rack.usePresetFolder (channel, folder, false));
+    CHECK (r.rack.getPresetFolders (channel).isEmpty());
+    root.deleteRecursively();
 }

@@ -83,6 +83,8 @@ std::vector<InstrumentPreset> find (Session& session, const model::Device& devic
     return presets;
 }
 
+void forgetFound (const model::Device& device) { foundBefore().erase (keyOf (device)); }
+
 const InstrumentPreset* match (const std::vector<InstrumentPreset>& presets, const juce::String& said)
 {
     const auto wanted = said.trim();
