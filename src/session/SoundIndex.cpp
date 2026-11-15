@@ -303,6 +303,10 @@ void SoundIndex::load()
                 continue;
             i.complete = (bool)v["complete"];
             i.presetFiles = (bool)v["presetFiles"];
+            if (const auto* folders = v["presetFolders"].getArray())
+                for (const auto& f : *folders)
+                    i.presetFolders.add (f.toString());
+            i.presetFilesStamp = v["presetFilesStamp"].toString();
             i.problem = v["problem"].toString();
             i.measuredWith = (int)v["measuredWith"];
             i.updated = juce::Time::fromISO8601 (v["updated"].toString());
@@ -346,6 +350,8 @@ bool SoundIndex::saveIndex() const
         auto* o = v.getDynamicObject();
         o->setProperty ("complete", i.complete);
         o->setProperty ("presetFiles", i.presetFiles);
+        o->setProperty ("presetFolders", i.presetFolders);
+        o->setProperty ("presetFilesStamp", i.presetFilesStamp);
         if (i.problem.isNotEmpty())
             o->setProperty ("problem", i.problem);
         juce::Array<juce::var> bad;
@@ -477,6 +483,29 @@ bool SoundIndex::Instrument::silentOrFailed() const
     return false;
 }
 
+juce::String SoundIndex::presetFilesStamp (const juce::StringArray& folders, const juce::Array<juce::File>& chosen)
+{
+    juce::StringArray all (folders);
+    for (const auto& f : chosen)
+        all.addIfNotAlreadyThere (f.getFullPathName());
+    all.sort (false);
+    juce::int64 count = 0, bytes = 0, newest = 0;
+    for (const auto& path : all)
+    {
+        const juce::File folder (path);
+        if (! folder.isDirectory())
+            continue;
+        for (const auto& entry : juce::RangedDirectoryIterator (folder, true, "*", juce::File::findFiles))
+        {
+            ++count;
+            bytes += entry.getFileSize();
+            newest = juce::jmax (newest, entry.getModificationTime().toMilliseconds());
+        }
+    }
+    return juce::String (all.joinIntoString ("|").hashCode64()) + ":" + juce::String (count) + ":" +
+           juce::String (bytes) + ":" + juce::String (newest);
+}
+
 bool SoundIndex::needsVisit (const SoundSource& source) const
 {
     const auto found = instruments.find (source.key);
@@ -498,17 +527,20 @@ bool SoundIndex::needsVisit (const SoundSource& source) const
             return true;
     if (measured.size() != mine.size())
         return true;
-    // Preset folders the user chose for it: their files are listed again at each update (new ones measured).
-    PresetFolders folders (root);
-    folders.load();
-    if (! folders.get (source.key).isEmpty())
-        return true;
     // Silent or failed with an older helper, which may have measured it too soon or given up too early.
     if (known.measuredWith != helperRevision && known.silentOrFailed())
         return true;
     if (known.problem.isNotEmpty())
         return false; // it did not load: not again until it changes
-    return ! known.complete || known.presetFiles;
+    if (! known.complete)
+        return true;
+    // Its preset files (its own, or in folders the user chose): listed again only when they changed.
+    PresetFolders folders (root);
+    folders.load();
+    const auto chosen = folders.get (source.key);
+    if (! known.presetFiles && chosen.isEmpty())
+        return false;
+    return known.presetFilesStamp.isEmpty() || presetFilesStamp (known.presetFolders, chosen) != known.presetFilesStamp;
 }
 
 bool SoundIndex::measureAgain (const juce::String& key)
@@ -991,6 +1023,14 @@ void visitInstrument (SoundIndex& index, const SoundIndexer::Options& options, c
                         for (const auto& p : *list)
                             listed->insert (p["id"].toString());
                     entry.presetFiles = (bool)presets["presetFiles"];
+                    entry.presetFolders.clear();
+                    if (const auto* folders = presets["folders"].getArray())
+                        for (const auto& f : *folders)
+                            entry.presetFolders.add (f.toString());
+                    PresetFolders chosen (index.getFolder());
+                    chosen.load();
+                    entry.presetFilesStamp =
+                        SoundIndex::presetFilesStamp (entry.presetFolders, chosen.get (source.key));
                 }
                 if (line.hasProperty ("error"))
                     entry.problem = line["error"].toString();

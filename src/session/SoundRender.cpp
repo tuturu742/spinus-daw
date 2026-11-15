@@ -195,18 +195,30 @@ int runInstrument (const juce::var& request, Lines& out)
 
     juce::Array<juce::var> listed;
     bool presetFiles = false;
+    juce::StringArray folders; // where its preset files are: Spinus lists them again only when these change
     for (const auto& p : presets)
     {
         auto* o = new juce::DynamicObject();
         o->setProperty ("id", p.id);
         o->setProperty ("version", p.version);
         listed.add (juce::var (o));
-        presetFiles = presetFiles || (p.file != juce::File() && ! SavedSounds::isSaved (p.id)); // more may come
+        if (p.file != juce::File() && ! SavedSounds::isSaved (p.id)) // more may come
+        {
+            presetFiles = true;
+            folders.addIfNotAlreadyThere (p.file.getParentDirectory().getFullPathName());
+        }
     }
+    // Only the outermost folders: the others are read with them.
+    folders.sort (false);
+    juce::StringArray outermost;
+    for (const auto& f : folders)
+        if (outermost.isEmpty() || ! juce::File (f).isAChildOf (juce::File (outermost[outermost.size() - 1])))
+            outermost.add (f);
     {
         auto* o = new juce::DynamicObject();
         o->setProperty ("list", listed);
         o->setProperty ("presetFiles", presetFiles);
+        o->setProperty ("folders", outermost);
         out.write ("presets", juce::var (o));
     }
 
@@ -225,7 +237,10 @@ int runInstrument (const juce::var& request, Lines& out)
         return player.renderStereo (converted, tail); // the width is measured too
     };
 
-    double firstWait = 40.0; // seconds an instrument may take to load its sounds, then for each preset
+    // Seconds a silent sound is given to start sounding: the first long, as the instrument may still be loading its
+    // samples; then a little for a preset that loads samples of its own (its loading already waited for sound).
+    double firstWait = 40.0;
+    constexpr double laterWait = 3.0;
     for (const auto& preset : presets)
     {
         if (skip.contains (preset.id))
@@ -244,7 +259,7 @@ int runInstrument (const juce::var& request, Lines& out)
             auto described =
                 sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
             // Silent: perhaps still loading (the first sound, or a preset that loads other samples).
-            if (described.silent && waitUntilAudible (player, out, std::exchange (firstWait, 10.0)))
+            if (described.silent && waitUntilAudible (player, out, std::exchange (firstWait, laterWait)))
                 described =
                     sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
             sound = sounds::toVar (described);

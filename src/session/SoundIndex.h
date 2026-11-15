@@ -91,9 +91,8 @@ std::vector<SoundSource> findSoundSources (const plugins::DeviceList&);
     differs):
     - `index.json`: `{kind: "spinus.sound-index", version, descriptorsVersion, updated, roleExamples, instruments:
       [{key, name, format, file, pluginName, uniqueId, stockType, badge, fingerprint, complete, presetFiles,
-      problem, problemPresets, problemDetails: {id: {name, why}}, sounds (how many), measuredWith, updated}],
-      sampleFolders, summary: {instruments,
-   presets, samples, problems}}`;
+      presetFolders, presetFilesStamp, problem, problemPresets, problemDetails: {id: {name, why}}, sounds (how
+      many), measuredWith, updated}], sampleFolders, summary: {instruments, presets, samples, problems}}`;
     - `instruments/<key>.json`: `{version, key, sounds: [{id, version, name, category, role, roleFrom,
       soundRole, soundRoleFrom, ruleRole, silent, tracksPitch, polyphonic, low, high, width, registerLevels,
       registerBrightness, sound: {descriptors}, drumMap}]}`;
@@ -115,6 +114,11 @@ public:
     explicit SoundIndex (juce::File folder) : root (std::move (folder)) {}
     /** <plugin list folder>/ai/sounds. */
     static juce::File getDefaultFolder();
+
+    /** What changes when a preset file is added, removed or changed in `folders`, or another preset folder is
+        chosen for the instrument (`chosen`): how many files, their sizes and newest time. Reading it takes a
+        moment even for thousands of files, much less than loading the instrument to list them. */
+    static juce::String presetFilesStamp (const juce::StringArray& folders, const juce::Array<juce::File>& chosen);
     juce::File getFolder() const { return root; }
 
     struct Instrument
@@ -129,8 +133,10 @@ public:
         std::map<juce::String, ProblemPreset> problemDetails; // by preset id, for the ones in problemPresets
         juce::String problem;                                 // the instrument itself did not load
         bool complete = false;                                // every preset measured (not stopped part way)
-        bool presetFiles = false; // its presets are files (more may come): listed again at each update
-        int measuredWith = 0;     // the helperRevision that measured it (0: older than revision 2)
+        bool presetFiles = false;        // its presets are files (more may come): listed again when they change
+        juce::StringArray presetFolders; // the folders its preset files are in (the helper says)
+        juce::String presetFilesStamp;   // presetFilesStamp() of them when it was measured
+        int measuredWith = 0;            // the helperRevision that measured it (0: older than revision 2)
         juce::Time updated;
 
         /** It did not load, a preset crashed or hung the helper, or a sound was silent. */
