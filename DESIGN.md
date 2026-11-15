@@ -912,7 +912,12 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
      (`ai.v1.effect.readManual`, `spinus_ai.manuals.read_effect_manuals`: the AI is given the plugin's settings
      by id with their ranges and answers only by those ids; `EffectProfiles::Reading`; Apply fills the settings
      the user has not set, Source::manual).
-  4. Profiles shipped as files for Spinus's own effects and the free ones it offers.
+  4. Profiles shipped as files for Spinus's own effects and the free ones it offers
+     (`packaging/share/effect-profiles`, built in as `SpinusEffectProfiles`, read by `EffectProfiles::bundled`;
+     `get` falls back to them, Source::bundled). A shipped plugin's setting may be named without an id: CLAP ids
+     are each plugin's own numbers (LSP hashes its port ids), so `Profile::find (id, name)` and the window match by
+     the name the plugin shows when no id matches. Spinus's own effects name settings by id and name, checked
+     against what each effect reports in a test.
   5. Later: listening, test signals through the effect to learn what a setting does to the sound.
 - **The Analyzer builds songs the way a producer would** (§12.7; owner decision 2026-11-14), in this order, each
   a small step, the Analyzer staying experimental:

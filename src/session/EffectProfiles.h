@@ -40,6 +40,9 @@ public:
         bool operator== (const Profile&) const = default;
         bool isEmpty() const { return goodFor.isEmpty() && settings.empty() && manuals.empty(); }
         const Setting* find (const juce::String& id) const;
+        /** By id, else (a shipped profile names settings as plugins show them, whose ids differ between hosts and
+           versions) by name, ignoring case. */
+        const Setting* find (const juce::String& id, const juce::String& name) const;
     };
 
     explicit EffectProfiles (const juce::File& indexFolder);
@@ -51,7 +54,12 @@ public:
     void load();
     bool save() const;
 
+    /** The effect's profile: the user's, else the one Spinus ships for it (bundled), else none. */
     std::optional<Profile> get (const juce::String& effect) const;
+    /** The profile Spinus ships for one of its own effects or the free ones it gets, by the effect's key; none for
+        others. Files in packaging/share/effect-profiles, each an exported profile (toShared) with the key it is
+        `for`, built into Spinus; their settings are Source::bundled and may name a setting without its id. */
+    static std::optional<Profile> bundled (const juce::String& effect);
     /** Sets the effect's profile (nullopt or an empty one: forgotten). Settings with nothing learned are left out.
         Not saved until save(). */
     void set (const juce::String& effect, std::optional<Profile>);

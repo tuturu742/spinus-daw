@@ -1,0 +1,78 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Plate Reverb",
+  "for": "stock-bundled.dragonfly.plate",
+  "profile": {
+    "goodFor": "bright, dense tails on vocals and snare",
+    "settings": [
+      {
+        "id": "",
+        "name": "Decay",
+        "what": "how long the tail lasts",
+        "low": "0.8 s",
+        "high": "3 s",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Wet Level",
+        "what": "level of the reverb",
+        "low": "10 %",
+        "high": "40 %",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Algorithm",
+        "what": "the plate's character: Simple, Nested or Tank",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Dry Level",
+        "what": "level of the original sound; 0 on a send bus",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Predelay",
+        "what": "gap before the reverb starts",
+        "low": "0 ms",
+        "high": "30 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Dampen",
+        "what": "darkens the tail",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "High Cut",
+        "what": "darkens the whole reverb",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Low Cut",
+        "what": "removes lows from the reverb",
+        "source": "bundled"
+      },
+      {
+        "id": "",
+        "name": "Width",
+        "what": "stereo width of the reverb",
+        "source": "bundled"
+      }
+    ],
+    "manuals": [
+      {
+        "source": "https://michaelwillis.github.io/dragonfly-reverb"
+      }
+    ]
+  }
+}

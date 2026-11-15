@@ -1,0 +1,76 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Spinus EQ",
+  "for": "stock-spinus.eq",
+  "profile": {
+    "goodFor": "tone shaping with up to 8 bands: cutting rumble and harshness, adding air or weight",
+    "settings": [
+      {
+        "id": "band1_freq",
+        "name": "Band 1 frequency",
+        "what": "band 1's frequency; by default a low cut for rumble",
+        "low": "20 Hz",
+        "high": "150 Hz",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "band1_on",
+        "name": "Band 1 on",
+        "what": "switches band 1 (low cut) on",
+        "source": "bundled"
+      },
+      {
+        "id": "band2_gain",
+        "name": "Band 2 gain",
+        "what": "low shelf boost or cut: weight",
+        "low": "-6.0 dB",
+        "high": "6.0 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "band4_gain",
+        "name": "Band 4 gain",
+        "what": "boost or cut around the low mids (mud, boxiness)",
+        "low": "-9.0 dB",
+        "high": "4.0 dB",
+        "source": "bundled"
+      },
+      {
+        "id": "band6_gain",
+        "name": "Band 6 gain",
+        "what": "boost or cut around the upper mids (presence, harshness)",
+        "low": "-6.0 dB",
+        "high": "4.0 dB",
+        "source": "bundled"
+      },
+      {
+        "id": "band7_gain",
+        "name": "Band 7 gain",
+        "what": "high shelf boost or cut: air and brightness",
+        "low": "-6.0 dB",
+        "high": "6.0 dB",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "band3_q",
+        "name": "Band 3 Q",
+        "what": "how narrow a band is (every band has one); higher is narrower",
+        "low": "0.50",
+        "high": "4.00",
+        "source": "bundled"
+      },
+      {
+        "id": "output",
+        "name": "Output",
+        "what": "level after the EQ",
+        "low": "-12.0 dB",
+        "high": "6.0 dB",
+        "source": "bundled"
+      }
+    ]
+  }
+}

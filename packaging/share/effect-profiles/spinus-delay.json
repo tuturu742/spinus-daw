@@ -1,0 +1,78 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Spinus Delay",
+  "for": "stock-spinus.delay",
+  "profile": {
+    "goodFor": "echoes: slapback on vocals, rhythmic delays in time with the song, wide stereo echoes on a send",
+    "settings": [
+      {
+        "id": "note",
+        "name": "Note",
+        "what": "the echo time in note lengths, when synced to the tempo",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "feedback",
+        "name": "Feedback",
+        "what": "how many times it repeats: more is longer",
+        "low": "10%",
+        "high": "60%",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "mix",
+        "name": "Mix",
+        "what": "dry to echoes; 100% on a send bus",
+        "low": "10%",
+        "high": "40%",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "sync",
+        "name": "Sync",
+        "what": "echo time following the song's tempo, or free in ms",
+        "source": "bundled"
+      },
+      {
+        "id": "time",
+        "name": "Time",
+        "what": "the echo time in ms, when free",
+        "low": "60.0 ms",
+        "high": "800 ms",
+        "source": "bundled"
+      },
+      {
+        "id": "high_cut",
+        "name": "High cut",
+        "what": "darkens the echoes so they sit behind the sound",
+        "low": "3.0 kHz",
+        "high": "10.0 kHz",
+        "source": "bundled"
+      },
+      {
+        "id": "low_cut",
+        "name": "Low cut",
+        "what": "thins the echoes so they don't muddy the lows",
+        "low": "80 Hz",
+        "high": "400 Hz",
+        "source": "bundled"
+      },
+      {
+        "id": "mode",
+        "name": "Mode",
+        "what": "stereo, ping-pong between sides, or mono echoes",
+        "source": "bundled"
+      },
+      {
+        "id": "width",
+        "name": "Width",
+        "what": "how wide the echoes are",
+        "source": "bundled"
+      }
+    ]
+  }
+}

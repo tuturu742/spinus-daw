@@ -1,0 +1,110 @@
+{
+  "kind": "spinus.effect-profile",
+  "version": 1,
+  "effect": "Filter",
+  "for": "stock-spinus.filter",
+  "profile": {
+    "goodFor": "sweeps and tone shaping: cutting lows or highs, filter sweeps and wobbles moved by an LFO or the level",
+    "settings": [
+      {
+        "id": "cutoff",
+        "name": "Cutoff",
+        "what": "where the filter starts to cut",
+        "low": "200 Hz",
+        "high": "12.0 kHz",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "type",
+        "name": "Type",
+        "what": "which part it keeps: low pass keeps the lows, high pass the highs, band pass the middle, notch removes a narrow band",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "resonance",
+        "name": "Resonance",
+        "what": "boost at the cutoff; high values whistle",
+        "low": "0%",
+        "high": "60%",
+        "matters": true,
+        "source": "bundled"
+      },
+      {
+        "id": "slope",
+        "name": "Slope",
+        "what": "how steeply it cuts past the cutoff",
+        "source": "bundled"
+      },
+      {
+        "id": "lfo_amount",
+        "name": "LFO amount",
+        "what": "how far the LFO moves the cutoff; negative moves it down",
+        "low": "-50%",
+        "high": "50%",
+        "source": "bundled"
+      },
+      {
+        "id": "lfo_sync",
+        "name": "LFO sync",
+        "what": "LFO speed following the song's tempo, or free in Hz",
+        "source": "bundled"
+      },
+      {
+        "id": "lfo_length",
+        "name": "LFO length",
+        "what": "one LFO cycle in note lengths, when synced to the tempo",
+        "source": "bundled"
+      },
+      {
+        "id": "lfo_rate",
+        "name": "LFO rate",
+        "what": "LFO speed in Hz, when free",
+        "low": "0.10 Hz",
+        "high": "8.00 Hz",
+        "source": "bundled"
+      },
+      {
+        "id": "lfo_shape",
+        "name": "LFO shape",
+        "what": "the LFO's wave",
+        "source": "bundled"
+      },
+      {
+        "id": "env_amount",
+        "name": "Envelope amount",
+        "what": "how far the input's level moves the cutoff (auto-wah); negative closes it",
+        "low": "-60%",
+        "high": "60%",
+        "source": "bundled"
+      },
+      {
+        "id": "env_attack",
+        "name": "Envelope attack",
+        "what": "how fast the cutoff follows a rise in level",
+        "source": "bundled"
+      },
+      {
+        "id": "env_release",
+        "name": "Envelope release",
+        "what": "how fast it falls back",
+        "source": "bundled"
+      },
+      {
+        "id": "mix",
+        "name": "Mix",
+        "what": "dry to filtered",
+        "source": "bundled"
+      },
+      {
+        "id": "gain",
+        "name": "Volume",
+        "what": "output level after the filter",
+        "low": "-12.0 dB",
+        "high": "6.0 dB",
+        "source": "bundled"
+      }
+    ]
+  }
+}

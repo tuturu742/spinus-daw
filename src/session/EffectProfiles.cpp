@@ -1,5 +1,7 @@
 #include "EffectProfiles.h"
 
+#include "SpinusEffectProfiles.h"
+
 namespace spinus
 {
 
@@ -19,6 +21,17 @@ const EffectProfiles::Setting* EffectProfiles::Profile::find (const juce::String
     for (const auto& s : settings)
         if (s.id == id)
             return &s;
+    return nullptr;
+}
+
+const EffectProfiles::Setting* EffectProfiles::Profile::find (const juce::String& id, const juce::String& name) const
+{
+    if (const auto* s = find (id))
+        return s;
+    if (name.isNotEmpty())
+        for (const auto& s : settings)
+            if (s.name.equalsIgnoreCase (name))
+                return &s;
     return nullptr;
 }
 
@@ -50,6 +63,35 @@ std::optional<EffectProfiles::Profile> EffectProfiles::get (const juce::String& 
 {
     if (const auto found = profiles.find (effect); found != profiles.end())
         return found->second;
+    return bundled (effect);
+}
+
+std::optional<EffectProfiles::Profile> EffectProfiles::bundled (const juce::String& effect)
+{
+    // Read once from the files built into Spinus (packaging/share/effect-profiles).
+    static const auto shipped = []
+    {
+        std::map<juce::String, Profile> all;
+        for (int i = 0; i < SpinusEffectProfiles::namedResourceListSize; ++i)
+        {
+            int size = 0;
+            const auto* data =
+                SpinusEffectProfiles::getNamedResource (SpinusEffectProfiles::namedResourceList[i], size);
+            const auto file = juce::JSON::parse (juce::String::fromUTF8 (data, size));
+            juce::String name, problem;
+            auto profile = fromShared (file, name, problem);
+            const auto key = file["for"].toString();
+            jassert (profile.has_value() && key.isNotEmpty()); // a shipped file that doesn't read
+            if (! profile.has_value() || key.isEmpty())
+                continue;
+            for (auto& s : profile->settings)
+                s.source = Source::bundled;
+            all.emplace (key, std::move (*profile));
+        }
+        return all;
+    }();
+    if (const auto found = shipped.find (effect); found != shipped.end())
+        return found->second;
     return std::nullopt;
 }
 
@@ -71,7 +113,8 @@ juce::var EffectProfiles::describeForAgents (const Profile& profile)
         if (s.isEmpty())
             continue;
         auto* o = new juce::DynamicObject();
-        o->setProperty ("id", s.id);
+        if (s.id.isNotEmpty()) // a shipped profile may name a setting only
+            o->setProperty ("id", s.id);
         o->setProperty ("name", s.name);
         if (s.what.isNotEmpty())
             o->setProperty ("what", s.what);
@@ -168,7 +211,7 @@ std::optional<EffectProfiles::Profile> EffectProfiles::fromVar (const juce::var&
         {
             Setting s { r["id"].toString(),   r["name"].toString(), r["what"].toString(),    r["low"].toString(),
                         r["high"].toString(), (bool)r["matters"],   sourceFrom (r["source"]) };
-            if (s.id.isNotEmpty() && ! s.isEmpty())
+            if ((s.id.isNotEmpty() || s.name.isNotEmpty()) && ! s.isEmpty())
                 profile.settings.push_back (std::move (s));
         }
     if (const auto* manuals = v["manuals"].getArray())

@@ -409,9 +409,14 @@ file (GLOB spinus_profile_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/packagin
 juce_add_binary_data (spinus_profiles HEADER_NAME SpinusProfiles.h NAMESPACE SpinusProfiles
     SOURCES ${spinus_profile_files})
 
+# The effect profiles Spinus ships (EffectProfiles::bundled): one exported profile per file.
+file (GLOB spinus_effect_profile_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/packaging/share/effect-profiles/*.json)
+juce_add_binary_data (spinus_effect_profiles HEADER_NAME SpinusEffectProfiles.h NAMESPACE SpinusEffectProfiles
+    SOURCES ${spinus_effect_profile_files})
+
 target_link_libraries (spinus_core
     PUBLIC spinus_juce
-    PRIVATE spinus_art spinus_profiles spinus_warnings ${CMAKE_DL_LIBS} spinus_rubberband)
+    PRIVATE spinus_art spinus_profiles spinus_effect_profiles spinus_warnings ${CMAKE_DL_LIBS} spinus_rubberband)
 
 if (WIN32)
     # Downloads go through JUCE (WinINet) and unpack with JUCE's zip and gzip readers. The AI service's
