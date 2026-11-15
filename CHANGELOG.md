@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Update sound index** is quicker: an instrument whose presets are files (Surge XT's patches, preset folders you
+  chose) is no longer loaded again at every update when none of its files changed, and a silent preset after the
+  first is given 3 seconds to sound instead of 10.
 - Agents are told how to play an instrument's chord mode (a guitar's strummer): its chord keys, its pattern keys
   and how to hold a chord and press a pattern key with it, instead of "plays keys not known". **Read the
   manual** keeps longer notes for each key (up to 300 characters, so a rule such as where a chord's root goes is
