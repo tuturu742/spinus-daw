@@ -323,7 +323,7 @@ bool Analyzer::analyze (const juce::File& file)
         return false;
     }
     song = file;
-    resume = nullptr;
+    resume = afterEngine = nullptr;
     clapWanted = false;
     rhythm.reset();
     key.reset();
@@ -491,8 +491,13 @@ void Analyzer::checkReady (const std::function<void()>& then, const juce::String
                                          "The Analyzer needs the analysis engine (PyTorch) installed first.",
                                          juce::dontSendNotification);
                                      engineButton.setVisible (true);
+                                     afterEngine = then;
+                                     afterEngineNeeds = alsoNeeded;
+                                     engineWatch.startTimer (2000);
                                      return fail ("The analysis engine is not installed.");
                                  }
+                                 afterEngine = nullptr;
+                                 engineWatch.stopTimer();
                                  beatModel = engine.gpu ? "beat_this_final0" : "beat_this_small0";
                                  readModels (engine.models);
                                  engineButton.setVisible (false);
@@ -502,6 +507,28 @@ void Analyzer::checkReady (const std::function<void()>& then, const juce::String
                                      return fail ("Model files are missing.");
                                  resume = nullptr; // it is under way
                                  then();
+                             });
+}
+
+/** Installed since the Analyzer said it was missing: on with what was asked for, without a restart. */
+void Analyzer::lookForEngine()
+{
+    if (afterEngine == nullptr || service == nullptr || ! service->isEnabled())
+        return engineWatch.stopTimer();
+    if (lookingForEngine || isBusy())
+        return;
+    lookingForEngine = true;
+    ai::checkAnalysisEngine (*service, alive,
+                             [this] (const ai::EngineCheck& engine)
+                             {
+                                 lookingForEngine = false;
+                                 if (! engine.installed || afterEngine == nullptr || isBusy())
+                                     return;
+                                 engineWatch.stopTimer();
+                                 const auto then = std::move (afterEngine);
+                                 afterEngine = nullptr;
+                                 needsText.setText ({}, juce::dontSendNotification);
+                                 checkReady (then, afterEngineNeeds);
                              });
 }
 

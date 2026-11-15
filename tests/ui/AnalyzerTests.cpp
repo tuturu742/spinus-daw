@@ -65,13 +65,12 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
     REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }));
     CHECK (analyzer.getNeedsText().contains ("analysis engine"));
 
-    // Install the engine (the stand-in), then: the model files are missing, with their size.
+    // Install the engine (the stand-in, as Options > AI does), then, without asking again or a restart: the model
+    // files are missing, with their size.
     service.call ("ai.v1.compute.install", juce::JSON::parse (R"({"build": "cpu"})"), {});
     REQUIRE (waitFor (
         [&] { return models.getSiblingFile ("python").getChildFile ("cpu/spinus-build.json").existsAsFile(); }, 60000));
-    REQUIRE (analyzer.analyze (song));
-    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }));
-    CHECK (analyzer.getNeedsText().contains ("MB"));
+    REQUIRE (waitFor ([&] { return analyzer.getNeedsText().contains ("MB") && ! analyzer.isBusy(); }, 15000));
     CHECK (analyzer.getDownloadSize() == 84025440 + 21 + 8451101 + 230444); // Demucs, Beat This!, Basic Pitch
     // Each says its licence and where to read about it.
     REQUIRE (analyzer.getMissingSources().size() == 3);

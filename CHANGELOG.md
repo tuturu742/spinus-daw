@@ -8,6 +8,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - Fixed: when one of the Analyzer's model files could not be downloaded (its authors' server down), the others
   were not downloaded either and the list never shrank. Now the others still download, and the status line
   says which one failed and why.
+- Fixed: after installing the analysis engine (PyTorch) from the Analyzer, it kept saying PyTorch was needed
+  until Spinus restarted. It now notices the install and carries on with the analysis.
 - The Analyzer builds a replicated song the way a producer would: it finds the sections (markers on the ruler:
   Intro, Verse 1, Chorus 1...), puts each stem on its own track, and turns its notes into short patterns: a
   loop is one pattern placed again, a fill a pattern of its own, and a section that comes back reuses its
