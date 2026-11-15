@@ -6,6 +6,7 @@
 #include "session/SoundDescriptors.h"
 #include "session/ProgramFolder.h"
 #include "session/SoundIndex.h"
+#include "session/PresetFolders.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -728,4 +729,45 @@ TEST_CASE ("Sound index on the Browser's real sample folders", "[.realsamples]")
               << " s; nothing changed: " << again.samplesMeasured << " measured in " << second << " s; index "
               << index.getFolder().getFullPathName() << "\n";
     CHECK (again.samplesMeasured == 0);
+}
+
+TEST_CASE ("Sound index: an instrument's preset files are listed again only when they changed", "[sounds][index]")
+{
+    // The index in a folder of its own: the preset folders chosen are kept beside it.
+    TempFolder temp;
+    const auto indexFolder = temp.folder.getChildFile ("sounds");
+    SoundIndex index (indexFolder);
+    const auto presets = temp.folder.getChildFile ("Preset files of a synth");
+    REQUIRE (presets.getChildFile ("Leads").createDirectory());
+    REQUIRE (presets.getChildFile ("Leads/Saw.fxp").replaceWithText ("saw"));
+    REQUIRE (presets.getChildFile ("Pad.fxp").replaceWithText ("pad"));
+
+    SoundIndex::Instrument i;
+    i.source = threeOsc();
+    i.complete = true;
+    i.presetFiles = true;
+    i.presetFolders.add (presets.getFullPathName());
+    i.presetFilesStamp = SoundIndex::presetFilesStamp (i.presetFolders, {});
+    index.instruments[i.source.key] = i;
+    REQUIRE (index.saveInstrument (index.instruments.begin()->second));
+    REQUIRE (index.saveIndex());
+
+    SoundIndex again (indexFolder);
+    again.load();
+    CHECK (again.instruments.begin()->second.presetFilesStamp == i.presetFilesStamp);
+    CHECK_FALSE (again.needsVisit (threeOsc())); // nothing changed: not loaded again
+
+    REQUIRE (presets.getChildFile ("Leads/Square.fxp").replaceWithText ("square")); // a new preset
+    CHECK (again.needsVisit (threeOsc()));
+    REQUIRE (presets.getChildFile ("Leads/Square.fxp").deleteFile());
+    CHECK_FALSE (again.needsVisit (threeOsc()));
+
+    // A preset folder the user chooses for it: listed again.
+    const auto mine = temp.folder.getChildFile ("My presets");
+    REQUIRE (mine.createDirectory());
+    PresetFolders chosen (indexFolder);
+    chosen.load();
+    REQUIRE (chosen.add (threeOsc().key, mine));
+    REQUIRE (chosen.save());
+    CHECK (again.needsVisit (threeOsc()));
 }

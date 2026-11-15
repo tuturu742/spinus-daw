@@ -114,6 +114,11 @@ public:
     explicit SoundIndex (juce::File folder) : root (std::move (folder)) {}
     /** <plugin list folder>/ai/sounds. */
     static juce::File getDefaultFolder();
+
+    /** What changes when a preset file is added, removed or changed in `folders`, or another preset folder is
+        chosen for the instrument (`chosen`): how many files, their sizes and newest time. Reading it takes a
+        moment even for thousands of files, much less than loading the instrument to list them. */
+    static juce::String presetFilesStamp (const juce::StringArray& folders, const juce::Array<juce::File>& chosen);
     juce::File getFolder() const { return root; }
 
     struct Instrument
@@ -123,7 +128,9 @@ public:
         juce::StringArray problemPresets; // presets that crashed or hung the helper: skipped
         juce::String problem;             // the instrument itself did not load
         bool complete = false;            // every preset measured (not stopped part way)
-        bool presetFiles = false;         // its presets are files (more may come): listed again at each update
+        bool presetFiles = false;         // its presets are files (more may come): listed again when they change
+        juce::StringArray presetFolders;  // the folders its preset files are in (the helper says)
+        juce::String presetFilesStamp;    // presetFilesStamp() of them when it was measured
         int measuredWith = 0;             // the helperRevision that measured it (0: older than revision 2)
         juce::Time updated;
 
