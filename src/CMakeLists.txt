@@ -396,9 +396,14 @@ include ("${PROJECT_SOURCE_DIR}/cmake/SpinusRubberBand.cmake") # Spinus Tune's r
 juce_add_binary_data (spinus_art HEADER_NAME SpinusArt.h NAMESPACE SpinusArt
     SOURCES ${PROJECT_SOURCE_DIR}/packaging/share/spinus.svg ${PROJECT_SOURCE_DIR}/THIRD_PARTY.md)
 
+# The instrument profiles Spinus ships (InstrumentProfiles::bundled): one exported profile per file.
+file (GLOB spinus_profile_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/packaging/share/instrument-profiles/*.json)
+juce_add_binary_data (spinus_profiles HEADER_NAME SpinusProfiles.h NAMESPACE SpinusProfiles
+    SOURCES ${spinus_profile_files})
+
 target_link_libraries (spinus_core
     PUBLIC spinus_juce
-    PRIVATE spinus_art spinus_warnings ${CMAKE_DL_LIBS} spinus_rubberband)
+    PRIVATE spinus_art spinus_profiles spinus_warnings ${CMAKE_DL_LIBS} spinus_rubberband)
 
 if (WIN32)
     # Downloads go through JUCE (WinINet) and unpack with JUCE's zip and gzip readers. The AI service's

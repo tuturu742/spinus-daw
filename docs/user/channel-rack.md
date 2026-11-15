@@ -38,7 +38,10 @@ play, which switch what it plays, and its modes. Spinus can also listen to every
 channel has now), ask the plugin, or read its manual with the AI. What you set is kept for that instrument, on
 every channel and in every project that uses it, and you can export it as a file to share. The window is the same
 as in the Track creator; [Learn this instrument](track-creator.md#sounds-for-each-part) there explains it in
-full. Spinus's own synths and the free ones it gets come with what it knows of them.
+full. Spinus's own instruments that play every key (3x Osc, the Sampler) and the free synths it gets (Surge XT,
+OB-Xf, Odin 2, Six Sines) come with what it knows of them: every key plays, with a few words on what they suit.
+The Drum Machine and the Beat Slicer don't: you choose which key plays each pad or slice, and they tell Spinus
+the names themselves.
 
 ## Replace instrument
 

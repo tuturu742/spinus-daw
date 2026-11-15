@@ -1,0 +1,23 @@
+{
+  "kind": "spinus.instrument-profile",
+  "version": 1,
+  "instrument": "Six Sines",
+  "for": "stock-bundled.six-sines",
+  "profile": {
+    "modes": [
+      {
+        "name": "Normal",
+        "goodFor": "FM bells, electric pianos, metallic basses and leads",
+        "voices": "chords",
+        "keys": [
+          {
+            "from": 0,
+            "to": 127,
+            "job": "plays",
+            "source": "bundled"
+          }
+        ]
+      }
+    ]
+  }
+}

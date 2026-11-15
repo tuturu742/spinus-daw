@@ -1,0 +1,23 @@
+{
+  "kind": "spinus.instrument-profile",
+  "version": 1,
+  "instrument": "Odin 2",
+  "for": "odin2",
+  "profile": {
+    "modes": [
+      {
+        "name": "Normal",
+        "goodFor": "basses, leads, pads and arps",
+        "voices": "chords",
+        "keys": [
+          {
+            "from": 0,
+            "to": 127,
+            "job": "plays",
+            "source": "bundled"
+          }
+        ]
+      }
+    ]
+  }
+}

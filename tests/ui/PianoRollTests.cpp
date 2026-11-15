@@ -1174,7 +1174,7 @@ TEST_CASE ("Keys the instrument does not play are shaded and its switch keys nam
     CHECK (r.roll.describeKey (60) == "C5");
 
     // An instrument Spinus knows nothing of: every key may play.
-    REQUIRE (r.rack.addChannel ("spinus.sampler", "Hits"));
+    REQUIRE (r.rack.addChannel ("spinus.beat-slicer", "Hits"));
     r.roll.handleUpdateNowIfNeeded();
     CHECK (r.roll.getKeyJobs() == nullptr);
     CHECK (r.roll.keyPlays (12));

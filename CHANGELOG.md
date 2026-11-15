@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The Sampler and Six Sines come with what Spinus knows of their keys, like 3x Osc, Surge XT, OB-Xf and Odin 2.
+  These shipped profiles are now files in the same format as an exported profile
+  (`packaging/share/instrument-profiles`), built into Spinus.
 - The Piano Roll's **Generate** keeps notes on keys a learned instrument plays: a note above or below it moves by
   octaves onto a key that plays, and its switch keys ("palm mute") are written only when asked for.
 - The assistant's and outside agents' music tools keep notes on keys a learned instrument plays: `write_part` moves

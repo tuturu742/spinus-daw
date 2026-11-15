@@ -464,8 +464,9 @@ and drums": those three), or empty. Then:
   **Export...** saves what Spinus knows of the instrument as a file you can share (only facts about its keys
   and modes, and the manuals that are web pages; never the manuals' text). **Import...** reads such a file as
   a proposal, like a manual's: Apply takes it, and the keys you marked yourself stay yours. Imported keys say
-  "from an imported profile" when you hover them. Spinus's own synth (3x Osc) and the free synths it gets
-  (Surge XT, OB-Xf, Odin 2) come with a profile already: every key plays, with a few words on what they suit.
+  "from an imported profile" when you hover them. Spinus's own 3x Osc and Sampler and the free synths it gets
+  (Surge XT, OB-Xf, Odin 2, Six Sines) come with a profile already: every key plays, with a few words on what
+  they suit.
   Your own changes to it win, and **Forget this instrument** brings the original back. Notes it
   plays, set in an earlier version, becomes the first mode's playing keys.
 

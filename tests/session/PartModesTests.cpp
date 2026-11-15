@@ -220,6 +220,25 @@ TEST_CASE ("Part modes: notes kept to the mode's keys, switch keys written at ea
     }
 }
 
+TEST_CASE ("Instrument profiles: every file Spinus ships reads, for the instrument it names", "[instruments][profiles]")
+{
+    const auto folder = juce::File (SPINUS_TEST_FILES_DIR).getSiblingFile ("packaging/share/instrument-profiles");
+    const auto files = folder.findChildFiles (juce::File::findFiles, false, "*.json");
+    REQUIRE (files.size() >= 6);
+    for (const auto& file : files)
+    {
+        INFO (file.getFileName());
+        const auto shared = juce::JSON::parse (file);
+        juce::String name, problem;
+        const auto profile = InstrumentProfiles::fromShared (shared, name, problem);
+        REQUIRE (profile.has_value());
+        CHECK (name.isNotEmpty());
+        const auto shipped = InstrumentProfiles::bundled (shared["for"].toString());
+        REQUIRE (shipped.has_value());
+        CHECK (shipped.value().modes.size() == profile.value().modes.size());
+    }
+}
+
 TEST_CASE ("Instrument profiles: the ones Spinus ships, and a profile shared as a file", "[instruments][profiles]")
 {
     // Spinus's own synth and the free ones it gets come with a profile; the user's own wins, and forgetting it
@@ -227,7 +246,8 @@ TEST_CASE ("Instrument profiles: the ones Spinus ships, and a profile shared as 
     const auto root = juce::File::createTempFile ("shipped");
     const auto indexFolder = root.getChildFile ("sound-index");
     InstrumentProfiles profiles (indexFolder);
-    for (const auto* key : { "stock-spinus.3x-osc", "surge-xt", "ob-xf", "odin2" })
+    for (const auto* key :
+         { "stock-spinus.3x-osc", "stock-spinus.sampler", "surge-xt", "ob-xf", "odin2", "stock-bundled.six-sines" })
     {
         const auto shipped = profiles.get (key);
         REQUIRE (shipped.has_value());

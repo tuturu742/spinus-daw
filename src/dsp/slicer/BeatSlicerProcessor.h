@@ -106,6 +106,8 @@ public:
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
+    /** "Slice 3" on the key that plays slice 3, while a loop is loaded (Learn this instrument's Ask the plugin). */
+    std::optional<juce::String> getNameForMidiNoteNumber (int note, int midiChannel) override;
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

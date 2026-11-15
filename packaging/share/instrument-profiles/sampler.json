@@ -1,0 +1,23 @@
+{
+  "kind": "spinus.instrument-profile",
+  "version": 1,
+  "instrument": "Sampler",
+  "for": "stock-spinus.sampler",
+  "profile": {
+    "modes": [
+      {
+        "name": "Normal",
+        "goodFor": "a recorded sound played at any pitch: keys, plucks, pads, vocal chops",
+        "voices": "chords",
+        "keys": [
+          {
+            "from": 0,
+            "to": 127,
+            "job": "plays",
+            "source": "bundled"
+          }
+        ]
+      }
+    ]
+  }
+}

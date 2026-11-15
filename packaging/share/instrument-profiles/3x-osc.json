@@ -1,0 +1,23 @@
+{
+  "kind": "spinus.instrument-profile",
+  "version": 1,
+  "instrument": "3x Osc",
+  "for": "stock-spinus.3x-osc",
+  "profile": {
+    "modes": [
+      {
+        "name": "Normal",
+        "goodFor": "basses, leads, plucks and simple pads",
+        "voices": "chords",
+        "keys": [
+          {
+            "from": 0,
+            "to": 127,
+            "job": "plays",
+            "source": "bundled"
+          }
+        ]
+      }
+    ]
+  }
+}
