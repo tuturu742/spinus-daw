@@ -70,8 +70,15 @@ struct Fixture
     {
         std::optional<ExportJob::Result> result;
         ExportJob job (host.getEngine(), devices, project, {}, destination, std::move (settings),
-                       [&] (const ExportJob::Result& r) { result = r; });
+                       [&] (const ExportJob::Result& r)
+                       {
+                           result = r;
+                           renderedSingleThreaded = SingleThreadedRender::isActive();
+                       });
+        CHECK_FALSE (SingleThreadedRender::isActive());
         job.start();
+        CHECK (SingleThreadedRender::isActive() !=
+               result.has_value()); // one thread while it runs (unless done at once)
         if (cancelAtOnce)
             job.cancel();
 
@@ -84,6 +91,7 @@ struct Fixture
     EngineHost host { { .openAudioDevice = false } };
     test::TestDevices devices;
     juce::TemporaryFile folder;
+    bool renderedSingleThreaded = true;
 };
 
 struct Audio
@@ -135,6 +143,10 @@ TEST_CASE ("Exporting the song writes a WAV of the song plus the tail", "[engine
         CHECK (audio.bits == bits);
         CHECK (audio.isFloat == isFloat);
         CHECK (audio.rmsDb > -30.0f);
+        CHECK_FALSE (f.renderedSingleThreaded); // no longer once it is done
+        CHECK_FALSE (SingleThreadedRender::isActive());
+        CHECK (f.host.getEngine().getEngineBehaviour().getNumberOfCPUsToUseForAudio() ==
+               juce::jmax (1, juce::SystemStats::getNumCpus()));
     }
 }
 
