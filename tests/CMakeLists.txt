@@ -99,6 +99,7 @@ add_executable (spinus_tests
     ui/AnalyzerTests.cpp
     ui/TrackCreatorTests.cpp
     ui/SoundIndexWindowTests.cpp
+    ui/LearnEffectTests.cpp
     ui/SongWriterPanelTests.cpp
     ui/ExperimentalFeaturesTests.cpp
     ui/OwnerSongsTests.cpp

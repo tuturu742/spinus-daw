@@ -254,6 +254,8 @@ add_library (spinus_core STATIC
     session/PartSounds.cpp
     session/PartSounds.h
     session/SongWriter.cpp
+    session/EffectProfiles.cpp
+    session/EffectProfiles.h
     session/InstrumentProfiles.cpp
     session/KeyProbe.cpp
     session/KeyProbe.h
@@ -294,6 +296,8 @@ add_library (spinus_core STATIC
     ui/DescribeSongPanel.cpp
     ui/DescribeSongPanel.h
     ui/PartSoundsPanel.cpp
+    ui/LearnEffectWindow.cpp
+    ui/LearnEffectWindow.h
     ui/LearnInstrumentWindow.cpp
     ui/LearnInstrumentWindow.h
     ui/SaveSoundWindow.cpp

@@ -894,6 +894,20 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   - **Profiles shipped as files,** in the same format as an exported profile, for all of Spinus's own
     instruments (the Drum Machine's pads named, the Sampler, Beat Slicer, 3x Osc) and the free open-source
     instruments it offers (Surge XT, Odin 2, OB-Xf, Six Sines), replacing the four written into the code today.
+- **Effect learning** (owner request, 2026-11-15), like instrument learning but for effects: what each setting
+  does, a safe range and whether it matters most, and what the effect is good for, so the assistant, outside
+  agents and the Automixer choose and set effects instead of guessing from names like "Param 7". Kept per effect
+  key (`InstrumentPresets::libraryOf`) beside the sound index in `effect-profiles.json` (`session/EffectProfiles`;
+  every setting records where it was learned, the user's word wins; facts only, exported and imported as
+  `spinus.effect-profile` files). Steps, each a small PR, generic for every plugin:
+  1. **Learn this effect...** in an effect slot's menu (`ui/LearnEffectWindow`): the plugin's own settings with
+     the values at the ends of their ranges (`Session::getDeviceParameterTexts`, read without AI), edited by the
+     user, with a search.
+  2. Everything that sets effects reads it: the assistant's context, outside agents (MCP and `--run`) and the
+     Automixer.
+  3. **Read the manual** and web pages for an effect, through the user's AI connection, as a proposal to Apply.
+  4. Profiles shipped as files for Spinus's own effects and the free ones it offers.
+  5. Later: listening, test signals through the effect to learn what a setting does to the sound.
 - **The Analyzer builds songs the way a producer would** (§12.7; owner decision 2026-11-14), in this order, each
   a small step, the Analyzer staying experimental:
   1. **Patterns by section and loop.** Bars are compared by harmony, loudness and the notes found, on the beats

@@ -1,8 +1,10 @@
 #pragma once
 
+#include <optional>
 #include <set>
 
 #include "DeviceFactory.h"
+#include "EngineHost.h"
 #include "model/Model.h"
 
 #include <tracktion_engine/tracktion_engine.h>
@@ -191,6 +193,7 @@ private:
     std::unique_ptr<tracktion::Edit> edit;
     std::unique_ptr<class EngineAdapter> adapter;
     std::shared_ptr<tracktion::EditRenderer::Handle> handle;
+    std::optional<SingleThreadedRender> singleThreaded; // while it runs
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);
 
     JUCE_DECLARE_NON_COPYABLE (ExportJob)
