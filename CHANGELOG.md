@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The assistant and coding agents read what you taught Spinus in **Learn this effect...**: what an effect is good
+  for, and for each setting what it does, its safe range and whether it matters most. An effect can be asked for
+  by what it suits ("drum glue") as well as by its name.
 - **Learn this effect...** in an effect's right-click menu in the Mixer: every setting with the range the plugin
   reports, where you can write what it does and a safe range, tick the ones that matter most, and say what the
   effect is good for; exported and imported as a file. The first step of effect learning: next, the assistant and

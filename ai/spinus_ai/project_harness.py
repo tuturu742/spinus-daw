@@ -170,7 +170,8 @@ TOOLS = [
     Tool(
         "song_overview",
         "The open project: tempo, key, sections (from the Playlist's markers, with their bars), the parts (channels: "
-        "role, sound, insert, where they play), the mixer (effects, sends, sidechains). Call it first.",
+        "role, sound, insert, where they play), the mixer (effects, what a learned one is good for, sends, "
+        "sidechains). Call it first.",
         schema({}, []),
     ),
     Tool(
@@ -181,8 +182,9 @@ TOOLS = [
     Tool(
         "sound_settings",
         "A part's instrument (or one of its insert's effects) and its settings with the values they show now, "
-        f"{MOST_SETTINGS} at a time: 'find' keeps those whose name has all its words, 'start' pages on through a "
-        "plugin with many.",
+        f"{MOST_SETTINGS} at a time: 'find' keeps those whose name (or what it does) has all its words, 'start' pages "
+        "on through a plugin with many. A learned effect's settings say what each does, a safe range to keep to "
+        "and which matter most (listed first).",
         schema(
             {
                 "part": PART,
@@ -434,6 +436,13 @@ def tool_hints(name: str) -> dict[str, Any]:
     return {"readOnlyHint": False, "destructiveHint": name not in ADDS, "openWorldHint": False}
 
 
+def learned_setting(p: dict[str, Any]) -> Any:
+    """A setting as sound_settings shows it: the value it shows now, or with what a learned effect's setting does,
+    its safe range, the plugin's own range and whether it matters (Learn this effect)."""
+    extra = {k: p[k] for k in ("what", "safeRange", "range", "matters") if p.get(k)}
+    return {"now": p.get("text", ""), **extra} if extra else p.get("text", "")
+
+
 class ProjectHarness:
     """The tools on a working copy of the open project; `steps` are the Spinus commands its edits made."""
 
@@ -452,6 +461,10 @@ class ProjectHarness:
             str(k): int(v) for k, v in (context.get("deviceParameterCounts") or {}).items() if isinstance(v, int)
         }
         self.measured: dict[str, Any] = dict(context.get("measured") or {})
+        # Device ID -> what a learned effect is good for (Learn this effect; its settings carry what each does).
+        self.effect_good_for: dict[str, str] = {
+            str(k): str(v) for k, v in (context.get("effectGoodFor") or {}).items() if isinstance(v, str)
+        }
         # Device ID -> what a learned instrument's keys do (InstrumentProfiles::describeForAgents).
         self.instrument_keys: dict[str, dict[str, Any]] = {
             str(k): v for k, v in (context.get("instrumentKeys") or {}).items() if isinstance(v, dict)
@@ -962,6 +975,7 @@ class ProjectHarness:
                 {
                     "name": i.get("name") or "Insert",
                     "effects": [self.device_name(e.get("device")) for e in i.get("effects", [])],
+                    **self.learned_effects(i),
                     "volumeDb": i.get("volumeDb", 0),
                     "output": target.get("name") if target else ("master" if i.get("output") else None),
                     "sends": [
@@ -984,6 +998,15 @@ class ProjectHarness:
                 "mixer": inserts,
             }
         )
+
+    def learned_effects(self, insert: dict[str, Any]) -> dict[str, Any]:
+        """{"goodFor": {effect: what it suits}} for the insert's learned effects (Learn this effect), else nothing."""
+        good = {
+            self.device_name(e.get("device")): self.effect_good_for[str((e.get("device") or {}).get("id"))]
+            for e in insert.get("effects", [])
+            if str((e.get("device") or {}).get("id")) in self.effect_good_for
+        }
+        return {"goodFor": good} if good else {}
 
     @staticmethod
     def keys_in_words(keys: dict[str, Any]) -> list[str]:
@@ -1022,13 +1045,16 @@ class ProjectHarness:
             stored = device.get("parameters") or {}
             return json.dumps({"device": self.device_name(device), "settings": stored or "not known here"})
         words = find.lower().split()
-        found = [p for p in listed if all(w in str(p.get("name") or p.get("id")).lower() for w in words)]
+        found = [
+            p for p in listed if all(w in f"{p.get('name') or p.get('id')} {p.get('what', '')}".lower() for w in words)
+        ]
+        found.sort(key=lambda p: not p.get("matters"))  # the learned ones that matter most first (stable)
         first = max(1, int(start))
         shown = found[first - 1 : first - 1 + MOST_SETTINGS]
-        answer: dict[str, Any] = {
-            "device": self.device_name(device),
-            "settings": {str(p.get("name") or p.get("id")): p.get("text", "") for p in shown},
-        }
+        answer: dict[str, Any] = {"device": self.device_name(device)}
+        if key in self.effect_good_for:
+            answer["goodFor"] = self.effect_good_for[key]
+        answer["settings"] = {str(p.get("name") or p.get("id")): learned_setting(p) for p in shown}
         what = f"settings matching '{find}'" if words else "settings"
         if shown:
             answer["shown"] = f"{what} {first}-{first + len(shown) - 1} of {len(found)}"
@@ -1369,11 +1395,18 @@ class ProjectHarness:
                             found.append((name != wanted, d, str(setting), str(choice)))
             found.sort(key=lambda f: (f[0], not f[1].get("available", True)))
             if not found:
+                # What a learned effect is good for ("plate reverb for vocals"): every word in it.
+                for d in self.devices:
+                    good = " ".join(str(d.get("goodFor", "")).lower().split())
+                    if d.get("type") == "effect" and good and all(w in good for w in wanted.split()):
+                        found.append((True, d, "", ""))
+                found.sort(key=lambda f: not f[1].get("available", True))
+            if not found:
                 raise by_name
             _, d, setting, choice = found[0]
             if not d.get("available", True):
                 raise Mistake(f"{d.get('name')} is not downloaded here (Options > Get free plugins)") from by_name
-            return copy.deepcopy(d.get("device") or {}), {setting: choice}
+            return copy.deepcopy(d.get("device") or {}), ({setting: choice} if setting else {})
 
     def tool_add_effect(self, to: str, effect: str, settings: dict[str, Any] | None = None) -> str:
         insert = self.where(to)

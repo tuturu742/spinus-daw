@@ -7,6 +7,7 @@
 #include "engine/EngineHost.h"
 #include "model/Model.h"
 #include "session/AgentCommandLine.h"
+#include "session/EffectProfiles.h"
 #include "session/InstrumentProfiles.h"
 #include "session/ProjectDocument.h"
 #include "session/Session.h"
@@ -431,4 +432,27 @@ TEST_CASE ("The summary tells what a learned instrument's keys do", "[cli][instr
     REQUIRE (keys["modes"].size() == 1);
     CHECK (keys["modes"][0]["switches"][0]["what"].toString() == "palm mute");
     CHECK (juce::JSON::toString (keys["modes"][0]["plays"], true) == "[[40, 91]]");
+}
+
+TEST_CASE ("The summary tells what a learned effect suits and what its settings do", "[cli][effects]")
+{
+    TempFolder t;
+    const auto index = t.root.getChildFile ("sounds");
+    Fixture f;
+    std::vector<juce::var> said;
+    REQUIRE (f.run (R"([{"command": "insert.addEffect", "params": {"insert": )" +
+                        juce::String ((int)model::masterInsertId.value) +
+                        R"(, "device": {"kind": "stock", "stockType": "spinus.filter"}}}])",
+                    said) == 0);
+    CHECK_FALSE (cli::summarize (f.session, {}, index)["inserts"][0]["effects"][0].hasProperty ("learned"));
+
+    EffectProfiles::Profile profile;
+    profile.goodFor = "taming harsh highs";
+    profile.settings.push_back ({ "cutoff", "Cutoff", "where the highs start to fall", "2 kHz", "12 kHz", true });
+    EffectProfiles profiles (index);
+    profiles.set ("stock-spinus.filter", profile);
+    REQUIRE (profiles.save());
+    const auto learned = cli::summarize (f.session, {}, index)["inserts"][0]["effects"][0]["learned"];
+    CHECK (learned["goodFor"].toString() == "taming harsh highs");
+    CHECK (learned["settings"][0]["safeRange"].toString() == "2 kHz to 12 kHz");
 }
