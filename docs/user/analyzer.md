@@ -80,7 +80,7 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
      is taken as the chorus, another that comes back as the verse, a part heard once as the intro, the outro
      or a bridge. These are guesses: rename the markers if they are wrong.
    - Each stem's notes become short **patterns**: where a section repeats a loop (drums and bass often repeat
-     every 1, 2 or 4 bars), that loop is one pattern placed again and again ("Drums: Verse loop"); a bar that
+     every 1, 2, 4 or 8 bars), that loop is one pattern placed again and again ("Drums: Verse loop"); a bar that
      differs, such as a drum fill, gets a pattern of its own ("Drums: Verse fill"). The same notes anywhere in
      the song are the same pattern, so a chorus that comes back reuses its patterns: change the pattern once
      and every chorus changes. No note is left out.

@@ -922,14 +922,19 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
 - **The Analyzer builds songs the way a producer would** (§12.7; owner decision 2026-11-14), in this order, each
   a small step, the Analyzer staying experimental:
   1. **Patterns by section and loop** (done: `session/SongSections`, used by the Analyzer's Add to the project).
-     Bars are compared by the notes found (each stem's pitch classes by duration and onsets on sixteenths; how
-     busy it is stands in for loudness), in 4-bar phrases from the first downbeat; phrases at least 0.7 alike
-     are one kind, a run of one kind is a section, named by repetition and busyness (the busiest repeated kind
-     the chorus, the next the verse, single ones intro, outro or bridge) and marked on the ruler. Inside each
-     section, per stem, the shortest loop of 1, 2 or 4 bars that covers at least half the section is one
-     pattern placed again; the other chunks (fills) are patterns of their own; identical notes anywhere in the
-     song (start, length, pitch) are one pattern, so a returning section reuses its patterns and no note is
-     lost. Each stem gets its own Playlist track. No new model.
+     The song is cut in 4-bar phrases from the first downbeat; each stem's notes in a phrase give its harmony
+     (pitch classes by duration), its rhythm (onsets by sixteenth of the bar) and how busy it is, summed over the
+     phrase. Two phrases are compared stem by stem (harmony 0.6, rhythm 0.4, weighed by how much the stem plays
+     in both; a stem playing in one only counts against). Phrases are grouped in kinds by average linkage while
+     the groups are at least as alike as the song's own 60th percentile of phrase likeness (within 0.6..0.85):
+     a fixed bar (0.7 at first, bar by bar) found no repeats at all in most of 56 transcribed real songs, whose
+     notes are never quite the same twice. A lone phrase between two of one kind is that kind varied; two kinds
+     taking turns (ABAB) are one section. A run of one kind is a section, named by repetition and busyness (the
+     busiest repeated kind the chorus, the next the verse, single ones intro, outro or bridge) and marked on the
+     ruler. Inside each section, per stem, the loop of 1, 2, 4 or 8 bars that covers the most of it (at least
+     half) is one pattern placed again; the other chunks (fills) are patterns of their own; identical notes
+     anywhere in the song (start, length, pitch) are one pattern, so a returning section reuses its patterns and
+     no note is lost. Each stem gets its own Playlist track. No new model.
   2. **Rhythm, lead and solo** (done: `session/StemParts`, used by the Analyzer's Add to the project). One
      separated stem often holds several parts (two guitars). Its notes (not drums, bass or vocals) are split by
      how they are played: notes struck together (within a 32nd, more than octaves of one note, which the
