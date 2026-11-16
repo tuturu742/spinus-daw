@@ -10,7 +10,7 @@ namespace spinus
 
 /** A transcribed song (the Analyzer's notes, one list per stem, on the project's bars) built the way a producer
     would (§17, the Analyzer's step 1): its sections found by comparing bars, and each stem's notes as short
-    patterns: within a section, the shortest repeat (a loop of 1, 2 or 4 bars) is one pattern placed again, a part
+    patterns: within a section, the shortest repeat (a loop of 1, 2, 4 or 8 bars) is one pattern placed again, a part
     that differs (a fill) a pattern of its own, and the same notes anywhere in the song the same pattern, so a
     section that comes back reuses its patterns and no note is lost. No AI and no model: plain data, any thread. */
 namespace songsections

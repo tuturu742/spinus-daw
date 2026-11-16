@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Fixed: the Analyzer found no verses or choruses in most real songs (they came out as Part 1, Part 2, ...),
+  because a transcribed song never plays a part exactly the same twice. It now compares whole 4-bar phrases with
+  a bar set by the song itself, and a chorus made of two different halves is one section.
 - Fixed: when one of the Analyzer's model files could not be downloaded (its authors' server down), the others
   were not downloaded either and the list never shrank. Now the others still download, and the status line
   says which one failed and why.

@@ -9,16 +9,14 @@ namespace spinus::songsections
 
 namespace
 {
-constexpr double alike = 0.7; // phrases at least this similar are one kind
-
-/** What one stem plays in one bar: its harmony (pitch classes, by duration), its rhythm (onsets on sixteenths)
-    and how busy it is. */
-struct BarFeature
+/** What one stem plays in one phrase: its harmony (pitch classes, by duration, a note counting up to a bar), its
+    rhythm (onsets by sixteenth of the bar, all its bars together) and how busy it is. Summed over the phrase, so a
+    wrong note or two of the transcription matter little. */
+struct PhraseFeature
 {
     std::array<double, 12> pitches {};
     std::array<double, 16> onsets {};
     double busy = 0.0;
-    bool silent() const { return busy <= 0.0; }
 };
 
 double cosine (const double* a, const double* b, size_t n)
@@ -30,41 +28,77 @@ double cosine (const double* a, const double* b, size_t n)
         aa += a[i] * a[i];
         bb += b[i] * b[i];
     }
-    return aa > 0.0 && bb > 0.0 ? ab / std::sqrt (aa * bb) : (aa <= 0.0 && bb <= 0.0 ? 1.0 : 0.0);
+    return aa > 0.0 && bb > 0.0 ? ab / std::sqrt (aa * bb) : 0.0;
 }
 
-/** How alike two bars of one stem are, 0..1; nullopt when both are silent (nothing to compare). */
-std::optional<double> similarity (const BarFeature& a, const BarFeature& b)
-{
-    if (a.silent() && b.silent())
-        return std::nullopt;
-    if (a.silent() != b.silent())
-        return 0.0;
-    return 0.5 * cosine (a.pitches.data(), b.pitches.data(), 12) + 0.5 * cosine (a.onsets.data(), b.onsets.data(), 16);
-}
+using Features = std::vector<std::vector<PhraseFeature>>; // [stem][phrase]
 
-using Features = std::vector<std::vector<BarFeature>>; // [stem][bar]
-
-double barSimilarity (const Features& features, int a, int b)
+/** How alike two phrases are, 0..1: each stem's harmony (0.6) and rhythm (0.4), weighed by how much it plays in
+    both (a stem that plays in one of them only counts against, as much as it plays: a part coming in starts a
+    section). */
+double phraseSimilarity (const Features& features, size_t a, size_t b)
 {
-    double sum = 0.0;
-    int counted = 0;
+    double sum = 0.0, weights = 0.0;
     for (const auto& stem : features)
-        if (const auto s = similarity (stem[(size_t)a], stem[(size_t)b]))
+    {
+        const auto &x = stem[a], &y = stem[b];
+        if (x.busy <= 0.0 && y.busy <= 0.0)
+            continue;
+        if (x.busy <= 0.0 || y.busy <= 0.0)
         {
-            sum += s.value();
-            ++counted;
+            weights += std::sqrt (std::max (x.busy, y.busy));
+            continue;
         }
-    return counted > 0 ? sum / counted : 1.0; // silent everywhere in both
+        const auto weight = std::sqrt (std::min (x.busy, y.busy));
+        sum += weight * (0.6 * cosine (x.pitches.data(), y.pitches.data(), 12) +
+                         0.4 * cosine (x.onsets.data(), y.onsets.data(), 16));
+        weights += weight;
+    }
+    return weights > 0.0 ? sum / weights : 1.0; // silent everywhere in both
 }
 
-double busyness (const Features& features, int firstBar, int bars)
+/** Groups the phrases into kinds (average linkage: the two groups most alike on average join, while they are at
+    least `alike`). Each phrase's kind, numbered in order of first appearance. */
+std::vector<int> groupPhrases (const std::vector<std::vector<double>>& similarity, double alike)
 {
-    double sum = 0.0;
-    for (const auto& stem : features)
-        for (int b = firstBar; b < firstBar + bars; ++b)
-            sum += stem[(size_t)b].busy;
-    return bars > 0 ? sum / bars : 0.0;
+    const auto n = similarity.size();
+    std::vector<std::vector<size_t>> groups;
+    groups.reserve (n);
+    for (size_t i = 0; i < n; ++i)
+        groups.push_back ({ i });
+    auto sums = similarity; // between groups, summed over their members
+    while (groups.size() > 1)
+    {
+        double best = -1.0;
+        size_t a = 0, b = 0;
+        for (size_t i = 0; i < groups.size(); ++i)
+            for (size_t j = i + 1; j < groups.size(); ++j)
+                if (const auto mean = sums[i][j] / (double)(groups[i].size() * groups[j].size()); mean > best)
+                {
+                    best = mean;
+                    a = i;
+                    b = j;
+                }
+        if (best < alike)
+            break;
+        groups[a].insert (groups[a].end(), groups[b].begin(), groups[b].end());
+        for (size_t k = 0; k < groups.size(); ++k)
+        {
+            sums[a][k] += sums[b][k];
+            sums[k][a] = sums[a][k];
+        }
+        groups.erase (groups.begin() + (std::ptrdiff_t)b);
+        sums.erase (sums.begin() + (std::ptrdiff_t)b);
+        for (auto& row : sums)
+            row.erase (row.begin() + (std::ptrdiff_t)b);
+    }
+    std::sort (groups.begin(), groups.end(), [] (const auto& x, const auto& y)
+               { return *std::min_element (x.begin(), x.end()) < *std::min_element (y.begin(), y.end()); });
+    std::vector<int> kinds (n, 0);
+    for (size_t k = 0; k < groups.size(); ++k)
+        for (const auto i : groups[k])
+            kinds[i] = (int)k;
+    return kinds;
 }
 
 /** A note as pieces compare them: where it starts in the piece, how long, which key. */
@@ -101,56 +135,89 @@ std::vector<Section> find (const std::map<juce::String, std::vector<model::Note>
     if (bars <= 0 || barLength <= 0)
         return {};
     phraseBars = std::max (1, phraseBars);
+    struct Phrase
+    {
+        int firstBar, bars, kind;
+    };
+    std::vector<Phrase> phrases;
+    for (int first = 0; first < bars; first += phraseBars)
+        phrases.push_back ({ first, std::min (phraseBars, bars - first), 0 });
     Features features;
     for (const auto& [name, notes] : stems)
     {
-        std::vector<BarFeature> perBar ((size_t)bars);
+        std::vector<PhraseFeature> perPhrase (phrases.size());
         for (const auto& n : notes)
         {
             const auto start = std::max<model::Ticks> (0, n.start);
             const auto bar = (int)(start / barLength);
             if (bar >= bars)
                 continue;
-            auto& f = perBar[(size_t)bar];
+            auto& f = perPhrase[(size_t)(bar / phraseBars)];
             const auto within = start - (model::Ticks)bar * barLength;
-            f.pitches[(size_t)(((n.pitch % 12) + 12) % 12)] += (double)std::min (n.length, barLength - within);
+            f.pitches[(size_t)(((n.pitch % 12) + 12) % 12)] += (double)std::min (n.length, barLength);
             f.onsets[(size_t)juce::jlimit (0, 15, (int)(within * 16 / barLength))] += 1.0;
             f.busy += std::max (0.1, (double)n.velocity);
         }
-        features.push_back (std::move (perBar));
+        features.push_back (std::move (perPhrase));
     }
 
-    // Phrases, each the kind of the first phrase it is like (or a new kind).
-    struct Phrase
-    {
-        int firstBar, bars, kind;
-    };
-    std::vector<Phrase> phrases;
-    std::vector<int> firstOfKind; // the phrase each kind is compared by
-    for (int first = 0; first < bars; first += phraseBars)
-    {
-        Phrase phrase { first, std::min (phraseBars, bars - first), -1 };
-        double best = 0.0;
-        for (int k = 0; k < (int)firstOfKind.size(); ++k)
+    // Phrases alike are one kind. How alike counts as the same differs from song to song (how clean the
+    // transcription is, how much the parts vary), so the bar is the song's own: its 60th percentile of how alike
+    // two phrases are, within 0.6..0.85 (tried on 56 transcribed songs: fewer and the verses and choruses split
+    // in kinds of their own, more and unlike parts join).
+    const auto phraseCount = phrases.size();
+    std::vector<std::vector<double>> similarity (phraseCount, std::vector<double> (phraseCount, 1.0));
+    std::vector<double> pairs;
+    for (size_t a = 0; a < phraseCount; ++a)
+        for (size_t b = a + 1; b < phraseCount; ++b)
         {
-            const auto& other = phrases[(size_t)firstOfKind[(size_t)k]];
-            const auto shared = std::min (phrase.bars, other.bars);
-            double sum = 0.0;
-            for (int b = 0; b < shared; ++b)
-                sum += barSimilarity (features, phrase.firstBar + b, other.firstBar + b);
-            if (const auto s = sum / shared; s >= alike && s > best)
-            {
-                best = s;
-                phrase.kind = k;
-            }
+            similarity[a][b] = similarity[b][a] = phraseSimilarity (features, a, b);
+            pairs.push_back (similarity[a][b]);
         }
-        if (phrase.kind < 0)
-        {
-            phrase.kind = (int)firstOfKind.size();
-            firstOfKind.push_back ((int)phrases.size());
-        }
-        phrases.push_back (phrase);
+    double alike = 0.85;
+    if (pairs.size() >= 10)
+    {
+        const auto at = pairs.begin() + (std::ptrdiff_t)(pairs.size() * 3 / 5);
+        std::nth_element (pairs.begin(), at, pairs.end());
+        alike = juce::jlimit (0.6, 0.85, *at);
     }
+    const auto kinds = groupPhrases (similarity, alike);
+    const auto kindsFound = (size_t)*std::max_element (kinds.begin(), kinds.end()) + 1;
+    for (size_t i = 0; i < phraseCount; ++i)
+        phrases[i].kind = kinds[i];
+    // A phrase of its own kind between two of one kind is that kind, varied (a fill, a different last line).
+    for (size_t i = 1; i + 1 < phraseCount; ++i)
+        if (phrases[i - 1].kind == phrases[i + 1].kind && phrases[i].kind != phrases[i - 1].kind &&
+            std::count (kinds.begin(), kinds.end(), kinds[i]) == 1)
+            phrases[i].kind = phrases[i - 1].kind;
+    // Two kinds taking turns (ABAB: a chorus of two different halves) are one section, of a kind of their own.
+    std::map<std::pair<int, int>, int> pairKinds;
+    for (size_t i = 0; i + 3 < phraseCount;)
+    {
+        const auto x = phrases[i].kind, y = phrases[i + 1].kind;
+        if (x == y || phrases[i + 2].kind != x || phrases[i + 3].kind != y)
+        {
+            ++i;
+            continue;
+        }
+        auto end = i + 4;
+        while (end + 1 < phraseCount && phrases[end].kind == x && phrases[end + 1].kind == y)
+            end += 2;
+        const auto kind =
+            pairKinds.emplace (std::make_pair (x, y), (int)kindsFound + (int)pairKinds.size()).first->second;
+        for (auto p = i; p < end; ++p)
+            phrases[p].kind = kind;
+        i = end;
+    }
+
+    const auto busyness = [&features, phraseBars] (int firstBar, int barsLong)
+    {
+        double sum = 0.0;
+        for (const auto& stem : features)
+            for (int p = firstBar / phraseBars; p * phraseBars < firstBar + barsLong; ++p)
+                sum += stem[(size_t)p].busy;
+        return barsLong > 0 ? sum / barsLong : 0.0;
+    };
 
     // Runs of one kind are sections.
     struct Run
@@ -165,16 +232,18 @@ std::vector<Section> find (const std::map<juce::String, std::vector<model::Note>
             runs.push_back ({ p.firstBar, p.bars, p.kind });
 
     // Name each kind: how often it comes back and how busy it is.
-    const auto kinds = (int)firstOfKind.size();
-    std::vector<int> count ((size_t)kinds, 0);
-    std::vector<double> busy ((size_t)kinds, 0.0);
+    int kindCount = 0;
+    for (const auto& p : phrases)
+        kindCount = std::max (kindCount, p.kind + 1);
+    std::vector<int> count ((size_t)kindCount, 0);
+    std::vector<double> busy ((size_t)kindCount, 0.0);
     for (const auto& r : runs)
     {
         ++count[(size_t)r.kind];
-        busy[(size_t)r.kind] += busyness (features, r.firstBar, r.bars);
+        busy[(size_t)r.kind] += busyness (r.firstBar, r.bars);
     }
     std::vector<int> repeated;
-    for (int k = 0; k < kinds; ++k)
+    for (int k = 0; k < kindCount; ++k)
         if (count[(size_t)k] > 1)
             repeated.push_back (k);
     std::sort (repeated.begin(), repeated.end(),
@@ -231,10 +300,12 @@ Split split (const std::vector<model::Note>& notes, const std::vector<Section>& 
         if (section.bars <= 0)
             continue;
         const auto from = (model::Ticks)section.firstBar * barLength;
-        // The shortest loop that most of the section repeats; none: the section is one piece.
+        // The loop of 1, 2, 4 or 8 bars that covers the most of the section, at least half (the shorter of two
+        // that cover as much); none: the section is one piece.
         int loopBars = section.bars;
         std::optional<PieceKey> loop; // the notes it loops
-        for (const int bars : { 1, 2, 4 })
+        double covered = 0.0;
+        for (const int bars : { 1, 2, 4, 8 })
         {
             if (bars * 2 > section.bars)
                 break;
@@ -247,11 +318,13 @@ Split split (const std::vector<model::Note>& notes, const std::vector<Section>& 
             }
             const auto most = std::max_element (chunks.begin(), chunks.end(),
                                                 [] (const auto& a, const auto& b) { return a.second < b.second; });
-            if (most != chunks.end() && most->second >= 2 && most->second * 2 >= whole && ! most->first.second.empty())
+            if (most == chunks.end() || most->second < 2 || most->first.second.empty())
+                continue;
+            if (const auto share = (double)most->second / whole; share >= 0.5 && share > covered)
             {
+                covered = share;
                 loopBars = bars;
                 loop = most->first;
-                break;
             }
         }
         for (int b = 0; b < section.bars; b += loopBars)
