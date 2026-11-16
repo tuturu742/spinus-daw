@@ -90,6 +90,12 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
      **solo**. Each part gets its own channel and track, with the same sound. Parts that take turns split well;
      where both play at the same moment the split is rough (notes struck together with a chord stay in the
      rhythm part). When Spinus is not sure, the stem stays one part. Drums, bass and vocals are never split.
+   - Spinus also listens to **how each part gets louder, quieter or moves** between left and right over the song
+     (fades, swells, drops, pans), smoothed over about a bar, and adds that as **volume and pan automation** for
+     its channel, on Playlist tracks of their own ("Guitar volume (<song>)", "Guitar pan (<song>)"). The loud
+     parts keep the channel's volume; quieter parts go below it. A part whose loudness hardly changes gets no
+     volume curve, and one that stays in one place gets a fixed pan instead of a curve. Each note's own loudness
+     is in its velocity. Drums get no curves.
 
    Melodic stems play on **3x Osc**; the
    drums become steps on a **Drum Machine** (kick, snare, clap, hats, toms, rim, crash and ride on their

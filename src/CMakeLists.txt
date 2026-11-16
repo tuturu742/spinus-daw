@@ -240,6 +240,8 @@ add_library (spinus_core STATIC
     session/SongSections.h
     session/StemParts.cpp
     session/StemParts.h
+    session/StemAutomation.cpp
+    session/StemAutomation.h
     session/SongPreparation.cpp
     session/AnalysisLibrary.cpp
     session/AnalysisLibrary.h

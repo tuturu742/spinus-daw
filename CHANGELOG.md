@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The Analyzer adds volume and pan automation to the parts it replicates, from how each stem gets louder, quieter
+  or moves between left and right over the song (fades, swells, drops, pans). A part that stays in one place gets
+  a fixed pan instead.
 - The Analyzer splits a stem that holds several parts (two guitars, a piano's chords and its tune) by how they
   are played: the rhythm part (chords, steady playing), the lead (single, higher, freer lines) and the solo (a
   lead heard in one section only), each on a channel and track of its own. Where both play at once, the split
