@@ -130,6 +130,7 @@ std::vector<Part> split (const std::vector<model::Note>& input, const std::vecto
         if (steady[index] || bar.singles.size() < 2)
             continue;
         std::vector<int> pitches;
+        pitches.reserve (bar.singles.size());
         for (const auto i : bar.singles)
             pitches.push_back (notes[i].pitch);
         if (const auto middle = median (pitches);
