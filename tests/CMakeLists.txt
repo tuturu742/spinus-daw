@@ -64,6 +64,7 @@ add_executable (spinus_tests
     session/DemoSongTests.cpp
     session/SongSectionsTests.cpp
     session/StemPartsTests.cpp
+    session/SongTempoTests.cpp
     session/StemAutomationTests.cpp
     session/ProblemReportTests.cpp
     session/ProjectDocumentTests.cpp
