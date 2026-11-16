@@ -1358,6 +1358,7 @@ bool Analyzer::makeNotesWith (const std::map<juce::String, Sounds>& soundPerStem
     pieces.clear();
     closest.clear();
     madeChannels.clear();
+    dynamics.clear();
     tuned.clear();
     tuneNotes.clear();
     heard.clear();
@@ -1468,13 +1469,57 @@ void Analyzer::rememberPresets (const model::Device& device, int count)
     }
 }
 
+void Analyzer::measureDynamics (const std::function<void()>& then)
+{
+    dynamics.clear();
+    std::map<juce::String, juce::File> files;
+    for (const auto& [name, notes] : transcribed)
+        if (name != "drums" && ! notes.empty() && stems.contains (name) && stems[name].existsAsFile())
+            files[name] = stems[name];
+    if (files.empty())
+        return then();
+    setStep (Step::transcribing, "Listening to how loud each part is and where it sits...");
+    auto found = std::make_shared<std::map<juce::String, stemautomation::Curves>>();
+    dynamicsTask = std::make_unique<BackgroundTask> (
+        "Spinus analyzer dynamics",
+        [files, found, beats = beatTimes,
+         first = rhythm ? rhythm->firstDownbeat : 0.0] (const std::function<bool()>& stop)
+        {
+            juce::AudioFormatManager formats;
+            formats.registerBasicFormats();
+            for (const auto& [name, file] : files)
+            {
+                if (stop())
+                    break;
+                std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+                if (reader == nullptr || reader->lengthInSamples > std::numeric_limits<int>::max())
+                    continue;
+                juce::AudioBuffer<float> audio ((int)juce::jlimit (1u, 2u, reader->numChannels),
+                                                (int)reader->lengthInSamples);
+                reader->read (&audio, 0, audio.getNumSamples(), 0, true, true);
+                (*found)[name] = stemautomation::measure (audio, reader->sampleRate, beats, first);
+            }
+            return juce::Result::ok();
+        },
+        [this, found, then] (const juce::Result&)
+        {
+            dynamicsTask = nullptr;
+            dynamics = std::move (*found);
+            then();
+        });
+}
+
 void Analyzer::transcribeNext()
 {
     if (notesQueue.isEmpty())
     {
         clapWanted = false;
-        addNotesToProject(); // it says what it added, or why it could not
-        return setStep (Step::done, status.getText());
+        return measureDynamics (
+            [this]
+            {
+                addNotesToProject(); // it says what it added, or why it could not
+                setStep (Step::done, status.getText());
+            });
     }
     const auto name = notesQueue[0];
     notesQueue.remove (0);
@@ -1984,7 +2029,43 @@ bool Analyzer::addNotesToProject()
             steps.add ("marker.add", object ({ { "at", (juce::int64)at }, { "name", markers[(int)i] } })).isVoid())
             return failed();
     }
-    int count = 0, patternCount = 0, channelCount = 0;
+    int count = 0, patternCount = 0, channelCount = 0, curveCount = 0;
+    // The stem's fades, swells and moves (stemautomation): volume and pan curves for its channel, each on a lane of
+    // its own, or a fixed pan when it stays in one place.
+    const auto addDynamics = [&] (const juce::String& name, const juce::var& channel, const juce::String& label)
+    {
+        const auto found = dynamics.find (name);
+        if (found == dynamics.end())
+            return true;
+        const auto& curves = found->second;
+        if (curves.steadyPan.has_value() &&
+            steps.add ("channel.set", object ({ { "channel", channel }, { "pan", (double)*curves.steadyPan } }))
+                .isVoid())
+            return false;
+        for (const auto& [kind, points, what] : { std::tuple { "channelVolume", &curves.volume, " volume" },
+                                                  std::tuple { "channelPan", &curves.pan, " pan" } })
+        {
+            juce::Array<juce::var> list;
+            for (const auto& p : *points)
+                if (p.time < length)
+                    list.add (object ({ { "time", (juce::int64)p.time }, { "value", (double)p.value } }));
+            if (list.size() < 2)
+                continue;
+            const auto lane = label.upToFirstOccurrenceOf (" (", false, false) + what +
+                              label.fromFirstOccurrenceOf (" (", true, false);
+            if (steps
+                    .add ("clip.addAutomation",
+                          object ({ { "laneName", lane },
+                                    { "start", 0 },
+                                    { "length", (juce::int64)length },
+                                    { "target", object ({ { "kind", kind }, { "channel", channel } }) },
+                                    { "points", list } }))
+                    .isVoid())
+                return false;
+            ++curveCount;
+        }
+        return true;
+    };
     std::map<juce::String, std::vector<model::ChannelId>> channels;
     juce::StringArray splitStems; // "the guitar into rhythm and lead"
     for (auto& [name, notes] : transcribed)
@@ -2054,6 +2135,8 @@ bool Analyzer::addNotesToProject()
                                                            { "start", (juce::int64)placed.start } }))
                         .isVoid())
                     return failed();
+            if (! addDynamics (name, channel, label))
+                return failed();
             patternCount += (int)split.pieces.size();
             ++channelCount;
         }
@@ -2107,6 +2190,10 @@ bool Analyzer::addNotesToProject()
                   (audioCount > 0
                        ? ", and " + juce::String (audioCount) + (audioCount == 1 ? " stem" : " stems") + " as audio"
                        : juce::String()) +
+                  (curveCount > 0 ? ", with " + juce::String (curveCount) +
+                                        (curveCount == 1 ? " volume or pan curve" : " volume and pan curves") +
+                                        " from how the stems get louder, quieter or move"
+                                  : juce::String()) +
                   (splitStems.isEmpty() ? juce::String()
                                         : ". Split by how they are played: " + splitStems.joinIntoString ("; ") +
                                               " (roughly where they play at the same moment)") +
@@ -2119,6 +2206,11 @@ bool Analyzer::addNotesToProject()
 
 void Analyzer::cancel()
 {
+    if (dynamicsTask != nullptr)
+    {
+        dynamicsTask = nullptr;
+        return fail ("Stopped.");
+    }
     if (stemTask != nullptr && step == Step::separating)
     {
         stemTask = nullptr;
