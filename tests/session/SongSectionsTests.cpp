@@ -101,3 +101,45 @@ TEST_CASE ("A stem's notes become loops placed again, fills of their own, and no
     CHECK (early.pieces[0].notes[0].start == 0);
     CHECK (early.placed.size() == 2);
 }
+
+TEST_CASE ("A chorus of two halves is one section, and a verse played a little differently is still the verse",
+           "[analyzer][sections]")
+{
+    // Verse (8 bars of A minor), chorus (F then G, 4 bars each, twice), verse again with three wrong notes, chorus.
+    std::vector<model::Note> keys, bass;
+    const auto play = [&] (int firstBar, int bars, std::initializer_list<int> chord, int root, bool busy)
+    {
+        for (int b = firstBar; b < firstBar + bars; ++b)
+        {
+            for (const int pitch : chord)
+                keys.push_back (note (b * bar, bar - 10, pitch));
+            for (int i = 0; i < (busy ? 8 : 4); ++i)
+                bass.push_back (note (b * bar + i * (busy ? beat / 2 : beat), busy ? 400 : 900, root));
+        }
+    };
+    for (const int verse : { 0, 24 })
+    {
+        play (verse, 8, { 57, 60, 64 }, 33, false);
+        for (const int chorus : { verse + 8, verse + 16 })
+        {
+            play (chorus, 4, { 53, 57, 60 }, 41, true);
+            play (chorus + 4, 4, { 55, 59, 62 }, 43, true);
+        }
+    }
+    for (int i = 0; i < 3; ++i)
+        bass.push_back (note (25 * bar + i * beat + beat / 2, 200, 45));
+    const std::map<juce::String, std::vector<model::Note>> stems { { "keys", keys }, { "bass", bass } };
+
+    const auto sections = songsections::find (stems, bar, 48);
+    juce::StringArray found;
+    for (const auto& s : sections)
+        found.add (s.name + " " + juce::String (s.firstBar) + "+" + juce::String (s.bars));
+    CHECK (found.joinIntoString (", ") == "Verse 0+8, Chorus 8+16, Verse 24+8, Chorus 32+16");
+
+    // The chorus's keys: one loop of 8 bars (both halves), placed twice in each chorus.
+    const auto split = songsections::split (keys, sections, bar);
+    REQUIRE (split.pieces.size() == 2);
+    CHECK (split.pieces[1].name == "Chorus loop");
+    CHECK (split.pieces[1].length == 8 * bar);
+    CHECK (notesPlaced (split) == (int)keys.size());
+}
