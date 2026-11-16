@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Fixed: on some AMD graphics cards (seen on a Strix Halo with ROCm), the Analyzer's "Add to the project" went
+  back to the start after a moment. The card passed its test and then failed the note finding (a MIOpen error),
+  and the error stayed in the status line. A job the graphics card fails now runs again on the processor, which
+  is used for the rest of the session; **Options › AI › Analysis engine** says why.
 - The Analyzer adds volume and pan automation to the parts it replicates, from how each stem gets louder, quieter
   or moves between left and right over the song (fades, swells, drops, pans). A part that stays in one place gets
   a fixed pan instead.

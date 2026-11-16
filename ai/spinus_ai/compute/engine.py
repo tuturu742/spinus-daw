@@ -14,6 +14,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,10 @@ from .devices import Gpu, detect, physical_cores
 from .environments import Environments, find_uv
 
 PACKAGE_PARENT = Path(__file__).resolve().parent.parent.parent
+# What a job's error says when the GPU's own libraries failed (MIOpen, HIP, CUDA, a driver reset), rather than the job.
+GPU_ERROR = re.compile(
+    r"miopen|hipblas|rocblas|\bhip\b|hip error|hsa_status|cuda|cudnn|cublas|device-side|xpu|level.?zero", re.IGNORECASE
+)
 START_TIMEOUT = 300.0  # importing PyTorch and the first GPU kernels can take a while
 
 Progress = Callable[[dict[str, Any]], Awaitable[None]]
@@ -235,14 +240,25 @@ class Engine:
             return await self.ensure()
 
     async def call(self, method: str, params: dict[str, Any], progress: Progress | None = None) -> Any:
-        """Runs one job in the worker; cancelling it stops the worker."""
+        """Runs one job in the worker; cancelling it stops the worker. A GPU that passed its self-test can still fail
+        a real job (MIOpen on some AMD GPUs): the job then runs again on the CPU, which is used for the session."""
         async with self.lock:
-            await self.ensure()
+            plan = await self.ensure()
             try:
                 return await self.send(method, params, progress)
             except asyncio.CancelledError:
                 await self.stop()
                 raise
+            except EngineError as error:
+                crashed = self.process is not None and self.process.returncode is not None
+                if plan.device == "cpu" or not (crashed or GPU_ERROR.search(str(error))):
+                    raise
+                await self.stop()
+                self.gpu_failures[plan.build.id] = f"The GPU failed a job, so the CPU is used instead: {error}"
+                self.last_test = {"ok": False, "message": str(error)}
+                if (await self.ensure()).device != "cpu":
+                    raise
+                return await self.send(method, params, progress)
 
     async def test(self) -> dict[str, Any]:
         """Tries the GPU again (and the CPU otherwise): the result of the self-test, for Options > AI."""

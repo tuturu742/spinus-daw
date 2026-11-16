@@ -1,6 +1,7 @@
 """A stand-in for PyTorch: enough for the worker's self-test, with NumPy doing the arithmetic.
 
-FAKE_GPU says what the "GPU" does: "ok", "wrong" (bad results), "crash" (dies), or "none" (no GPU).
+FAKE_GPU says what the "GPU" does: "ok", "wrong" (bad results), "crash" (dies), "jobs" (passes its self-test, then
+fails every job on the GPU, as ROCm's MIOpen did on a Strix Halo), or "none" (no GPU).
 """
 
 import os
@@ -132,7 +133,14 @@ def set_num_threads(count):
     _threads[0] = count
 
 
+_calls = [0]
+
+
 def get_num_threads():
+    # The self-test asks once; any later job on the "GPU" fails.
+    _calls[0] += 1
+    if _gpu == "jobs" and "HIP_VISIBLE_DEVICES" in os.environ and _calls[0] > 1:
+        raise RuntimeError("miopenStatusUnknownError")
     return _threads[0]
 
 
