@@ -242,6 +242,11 @@ public:
         int beatsPerBar = 4;
     };
     std::optional<Rhythm> getRhythm() const { return rhythm; }
+    /** The tempo the project takes on Add to the project: the song's average (songtempo::average). */
+    double getSongTempo() const;
+    /** The beats notes, hits and curves are placed on: a steady beat at getSongTempo() through the first downbeat,
+        so everything keeps its moment in the recording and lines up with the stems played as audio. */
+    std::vector<double> placementBeats() const;
     std::optional<model::Key> getKey() const { return key; }
     const std::map<juce::String, juce::File>& getStems() const noexcept { return stems; }
 
@@ -303,7 +308,7 @@ private:
     void measureDynamics (const std::function<void()>& then);
     bool addNotesToProject();
     void cannotAdd (const juce::String& why); // says so in the status line
-    bool addAudioSteps (Steps&, const juce::StringArray& names, int& added);
+    bool addAudioSteps (Steps&, const juce::StringArray& names, int& added, double tempo);
     void updateNoteChoices();
 
     /** A sound source in a stem's first list. */
