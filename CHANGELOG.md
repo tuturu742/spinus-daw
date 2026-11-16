@@ -8,6 +8,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Options › Sound index**: the Sounds tab has **Show** (all, presets, samples or problems) and **From** (one
   instrument or sample folder) menus. The Samples tab has **Show its samples** and **Show its problems**, so a
   folder's "4 problems" can be opened and read: which files, and why.
+- Fixed: on some AMD graphics cards (seen on a Strix Halo with ROCm), the Analyzer's "Add to the project" went
+  back to the start after a moment. The card passed its test and then failed the note finding (a MIOpen error),
+  and the error stayed in the status line. A job the graphics card fails now runs again on the processor, which
+  is used for the rest of the session; **Options › AI › Analysis engine** says why.
 - Fixed: with the Flatpak, every program crackled while Spinus was open and Spinus could not quit, on systems
   with a newer PipeWire. The Flatpak's JACK connection kept calling Spinus's sound thread, which took a whole
   processor core. The Flatpak now plays through ALSA's PipeWire device, and a saved JACK choice is replaced
