@@ -63,6 +63,7 @@ std::vector<int> groupPhrases (const std::vector<std::vector<double>>& similarit
 {
     const auto n = similarity.size();
     std::vector<std::vector<size_t>> groups;
+    groups.reserve (n);
     for (size_t i = 0; i < n; ++i)
         groups.push_back ({ i });
     auto sums = similarity; // between groups, summed over their members
