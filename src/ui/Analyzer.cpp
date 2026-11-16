@@ -12,6 +12,7 @@
 #include "project/ProjectFiles.h"
 #include "session/SongPreparation.h"
 #include "session/SongSections.h"
+#include "session/SongTempo.h"
 #include "session/StemParts.h"
 #include "model/ModelJson.h"
 #include "plugins/sandbox/SandboxPluginFormat.h"
@@ -793,6 +794,13 @@ void Analyzer::findTempo()
             });
 }
 
+double Analyzer::getSongTempo() const { return rhythm ? songtempo::average (beatTimes, rhythm->tempo) : 0.0; }
+
+std::vector<double> Analyzer::placementBeats() const
+{
+    return rhythm ? songtempo::steadyBeats (beatTimes, rhythm->firstDownbeat, getSongTempo()) : beatTimes;
+}
+
 void Analyzer::applyTempo (const juce::var& result)
 {
     beatTimes.clear();
@@ -803,7 +811,7 @@ void Analyzer::applyTempo (const juce::var& result)
     {
         rhythm = Rhythm { (double)result["tempo"], (double)result["firstDownbeat"],
                           juce::jmax (1, (int)result["beatsPerBar"]) };
-        tempoText.setText (juce::String (rhythm->tempo, 1) + " BPM, " + juce::String (rhythm->beatsPerBar) +
+        tempoText.setText (juce::String (getSongTempo(), 1) + " BPM, " + juce::String (rhythm->beatsPerBar) +
                                " beats per bar",
                            juce::dontSendNotification);
     }
@@ -1482,7 +1490,7 @@ void Analyzer::measureDynamics (const std::function<void()>& then)
     auto found = std::make_shared<std::map<juce::String, stemautomation::Curves>>();
     dynamicsTask = std::make_unique<BackgroundTask> (
         "Spinus analyzer dynamics",
-        [files, found, beats = beatTimes,
+        [files, found, beats = placementBeats(),
          first = rhythm ? rhythm->firstDownbeat : 0.0] (const std::function<bool()>& stop)
         {
             juce::AudioFormatManager formats;
@@ -1527,7 +1535,7 @@ void Analyzer::transcribeNext()
              (soundOf (name) == Sounds::song ? "Cutting samples from the " : "Listening for the notes of the ") + name +
                  "...");
     juce::Array<juce::var> beats;
-    for (auto b : beatTimes)
+    for (auto b : placementBeats())
         beats.add (b);
     const bool ownSounds = soundOf (name) == Sounds::song;
     const auto* method = ownSounds         ? "ai.v1.samples.make"
@@ -2013,8 +2021,19 @@ bool Analyzer::addNotesToProject()
         cannotAdd (steps.getError().isNotEmpty() ? steps.getError() : juce::String ("a stem's file is missing."));
         return false;
     };
+    // The notes follow the song's beats: the project takes the song's average tempo, so they and the stems
+    // played as audio line up at both ends (one undo step with the rest).
+    auto tempo = session.getProject().settings.tempoBpm;
+    const auto songTempo = rhythm ? getSongTempo() : 0.0;
+    const bool tempoSet = songTempo > 0.0 && std::abs (songTempo - tempo) > 0.005;
+    if (tempoSet)
+    {
+        if (steps.add ("project.setTempo", object ({ { "bpm", songTempo } })).isVoid())
+            return failed();
+        tempo = songTempo;
+    }
     int audioCount = 0;
-    if (! addAudioSteps (steps, audioStems, audioCount))
+    if (! addAudioSteps (steps, audioStems, audioCount, tempo))
         return failed();
     audioStems.clear();
     // The song's sections (markers on the ruler) and each stem's notes as patterns by section: loops placed
@@ -2197,6 +2216,13 @@ bool Analyzer::addNotesToProject()
                   (splitStems.isEmpty() ? juce::String()
                                         : ". Split by how they are played: " + splitStems.joinIntoString ("; ") +
                                               " (roughly where they play at the same moment)") +
+                  (tempoSet ? ". The project's tempo is now the song's, " + juce::String (tempo, 2) + " BPM"
+                            : juce::String()) +
+                  (songtempo::drift (beatTimes) > 0.08
+                       ? ". This song speeds up and slows down (played live, not to a click): the notes keep the "
+                         "recording's timing, so in places they are up to " +
+                             juce::String (songtempo::drift (beatTimes), 1) + " s off the grid"
+                       : juce::String()) +
                   ". Ctrl+Z takes them away." +
                   (tuneNotes.isEmpty() ? juce::String() : " " + tuneNotes.joinIntoString (" "))
             : "Added, but not every sound could be loaded: " + result.getErrorMessage(),
@@ -2240,7 +2266,7 @@ bool Analyzer::useTempo()
     auto transaction =
         std::make_unique<commands::Transaction> ("Use the tempo of " + song.getFileNameWithoutExtension());
     juce::String error;
-    auto tempo = registry.create ("project.setTempo", object ({ { "bpm", rhythm->tempo } }), error);
+    auto tempo = registry.create ("project.setTempo", object ({ { "bpm", getSongTempo() } }), error);
     if (tempo == nullptr)
         return false;
     transaction->add (std::move (tempo));
@@ -2271,7 +2297,7 @@ bool Analyzer::addStemsAsAudio (const juce::StringArray& names)
         return false;
     Steps steps (session.getProject(), "Add the stems of " + song.getFileNameWithoutExtension());
     int added = 0;
-    if (! addAudioSteps (steps, names, added))
+    if (! addAudioSteps (steps, names, added, session.getProject().settings.tempoBpm))
     {
         cannotAdd (steps.getError().isNotEmpty() ? steps.getError() : juce::String ("a stem's file is missing."));
         return false;
@@ -2286,11 +2312,11 @@ bool Analyzer::addStemsAsAudio (const juce::StringArray& names)
     return result.wasOk();
 }
 
-bool Analyzer::addAudioSteps (Steps& steps, const juce::StringArray& names, int& added)
+bool Analyzer::addAudioSteps (Steps& steps, const juce::StringArray& names, int& added, double tempo)
 {
-    // Each on a track of its own, the song's first downbeat on bar 1.
+    // Each on a track of its own, the song's first downbeat on bar 1, at `tempo` (the project's once the steps
+    // are done).
     const auto title = song.getFileNameWithoutExtension();
-    const auto tempo = session.getProject().settings.tempoBpm;
     const auto offset =
         rhythm ? (model::Ticks)std::llround (rhythm->firstDownbeat * tempo / 60.0 * (double)model::ticksPerQuarterNote)
                : (model::Ticks)0;

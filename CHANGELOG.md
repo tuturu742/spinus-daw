@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Fixed: the Analyzer's **Add to the project** left the project at its old tempo (120), so the notes ran away from
+  the stems added as audio. It now sets the song's average tempo, and places every note, drum hit and curve at
+  its moment in the recording, so a song played live (speeding up and slowing down) still lines up with its
+  stems; the status line says how far such a song strays from the grid.
 - Fixed: on some AMD graphics cards (seen on a Strix Halo with ROCm), the Analyzer's "Add to the project" went
   back to the start after a moment. The card passed its test and then failed the note finding (a MIOpen error),
   and the error stayed in the status line. A job the graphics card fails now runs again on the processor, which
