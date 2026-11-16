@@ -399,7 +399,7 @@ private:
     juce::File drumSamplesFolder;
     std::map<juce::String, juce::File> drumCandidates; // id -> file
     std::map<juce::String, std::vector<InstrumentPreset>> closest;
-    std::map<juce::String, model::ChannelId> madeChannels;
+    std::map<juce::String, std::vector<model::ChannelId>> madeChannels; // a stem split in parts has several
     std::map<juce::String, std::unique_ptr<juce::ComboBox>> presetChoices;
     std::map<juce::String, StemRow> rows; // each stem: what happens to it, and what plays it how
     juce::StringArray audioStems;         // added as audio with the notes being made, in their undo step

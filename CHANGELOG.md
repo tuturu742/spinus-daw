@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- The Analyzer splits a stem that holds several parts (two guitars, a piano's chords and its tune) by how they
+  are played: the rhythm part (chords, steady playing), the lead (single, higher, freer lines) and the solo (a
+  lead heard in one section only), each on a channel and track of its own. Where both play at once, the split
+  is rough; when unsure, the stem stays one part.
 - Fixed: the Analyzer found no verses or choruses in most real songs (they came out as Part 1, Part 2, ...),
   because a transcribed song never plays a part exactly the same twice. It now compares whole 4-bar phrases with
   a bar set by the song itself, and a chorus made of two different halves is one section.

@@ -84,6 +84,12 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
      differs, such as a drum fill, gets a pattern of its own ("Drums: Verse fill"). The same notes anywhere in
      the song are the same pattern, so a chorus that comes back reuses its patterns: change the pattern once
      and every chorus changes. No note is left out.
+   - A stem that holds more than one part, such as two guitars or a piano's chords and its tune, is **split
+     by how it is played**: chords and steady playing are the **rhythm** part ("Guitar rhythm (<song>)"), single
+     higher, freer lines the **lead** ("Guitar lead (<song>)"), and a lead heard in one section only the
+     **solo**. Each part gets its own channel and track, with the same sound. Parts that take turns split well;
+     where both play at the same moment the split is rough (notes struck together with a chord stay in the
+     rhythm part). When Spinus is not sure, the stem stays one part. Drums, bass and vocals are never split.
 
    Melodic stems play on **3x Osc**; the
    drums become steps on a **Drum Machine** (kick, snare, clap, hats, toms, rim, crash and ride on their
