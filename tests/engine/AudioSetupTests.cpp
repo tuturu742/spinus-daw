@@ -35,6 +35,18 @@ TEST_CASE ("First start through JACK records from a microphone, not from a progr
     CHECK (AudioSetup::pickJackInput ({ "Vivaldi" }, { "Built-in Mic" }).isEmpty());
 }
 
+TEST_CASE ("The Flatpak plays through ALSA's PipeWire device first, elsewhere JACK first", "[engine][audio]")
+{
+    const auto flatpak = engine::AudioSetup::linuxChoices (true);
+    REQUIRE (flatpak.size() == 3);
+    CHECK (flatpak[0] == std::pair<juce::String, juce::String> { "ALSA", "PipeWire Sound Server" });
+    CHECK (flatpak[1].first == "JACK");
+    const auto native = engine::AudioSetup::linuxChoices (false);
+    REQUIRE (native.size() == 3);
+    CHECK (native[0].first == "JACK");
+    CHECK (native[1] == std::pair<juce::String, juce::String> { "ALSA", "PipeWire Sound Server" });
+}
+
 TEST_CASE ("First-start defaults open a real device", "[.hardware]")
 {
     // Needs a sound card: spinus_tests "[.hardware]". Prints what the first-start rules choose here.

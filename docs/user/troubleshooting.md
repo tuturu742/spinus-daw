@@ -28,9 +28,18 @@ Spinus draws its text with a font from your system. Install one, for example Dej
 
 ## Crackles and dropouts
 
+- **Flatpak: everything crackles while Spinus is open, and Spinus won't close.** The Flatpak's JACK
+  connection doesn't get along with some newer PipeWire versions (seen with PipeWire 1.6 on the computer):
+  Spinus's sound thread is called over and over, takes a whole processor core, and every program's sound
+  crackles. Since version 0.2.0 the Flatpak uses **ALSA** with **PipeWire Sound Server** instead, and moves
+  you off JACK once when you update. If you still hear it: open **F10** (**Options › Audio**), choose
+  **ALSA** as the sound system and **PipeWire Sound Server** to play through. If Spinus hangs on closing,
+  end it with `flatpak kill io.github.tuturu742.spinus`. The AppImage and builds from source use the
+  computer's own JACK library and are not affected.
 - The line at the bottom of **F10** counts **dropouts**. If it rises while playing, choose a larger
   **Buffer size** (256 or 512).
-- Install `pipewire-jack` and choose **JACK** in **F10**: it is steadier and has less delay.
+- Install `pipewire-jack` and choose **JACK** in **F10**: it is steadier and has less delay (not in the
+  Flatpak: see the first point).
 - The Mixer shows each insert's CPU share at the top right of its strip, and each effect's in its slot.
   Find the heavy one and [freeze](freeze.md) its channel or insert.
 - Windows plugins play best with real-time privileges: see the line at the bottom of **Options ›

@@ -8,6 +8,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Options › Sound index**: the Sounds tab has **Show** (all, presets, samples or problems) and **From** (one
   instrument or sample folder) menus. The Samples tab has **Show its samples** and **Show its problems**, so a
   folder's "4 problems" can be opened and read: which files, and why.
+- Fixed: with the Flatpak, every program crackled while Spinus was open and Spinus could not quit, on systems
+  with a newer PipeWire. The Flatpak's JACK connection kept calling Spinus's sound thread, which took a whole
+  processor core. The Flatpak now plays through ALSA's PipeWire device, and a saved JACK choice is replaced
+  once. [Troubleshooting](docs/user/troubleshooting.md#crackles-and-dropouts) explains it for anyone who meets it.
 - The Analyzer adds volume and pan automation to the parts it replicates, from how each stem gets louder, quieter
   or moves between left and right over the song (fades, swells, drops, pans). A part that stays in one place gets
   a fixed pan instead.
