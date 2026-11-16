@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Fixed: with the Flatpak, every program crackled while Spinus was open and Spinus could not quit, on systems
+  with a newer PipeWire. The Flatpak's JACK connection kept calling Spinus's sound thread, which took a whole
+  processor core. The Flatpak now plays through ALSA's PipeWire device, and a saved JACK choice is replaced
+  once. [Troubleshooting](docs/user/troubleshooting.md#crackles-and-dropouts) explains it for anyone who meets it.
 - The Analyzer splits a stem that holds several parts (two guitars, a piano's chords and its tune) by how they
   are played: the rhythm part (chords, steady playing), the lead (single, higher, freer lines) and the solo (a
   lead heard in one section only), each on a channel and track of its own. Where both play at once, the split

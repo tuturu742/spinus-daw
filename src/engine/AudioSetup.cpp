@@ -1,5 +1,7 @@
 #include "AudioSetup.h"
 
+#include "session/ProgramFolder.h"
+
 namespace spinus::engine
 {
 
@@ -42,13 +44,20 @@ juce::String AudioSetup::applyDefaults (juce::AudioDeviceManager& manager)
         tryType (manager, "DirectSound", {}))
         return getStatus (manager).describe();
 #else
-    // JACK only works when a server is already running (PipeWire provides one); JUCE does not start one.
-    if (tryType (manager, "JACK", {}) || tryType (manager, "ALSA", "PipeWire Sound Server") ||
-        tryType (manager, "ALSA", {}))
-        return getStatus (manager).describe();
+    for (const auto& [type, device] : linuxChoices (isFlatpak()))
+        if (tryType (manager, type, device))
+            return getStatus (manager).describe();
 #endif
 
     return "No audio device could be opened";
+}
+
+std::vector<std::pair<juce::String, juce::String>> AudioSetup::linuxChoices (bool inFlatpak)
+{
+    // JACK only works when a server is already running (PipeWire provides one); JUCE does not start one.
+    if (inFlatpak)
+        return { { "ALSA", "PipeWire Sound Server" }, { "JACK", {} }, { "ALSA", {} } };
+    return { { "JACK", {} }, { "ALSA", "PipeWire Sound Server" }, { "ALSA", {} } };
 }
 
 juce::String AudioSetup::pickJackInput (const juce::StringArray& jackInputs, const juce::StringArray& microphones)
