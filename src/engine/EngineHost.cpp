@@ -154,6 +154,23 @@ void useSpinusClicks (tracktion::Engine& engine)
     storage.setProperty (tracktion::SettingID::clickTrackSampleSmall, beat.getFullPathName());
 }
 
+/** The settings. In the Flatpak, a saved JACK choice is forgotten once, so Spinus starts as on a first start: on
+    ALSA's PipeWire device (AudioSetup::linuxChoices says why). Choosing JACK again afterwards is kept. */
+std::unique_ptr<tracktion::PropertyStorage> makeSettings (bool openAudioDevice)
+{
+    auto storage = std::make_unique<tracktion::PropertyStorage> (settingsName());
+    if (! openAudioDevice || ! isFlatpak())
+        return storage;
+    auto& file = storage->getPropertiesFile();
+    if (file.getBoolValue ("flatpakLeftJack"))
+        return storage;
+    file.setValue ("flatpakLeftJack", true);
+    if (const auto saved = storage->getXmlProperty (tracktion::SettingID::audio_device_setup);
+        saved != nullptr && saved->getStringAttribute ("deviceType") == "JACK")
+        storage->removeProperty (tracktion::SettingID::audio_device_setup);
+    return storage;
+}
+
 } // namespace
 
 void EngineHost::setSettingsName (const juce::String& name) { settingsName() = name; }
@@ -167,7 +184,7 @@ void EngineHost::setPluginWindowFactory (tracktion::Engine& engine, PluginWindow
 }
 
 EngineHost::EngineHost (const Options& options)
-    : engine (std::make_unique<tracktion::Engine> (std::make_unique<tracktion::PropertyStorage> (settingsName()),
+    : engine (std::make_unique<tracktion::Engine> (makeSettings (options.openAudioDevice),
                                                    std::make_unique<SpinusUIBehaviour>(),
                                                    std::make_unique<SpinusEngineBehaviour> (options.openAudioDevice)))
 {
