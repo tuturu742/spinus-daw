@@ -947,8 +947,16 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
      stays whole). Each part gets a channel and a track of its own, on the stem's sound. Parts that take turns
      split well; parts playing at the same moment only roughly (said in the status line). Tried on 56 analyzed
      songs: most guitar stems stay whole, leads come out as phrases.
-  3. **Volume and pan automation** from each stem's loudness and stereo position over time (fades, swells,
-     drops, moves); tempo changes once tempo automation exists (below).
+  3. **Volume and pan automation** (done: `session/StemAutomation`, measured on a thread of its own after the
+     notes, added by the Analyzer's Add to the project) from each melodic stem's loudness and stereo position
+     over time (fades, swells, drops, moves): RMS and the right-left energy balance per beat of the song's own
+     beats, beats 40 dB under the loudest left out (not playing), smoothed over four beats, simplified
+     (Douglas-Peucker, 1 dB and 0.05 of the width) and snapped to sixteenths. The 90th percentile of loudness
+     keeps the channel's volume, the rest goes below it (down to -30 dB). Only real changes become curves: under
+     3 dB between the 10th and 95th percentile, no volume curve; a place that moves less than 0.15 of the width,
+     a fixed pan (when 0.1 or more off the centre). Each curve is one `clip.addAutomation` over the song on a
+     lane of its own, in the same undo step as the notes. Drums get none (their hits' velocities say it). Tempo
+     changes once tempo automation exists (below).
   4. **Filter automation, approximate:** brightness over time as a filter's cutoff, labelled as a guess at the
      effect, not the producer's own moves.
 

@@ -6,6 +6,7 @@
 #include "session/AnalysisLibrary.h"
 #include "session/Session.h"
 #include "session/PresetPreviews.h"
+#include "session/StemAutomation.h"
 #include "session/StemSamples.h"
 #include "session/SynthMatch.h"
 #include "MessageLabel.h"
@@ -298,6 +299,8 @@ private:
     void downloadNext();
     void findTempo();
     void transcribeNext();
+    /** How loud each melodic stem is and where it sits, over time (on a thread of its own), then `then`. */
+    void measureDynamics (const std::function<void()>& then);
     bool addNotesToProject();
     void cannotAdd (const juce::String& why); // says so in the status line
     bool addAudioSteps (Steps&, const juce::StringArray& names, int& added);
@@ -350,11 +353,13 @@ private:
 
     Step step = Step::idle;
     juce::File song, prepared;
-    juce::String songDigest;                  // its contents' SHA-256: its name in the analysis library
-    juce::var earlier;                        // what the library had of it (void when analyzed anew)
-    bool choosing = false;                    // asking whether to continue from the earlier analysis
-    juce::String stemsModel;                  // the separation model of `stems`
-    std::unique_ptr<BackgroundTask> stemTask; // keeping or restoring stems
+    juce::String songDigest;                      // its contents' SHA-256: its name in the analysis library
+    juce::var earlier;                            // what the library had of it (void when analyzed anew)
+    bool choosing = false;                        // asking whether to continue from the earlier analysis
+    juce::String stemsModel;                      // the separation model of `stems`
+    std::unique_ptr<BackgroundTask> stemTask;     // keeping or restoring stems
+    std::unique_ptr<BackgroundTask> dynamicsTask; // measuring the stems' volume and pan over time
+    std::map<juce::String, stemautomation::Curves> dynamics;
     std::unique_ptr<Decoder> decoder;
     juce::String job, beatModel;
     std::vector<juce::String> missingModels;
