@@ -1,6 +1,7 @@
 #include "SoundIndex.h"
 
 #include "InstrumentPresets.h"
+#include "LeftOutSounds.h"
 #include "PresetFolders.h"
 #include "ProgramFolder.h"
 #include "SoundDescriptors.h"
@@ -561,6 +562,17 @@ bool SoundIndex::measureAgain (const juce::String& key)
     return true;
 }
 
+bool SoundIndex::visitAgain (const juce::String& key)
+{
+    const auto found = instruments.find (key);
+    if (found == instruments.end())
+        return false;
+    found->second.complete = false;
+    saveInstrument (found->second);
+    saveIndex();
+    return true;
+}
+
 bool SoundIndex::forget (const juce::String& key)
 {
     if (instruments.erase (key) == 0)
@@ -612,6 +624,52 @@ std::vector<SoundIndex::SampleFile> SoundIndex::listSampleFiles (const juce::Arr
     for (auto& [path, f] : found)
         result.push_back (f);
     return result;
+}
+
+void SoundIndex::dropLeftOut (std::vector<SampleFile>& files, const juce::File& indexFolder)
+{
+    LeftOutSounds leftOut (indexFolder);
+    leftOut.load();
+    std::erase_if (files, [&] (const SampleFile& f) { return leftOut.isSampleLeftOut (f.file.getFullPathName()); });
+}
+
+void SoundIndex::dropLeftOut (Instrument& i, const LeftOutSounds& leftOut)
+{
+    const auto key = i.source.key;
+    for (int n = i.sounds.size(); --n >= 0;)
+        if (leftOut.isLeftOut (key, i.sounds[n]["id"].toString()))
+            i.sounds.remove (n);
+    for (int n = i.problemPresets.size(); --n >= 0;)
+        if (leftOut.isLeftOut (key, i.problemPresets[n]))
+        {
+            i.problemDetails.erase (i.problemPresets[n]);
+            i.problemPresets.remove (n);
+        }
+}
+
+int SoundIndex::dropLeftOut (const LeftOutSounds& leftOut)
+{
+    int dropped = 0;
+    for (auto& [key, i] : instruments)
+    {
+        const auto before = i.sounds.size() + i.problemPresets.size();
+        dropLeftOut (i, leftOut);
+        if (const auto after = i.sounds.size() + i.problemPresets.size(); after != before)
+        {
+            dropped += before - after;
+            saveInstrument (i);
+        }
+    }
+    const auto before = samples.size();
+    std::erase_if (samples, [&] (const Sample& s) { return leftOut.isSampleLeftOut (s.path); });
+    if (samples.size() != before)
+    {
+        dropped += (int)(before - samples.size());
+        saveSamples();
+    }
+    if (dropped > 0)
+        saveIndex();
+    return dropped;
 }
 
 std::vector<SoundIndex::SampleFile> SoundIndex::changedSamples (const std::vector<SampleFile>& files) const
@@ -695,23 +753,32 @@ std::vector<SoundIndex::Row> SoundIndex::rows() const
     for (const auto& [key, i] : instruments)
     {
         if (i.problem.isNotEmpty())
-            result.push_back ({ i.source.name, i.source.name, "problem", i.problem + " (no sound of it is measured)" });
+        {
+            Row row { i.source.name, i.source.name, "problem", i.problem + " (no sound of it is measured)" };
+            row.instrument = key;
+            row.whole = true;
+            result.push_back (row);
+        }
         for (const auto& id : i.problemPresets)
         {
             const auto found = i.problemDetails.find (id);
             const auto known = found != i.problemDetails.end();
-            result.push_back (
-                { known && found->second.name.isNotEmpty() ? found->second.name : presetNameFromId (id), i.source.name,
-                  "problem",
-                  "the instrument " +
-                      (known && found->second.why.isNotEmpty() ? found->second.why : juce::String ("crashed")) +
-                      " on this preset, so it is left out" });
+            Row row { known && found->second.name.isNotEmpty() ? found->second.name : presetNameFromId (id),
+                      i.source.name, "problem",
+                      "the instrument " +
+                          (known && found->second.why.isNotEmpty() ? found->second.why : juce::String ("crashed")) +
+                          " on this preset, so it is left out" };
+            row.instrument = key;
+            row.id = id;
+            result.push_back (row);
         }
         for (const auto& s : i.sounds)
         {
             Row row;
             row.name = s["name"].toString();
             row.source = i.source.name;
+            row.instrument = key;
+            row.id = s["id"].toString();
             if (s.hasProperty ("problem"))
             {
                 row.role = "problem";
@@ -996,6 +1063,8 @@ void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, co
     entry.source = source;
     entry.problem.clear();
     entry.complete = false;
+    LeftOutSounds leftOut (index.getFolder());
+    leftOut.load();
 
     std::map<juce::String, int> at; // a preset's place in entry.sounds
     for (int i = 0; i < entry.sounds.size(); ++i)
@@ -1027,6 +1096,8 @@ void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, co
                 known->setProperty (id, s["version"]);
         juce::Array<juce::var> skip;
         for (const auto& b : entry.problemPresets)
+            skip.add (b);
+        for (const auto& b : leftOut.presetsOf (source.key))
             skip.add (b);
         const auto request = object ({ { "mode", "instrument" },
                                        { "format", source.format },
@@ -1138,6 +1209,7 @@ void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, co
                 entry.sounds.remove (i);
                 ++result.soundsRemoved;
             }
+    SoundIndex::dropLeftOut (entry, leftOut);
     entry.updated = juce::Time::getCurrentTime();
     index.saveInstrument (entry);
     ++result.instrumentsVisited;
@@ -1366,7 +1438,8 @@ SoundIndexer::Result SoundIndexer::update (SoundIndex& index, const Options& opt
         index.sampleFolders.clear();
         for (const auto& f : sampleFolders)
             index.sampleFolders.add (f.getFullPathName());
-        const auto files = SoundIndex::listSampleFiles (sampleFolders, shouldStop);
+        auto files = SoundIndex::listSampleFiles (sampleFolders, shouldStop);
+        SoundIndex::dropLeftOut (files, index.getFolder());
         if (stop())
             result.cancelled = true;
         else
@@ -1399,7 +1472,8 @@ SoundIndexer::Result SoundIndexer::updateSamples (SoundIndex& index, const Optio
         if (onProgress)
             onProgress (p);
     };
-    const auto files = SoundIndex::listSampleFiles (filesOrFolders, shouldStop);
+    auto files = SoundIndex::listSampleFiles (filesOrFolders, shouldStop);
+    SoundIndex::dropLeftOut (files, index.getFolder());
     if (shouldStop && shouldStop())
         result.cancelled = true;
     else

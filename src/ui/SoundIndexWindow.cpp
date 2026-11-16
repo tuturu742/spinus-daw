@@ -281,6 +281,48 @@ SoundIndexPage::SoundIndexPage (SoundIndexService& service) : index (service)
 
     instrumentList = std::make_unique<InstrumentList> (*this);
     sounds = std::make_unique<SoundIndexView> (index.getFolder());
+    sounds->onLeaveOut = [this] (const std::vector<SoundIndex::Row>& rows)
+    {
+        std::vector<LeftOutSounds::Entry> entries;
+        entries.reserve (rows.size());
+        for (const auto& r : rows)
+            entries.push_back (SoundIndexService::entryOf (r));
+        if (index.isUpdating())
+            return sounds->setMessage ("Wait for the update to finish (or Stop it), then leave them out.");
+        const auto n = index.leaveOut (entries);
+        sounds->setMessage (juce::String (n) + (n == 1 ? " sound" : " sounds") +
+                            " left out. Show \"Left out\" puts them back.");
+    };
+    sounds->onPutBack = [this] (const std::vector<SoundIndex::Row>& rows)
+    {
+        std::vector<LeftOutSounds::Entry> entries;
+        entries.reserve (rows.size());
+        for (const auto& r : rows)
+        {
+            LeftOutSounds::Entry e;
+            e.sample = r.path;
+            e.instrument = r.instrument;
+            e.preset = r.id;
+            entries.push_back (e);
+        }
+        const auto n = index.putBack (entries);
+        sounds->setMessage (juce::String (n) + (n == 1 ? " sound" : " sounds") +
+                            " put back: the update measures them again.");
+        sounds->reload();
+    };
+    sounds->onListen = [this] (const SoundIndex::Row& row)
+    {
+        sounds->setMessage (row.sample ? "Playing " + row.name + "."
+                                       : "Playing " + row.name + " (" + row.source + ")...");
+        index.listen (
+            row,
+            [safe = juce::Component::SafePointer (sounds.get()), name = row.name] (const juce::String& problem)
+            {
+                if (safe != nullptr)
+                    safe->setMessage (problem.isEmpty() ? "Playing " + name + "."
+                                                        : name + " could not be played: " + problem + ".");
+            });
+    };
     folderList = std::make_unique<FolderList> (*this);
     tabs.addTab ("Instruments", juce::Colours::transparentBlack, instrumentList.get(), false);
     tabs.addTab ("Sounds", juce::Colours::transparentBlack, sounds.get(), false);

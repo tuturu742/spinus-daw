@@ -35,15 +35,26 @@ Everything Spinus measured, with its guess and a few details ("attack 5 ms, sust
 C1-C7, chords"), and a search box: type "bass", "pad", "Surge" or "kick sample" to check its guesses. When a
 name says one thing and the sound another, both are shown ("sounds like pad").
 
-Two menus beside the search narrow the list:
+Three menus beside the search narrow the list:
 
-- **Show**: all sounds, only **Presets**, only **Samples**, or only **Problems**. Problems lists everything the
-  index counts as one, and says what went wrong: which instrument and preset ("the instrument crashed on this
-  preset, so it is left out"), or which sample file and why it could not be read.
+- **Show**: all sounds, only **Presets**, only **Samples**, only **Problems**, or what you **Left out**. Problems
+  lists everything the index counts as one, and says what went wrong: which instrument and preset ("the
+  instrument crashed on this preset, so it is left out"), or which sample file and why it could not be read.
 - **From**: one instrument, or one sample folder (with the folders inside it).
+- **Role**: only sounds of one role (bass, pad, lead...), or samples of one kind (kick, loop...).
 
-Right-click a preset to give it a role of your own ("Use as rhythm guitar"): Spinus uses yours before its own
-guess.
+Select a sound (Ctrl+click or Shift+click for several), or right-click it, for:
+
+- **Listen** (or double-click it): a sample plays as it is. A preset is played by its instrument (C3, then a
+  chord; a drum kit plays a short beat): the first time takes a few seconds, then it plays at once.
+- **Leave out**: the sound leaves the index, and no update measures it again, so Spinus never suggests it.
+  **Leave out all shown** does it for everything the search and menus show: for example Role "bass" and From
+  "Surge XT" leaves out all of Surge XT's bass presets. Spinus asks first when there are several.
+- **Use as** (presets): give it a role of your own ("Use as rhythm guitar"): Spinus uses yours before its own
+  guess.
+
+**Show › Left out** lists what you left out, with **Put back** and **Put back all shown**: they are measured
+again by the update, which starts. What you left out stays left out even after you delete the index.
 
 ## Samples
 
