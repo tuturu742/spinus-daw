@@ -355,6 +355,21 @@ async def test_a_failing_gpu_falls_back_to_the_cpu(
     await engine.stop()
 
 
+async def test_a_gpu_that_fails_a_job_finishes_it_on_the_cpu(fakes: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE_GPU", "jobs")
+    engine = make_engine(fakes, STRIX)
+    await install(engine, "rocm-gfx1151")
+    await install(engine, "cpu")
+    info = await engine.call("info", {})  # passes the self-test, fails the job, runs it again on the CPU
+    assert info["device"] == "cpu"
+    uses = engine.status()["uses"]
+    assert uses["build"] == "cpu" and "miopenStatusUnknownError" in uses["note"]
+    # A job's own error (not the GPU's) is not run again.
+    with pytest.raises(EngineError, match="Unknown method"):
+        await engine.call("no-such-job", {})
+    await engine.stop()
+
+
 async def test_a_crashed_or_stopped_job_does_not_stop_the_next(fakes: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FAKE_GPU", "none")
     engine = make_engine(fakes, [])
