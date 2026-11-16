@@ -60,7 +60,8 @@ public:
     //==============================================================================
     // For the buttons and for tests. Results arrive asynchronously.
     bool analyze (const juce::File& song);
-    /** Downloads the model files the analysis needs (the user agreed to their size). */
+    /** Downloads the model files the analysis needs (the user agreed to their size). One that cannot be downloaded
+        (its authors' server is down) does not stop the others; the status line says which and why. */
     void downloadModels();
     /** Downloads one model from a link the user pasted (its authors gave a new one, or its usual server is
         down); its files must still match the model's checksums. */
@@ -292,7 +293,9 @@ private:
     void matchDrumGroups (size_t index, const std::function<void()>& then);
     juce::File getSettingsFile() const;
     void runJob (const juce::String& method, const juce::var& params, const juce::String& what,
-                 const std::function<void (const juce::var&)>& done);
+                 const std::function<void (const juce::var&)>& done,
+                 const std::function<void (const juce::String&)>& failed = {}); // default: fail()
+    void downloadNext();
     void findTempo();
     void transcribeNext();
     bool addNotesToProject();
@@ -367,6 +370,7 @@ private:
     juce::TimedCallback engineWatch { [this] { lookForEngine(); } };
     bool clapWanted = false; // the notes being made compare sounds by ear (CLAP)
     juce::int64 downloadSize = 0;
+    juce::StringArray downloadProblems; // this round's models that could not be downloaded, and why
     double progress = -1.0;
     std::optional<Rhythm> rhythm;
     std::optional<model::Key> key;

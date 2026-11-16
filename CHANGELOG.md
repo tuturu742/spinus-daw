@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Fixed: when one of the Analyzer's model files could not be downloaded (its authors' server down), the others
+  were not downloaded either and the list never shrank. Now the others still download, and the status line
+  says which one failed and why.
 - Fixed: after installing the analysis engine (PyTorch) from the Analyzer, it kept saying PyTorch was needed
   until Spinus restarted. It now notices the install and carries on with the analysis.
 - The Analyzer builds a replicated song the way a producer would: it finds the sections (markers on the ruler:

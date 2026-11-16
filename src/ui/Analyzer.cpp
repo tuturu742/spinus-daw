@@ -669,39 +669,60 @@ void Analyzer::downloadModels()
 {
     if (service == nullptr || missingModels.empty() || isBusy())
         return;
+    downloadProblems.clear();
+    downloadNext();
+}
+
+void Analyzer::downloadNext()
+{
     const auto next = missingModels.front();
     setStep (Step::downloading, "Downloading...");
-    runJob ("ai.v1.stems.download", object ({ { "model", next } }), "Downloading",
-            [this, next] (const juce::var&)
-            {
-                missingModels.erase (missingModels.begin());
-                for (auto& m : allSources)
-                    if (m.id == next)
-                        m.downloaded = true;
-                if (! missingModels.empty())
-                {
-                    step = Step::idle; // the next one
-                    return downloadModels();
-                }
-                step = Step::idle;
-                // The choices may have changed while downloading: whatever they need now.
-                showNeeds();
-                if (! missingModels.empty())
-                    return setStep (Step::idle, "Downloaded. The choices made since need more.");
-                if (song.existsAsFile() && prepared.existsAsFile() && ! rhythm)
-                {
-                    setStep (Step::tempo);
-                    return checkReady ([this] { findTempo(); });
-                }
-                // On with what was asked for (separating, adding the stems), which needed them.
-                if (auto asked = std::move (resume))
-                {
-                    resume = nullptr;
-                    setStep (Step::done, "Downloaded.");
-                    return asked();
-                }
-                setStep (Step::done, "Downloaded.");
-            });
+    auto onward = [this, next]
+    {
+        missingModels.erase (missingModels.begin());
+        if (! missingModels.empty())
+            return downloadNext();
+        step = Step::idle;
+        // The choices may have changed while downloading: whatever they need now.
+        showNeeds();
+        if (! downloadProblems.isEmpty())
+        {
+            resume = nullptr; // asked again once all are there
+            return setStep (Step::idle, downloadProblems.joinIntoString (" "));
+        }
+        if (! missingModels.empty())
+            return setStep (Step::idle, "Downloaded. The choices made since need more.");
+        if (song.existsAsFile() && prepared.existsAsFile() && ! rhythm)
+        {
+            setStep (Step::tempo);
+            return checkReady ([this] { findTempo(); });
+        }
+        // On with what was asked for (separating, adding the stems), which needed them.
+        if (auto asked = std::move (resume))
+        {
+            resume = nullptr;
+            setStep (Step::done, "Downloaded.");
+            return asked();
+        }
+        setStep (Step::done, "Downloaded.");
+    };
+    runJob (
+        "ai.v1.stems.download", object ({ { "model", next } }), "Downloading",
+        [this, next, onward] (const juce::var&)
+        {
+            for (auto& m : allSources)
+                if (m.id == next)
+                    m.downloaded = true;
+            onward();
+        },
+        [this, onward] (const juce::String& error)
+        {
+            // One server down: the others are still downloaded, and this one is said at the end.
+            job.clear();
+            progress = -1.0;
+            downloadProblems.add (error);
+            onward();
+        });
 }
 
 void Analyzer::downloadFromLink (const juce::String& modelId, const juce::String& link)
@@ -732,7 +753,8 @@ void Analyzer::downloadFromLink (const juce::String& modelId, const juce::String
 }
 
 void Analyzer::runJob (const juce::String& method, const juce::var& params, const juce::String& what,
-                       const std::function<void (const juce::var&)>& done)
+                       const std::function<void (const juce::var&)>& done,
+                       const std::function<void (const juce::String&)>& failed)
 {
     progress = 0.0;
     job = "starting";
@@ -745,10 +767,10 @@ void Analyzer::runJob (const juce::String& method, const juce::var& params, cons
             job = started;
             updateButtons();
         },
-        [this, done] (const juce::var& result, const juce::String& error)
+        [this, done, failed] (const juce::var& result, const juce::String& error)
         {
             if (error.isNotEmpty())
-                return fail (error);
+                return failed ? failed (error) : fail (error);
             job.clear();
             progress = -1.0;
             done (result);
