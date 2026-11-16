@@ -2,6 +2,9 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include <utility>
+#include <vector>
+
 namespace spinus::engine
 {
 
@@ -12,9 +15,15 @@ struct AudioSetup
     static constexpr int defaultBufferSize = 256;
 
     /** First start: JACK (normally PipeWire's) if a server is reachable, otherwise ALSA on the
-        "pipewire" or default device; 48 kHz, 256 samples. Spinus never starts a JACK server itself.
-        Returns a description of what was chosen. */
+        "pipewire" or default device; 48 kHz, 256 samples. In the Flatpak, ALSA's PipeWire device comes first (see
+        linuxChoices). Spinus never starts a JACK server itself. Returns a description of what was chosen. */
     static juce::String applyDefaults (juce::AudioDeviceManager&);
+
+    /** The device types to try on Linux, in order: {type, preferred device}. The Flatpak's JACK library is the
+        runtime's PipeWire one, which with a newer PipeWire on the computer can call Spinus's audio over and over:
+        the audio thread takes a whole core, everything that plays crackles and Spinus cannot quit (seen with
+        PipeWire 1.4.9 in the runtime and 1.6.9 on the system). So the Flatpak tries ALSA's PipeWire device first. */
+    static std::vector<std::pair<juce::String, juce::String>> linuxChoices (bool inFlatpak);
 
     /** JACK lists every program that plays sound as an input, and JUCE takes the first: a music player
         playing when Spinus first starts would be what it records. The first of `jackInputs` that is one of
