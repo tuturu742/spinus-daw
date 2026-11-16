@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Fixed: the Analyzer's **Add to the project** left the project at its old tempo (120), so the notes ran away from
+  the stems added as audio. It now sets the song's average tempo, and places every note, drum hit and curve at
+  its moment in the recording, so a song played live (speeding up and slowing down) still lines up with its
+  stems; the status line says how far such a song strays from the grid.
 - Fixed: with the Flatpak, every program crackled while Spinus was open and Spinus could not quit, on systems
   with a newer PipeWire. The Flatpak's JACK connection kept calling Spinus's sound thread, which took a whole
   processor core. The Flatpak now plays through ALSA's PipeWire device, and a saved JACK choice is replaced

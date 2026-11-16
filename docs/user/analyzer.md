@@ -46,8 +46,9 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    also M4A/AAC, WebM, WMA and more.
 2. Spinus prepares the song, then finds the beat and the key. Each step shows its progress; **Cancel**
    stops it.
-3. **Tempo**: for example "98.0 BPM, 4 beats per bar". **Use for the song** sets your song's tempo (and
-   time signature, if the bars are not four beats) in one undo step.
+3. **Tempo**: for example "98.0 BPM, 4 beats per bar": the song's average tempo, from its first beat to its
+   last. **Use for the song** sets your song's tempo (and time signature, if the bars are not four beats) in
+   one undo step. **Add to the project** sets it too.
 4. **Key**: for example "A minor". When it is not sure, it says what else it might be. **Use for the song**
    sets your song's key.
 5. **Stems**: choose **4 stems** (vocals, drums, bass, other) or **6 stems** (also piano and guitar, less
@@ -65,8 +66,7 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    - **Replicate**: Spinus turns it into notes on a new channel, played by the sound you choose beside it
      (see below).
    - **Add as audio**: the stem itself goes on a Playlist track of its own, named
-     "Vocals stem (<song>)", lined up so that the song's first bar starts on bar 1 (set the song's
-     tempo first for the bars to match).
+     "Vocals stem (<song>)", lined up so that the song's first bar starts on bar 1.
    - **Leave out**: nothing is added for it.
 
    The drums and the bass start as **Replicate**, the other stems as **Add as audio**. Click **Add to the
@@ -99,8 +99,11 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
 
    Melodic stems play on **3x Osc**; the
    drums become steps on a **Drum Machine** (kick, snare, clap, hats, toms, rim, crash and ride on their
-   own pads). The notes follow the song's own beats (even when it speeds up or slows down) and snap to
-   sixteenths. Swap the instrument for the sound you want.
+   own pads). Every note, hit and curve keeps its moment in the recording, at the song's average tempo, and
+   snaps to sixteenths, so the notes line up with the stems added as audio. A song played live, not to a
+   click, speeds up and slows down: there the notes stay with the recording and fall a little off the grid
+   (the status line says how much), and fewer of its bars repeat exactly. Swap the instrument for the sound
+   you want.
 
    The first time you turn drums into steps, Spinus spends a few seconds learning its own drum sounds
    (nothing is downloaded for this).
