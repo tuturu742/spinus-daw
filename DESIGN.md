@@ -930,10 +930,18 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
      pattern placed again; the other chunks (fills) are patterns of their own; identical notes anywhere in the
      song (start, length, pitch) are one pattern, so a returning section reuses its patterns and no note is
      lost. Each stem gets its own Playlist track. No new model.
-  2. **Rhythm, lead and solo.** One separated stem often holds several parts (two guitars). Its notes are split
-     by how they are played: chords and steady strumming are the rhythm part, single higher, freer lines the
-     lead, a lead heard in one section only the solo; each goes on a channel of its own. Parts that take turns
-     split well; parts playing at the same moment only roughly (said in the panel).
+  2. **Rhythm, lead and solo** (done: `session/StemParts`, used by the Analyzer's Add to the project). One
+     separated stem often holds several parts (two guitars). Its notes (not drums, bass or vocals) are split by
+     how they are played: notes struck together (within a 32nd, more than octaves of one note, which the
+     transcription often hears as overtones) are chords; a bar's single notes are steady when they use fewer
+     than three pitches or repeat a bar up to two away (0.7 alike), else free. Chords and steady notes are the
+     rhythm part; a free bar's single notes at least 3 semitones above both the rhythm part's middle pitch and
+     that bar's chords are the lead, kept only in phrases of two bars or more. The lead of the one section that
+     has one, or of the one section heard once (not intro or outro) among several, is the solo. A lead or solo
+     under 8 notes or a twentieth of the stem goes back to the rhythm part (a rhythm part that small: the stem
+     stays whole). Each part gets a channel and a track of its own, on the stem's sound. Parts that take turns
+     split well; parts playing at the same moment only roughly (said in the status line). Tried on 56 analyzed
+     songs: most guitar stems stay whole, leads come out as phrases.
   3. **Volume and pan automation** from each stem's loudness and stereo position over time (fades, swells,
      drops, moves); tempo changes once tempo automation exists (below).
   4. **Filter automation, approximate:** brightness over time as a filter's cutoff, labelled as a guess at the

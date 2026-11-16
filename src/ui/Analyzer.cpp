@@ -12,6 +12,7 @@
 #include "project/ProjectFiles.h"
 #include "session/SongPreparation.h"
 #include "session/SongSections.h"
+#include "session/StemParts.h"
 #include "model/ModelJson.h"
 #include "plugins/sandbox/SandboxPluginFormat.h"
 
@@ -1698,10 +1699,10 @@ void Analyzer::matchDrumGroups (size_t index, const std::function<void()>& then)
 bool Analyzer::useDrumSuggestion (int pad, int index)
 {
     const auto found = drumSuggestions.find (pad);
-    if (found == drumSuggestions.end() || ! madeChannels.contains ("drums") ||
+    if (found == drumSuggestions.end() || madeChannels["drums"].empty() ||
         ! juce::isPositiveAndBelow (index, (int)found->second.size()))
         return false;
-    return loadDrumPadFile (session, madeChannels["drums"], pad, found->second[(size_t)index]).wasOk();
+    return loadDrumPadFile (session, madeChannels["drums"].front(), pad, found->second[(size_t)index]).wasOk();
 }
 
 void Analyzer::tuneSynth (const juce::String& name)
@@ -1895,10 +1896,14 @@ void Analyzer::measureBatch (const juce::String& instrument, std::vector<juce::S
 
 bool Analyzer::useClosestPreset (const juce::String& stem, int index)
 {
-    if (! closest.contains (stem) || ! madeChannels.contains (stem) ||
+    if (! closest.contains (stem) || madeChannels[stem].empty() ||
         ! juce::isPositiveAndBelow (index, (int)closest[stem].size()))
         return false;
-    return loadInstrumentPreset (session, madeChannels[stem], closest[stem][(size_t)index]).wasOk();
+    auto result = juce::Result::ok();
+    for (const auto channel : madeChannels[stem])
+        if (result.wasOk())
+            result = loadInstrumentPreset (session, channel, closest[stem][(size_t)index]);
+    return result.wasOk();
 }
 
 void Analyzer::updatePresetChoices()
@@ -1979,8 +1984,9 @@ bool Analyzer::addNotesToProject()
             steps.add ("marker.add", object ({ { "at", (juce::int64)at }, { "name", markers[(int)i] } })).isVoid())
             return failed();
     }
-    int count = 0, patternCount = 0;
-    std::map<juce::String, model::ChannelId> channels;
+    int count = 0, patternCount = 0, channelCount = 0;
+    std::map<juce::String, std::vector<model::ChannelId>> channels;
+    juce::StringArray splitStems; // "the guitar into rhythm and lead"
     for (auto& [name, notes] : transcribed)
     {
         // Drums play on a Drum Machine (its pads match the hits); the rest on 3x Osc (tuned or not), on a
@@ -1994,46 +2000,64 @@ bool Analyzer::addNotesToProject()
                     chosen != stemInstruments.end()
                 ? model::deviceToJson (chosen->second)
                 : object ({ { "kind", "stock" }, { "stockType", instrumentOf (name).stockType } });
-        const auto channel = steps.add (
-            "channel.add", object ({ { "name", stemLabel (name, title) }, { "instrument", device } }))["channel"];
-        if (channel.isVoid())
-            return failed();
-        channels[name] = model::ChannelId { (uint32_t)(int)channel };
-        const auto lane = steps.add ("lane.add", object ({ { "name", stemLabel (name, title) } }))["lane"];
-        if (lane.isVoid())
-            return failed();
-        const auto split = songsections::split (notes, sections, barLength);
-        std::vector<juce::var> patterns;
-        for (const auto& piece : split.pieces)
+        // A stem that holds several parts (two guitars) gets a channel and a track per part, on the same sound.
+        const auto parts = stemparts::splits (name)
+                               ? stemparts::split (notes, sections, barLength)
+                               : std::vector<stemparts::Part> { { stemparts::Role::rhythm, notes } };
+        if (parts.size() > 1)
         {
-            const auto pattern = steps.add (
-                "pattern.add", object ({ { "name", stemLabel (name, title).upToFirstOccurrenceOf (" (", false, false) +
-                                                       ": " + piece.name },
-                                         { "length", (juce::int64)piece.length } }))["pattern"];
-            // As the notes command takes them (a note found at the very start, or one too short, still plays).
-            juce::Array<juce::var> list;
-            for (auto& n : piece.notes)
-                list.add (object ({ { "start", (juce::int64)juce::jmax<model::Ticks> (0, n.start) },
-                                    { "length", (juce::int64)juce::jmax<model::Ticks> (1, n.length) },
-                                    { "pitch", juce::jlimit (0, 127, n.pitch) },
-                                    { "velocity", juce::jlimit (0.0f, 1.0f, n.velocity) } }));
-            if (pattern.isVoid() ||
-                steps
-                    .add ("pattern.setNotes",
-                          object ({ { "pattern", pattern }, { "channel", channel }, { "notes", list } }))
-                    .isVoid())
-                return failed();
-            patterns.push_back (pattern);
+            juce::StringArray roles;
+            for (const auto& part : parts)
+                roles.add (stemparts::nameOf (part.role).toLowerCase());
+            splitStems.add ("the " + stemDisplayName (name) + " into " +
+                            roles.joinIntoString (", ", 0, roles.size() - 1) + " and " + roles[roles.size() - 1]);
         }
-        for (const auto& placed : split.placed)
-            if (steps
-                    .add ("clip.addPattern", object ({ { "lane", lane },
-                                                       { "pattern", patterns[(size_t)placed.piece] },
-                                                       { "start", (juce::int64)placed.start } }))
-                    .isVoid())
+        for (const auto& part : parts)
+        {
+            const auto label =
+                stemLabel (parts.size() > 1 ? name + " " + stemparts::nameOf (part.role).toLowerCase() : name, title);
+            const auto channel =
+                steps.add ("channel.add", object ({ { "name", label }, { "instrument", device } }))["channel"];
+            if (channel.isVoid())
                 return failed();
+            channels[name].push_back (model::ChannelId { (uint32_t)(int)channel });
+            const auto lane = steps.add ("lane.add", object ({ { "name", label } }))["lane"];
+            if (lane.isVoid())
+                return failed();
+            const auto split = songsections::split (part.notes, sections, barLength);
+            std::vector<juce::var> patterns;
+            for (const auto& piece : split.pieces)
+            {
+                const auto pattern = steps.add (
+                    "pattern.add",
+                    object ({ { "name", label.upToFirstOccurrenceOf (" (", false, false) + ": " + piece.name },
+                              { "length", (juce::int64)piece.length } }))["pattern"];
+                // As the notes command takes them (a note found at the very start, or one too short, still plays).
+                juce::Array<juce::var> list;
+                for (auto& n : piece.notes)
+                    list.add (object ({ { "start", (juce::int64)juce::jmax<model::Ticks> (0, n.start) },
+                                        { "length", (juce::int64)juce::jmax<model::Ticks> (1, n.length) },
+                                        { "pitch", juce::jlimit (0, 127, n.pitch) },
+                                        { "velocity", juce::jlimit (0.0f, 1.0f, n.velocity) } }));
+                if (pattern.isVoid() ||
+                    steps
+                        .add ("pattern.setNotes",
+                              object ({ { "pattern", pattern }, { "channel", channel }, { "notes", list } }))
+                        .isVoid())
+                    return failed();
+                patterns.push_back (pattern);
+            }
+            for (const auto& placed : split.placed)
+                if (steps
+                        .add ("clip.addPattern", object ({ { "lane", lane },
+                                                           { "pattern", patterns[(size_t)placed.piece] },
+                                                           { "start", (juce::int64)placed.start } }))
+                        .isVoid())
+                    return failed();
+            patternCount += (int)split.pieces.size();
+            ++channelCount;
+        }
         count += (int)notes.size();
-        patternCount += (int)split.pieces.size();
     }
     auto result = steps.performOn (session.getHistory());
     if (result.failed())
@@ -2044,45 +2068,52 @@ bool Analyzer::addNotesToProject()
 
     // The song's own sounds go into the new instruments' saved state (an undo keeps it).
     for (auto& [name, cut] : pieces)
-        if (result.wasOk() && channels.contains (name))
-            result = name == "drums" ? loadDrumPieces (session, channels[name], stems[name], cut)
-                                     : loadSamplerPieces (session, channels[name], stems[name], cut);
+        for (const auto channel : channels[name])
+            if (result.wasOk())
+                result = name == "drums" ? loadDrumPieces (session, channel, stems[name], cut)
+                                         : loadSamplerPieces (session, channel, stems[name], cut);
     madeChannels = channels;
     // The closest presets: the best one now, the others offered beside the stem's name.
     for (auto& [name, presets] : closest)
-        if (result.wasOk() && ! presets.empty() && channels.contains (name))
-            result = loadInstrumentPreset (session, channels[name], presets.front());
+        for (const auto channel : channels[name])
+            if (result.wasOk() && ! presets.empty())
+                result = loadInstrumentPreset (session, channel, presets.front());
     // The tuned settings, on top (the preset choices then start from the preset again).
     for (auto& [name, found] : tuned)
-        if (result.wasOk() && channels.contains (name))
-            SynthMatcher::apply (session, channels[name], found);
+        for (const auto channel : channels[name])
+            if (result.wasOk())
+                SynthMatcher::apply (session, channel, found);
     for (auto it = closest.begin(); it != closest.end();)
         it =
             soundOf (it->first) == Sounds::presets ? std::next (it) : closest.erase (it); // tuned: a list would undo it
     // Drums: each group's closest sample on its pad; a second group without one starts from its kind's sound.
-    if (result.wasOk() && channels.contains ("drums"))
+    if (result.wasOk() && ! channels["drums"].empty())
         for (auto& group : drumGroups)
         {
             if (auto found = drumSuggestions.find (group.pad);
                 found != drumSuggestions.end() && ! found->second.empty())
-                loadDrumPadFile (session, channels["drums"], group.pad, found->second.front());
+                loadDrumPadFile (session, channels["drums"].front(), group.pad, found->second.front());
             else if (group.name.endsWith (" 2"))
                 for (auto& first : drumGroups)
                     if (first.kind == group.kind && &first != &group)
-                        copyDrumPad (session, channels["drums"], first.pad, group.pad, group.name);
+                        copyDrumPad (session, channels["drums"].front(), first.pad, group.pad, group.name);
         }
     updatePresetChoices();
-    status.setText (result.wasOk() ? juce::String (count) + " notes on " + juce::String ((int)transcribed.size()) +
-                                         " new channels, in " + juce::String (patternCount) +
-                                         (patternCount == 1 ? " pattern" : " patterns") + " placed by section (" +
-                                         markers.joinIntoString (", ") + ")" +
-                                         (audioCount > 0 ? ", and " + juce::String (audioCount) +
-                                                               (audioCount == 1 ? " stem" : " stems") + " as audio"
-                                                         : juce::String()) +
-                                         ". Ctrl+Z takes them away." +
-                                         (tuneNotes.isEmpty() ? juce::String() : " " + tuneNotes.joinIntoString (" "))
-                                   : "Added, but not every sound could be loaded: " + result.getErrorMessage(),
-                    juce::dontSendNotification);
+    status.setText (
+        result.wasOk()
+            ? juce::String (count) + " notes on " + juce::String (channelCount) + " new channels, in " +
+                  juce::String (patternCount) + (patternCount == 1 ? " pattern" : " patterns") +
+                  " placed by section (" + markers.joinIntoString (", ") + ")" +
+                  (audioCount > 0
+                       ? ", and " + juce::String (audioCount) + (audioCount == 1 ? " stem" : " stems") + " as audio"
+                       : juce::String()) +
+                  (splitStems.isEmpty() ? juce::String()
+                                        : ". Split by how they are played: " + splitStems.joinIntoString ("; ") +
+                                              " (roughly where they play at the same moment)") +
+                  ". Ctrl+Z takes them away." +
+                  (tuneNotes.isEmpty() ? juce::String() : " " + tuneNotes.joinIntoString (" "))
+            : "Added, but not every sound could be loaded: " + result.getErrorMessage(),
+        juce::dontSendNotification);
     return result.wasOk();
 }
 
