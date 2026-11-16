@@ -46,6 +46,8 @@ public:
     };
     const std::vector<FolderRow>& getFolders() const noexcept { return folders; }
     void measureFolderAgain (int row);
+    /** Shows the folder's samples (or only those that went wrong) in the Sounds tab. */
+    void showSamplesOf (int row, bool problemsOnly);
 
     /** Deletes the index (after the user confirmed it). */
     bool deleteIndex();

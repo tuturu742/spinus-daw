@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Options › Sound index**: the Sounds tab has **Show** (all, presets, samples or problems) and **From** (one
+  instrument or sample folder) menus. The Samples tab has **Show its samples** and **Show its problems**, so a
+  folder's "4 problems" can be opened and read: which files, and why.
 - The Analyzer adds volume and pan automation to the parts it replicates, from how each stem gets louder, quieter
   or moves between left and right over the song (fades, swells, drops, pans). A part that stays in one place gets
   a fixed pan instead.

@@ -151,6 +151,23 @@ TEST_CASE ("Options > Sound index lists, ticks, measures, forgets and deletes", 
     page->showSoundsOf (rowIndex (*page, testSynth().key));
     CHECK (page->getTabs().getCurrentTabIndex() == 1);
     CHECK (page->getSounds().getShown().size() == 6);
+    CHECK (page->getSounds().getFrom() == testSynth().name);
+
+    // The filters: only samples, only presets, only problems; a folder's samples from the Samples tab.
+    page->getSounds().setFilter (SoundIndexView::Show::samples);
+    CHECK (page->getSounds().getShown().size() == 2);
+    page->getSounds().setFilter (SoundIndexView::Show::presets);
+    CHECK (std::none_of (page->getSounds().getShown().begin(), page->getSounds().getShown().end(),
+                         [] (const SoundIndex::Row& r) { return r.sample; }));
+    page->getSounds().setFilter (SoundIndexView::Show::problems);
+    CHECK (page->getSounds().getShown().empty());
+    page->getTabs().setCurrentTabIndex (2);
+    page->showSamplesOf (0, false);
+    CHECK (page->getTabs().getCurrentTabIndex() == 1);
+    CHECK (page->getSounds().getShow() == SoundIndexView::Show::samples);
+    CHECK (page->getSounds().getShown().size() == 2);
+    page->getSounds().setFilter (SoundIndexView::Show::samples, f.samples.getChildFile ("Leads").getFullPathName());
+    CHECK (page->getSounds().getShown().size() == 1); // a folder holds the folders inside it
 
     // Forget: its sounds leave the index, and it is unticked.
     page->forget (rowIndex (*page, testSynth().key));

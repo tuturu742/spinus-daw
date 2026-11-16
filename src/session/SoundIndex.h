@@ -214,6 +214,7 @@ public:
     {
         juce::String name, source, role, detail; // role: the role or the sample's class; "problem": detail says why
         bool sample = false;
+        juce::String path; // a sample's file
     };
     /** Every sound measured, and every problem: a preset that didn't load, crashed or hung the helper, an instrument
         that didn't load, a sample that couldn't be read. As many problems as summarize() counts. */

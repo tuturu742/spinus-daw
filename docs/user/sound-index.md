@@ -27,15 +27,20 @@ Select an instrument (or right-click it) for:
 - **Measure again**: Spinus forgets what it heard from it and measures all its presets anew, at once (one of
   your plugins is ticked for it).
 - **Forget its sounds**: its sounds leave the index and it is unticked.
-- **Show its sounds**: the Sounds tab, searched for it.
+- **Show its sounds**: the Sounds tab, showing only its presets.
 
 ## Sounds
 
 Everything Spinus measured, with its guess and a few details ("attack 5 ms, sustained, brightness 820 Hz,
 C1-C7, chords"), and a search box: type "bass", "pad", "Surge" or "kick sample" to check its guesses. When a
-name says one thing and the sound another, both are shown ("sounds like pad"). Search `problem` to see every
-problem the index counts: which instrument and preset, and what went wrong ("the instrument crashed on this
-preset, so it is left out").
+name says one thing and the sound another, both are shown ("sounds like pad").
+
+Two menus beside the search narrow the list:
+
+- **Show**: all sounds, only **Presets**, only **Samples**, or only **Problems**. Problems lists everything the
+  index counts as one, and says what went wrong: which instrument and preset ("the instrument crashed on this
+  preset, so it is left out"), or which sample file and why it could not be read.
+- **From**: one instrument, or one sample folder (with the folders inside it).
 
 Right-click a preset to give it a role of your own ("Use as rhythm guitar"): Spinus uses yours before its own
 guess.
@@ -43,7 +48,15 @@ guess.
 ## Samples
 
 The folders in the **Browser › Samples** list ("Add a folder of samples"), with how many of their files were
-measured. Add or remove folders in the Browser. **Measure again** measures a whole folder anew.
+measured, and how many of them are problems. Select a folder for:
+
+- **Measure again**: measures the whole folder anew.
+- **Show its samples** (or double-click it): the Sounds tab, showing only this folder's samples.
+- **Show its problems**: the Sounds tab, showing only the samples of this folder that could not be measured,
+  and why.
+
+To take a folder's samples out of the index, remove the folder from the **Browser › Samples** list: its
+samples leave the index at the next update.
 
 ## Refresh from the Browser
 

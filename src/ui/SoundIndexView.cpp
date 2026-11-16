@@ -3,6 +3,8 @@
 #include "Theme.h"
 #include "session/PartSounds.h"
 
+#include <set>
+
 namespace spinus::ui
 {
 
@@ -21,16 +23,29 @@ SoundIndexView::SoundIndexView (const juce::File& f) : folder (f), marked (f)
     intro.setText (
         "What Spinus measured of your instruments' presets and your samples, and the role it guesses "
         "for each (from its name when the name says, otherwise from how it sounds). Search by name, "
-        "instrument, role or anything shown (\"problem\" lists what went wrong, and why); right-click a preset to "
+        "instrument, role or anything shown; Show Problems lists what went wrong, and why. Right-click a preset to "
         "give it a role of your own.",
         juce::dontSendNotification);
     intro.setJustificationType (juce::Justification::topLeft);
     count.setJustificationType (juce::Justification::centredLeft);
     searchBox.setTextToShowWhenEmpty ("Search (for example: bass, pad, guitar, loop, kick)", juce::Colours::grey);
     searchBox.onTextChange = [this] { search (searchBox.getText()); };
+    showBox.addItem ("All sounds", 1 + (int)Show::everything);
+    showBox.addItem ("Presets", 1 + (int)Show::presets);
+    showBox.addItem ("Samples", 1 + (int)Show::samples);
+    showBox.addItem ("Problems", 1 + (int)Show::problems);
+    showBox.setSelectedId (1, juce::dontSendNotification);
+    showBox.setTooltip ("Show every sound, only presets, only samples, or only what went wrong (and why)");
+    showBox.onChange = [this] { setFilter ((Show)(showBox.getSelectedId() - 1), from); };
+    fromBox.setTooltip ("One instrument's presets, or one sample folder's samples");
+    fromBox.onChange = [this]
+    {
+        const auto i = fromBox.getSelectedId() - 2;
+        setFilter (show, juce::isPositiveAndBelow (i, fromItems.size()) ? fromItems[i] : juce::String());
+    };
     list.setModel (this);
     list.setRowHeight (22);
-    for (auto* c : std::initializer_list<juce::Component*> { &intro, &count, &searchBox, &list })
+    for (auto* c : std::initializer_list<juce::Component*> { &intro, &count, &searchBox, &showBox, &fromBox, &list })
         addAndMakeVisible (c);
     setSize (760, 520);
     reload();
@@ -47,7 +62,64 @@ void SoundIndexView::reload()
     for (const auto& [key, instrument] : index.instruments)
         for (const auto& sound : instrument.sounds)
             ids[instrument.source.name + "\n" + sound["name"].toString()] = { key, sound["id"].toString() };
+    fillFromMenu();
     search (searchBox.getText());
+}
+
+void SoundIndexView::setSampleFolders (const juce::Array<juce::File>& folders)
+{
+    sampleFolders = folders;
+    fillFromMenu();
+}
+
+void SoundIndexView::fillFromMenu()
+{
+    std::set<juce::String> instruments;
+    for (const auto& row : all)
+        if (! row.sample)
+            instruments.insert (row.source);
+    fromItems.clear();
+    fromBox.clear (juce::dontSendNotification);
+    fromBox.addItem ("Every instrument and folder", 1);
+    for (const auto& name : instruments)
+    {
+        fromItems.add (name);
+        fromBox.addItem (name, fromItems.size() + 1);
+    }
+    if (! sampleFolders.isEmpty())
+        fromBox.addSeparator();
+    for (const auto& f : sampleFolders)
+    {
+        fromItems.add (f.getFullPathName());
+        fromBox.addItem ("Folder: " + f.getFileName(), fromItems.size() + 1);
+    }
+    const auto i = fromItems.indexOf (from);
+    if (i < 0)
+        from.clear();
+    fromBox.setSelectedId (i < 0 ? 1 : i + 2, juce::dontSendNotification);
+}
+
+void SoundIndexView::setFilter (Show s, const juce::String& source)
+{
+    show = s;
+    from = source;
+    showBox.setSelectedId (1 + (int)show, juce::dontSendNotification);
+    const auto i = fromItems.indexOf (from);
+    fromBox.setSelectedId (i < 0 ? 1 : i + 2, juce::dontSendNotification);
+    search (searchBox.getText());
+}
+
+bool SoundIndexView::passes (const SoundIndex::Row& row) const
+{
+    const bool problem = row.role == "problem";
+    if ((show == Show::presets && row.sample) || (show == Show::samples && ! row.sample) ||
+        (show == Show::problems && ! problem))
+        return false;
+    if (from.isEmpty())
+        return true;
+    if (row.sample)
+        return row.path.startsWith (from + juce::File::getSeparatorString());
+    return row.source == from;
 }
 
 SoundIndexView::~SoundIndexView() { list.setModel (nullptr); }
@@ -63,6 +135,8 @@ void SoundIndexView::search (const juce::String& text)
     shown.clear();
     for (const auto& row : all)
     {
+        if (! passes (row))
+            continue;
         const auto haystack =
             (row.name + " " + row.source + " " + row.role + " " + row.detail + (row.sample ? " sample" : " preset"))
                 .toLowerCase();
@@ -161,7 +235,9 @@ void SoundIndexView::resized()
     auto area = getLocalBounds().reduced (10);
     intro.setBounds (area.removeFromTop (40));
     auto row = area.removeFromTop (28);
-    count.setBounds (row.removeFromRight (260));
+    count.setBounds (row.removeFromRight (150));
+    fromBox.setBounds (row.removeFromRight (200).reduced (4, 1));
+    showBox.setBounds (row.removeFromRight (120).reduced (4, 1));
     searchBox.setBounds (row.reduced (0, 1));
     area.removeFromTop (6);
     list.setBounds (area);

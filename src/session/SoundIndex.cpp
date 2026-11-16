@@ -748,6 +748,7 @@ std::vector<SoundIndex::Row> SoundIndex::rows() const
         row.name = file.getFileName();
         row.source = file.getParentDirectory().getFileName();
         row.sample = true;
+        row.path = sample.path;
         const auto& info = sample.info;
         if (info.hasProperty ("problem"))
         {
