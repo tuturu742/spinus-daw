@@ -957,8 +957,20 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
      a fixed pan (when 0.1 or more off the centre). Each curve is one `clip.addAutomation` over the song on a
      lane of its own, in the same undo step as the notes. Drums get none (their hits' velocities say it). Tempo
      changes once tempo automation exists (below).
-  4. **Filter automation, approximate:** brightness over time as a filter's cutoff, labelled as a guess at the
-     effect, not the producer's own moves.
+  4. **Filter automation, approximate** (done: `stemautomation::measure`'s `cutoff`, labelled as a guess at the
+     effect, not the producer's own moves): per beat, the stem's spectral centroid (2048-sample Hann frames,
+     by magnitude: by power a rich sound's fundamental outweighs its harmonics) over the mean frequency of the
+     notes sounding then (the stem's transcribed notes: a tone is dull for its notes, not because they are low;
+     no notes, no tone), in octaves, only on beats within 20 dB of its loudest (quieter ones are mostly the other
+     stems' bleed), smoothed over four bars (a part's tone changes with every chord and phrase). Under 1.5
+     octaves between the 10th and 90th percentile, nothing; vocals never (a voice's tone changes with every
+     vowel). Otherwise the 90th percentile and anything
+     within a quarter octave of it plays open (20 kHz); a part an octave or more duller gets a low pass at twice
+     its centroid (a low pass leaves a rich sound's centroid near half its cutoff), the cutoff gliding in octaves
+     between the two (150 Hz at the lowest); simplified (0.05 of the setting) and snapped like the others. Added
+     as a Spinus Filter (low pass, its defaults) on the channel's new mixer insert (`insert.addEffect`) with one
+     `clip.addAutomation` of its Cutoff (`deviceParameter`, `cutoff`, normalized by the Filter's own range,
+     `stemautomation::cutoffSetting`) on a lane of its own, in the same undo step. Tuned on the 56 analyzed songs (a Python copy of the measure): with one bar of smoothing and an octave, 41 of 56 guitar stems and 48 of 56 vocal stems got a filter, curves of hundreds of points; as it stands, 6 guitar, 14 other (mostly synths), 2 piano and 1 bass stem of 56 each.
 
   Test songs: the owner's own songs (made with Suno, and recordings of their old band whose original files are
   lost), used on the owner's computer only, never committed; the tests in the repository use short generated
