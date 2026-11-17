@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- Fixed: an instrument measured on its own (**Measure again**, the Browser's **Refresh sound index**, or a newly
+  ticked one) kept the simple rules' guess for its presets, so a bass plugin such as a 5-string bass could have
+  none listed as bass. Its presets are now guessed as a full update guesses them, learnt from the presets whose
+  names say their role.
 - **Options › Sound index**: listen to any sound (a preset is played by its instrument), and **Leave out**
   the ones you don't want, one, several or all that the search and menus show (for example every bass preset
   of one plugin); no update brings them back, and **Show › Left out** puts them back. A **Role** menu joins
