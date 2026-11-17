@@ -3,6 +3,7 @@
 
 #include "commands/CommandRegistry.h"
 #include "dsp/ParameterText.h"
+#include "dsp/sampler/SampleStorage.h"
 #include "engine/ParameterIds.h"
 #include "model/ModelJson.h"
 #include "project/ProjectFiles.h"
@@ -66,6 +67,7 @@ Session::Session (te::Engine& engine, std::unique_ptr<engine::DeviceFactory> d)
     freezer = std::make_unique<Freezer> (*this);
     tuner = std::make_unique<Tuner> (*this);
     preview = std::make_unique<engine::SamplePreview> (&engine.getDeviceManager());
+    soundIndex.play = [this] (const juce::File& file) { preview->play (file, dsp::getAudioFormats()); };
     syncAdapter();
     recorder = std::make_unique<MidiRecorder> (*this);
     ideaRecorder = std::make_unique<IdeaRecorder> (*this);
@@ -159,6 +161,7 @@ Session::~Session()
     controlWatcher->cancelPendingUpdate();
     history.removeListener (historyListener);
     edit->getTransport().stop (false, true);
+    soundIndex.play = nullptr;
     preview = nullptr;
     audioRecorder = nullptr;
     ideaRecorder = nullptr;

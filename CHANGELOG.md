@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Options › Sound index**: listen to any sound (a preset is played by its instrument), and **Leave out**
+  the ones you don't want, one, several or all that the search and menus show (for example every bass preset
+  of one plugin); no update brings them back, and **Show › Left out** puts them back. A **Role** menu joins
+  the filters.
+- **Options › Sound index**: the Sounds tab has **Show** (all, presets, samples or problems) and **From** (one
+  instrument or sample folder) menus. The Samples tab has **Show its samples** and **Show its problems**, so a
+  folder's "4 problems" can be opened and read: which files, and why.
 - Fixed: the Analyzer's **Add to the project** left the project at its old tempo (120), so the notes ran away from
   the stems added as audio. It now sets the song's average tempo, and places every note, drum hit and curve at
   its moment in the recording, so a song played live (speeding up and slowing down) still lines up with its

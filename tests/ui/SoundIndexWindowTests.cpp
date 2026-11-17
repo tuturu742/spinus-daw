@@ -1,6 +1,7 @@
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
 #include "session/Session.h"
+#include "session/LeftOutSounds.h"
 #include "ui/SoundIndexWindow.h"
 #include "ui/Theme.h"
 
@@ -101,6 +102,13 @@ const SoundIndexPage::InstrumentRow* rowOf (const SoundIndexPage& page, const ju
     return nullptr;
 }
 
+juce::SparseSet<int> rowSet (int row)
+{
+    juce::SparseSet<int> set;
+    set.addRange ({ row, row + 1 });
+    return set;
+}
+
 int rowIndex (const SoundIndexPage& page, const juce::String& key)
 {
     for (size_t i = 0; i < page.getInstruments().size(); ++i)
@@ -151,6 +159,97 @@ TEST_CASE ("Options > Sound index lists, ticks, measures, forgets and deletes", 
     page->showSoundsOf (rowIndex (*page, testSynth().key));
     CHECK (page->getTabs().getCurrentTabIndex() == 1);
     CHECK (page->getSounds().getShown().size() == 6);
+    CHECK (page->getSounds().getFrom() == testSynth().name);
+
+    // The filters: only samples, only presets, only problems; a folder's samples from the Samples tab.
+    page->getSounds().setFilter (SoundIndexView::Show::samples);
+    CHECK (page->getSounds().getShown().size() == 2);
+    page->getSounds().setFilter (SoundIndexView::Show::presets);
+    CHECK (std::none_of (page->getSounds().getShown().begin(), page->getSounds().getShown().end(),
+                         [] (const SoundIndex::Row& r) { return r.sample; }));
+    page->getSounds().setFilter (SoundIndexView::Show::problems);
+    CHECK (page->getSounds().getShown().empty());
+    page->getTabs().setCurrentTabIndex (2);
+    page->showSamplesOf (0, false);
+    CHECK (page->getTabs().getCurrentTabIndex() == 1);
+    CHECK (page->getSounds().getShow() == SoundIndexView::Show::samples);
+    CHECK (page->getSounds().getShown().size() == 2);
+    page->getSounds().setFilter (SoundIndexView::Show::samples, f.samples.getChildFile ("Leads").getFullPathName());
+    CHECK (page->getSounds().getShown().size() == 1); // a folder holds the folders inside it
+
+    // Listen: a sample plays as it is.
+    juce::File played;
+    f.index.play = [&] (const juce::File& file) { played = file; };
+    juce::String heard = "not yet";
+    f.index.listen (page->getSounds().getShown()[0], [&] (const juce::String& problem) { heard = problem; });
+    CHECK (heard.isEmpty());
+    CHECK (played == f.samples.getChildFile ("Leads/high.wav"));
+
+    // Leave out: one sample, then a preset; they leave the index and an update doesn't bring them back.
+    auto& sounds = page->getSounds();
+    sounds.selectRows (rowSet (0));
+    sounds.actOnSelected();
+    CHECK (sounds.getMessage().startsWith ("1 sound left out"));
+    page->getSounds().setFilter (SoundIndexView::Show::presets, testSynth().name);
+    REQUIRE (waitFor ([&] { return page->getSounds().getShown().size() == 6; }, 10000));
+    const auto preset = page->getSounds().getShown()[2];
+    page->getSounds().selectRows (rowSet (2));
+    page->getSounds().actOnSelected();
+    REQUIRE (waitFor ([&] { return page->getSounds().getShown().size() == 5; }, 10000));
+    {
+        SoundIndex saved (f.index.getFolder());
+        saved.load();
+        CHECK (saved.samples.size() == 1);
+        const auto& kept = saved.instruments[testSynth().key].sounds;
+        CHECK (std::none_of (kept.begin(), kept.end(), [&] (const juce::var& s) { return s["id"] == preset.id; }));
+    }
+    page->getSounds().setFilter (SoundIndexView::Show::leftOut);
+    CHECK (page->getSounds().getShown().size() == 2);
+    f.index.update();
+    REQUIRE (f.waitForIt());
+    {
+        SoundIndex saved (f.index.getFolder());
+        saved.load();
+        CHECK (saved.samples.size() == 1);
+        CHECK (saved.instruments[testSynth().key].sounds.size() == 5);
+    }
+
+    // The Role menu: only one role's sounds.
+    page->getSounds().setFilter (SoundIndexView::Show::everything);
+    const auto aRole = page->getSounds().getShown()[0].role;
+    page->getSounds().setRole (aRole);
+    CHECK (std::all_of (page->getSounds().getShown().begin(), page->getSounds().getShown().end(),
+                        [&] (const SoundIndex::Row& r) { return r.role == aRole; }));
+    page->getSounds().setRole ({});
+
+    // Put back: the update measures them again.
+    REQUIRE (waitFor ([&] { return ! f.index.isUpdating(); }, 10000));
+    page->getSounds().setFilter (SoundIndexView::Show::leftOut);
+    page->getSounds().actOnAllShown(); // two: asks first
+    settle();
+    if (auto* box = dynamic_cast<juce::AlertWindow*> (juce::Component::getCurrentlyModalComponent()))
+        box->exitModalState (0);
+    settle();
+    {
+        LeftOutSounds left (f.index.getFolder());
+        left.load();
+        CHECK (left.getEntries().size() == 2); // not before Yes
+    }
+    {
+        std::vector<SoundIndex::Row> rows (page->getSounds().getShown());
+        page->getSounds().onPutBack (rows);
+    }
+    REQUIRE (f.waitForIt());
+    {
+        LeftOutSounds left (f.index.getFolder());
+        left.load();
+        CHECK (left.getEntries().empty());
+        SoundIndex saved (f.index.getFolder());
+        saved.load();
+        CHECK (saved.samples.size() == 2);
+        CHECK (saved.instruments[testSynth().key].sounds.size() == 6);
+    }
+    page->getSounds().setFilter (SoundIndexView::Show::everything);
 
     // Forget: its sounds leave the index, and it is unticked.
     page->forget (rowIndex (*page, testSynth().key));

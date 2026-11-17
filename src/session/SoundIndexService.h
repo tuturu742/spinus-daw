@@ -1,8 +1,10 @@
 #pragma once
 
+#include "session/LeftOutSounds.h"
 #include "session/SoundIndex.h"
 
 #include <deque>
+#include <memory>
 
 namespace spinus
 {
@@ -59,6 +61,23 @@ public:
         updates. */
     bool deleteIndex();
 
+    /** Takes these sounds out of the index and keeps them out (LeftOutSounds: no update measures them again).
+        Returns how many left it; 0 while it updates. */
+    int leaveOut (const std::vector<LeftOutSounds::Entry>&);
+    /** Puts left-out sounds back: they are measured again by an update, which starts. Returns how many. */
+    int putBack (const std::vector<LeftOutSounds::Entry>&);
+    /** What a row of the Sounds tab leaves out. */
+    static LeftOutSounds::Entry entryOf (const SoundIndex::Row&);
+
+    /** Plays a sound of the index: a sample as it is; a preset played by its instrument in the helper (C3 held,
+        then a chord; a kit that does not follow the keys, a beat of General MIDI drums), kept in the index's
+        `listen` folder so it plays at once the next time. `done` (message thread) gets nothing, or why it could
+        not be played. */
+    void listen (const SoundIndex::Row&, const std::function<void (const juce::String&)>& done);
+    bool isListening() const noexcept { return listening != nullptr; }
+    /** Plays an audio file (Session: its sample preview). */
+    std::function<void (const juce::File&)> play;
+
     /** Stops the update that runs, and drops the waiting requests. */
     void cancel();
     bool isUpdating() const noexcept { return indexer != nullptr; }
@@ -88,6 +107,7 @@ private:
     std::optional<SoundIndexer::Result> lastResult;
     juce::String lastText; // what the last one did, said before the summary
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
+    std::unique_ptr<juce::Thread> listening;
 
     JUCE_DECLARE_NON_COPYABLE (SoundIndexService)
 };

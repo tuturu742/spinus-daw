@@ -14,6 +14,8 @@
 namespace spinus
 {
 
+class LeftOutSounds;
+
 namespace plugins
 {
 class DeviceList;
@@ -194,6 +196,9 @@ public:
     bool measureAgain (const juce::String& key);
     /** This instrument leaves the index (its file too), until an update measures it again. Saves the index. */
     bool forget (const juce::String& key);
+    /** Visited again at the next update, which then measures only its presets not measured yet (ones put back
+        after being left out). Saves the index. False when it is not in the index. */
+    bool visitAgain (const juce::String& key);
     /** measureAgain for every instrument that is silentOrFailed(). Returns how many. */
     int measureAgainSilentOrFailed();
 
@@ -208,12 +213,23 @@ public:
                                                     const std::function<bool()>& shouldStop = {});
     /** Which of these files are new or changed (path, size and modification time) since they were measured. */
     std::vector<SampleFile> changedSamples (const std::vector<SampleFile>&) const;
+    /** Takes the files the user left out (LeftOutSounds beside `indexFolder`) out of a list to measure. */
+    static void dropLeftOut (std::vector<SampleFile>&, const juce::File& indexFolder);
+    /** Takes the presets the user left out out of an instrument's sounds and problems. */
+    static void dropLeftOut (Instrument&, const LeftOutSounds&);
+    /** Takes everything the user left out out of the loaded index, and saves what changed. Returns how many
+        sounds left it. */
+    int dropLeftOut (const LeftOutSounds&);
 
     /** One flat list of every sound (for the panel's list and search): instrument presets and samples. */
     struct Row
     {
         juce::String name, source, role, detail; // role: the role or the sample's class; "problem": detail says why
         bool sample = false;
+        juce::String path;       // a sample's file
+        juce::String instrument; // a preset's instrument (its key)
+        juce::String id;         // and the preset's id ("": the instrument's sound as it opens)
+        bool whole = false;      // the instrument's own problem (it did not load), not one preset's
     };
     /** Every sound measured, and every problem: a preset that didn't load, crashed or hung the helper, an instrument
         that didn't load, a sample that couldn't be read. As many problems as summarize() counts. */

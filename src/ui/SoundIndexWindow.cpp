@@ -173,7 +173,11 @@ public:
         list.setModel (this);
         list.setRowHeight (34);
         againButton.onClick = [this] { page.measureFolderAgain (list.getSelectedRow()); };
-        for (auto* c : std::initializer_list<juce::Component*> { &intro, &list, &againButton })
+        showButton.onClick = [this] { page.showSamplesOf (list.getSelectedRow(), false); };
+        problemsButton.setTooltip ("What went wrong with this folder's samples, and why");
+        problemsButton.onClick = [this] { page.showSamplesOf (list.getSelectedRow(), true); };
+        for (auto* c :
+             std::initializer_list<juce::Component*> { &intro, &list, &againButton, &showButton, &problemsButton })
             addAndMakeVisible (c);
         updateButtons();
     }
@@ -187,14 +191,23 @@ public:
 
     void updateButtons()
     {
-        againButton.setEnabled (juce::isPositiveAndBelow (list.getSelectedRow(), (int)page.folders.size()));
+        const auto row = list.getSelectedRow();
+        const bool chosen = juce::isPositiveAndBelow (row, (int)page.folders.size());
+        againButton.setEnabled (chosen);
+        showButton.setEnabled (chosen && page.folders[(size_t)row].samples > 0);
+        problemsButton.setEnabled (chosen && page.folders[(size_t)row].problems > 0);
     }
 
     void resized() override
     {
         auto area = getLocalBounds().reduced (10);
         intro.setBounds (area.removeFromTop (40));
-        againButton.setBounds (area.removeFromBottom (28).removeFromLeft (130).reduced (0, 1));
+        auto buttons = area.removeFromBottom (28);
+        againButton.setBounds (buttons.removeFromLeft (130).reduced (0, 1));
+        buttons.removeFromLeft (6);
+        showButton.setBounds (buttons.removeFromLeft (140).reduced (0, 1));
+        buttons.removeFromLeft (6);
+        problemsButton.setBounds (buttons.removeFromLeft (140).reduced (0, 1));
         area.removeFromBottom (6);
         list.setBounds (area);
     }
@@ -242,11 +255,13 @@ private:
     }
 
     void selectedRowsChanged (int) override { updateButtons(); }
+    void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override { page.showSamplesOf (row, false); }
 
     SoundIndexPage& page;
     juce::Label intro;
     juce::ListBox list;
-    juce::TextButton againButton { "Measure again" };
+    juce::TextButton againButton { "Measure again" }, showButton { "Show its samples" },
+        problemsButton { "Show its problems" };
 };
 
 //==============================================================================
@@ -266,6 +281,48 @@ SoundIndexPage::SoundIndexPage (SoundIndexService& service) : index (service)
 
     instrumentList = std::make_unique<InstrumentList> (*this);
     sounds = std::make_unique<SoundIndexView> (index.getFolder());
+    sounds->onLeaveOut = [this] (const std::vector<SoundIndex::Row>& rows)
+    {
+        std::vector<LeftOutSounds::Entry> entries;
+        entries.reserve (rows.size());
+        for (const auto& r : rows)
+            entries.push_back (SoundIndexService::entryOf (r));
+        if (index.isUpdating())
+            return sounds->setMessage ("Wait for the update to finish (or Stop it), then leave them out.");
+        const auto n = index.leaveOut (entries);
+        sounds->setMessage (juce::String (n) + (n == 1 ? " sound" : " sounds") +
+                            " left out. Show \"Left out\" puts them back.");
+    };
+    sounds->onPutBack = [this] (const std::vector<SoundIndex::Row>& rows)
+    {
+        std::vector<LeftOutSounds::Entry> entries;
+        entries.reserve (rows.size());
+        for (const auto& r : rows)
+        {
+            LeftOutSounds::Entry e;
+            e.sample = r.path;
+            e.instrument = r.instrument;
+            e.preset = r.id;
+            entries.push_back (e);
+        }
+        const auto n = index.putBack (entries);
+        sounds->setMessage (juce::String (n) + (n == 1 ? " sound" : " sounds") +
+                            " put back: the update measures them again.");
+        sounds->reload();
+    };
+    sounds->onListen = [this] (const SoundIndex::Row& row)
+    {
+        sounds->setMessage (row.sample ? "Playing " + row.name + "."
+                                       : "Playing " + row.name + " (" + row.source + ")...");
+        index.listen (
+            row,
+            [safe = juce::Component::SafePointer (sounds.get()), name = row.name] (const juce::String& problem)
+            {
+                if (safe != nullptr)
+                    safe->setMessage (problem.isEmpty() ? "Playing " + name + "."
+                                                        : name + " could not be played: " + problem + ".");
+            });
+    };
     folderList = std::make_unique<FolderList> (*this);
     tabs.addTab ("Instruments", juce::Colours::transparentBlack, instrumentList.get(), false);
     tabs.addTab ("Sounds", juce::Colours::transparentBlack, sounds.get(), false);
@@ -306,7 +363,7 @@ void SoundIndexPage::reload()
             row.state << " so far (stopped part way: the next update carries on)";
         if (! i.problemPresets.isEmpty())
             row.state << "; " << count (i.problemPresets.size(), "preset", "presets")
-                      << " crashed or froze it (search \"problem\" in Sounds)";
+                      << " crashed or froze it (Show its sounds, then Problems)";
         if (silent > 0)
             row.state << "; " << count (silent, "is silent", "are silent");
         row.problem = ! i.problemPresets.isEmpty() || silent > 0;
@@ -359,6 +416,10 @@ void SoundIndexPage::reload()
         folders.push_back (row);
     }
 
+    juce::Array<juce::File> sampleFolders;
+    for (const auto& f : folders)
+        sampleFolders.add (f.folder);
+    sounds->setSampleFolders (sampleFolders);
     instrumentList->refresh();
     folderList->refresh();
     sounds->reload();
@@ -413,8 +474,18 @@ void SoundIndexPage::showSoundsOf (int row)
     if (! juce::isPositiveAndBelow (row, (int)instruments.size()))
         return;
     tabs.setCurrentTabIndex (1);
-    sounds->setSearchText ("\"" + instruments[(size_t)row].source.name + "\"");
-    sounds->search (sounds->getSearchText());
+    sounds->setSearchText ({});
+    sounds->setFilter (SoundIndexView::Show::everything, instruments[(size_t)row].source.name);
+}
+
+void SoundIndexPage::showSamplesOf (int row, bool problemsOnly)
+{
+    if (! juce::isPositiveAndBelow (row, (int)folders.size()))
+        return;
+    tabs.setCurrentTabIndex (1);
+    sounds->setSearchText ({});
+    sounds->setFilter (problemsOnly ? SoundIndexView::Show::problems : SoundIndexView::Show::samples,
+                       folders[(size_t)row].folder.getFullPathName());
 }
 
 void SoundIndexPage::measureFolderAgain (int row)
