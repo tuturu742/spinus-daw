@@ -312,6 +312,7 @@ void SoundIndex::load()
             i.presetFilesStamp = v["presetFilesStamp"].toString();
             i.problem = v["problem"].toString();
             i.measuredWith = (int)v["measuredWith"];
+            i.playedKeys = v["playedKeys"].toString();
             i.updated = juce::Time::fromISO8601 (v["updated"].toString());
             if (const auto* bad = v["problemPresets"].getArray())
                 for (const auto& b : *bad)
@@ -368,6 +369,8 @@ bool SoundIndex::saveIndex() const
         o->setProperty ("problemDetails", juce::var (details));
         o->setProperty ("sounds", i.sounds.size());
         o->setProperty ("measuredWith", i.measuredWith);
+        if (i.playedKeys.isNotEmpty())
+            o->setProperty ("playedKeys", i.playedKeys);
         o->setProperty ("updated", i.updated.toISO8601 (true));
         list.add (v);
     }
@@ -515,7 +518,7 @@ bool SoundIndex::needsVisit (const SoundSource& source) const
     if (found == instruments.end())
         return true;
     const auto& known = found->second;
-    if (known.source.fingerprint != source.fingerprint)
+    if (known.source.fingerprint != source.fingerprint || known.playedKeys != learnedKeys (source.key))
         return true;
     // Sounds the user saved for it and not measured yet (or saved again), or measured and since deleted.
     SavedSounds saved (root);
@@ -544,6 +547,35 @@ bool SoundIndex::needsVisit (const SoundSource& source) const
     if (! known.presetFiles && chosen.isEmpty())
         return false;
     return known.presetFilesStamp.isEmpty() || presetFilesStamp (known.presetFolders, chosen) != known.presetFilesStamp;
+}
+
+juce::String SoundIndex::learnedKeys (const juce::String& instrument) const
+{
+    InstrumentProfiles profiles (root);
+    profiles.load();
+    return keysStamp (profiles.playable (instrument));
+}
+
+juce::String SoundIndex::keysStamp (const std::optional<PlayableKeys>& keys)
+{
+    if (! keys.has_value() || keys->keys.all())
+        return {};
+    juce::StringArray runs;
+    int n = 0;
+    while (n < 128)
+    {
+        if (! keys->plays (n))
+        {
+            ++n;
+            continue;
+        }
+        auto to = n;
+        while (keys->plays (to + 1))
+            ++to;
+        runs.add (to == n ? juce::String (n) : juce::String (n) + "-" + juce::String (to));
+        n = to + 1;
+    }
+    return runs.joinIntoString (",");
 }
 
 bool SoundIndex::measureAgain (const juce::String& key)
@@ -1043,9 +1075,11 @@ void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, co
                       const SoundSource& source, const std::function<bool()>& shouldStop,
                       const std::function<void (const juce::String&, bool)>& tell, SoundIndexer::Result& result)
 {
-    if (entry.source.fingerprint != source.fingerprint)
+    const auto keys = index.learnedKeys (source.key);
+    if (entry.source.fingerprint != source.fingerprint || entry.playedKeys != keys)
     {
-        // A new or changed plugin: everything measured again.
+        // A new or changed plugin, or one learned since (its test notes go on other keys): everything measured
+        // again.
         entry.sounds.clear();
         entry.problemPresets.clear();
         entry.problemDetails.clear();
@@ -1060,6 +1094,7 @@ void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, co
         entry.problemDetails.clear();
     }
     entry.measuredWith = SoundIndex::helperRevision;
+    entry.playedKeys = keys;
     entry.source = source;
     entry.problem.clear();
     entry.complete = false;
@@ -1083,6 +1118,16 @@ void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, co
                                  { "name", s.name },
                                  { "version", s.version },
                                  { "file", mine.stateFile (s.id).getFullPathName() } }));
+    }
+
+    juce::Array<juce::var> playable; // the keys a learned instrument plays: the helper's test notes keep to them
+    {
+        InstrumentProfiles profiles (index.getFolder());
+        profiles.load();
+        if (const auto learned = profiles.playable (source.key); keys.isNotEmpty() && learned.has_value())
+            for (int n = 0; n < 128; ++n)
+                if (learned->plays (n))
+                    playable.add (n);
     }
 
     bool defaultOnly = false;
@@ -1109,7 +1154,8 @@ void visitInstrument (const SoundIndex& index, SoundIndex::Instrument& entry, co
                                        { "skip", skip },
                                        { "saved", saved },
                                        { "indexFolder", index.getFolder().getFullPathName() },
-                                       { "defaultOnly", defaultOnly } });
+                                       { "defaultOnly", defaultOnly },
+                                       { "playable", playable } });
         const auto run = SoundIndexer::runHelper (
             options, request, source.hostLibraries,
             [&] (const juce::var& line)

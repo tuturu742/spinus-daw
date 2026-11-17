@@ -1,4 +1,5 @@
 #include "SoundRender.h"
+#include "InstrumentProfiles.h"
 
 #include "InstrumentPresets.h"
 #include "KeyProbe.h"
@@ -228,6 +229,17 @@ int runInstrument (const juce::var& request, Lines& out)
         for (const auto& s : *list)
             skip.insert (s.toString());
 
+    // A learned instrument: the keys it plays, so no test note presses a switch or an effect key.
+    std::optional<PlayableKeys> playable;
+    if (const auto* list = request["playable"].getArray(); list != nullptr && ! list->isEmpty())
+    {
+        playable.emplace();
+        for (const auto& k : *list)
+            if (juce::isPositiveAndBelow ((int)k, 128))
+                playable->keys.set ((size_t)(int)k);
+    }
+    const auto* keys = playable.has_value() && playable->any() ? &*playable : nullptr;
+
     const sounds::Player play = [&player] (const std::vector<sounds::Note>& notes, double tail)
     {
         std::vector<OfflineInstrument::Note> converted;
@@ -257,11 +269,11 @@ int runInstrument (const juce::var& request, Lines& out)
         if (problem.isEmpty())
         {
             auto described =
-                sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
+                sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category, keys);
             // Silent: perhaps still loading (the first sound, or a preset that loads other samples).
             if (described.silent && waitUntilAudible (player, out, std::exchange (firstWait, laterWait)))
-                described =
-                    sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name, preset.category);
+                described = sounds::describeInstrument (play, OfflineInstrument::sampleRate, preset.name,
+                                                        preset.category, keys);
             sound = sounds::toVar (described);
         }
         else

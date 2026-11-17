@@ -1,4 +1,5 @@
 #include "SoundDescriptors.h"
+#include "InstrumentProfiles.h"
 
 #include <juce_dsp/juce_dsp.h>
 
@@ -686,9 +687,12 @@ juce::String RoleGuess::guess (const juce::var& sound, int k, int skip) const
 }
 
 InstrumentSound describeInstrument (const Player& player, double rate, const juce::String& name,
-                                    const juce::String& category)
+                                    const juce::String& category, const PlayableKeys* keys)
 {
     InstrumentSound result;
+    if (keys != nullptr && ! keys->any())
+        keys = nullptr;
+    const auto fit = [keys] (int note) { return keys != nullptr ? keys->fit (note) : note; };
     double lastWidth = 0.0;
     // Invalid samples (a plugin's filter blowing up) are silence here, and noted.
     const auto play = [&] (const std::vector<Note>& notes, double tail)
@@ -726,7 +730,7 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
         lastWidth = 0.0;
         return audio;
     };
-    const auto held = play ({ { TestNotes::held, 0.0, TestNotes::hold, 0.8f } }, TestNotes::ringOut);
+    const auto held = play ({ { fit (TestNotes::held), 0.0, TestNotes::hold, 0.8f } }, TestNotes::ringOut);
     result.width = round3 (lastWidth);
     result.sound = describe (held.getReadPointer (0), held.getNumSamples(), rate, TestNotes::hold);
     if (result.sound.peakDb < toDb (silentPeak))
@@ -746,8 +750,16 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
     };
     std::vector<Probe> probes;
     double loudest = 0.0; // of the probes (a pad's slow attack makes them quieter than the held note)
-    for (auto note : TestNotes::probes)
+    const auto chordRoot = fit (TestNotes::chord[0]);
+    for (auto probe : TestNotes::probes)
     {
+        // Beyond the keys a learned instrument plays: a register it lacks, as if silent.
+        if (keys != nullptr && (probe < keys->lowest() || probe > keys->highest()))
+        {
+            probes.push_back ({ probe, 0.0, {}, {}, 0.0 });
+            continue;
+        }
+        const auto note = fit (probe);
         const auto audio = play ({ { note, 0.0, TestNotes::probeHold, 0.8f } }, TestNotes::probeTail);
         const auto* x = audio.getReadPointer (0);
         const auto e = measureEnvelope (x, audio.getNumSamples(), rate, TestNotes::probeHold);
@@ -756,7 +768,7 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
         {
             p.pitch = detectPitch (x, audio.getNumSamples(), rate, e.start + 0.005, TestNotes::probeHold);
             p.centroid = measureSpectrum (x, audio.getNumSamples(), rate, e.start, TestNotes::probeHold).centroid;
-            if (note == TestNotes::chord[0])
+            if (note == chordRoot)
                 p.chroma = chroma (x, audio.getNumSamples(), rate, 0.0, TestNotes::probeHold);
         }
         loudest = juce::jmax (loudest, e.peak);
@@ -787,6 +799,26 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
         result.registerBrightness[i] = heard ? round3 (p.centroid / noteFrequency (p.note)) : 0.0;
     }
     result.tracksPitch = tuned >= 2 && (double)tuned >= 0.6 * (double)sounding;
+    if (keys == nullptr && tuned >= 2)
+    {
+        // In tune from the first in-tune test note to the last, and above them out of tune yet as loud as an
+        // in-tune one, with no clear pitch: an effect key (a guitar's fret noise). A filter dulling the high notes
+        // until their pitch is lost makes them quieter, and a synth's lowest notes can be out of reach of the pitch
+        // detection, so neither counts.
+        const auto first =
+            std::find_if (probes.begin(), probes.end(), [&] (const Probe& p) { return sounds (p) && inTune (p); });
+        const auto last =
+            std::find_if (probes.rbegin(), probes.rend(), [&] (const Probe& p) { return sounds (p) && inTune (p); })
+                .base();
+        double quietestInTune = loudest;
+        for (auto p = first; p != last; ++p)
+            if (sounds (*p))
+                quietestInTune = juce::jmin (quietestInTune, p->peak);
+        const auto off = [&] (const Probe& p) { return sounds (p) && ! inTune (p); };
+        result.oddKeys = std::none_of (first, last, off) &&
+                         std::any_of (last, probes.end(), [&] (const Probe& p)
+                                      { return off (p) && p.pitch.clarity < 0.5 && p.peak >= quietestInTune; });
+    }
     result.low = 127;
     result.high = 0;
     for (const auto& p : probes)
@@ -796,19 +828,19 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
             result.high = juce::jmax (result.high, p.note);
         }
     if (result.low > result.high)
-        result.low = result.high = TestNotes::held;
+        result.low = result.high = fit (TestNotes::held);
 
     if (result.tracksPitch)
     {
         // Polyphony: the chord's three notes are all there, and the third (E) much more than in C alone (where
         // only C's fifth harmonic puts some there).
-        const auto audio = play ({ { TestNotes::chord[0], 0.0, TestNotes::chordHold, 0.8f },
-                                   { TestNotes::chord[1], 0.0, TestNotes::chordHold, 0.8f },
-                                   { TestNotes::chord[2], 0.0, TestNotes::chordHold, 0.8f } },
+        const auto audio = play ({ { chordRoot, 0.0, TestNotes::chordHold, 0.8f },
+                                   { fit (TestNotes::chord[1]), 0.0, TestNotes::chordHold, 0.8f },
+                                   { fit (TestNotes::chord[2]), 0.0, TestNotes::chordHold, 0.8f } },
                                  0.2);
         const auto c3 = chroma (audio.getReadPointer (0), audio.getNumSamples(), rate, 0.05, TestNotes::chordHold);
         const auto single =
-            std::find_if (probes.begin(), probes.end(), [] (const Probe& p) { return p.note == TestNotes::chord[0]; });
+            std::find_if (probes.begin(), probes.end(), [chordRoot] (const Probe& p) { return p.note == chordRoot; });
         const auto most = *std::max_element (c3.begin(), c3.end());
         const auto e = (size_t)(TestNotes::chord[1] % 12), g = (size_t)(TestNotes::chord[2] % 12),
                    c = (size_t)(TestNotes::chord[0] % 12);
@@ -819,10 +851,9 @@ InstrumentSound describeInstrument (const Player& player, double rate, const juc
     {
         // A drum kit: each note's sound, by class.
         std::vector<int> notes;
-        for (int n = 35; n <= 51; ++n)
-            notes.push_back (n);
-        for (int n = 60; n <= 75; ++n)
-            notes.push_back (n);
+        for (int n = 35; n <= 75; ++n)
+            if ((n <= 51 || n >= 60) && (keys == nullptr || keys->plays (n)))
+                notes.push_back (n);
         juce::StringArray classes;
         for (auto n : notes)
         {
@@ -860,6 +891,8 @@ juce::var toVar (const InstrumentSound& s)
     if (s.invalid)
         o->setProperty ("invalid", true);
     o->setProperty ("tracksPitch", s.tracksPitch);
+    if (s.oddKeys)
+        o->setProperty ("oddKeys", true);
     o->setProperty ("polyphonic", s.polyphonic);
     o->setProperty ("low", s.low);
     o->setProperty ("high", s.high);

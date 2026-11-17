@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Options › Sound index**: an instrument you taught Spinus (**Learn this instrument**) is measured only on the keys
+  it plays, so its test notes no longer press keys that switch articulations or play effect noises (a sampled
+  guitar's presets read as drums or effects before). The next update measures such instruments again. One of your
+  plugins that isn't learned says so, and says more plainly when its sounds suggest such keys; **Learn this
+  instrument...** is in its menu. **Use as** gives every selected preset the role at once.
 - Fixed: an instrument measured on its own (**Measure again**, the Browser's **Refresh sound index**, or a newly
   ticked one) kept the simple rules' guess for its presets, so a bass plugin such as a 5-string bass could have
   none listed as bass. Its presets are now guessed as a full update guesses them, learnt from the presets whose

@@ -335,6 +335,29 @@ bool SoundIndexView::mark (int row, const juce::String& role)
     return marked.save();
 }
 
+int SoundIndexView::markSelected (const juce::String& role)
+{
+    int changed = 0;
+    const auto rows = list.getSelectedRows();
+    for (int i = 0; i < rows.size(); ++i)
+    {
+        const auto row = rows[i];
+        if (! juce::isPositiveAndBelow (row, (int)shown.size()))
+            continue;
+        const auto [instrument, preset] = idsOf (shown[(size_t)row]);
+        if (instrument.isEmpty())
+            continue; // a sample
+        marked.set (instrument, preset, role);
+        ++changed;
+    }
+    if (changed > 0)
+    {
+        list.repaint();
+        marked.save();
+    }
+    return changed;
+}
+
 void SoundIndexView::listBoxItemClicked (int row, const juce::MouseEvent& e)
 {
     if (! e.mods.isPopupMenu() || ! juce::isPositiveAndBelow (row, (int)shown.size()))
@@ -354,15 +377,22 @@ void SoundIndexView::listBoxItemClicked (int row, const juce::MouseEvent& e)
                   ! r.whole, false, [this] { actOnSelected(); });
     if (! idsOf (r).first.isEmpty())
     {
-        const auto mine = markOf (row);
+        // Every selected preset at once (the samples among them keep their class).
+        const auto rows = list.getSelectedRows();
+        juce::StringArray mine;
+        for (int i = 0; i < rows.size(); ++i)
+            if (juce::isPositiveAndBelow (rows[i], (int)shown.size()) &&
+                ! idsOf (shown[(size_t)rows[i]]).first.isEmpty())
+                mine.addIfNotAlreadyThere (markOf (rows[i]));
+        const auto same = mine.size() == 1 ? mine[0] : juce::String();
         juce::PopupMenu roles;
         for (const auto& songRole : parts::songRoles())
-            roles.addItem (parts::roleName (songRole), true, mine == songRole,
-                           [this, row, songRole] { mark (row, songRole); });
+            roles.addItem (parts::roleName (songRole), true, same == songRole,
+                           [this, songRole] { markSelected (songRole); });
         menu.addSeparator();
-        menu.addSubMenu ("Use as", roles);
-        if (mine.isNotEmpty())
-            menu.addItem ("Spinus's guess again", [this, row] { mark (row, {}); });
+        menu.addSubMenu (rows.size() > 1 ? "Use the selected presets as" : "Use as", roles);
+        if (mine.size() > 1 || same.isNotEmpty())
+            menu.addItem ("Spinus's guess again", [this] { markSelected ({}); });
     }
     menu.showMenuAsync ({});
 }

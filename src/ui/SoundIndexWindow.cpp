@@ -1,5 +1,7 @@
 #include "SoundIndexWindow.h"
 
+#include "LearnInstrumentWindow.h"
+
 #include "Theme.h"
 #include "WindowStacking.h"
 
@@ -31,15 +33,18 @@ public:
                        juce::dontSendNotification);
         intro.setJustificationType (juce::Justification::topLeft);
         list.setModel (this);
-        list.setRowHeight (34);
+        list.setRowHeight (48);
         againButton.setTooltip ("Forget what was measured of it and measure all its presets again");
         againButton.onClick = [this] { page.measureAgain (list.getSelectedRow()); };
         forgetButton.setTooltip ("Its sounds leave the index, and it is unticked (Spinus's own come back at the next "
                                  "update)");
         forgetButton.onClick = [this] { page.forget (list.getSelectedRow()); };
         showButton.onClick = [this] { page.showSoundsOf (list.getSelectedRow()); };
-        for (auto* c :
-             std::initializer_list<juce::Component*> { &intro, &list, &againButton, &forgetButton, &showButton })
+        learnButton.setTooltip ("Which of its keys play notes, and which switch what it plays or play effects: "
+                                "Spinus then measures it on the keys it plays");
+        learnButton.onClick = [this] { page.learn (list.getSelectedRow()); };
+        for (auto* c : std::initializer_list<juce::Component*> { &intro, &list, &againButton, &forgetButton,
+                                                                 &showButton, &learnButton })
             addAndMakeVisible (c);
         updateButtons();
     }
@@ -59,6 +64,7 @@ public:
         againButton.setEnabled (chosen && ! busy && page.instruments[(size_t)row].installed);
         forgetButton.setEnabled (chosen && ! busy);
         showButton.setEnabled (chosen);
+        learnButton.setEnabled (chosen && page.instruments[(size_t)row].installed);
     }
 
     void resized() override
@@ -71,6 +77,8 @@ public:
         forgetButton.setBounds (buttons.removeFromLeft (140).reduced (0, 1));
         buttons.removeFromLeft (6);
         showButton.setBounds (buttons.removeFromLeft (130).reduced (0, 1));
+        buttons.removeFromLeft (6);
+        learnButton.setBounds (buttons.removeFromLeft (170).reduced (0, 1));
         area.removeFromBottom (6);
         list.setBounds (area);
     }
@@ -108,7 +116,7 @@ private:
             p.lineTo (tick.getRight() - 3.0f, tick.getY() + 3.0f);
             g.strokePath (p, juce::PathStrokeType (1.8f));
         }
-        auto top = area.removeFromTop (area.getHeight() / 2);
+        auto top = area.removeFromTop (18);
         g.setFont (juce::FontOptions (13.5f));
         g.setColour (theme.get (r.installed ? "text" : "textDim"));
         g.drawFittedText (r.source.name, top.removeFromLeft (top.getWidth() * 60 / 100),
@@ -117,8 +125,8 @@ private:
         g.drawFittedText (r.source.badge + (r.always ? ", always measured" : juce::String()), top,
                           juce::Justification::centredRight, 1);
         g.setFont (juce::FontOptions (12.5f));
-        g.setColour (r.problem ? theme.get ("accent") : theme.get ("textDim"));
-        g.drawFittedText (r.state, area, juce::Justification::centredLeft, 1);
+        g.setColour (r.problem || r.hint ? theme.get ("accent") : theme.get ("textDim"));
+        g.drawFittedText (r.state, area, juce::Justification::topLeft, 2);
     }
 
     juce::String getTooltipForRow (int row) override
@@ -142,6 +150,7 @@ private:
                           [this, row] { page.measureAgain (row); });
             menu.addItem ("Forget its sounds", ! page.index.isUpdating(), false, [this, row] { page.forget (row); });
             menu.addItem ("Show its sounds", [this, row] { page.showSoundsOf (row); });
+            menu.addItem ("Learn this instrument...", r.installed, false, [this, row] { page.learn (row); });
             menu.showMenuAsync (juce::PopupMenu::Options());
             return;
         }
@@ -155,7 +164,7 @@ private:
     juce::Label intro;
     juce::ListBox list;
     juce::TextButton againButton { "Measure again" }, forgetButton { "Forget its sounds" },
-        showButton { "Show its sounds" };
+        showButton { "Show its sounds" }, learnButton { "Learn this instrument..." };
 };
 
 //==============================================================================
@@ -343,6 +352,36 @@ void SoundIndexPage::reload()
 {
     SoundIndex measured (index.getFolder());
     measured.load();
+    InstrumentProfiles profiles (index.getFolder());
+    profiles.load();
+    // Whether it is learned: Spinus's test notes keep to the keys it plays, or may land on ones that switch it.
+    auto learning = [&profiles] (InstrumentRow& row, const SoundIndex::Instrument* i)
+    {
+        row.learned = profiles.get (row.source.key).has_value();
+        if (i == nullptr || i->problem.isNotEmpty() || ! row.installed)
+            return;
+        const auto keys = SoundIndex::keysStamp (profiles.playable (row.source.key));
+        if (keys.isNotEmpty())
+        {
+            if (i->playedKeys == keys)
+                row.state << "; measured on the keys it plays (" << profiles.playable (row.source.key)->describe()
+                          << ")";
+            else
+                row.state << "; learned since it was measured: the next update measures it on the keys it plays";
+            return;
+        }
+        if (row.learned || row.always)
+            return;
+        int odd = 0;
+        for (const auto& s : i->sounds)
+            odd += (bool)s["oddKeys"] ? 1 : 0;
+        row.hint = odd > 0;
+        row.state << (row.hint ? "; " + count (odd, "preset sounds", "presets sound") +
+                                     " a noise, not a note, on the highest keys: it seems to have keys that play "
+                                     "effects or switch it. Learn this instrument for better guesses"
+                               : juce::String ("; not learned: if some of its keys switch it or play effects, its "
+                                               "guesses may be off (Learn this instrument)"));
+    };
 
     instruments.clear();
     const auto included = index.getIncludedPlugins();
@@ -377,7 +416,10 @@ void SoundIndexPage::reload()
         row.always = SoundIndexService::isAlwaysMeasured (s);
         row.measured = row.always || included.contains (s.key);
         if (const auto found = measured.instruments.find (s.key); found != measured.instruments.end())
+        {
             describe (row, found->second);
+            learning (row, &found->second);
+        }
         else
             row.state = row.measured ? "Not measured yet: click Update sound index"
                                      : "Not measured: tick it to measure it at the next update";
@@ -461,6 +503,24 @@ void SoundIndexPage::measureAgain (int row)
     if (! juce::isPositiveAndBelow (row, (int)instruments.size()) || ! instruments[(size_t)row].installed)
         return;
     index.refreshInstrument (instruments[(size_t)row].source.key);
+}
+
+void SoundIndexPage::learn (int row)
+{
+    if (! juce::isPositiveAndBelow (row, (int)instruments.size()) || ! instruments[(size_t)row].installed)
+        return;
+    const auto& r = instruments[(size_t)row];
+    LearnInstrumentWindow::Listening listening;
+    listening.helper = index.getOptions();
+    listening.source = r.source;
+    LearnInstrumentWindow::open (
+        index.getFolder(), r.source.key, r.source.name, this,
+        [safe = juce::Component::SafePointer<SoundIndexPage> (this)] (std::optional<PlayableKeys>)
+        {
+            if (safe != nullptr && ! safe->index.isUpdating())
+                safe->reload();
+        },
+        std::move (listening), aiService);
 }
 
 void SoundIndexPage::forget (int row)
@@ -564,7 +624,7 @@ SoundIndexWindow::~SoundIndexWindow()
         openWindow = nullptr;
 }
 
-void SoundIndexWindow::show (SoundIndexService& service, juce::Component* near)
+void SoundIndexWindow::show (SoundIndexService& service, juce::Component* near, ai::AiService* aiService)
 {
     if (openWindow != nullptr)
     {
@@ -572,6 +632,8 @@ void SoundIndexWindow::show (SoundIndexService& service, juce::Component* near)
         return;
     }
     auto* window = new SoundIndexWindow (service);
+    if (auto* page = getOpenPage())
+        page->setAiService (aiService);
     if (near != nullptr)
     {
         window->setLookAndFeel (&near->getLookAndFeel());
