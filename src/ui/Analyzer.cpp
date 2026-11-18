@@ -2136,7 +2136,7 @@ bool Analyzer::addNotesToProject()
             const auto label =
                 stemLabel (parts.size() > 1 ? name + " " + stemparts::nameOf (part.role).toLowerCase() : name, title);
             const auto added = steps.add ("channel.add", object ({ { "name", label }, { "instrument", device } }));
-            const auto channel = added["channel"];
+            const auto& channel = added["channel"];
             if (channel.isVoid())
                 return failed();
             channels[name].push_back (model::ChannelId { (uint32_t)(int)channel });

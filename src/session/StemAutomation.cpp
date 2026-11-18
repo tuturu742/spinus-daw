@@ -28,10 +28,10 @@ constexpr int fftOrder = 11; // 2048-sample frames for the brightness
     power, a rich sound's fundamental outweighs its harmonics); 0 when silent. */
 double centroidOf (const juce::AudioBuffer<float>& stem, int from, int to, double sampleRate)
 {
-    constexpr int size = 1 << fftOrder;
+    constexpr int size = 2048; // 2 ^ fftOrder
     static thread_local juce::dsp::FFT fft (fftOrder);
     static thread_local juce::dsp::WindowingFunction<float> window (size, juce::dsp::WindowingFunction<float>::hann);
-    std::vector<float> frame (2 * size);
+    std::vector<float> frame ((size_t)(2 * size));
     double weighted = 0.0, power = 0.0;
     const auto channels = stem.getNumChannels();
     for (auto start = from; start + size <= to; start += size)
@@ -303,7 +303,7 @@ Curves measure (const juce::AudioBuffer<float>& stem, double sampleRate, const s
                 const auto octaves = std::log2 (highestCutoff) + t * (closed - std::log2 (highestCutoff));
                 tones[i].value = cutoffSetting (std::pow (2.0, octaves));
             }
-            curves.cutoff = toAutomation (simplify (tones, 0.05), [] (double v) { return (float)v; });
+            curves.cutoff = toAutomation (simplify (tones, 0.1), [] (double v) { return (float)v; });
         }
     }
     return curves;

@@ -967,7 +967,7 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
      vowel). Otherwise the 90th percentile and anything
      within a quarter octave of it plays open (20 kHz); a part an octave or more duller gets a low pass at twice
      its centroid (a low pass leaves a rich sound's centroid near half its cutoff), the cutoff gliding in octaves
-     between the two (150 Hz at the lowest); simplified (0.05 of the setting) and snapped like the others. Added
+     between the two (150 Hz at the lowest); simplified (0.1 of the setting: a few moves, not every wiggle) and snapped like the others. Added
      as a Spinus Filter (low pass, its defaults) on the channel's new mixer insert (`insert.addEffect`) with one
      `clip.addAutomation` of its Cutoff (`deviceParameter`, `cutoff`, normalized by the Filter's own range,
      `stemautomation::cutoffSetting`) on a lane of its own, in the same undo step. Tuned on the 56 analyzed songs (a Python copy of the measure): with one bar of smoothing and an octave, 41 of 56 guitar stems and 48 of 56 vocal stems got a filter, curves of hundreds of points; as it stands, 6 guitar, 14 other (mostly synths), 2 piano and 1 bass stem of 56 each.
