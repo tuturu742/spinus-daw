@@ -413,7 +413,7 @@ void TrackCreator::showSoundSummary()
     updateButtons();
 }
 
-void TrackCreator::showSounds() { SoundIndexWindow::show (session.getSoundIndex(), this); }
+void TrackCreator::showSounds() { SoundIndexWindow::show (session.getSoundIndex(), this, service); }
 
 void TrackCreator::showPage (Page shown)
 {
