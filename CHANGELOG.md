@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Send levels can be automated**: right-click a send's knob in the Mixer for **Create automation clip: send
+  level** (more reverb in the chorus, an echo on one word). The knob moves with it while it plays, and removing
+  the send removes its automation too.
 - **Analyzer**: where a part's tone opens and closes over the song (a muffled intro, a filter sweep), **Add to the
   project** puts a Filter on its mixer track with a cutoff curve that follows it, roughly.
 - **Options › Sound index**: an instrument you taught Spinus (**Learn this instrument**) is measured only on the keys

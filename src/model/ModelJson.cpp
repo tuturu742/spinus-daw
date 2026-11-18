@@ -33,8 +33,11 @@ template <typename IdType> juce::var id (IdType i) { return juce::var ((int)i.va
 juce::var deviceKindName (Device::Kind k) { return k == Device::Kind::plugin ? "plugin" : "stock"; }
 
 const std::pair<ParameterTarget::Kind, const char*> targetKinds[] = {
-    { ParameterTarget::Kind::channelVolume, "channelVolume" },     { ParameterTarget::Kind::channelPan, "channelPan" },
-    { ParameterTarget::Kind::insertVolume, "insertVolume" },       { ParameterTarget::Kind::insertPan, "insertPan" },
+    { ParameterTarget::Kind::channelVolume, "channelVolume" },
+    { ParameterTarget::Kind::channelPan, "channelPan" },
+    { ParameterTarget::Kind::insertVolume, "insertVolume" },
+    { ParameterTarget::Kind::insertPan, "insertPan" },
+    { ParameterTarget::Kind::insertSend, "insertSend" },
     { ParameterTarget::Kind::deviceParameter, "deviceParameter" },
 };
 
@@ -98,6 +101,8 @@ juce::var write (const ParameterTarget& t)
         o.set ("channel", id (t.channel));
     else if (t.kind == K::insertVolume || t.kind == K::insertPan)
         o.set ("insert", id (t.insert));
+    else if (t.kind == K::insertSend)
+        o.set ("insert", id (t.insert)).set ("sendTo", id (t.sendTo));
     else
         o.set ("device", id (t.device)).set ("parameterId", t.parameterId);
 
@@ -325,6 +330,7 @@ struct Reader
 
         t.channel = id<ChannelId> (o, "channel");
         t.insert = id<InsertId> (o, "insert");
+        t.sendTo = id<InsertId> (o, "sendTo");
         t.device = id<DeviceId> (o, "device");
         t.parameterId = text (o, "parameterId");
         return t;

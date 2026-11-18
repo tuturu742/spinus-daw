@@ -118,6 +118,7 @@ An **automation clip** changes a setting over time: a fade-in, a filter sweep, a
 **Make one:** right-click
 
 - a mixer strip's name, and choose **Create automation clip: volume** or **pan**;
+- a send's knob in the Mixer, and choose **Create automation clip: send level** (for example, more reverb in the chorus);
 - a channel's name in the Channel Rack, for the channel's **volume**, **pan**, or any **instrument** setting;
 - an effect in the Mixer's slots, and choose **Create automation clip** and the setting.
 

@@ -1741,9 +1741,10 @@
                   "channelPan",
                   "insertVolume",
                   "insertPan",
+                  "insertSend",
                   "deviceParameter"
                 ],
-                "description": "channelVolume and channelPan need channel; insertVolume and insertPan need insert; deviceParameter needs device and parameterId"
+                "description": "channelVolume and channelPan need channel; insertVolume and insertPan need insert; insertSend (a send's level) needs insert and sendTo, and the send must exist; deviceParameter needs device and parameterId"
               },
               "channel": {
                 "type": "integer",
@@ -1751,7 +1752,11 @@
               },
               "insert": {
                 "type": "integer",
-                "description": "Mixer insert ID, 1 for the master, for insertVolume and insertPan"
+                "description": "Mixer insert ID, 1 for the master, for insertVolume, insertPan and insertSend (the insert that sends)"
+              },
+              "sendTo": {
+                "type": "integer",
+                "description": "For insertSend: the insert the send goes to"
               },
               "device": {
                 "type": "integer",

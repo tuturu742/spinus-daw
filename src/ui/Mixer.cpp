@@ -897,6 +897,39 @@ private:
             remove.setHelpText ("Remove this send");
             remove.onClick = [this] { details.mixer.removeSend (details.mixer.getSelectedInsert(), target); };
             addAndMakeVisible (remove);
+
+            level.addMouseListener (this, false); // its right-click menu
+        }
+
+        ~SendRow() override { level.removeMouseListener (this); }
+
+        model::ParameterTarget automationTarget() const
+        {
+            return { .kind = model::ParameterTarget::Kind::insertSend,
+                     .insert = details.mixer.getSelectedInsert(),
+                     .sendTo = target };
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            if (! e.mods.isPopupMenu())
+                return;
+            juce::PopupMenu menu;
+            menu.addItem ("Create automation clip: send level",
+                          [safe = juce::Component::SafePointer<SendRow> (this)]
+                          {
+                              if (safe != nullptr)
+                                  createAutomationClip (*safe, safe->details.mixer.session, safe->automationTarget());
+                          });
+            menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (level));
+        }
+
+        /** The knob moves with the send's automation while it plays. */
+        void followAutomation (float modelDb)
+        {
+            ui::followAutomation (
+                level, details.mixer.session.getAdapter().findParameter (automationTarget()),
+                [] (float position) { return (double)te::volumeFaderPositionToDB (position); }, modelDb, automated);
         }
 
         void update (const juce::String& name, float db)
@@ -928,8 +961,22 @@ private:
         juce::String text;
         juce::Slider level;
         juce::TextButton remove;
+        bool automated = false;
     };
 
+public:
+    void followAutomation()
+    {
+        const auto* insert = mixer.session.getProject().findInsert (mixer.getSelectedInsert());
+        if (insert == nullptr)
+            return;
+        for (auto& row : sendRows)
+            for (auto& send : insert->sends)
+                if (send.target == row->target)
+                    row->followAutomation (send.levelDb);
+    }
+
+private:
     int sendsTop() const { return slotBounds (getNumSlots() - 1).getBottom() + 8 + (output.isVisible() ? 30 : 0) + 16; }
 
     void showAddMenu (int slot)
@@ -1173,6 +1220,7 @@ void Mixer::timerCallback()
             strip->repaint(); // Freeze progress
     }
     wasRendering = rendering;
+    details->followAutomation();
     details->updateActivity();
 
     // A plugin in a separate process that stopped (or was reloaded) shows in its slot.
@@ -1522,9 +1570,13 @@ bool Mixer::setSidechain (model::InsertId id, model::InsertId source)
 
 bool Mixer::setSend (model::InsertId id, model::InsertId target, double levelDb, bool joined)
 {
-    return perform ("insert.setSend",
-                    object ({ { "insert", idValue (id) }, { "target", idValue (target) }, { "levelDb", levelDb } }),
-                    joined);
+    if (! perform ("insert.setSend",
+                   object ({ { "insert", idValue (id) }, { "target", idValue (target) }, { "levelDb", levelDb } }),
+                   joined))
+        return false;
+    // for Create automation clip for the last moved control
+    session.noteMovedControl ({ .kind = model::ParameterTarget::Kind::insertSend, .insert = id, .sendTo = target });
+    return true;
 }
 
 bool Mixer::removeSend (model::InsertId id, model::InsertId target)

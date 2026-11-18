@@ -504,7 +504,9 @@ void eraseInsert (Project& p, InsertId insert)
                    [&] (const Clip& clip)
                    {
                        auto* a = std::get_if<AutomationClip> (&clip.content);
-                       return a != nullptr && (a->target.insert == insert || devices.contains (a->target.device));
+                       return a != nullptr &&
+                              (a->target.insert == insert || devices.contains (a->target.device) ||
+                               (a->target.kind == ParameterTarget::Kind::insertSend && a->target.sendTo == insert));
                    });
 }
 
@@ -1333,39 +1335,40 @@ private:
     std::vector<Send> oldSends;
 };
 
-class RemoveSend final : public JsonCommand
+class RemoveSend final : public SnapshotCommand
 {
 public:
     RemoveSend (juce::var p, InsertId i, InsertId t)
-        : JsonCommand ("insert.removeSend", std::move (p)), insert (i), target (t)
+        : SnapshotCommand ("insert.removeSend", std::move (p)), insert (i), target (t)
     {
-        changes.inserts.insert (i);
     }
 
     juce::String getDescription() const override { return "Remove send"; }
 
-    juce::Result perform (Project& p) override
+protected:
+    juce::Result apply (Project& p) override
     {
         auto* i = p.findInsert (insert);
         if (i == nullptr)
             return juce::Result::fail ("insert " + juce::String (insert.value) + " does not exist");
 
-        oldSends = i->sends;
         if (std::erase_if (i->sends, [&] (auto& s) { return s.target == target; }) == 0)
             return juce::Result::fail ("insert " + juce::String (insert.value) + " has no send to " +
                                        juce::String (target.value));
-        return juce::Result::ok();
-    }
 
-    void undo (Project& p) override
-    {
-        if (auto* i = p.findInsert (insert))
-            i->sends = oldSends;
+        // Its level's automation goes with it, in the same undo step.
+        std::erase_if (p.playlist.clips,
+                       [&] (const Clip& clip)
+                       {
+                           auto* a = std::get_if<AutomationClip> (&clip.content);
+                           return a != nullptr && a->target.kind == ParameterTarget::Kind::insertSend &&
+                                  a->target.insert == insert && a->target.sendTo == target;
+                       });
+        return juce::Result::ok();
     }
 
 private:
     InsertId insert, target;
-    std::vector<Send> oldSends;
 };
 
 /** The insert holding the effect with this device, and the slot's position in it. */
@@ -3030,6 +3033,11 @@ bool targetExists (const Project& p, const ParameterTarget& t)
     case K::insertVolume:
     case K::insertPan:
         return p.findInsert (t.insert) != nullptr;
+    case K::insertSend:
+        if (auto* insert = p.findInsert (t.insert))
+            return std::any_of (insert->sends.begin(), insert->sends.end(),
+                                [&] (auto& s) { return s.target == t.sendTo; });
+        return false;
     case K::deviceParameter:
         if (t.parameterId.isEmpty())
             return false;
@@ -4196,9 +4204,10 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
         "curve": {"type": "number", "minimum": -1, "maximum": 1, "description": "Shape of the segment that starts here; 0 = straight"}},
         "required": ["time", "value"], "additionalProperties": false}})json");
     const auto targetSchema = juce::JSON::parse (R"json({"type": "object", "properties": {
-        "kind": {"enum": ["channelVolume", "channelPan", "insertVolume", "insertPan", "deviceParameter"], "description": "channelVolume and channelPan need channel; insertVolume and insertPan need insert; deviceParameter needs device and parameterId"},
+        "kind": {"enum": ["channelVolume", "channelPan", "insertVolume", "insertPan", "insertSend", "deviceParameter"], "description": "channelVolume and channelPan need channel; insertVolume and insertPan need insert; insertSend (a send's level) needs insert and sendTo, and the send must exist; deviceParameter needs device and parameterId"},
         "channel": {"type": "integer", "description": "Channel ID, for channelVolume and channelPan"},
-        "insert": {"type": "integer", "description": "Mixer insert ID, 1 for the master, for insertVolume and insertPan"},
+        "insert": {"type": "integer", "description": "Mixer insert ID, 1 for the master, for insertVolume, insertPan and insertSend (the insert that sends)"},
+        "sendTo": {"type": "integer", "description": "For insertSend: the insert the send goes to"},
         "device": {"type": "integer", "description": "Device ID, for deviceParameter"},
         "parameterId": {"type": "string", "description": "The setting's ID as spinus --describe lists it, for deviceParameter"}}, "required": ["kind"], "additionalProperties": false})json");
 

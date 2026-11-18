@@ -46,6 +46,29 @@ std::vector<Route> routesFrom (const Project& project, const Insert& insert)
     return result;
 }
 
+/** True if what an automation clip automates is there: its channel, insert, send or device. */
+bool targetFound (const Project& project, const std::set<DeviceId>& devices, const ParameterTarget& t)
+{
+    using K = ParameterTarget::Kind;
+    switch (t.kind)
+    {
+    case K::channelVolume:
+    case K::channelPan:
+        return project.findChannel (t.channel) != nullptr;
+    case K::insertVolume:
+    case K::insertPan:
+        return project.findInsert (t.insert) != nullptr;
+    case K::insertSend:
+        if (const auto* insert = project.findInsert (t.insert))
+            return std::any_of (insert->sends.begin(), insert->sends.end(),
+                                [&] (auto& s) { return s.target == t.sendTo; });
+        return false;
+    case K::deviceParameter:
+        return devices.contains (t.device) && t.parameterId.isNotEmpty();
+    }
+    return false;
+}
+
 bool reaches (const Project& project, InsertId start, InsertId goal)
 {
     std::vector<InsertId> stack { start };
@@ -447,13 +470,7 @@ juce::StringArray validate (const Project& project)
 
         if (auto* automation = std::get_if<AutomationClip> (&clip.content))
         {
-            const auto& t = automation->target;
-            using K = ParameterTarget::Kind;
-            const bool found = (t.kind == K::channelVolume || t.kind == K::channelPan)
-                                   ? project.findChannel (t.channel) != nullptr
-                               : (t.kind == K::insertVolume || t.kind == K::insertPan)
-                                   ? project.findInsert (t.insert) != nullptr
-                                   : devices.contains (t.device) && t.parameterId.isNotEmpty();
+            const bool found = targetFound (project, devices, automation->target);
             if (! found)
                 problems.add (name + " automates a missing target");
 
@@ -717,13 +734,7 @@ juce::StringArray repair (Project& project)
                            why = "its position is invalid";
                        else if (auto* automation = std::get_if<AutomationClip> (&clip.content))
                        {
-                           const auto& t = automation->target;
-                           using K = ParameterTarget::Kind;
-                           const bool found = (t.kind == K::channelVolume || t.kind == K::channelPan)
-                                                  ? project.findChannel (t.channel) != nullptr
-                                              : (t.kind == K::insertVolume || t.kind == K::insertPan)
-                                                  ? project.findInsert (t.insert) != nullptr
-                                                  : devices.contains (t.device) && t.parameterId.isNotEmpty();
+                           const bool found = targetFound (project, devices, automation->target);
                            if (! found)
                                why = "what it automates is missing";
                            auto& points = automation->points;
