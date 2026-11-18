@@ -306,8 +306,9 @@ public:
     static Result update (SoundIndex&, const Options&, const std::vector<SoundSource>&,
                           const juce::Array<juce::File>& sampleFolders, const std::function<bool()>& shouldStop,
                           const std::function<void (const Progress&)>& onProgress);
-    /** One instrument brought up to date on the calling thread (a sound just saved), the rest of the index left
-        as it is. Saves the index. */
+    /** One instrument brought up to date on the calling thread (a sound just saved, Measure again, the Browser's
+        Refresh sound index), the rest of the index left as it is, then the role guess learnt again. Saves the
+        index. */
     static Result updateInstrument (SoundIndex&, const Options&, const SoundSource&,
                                     const std::function<bool()>& shouldStop);
     /** These sample files, and the ones in these folders, measured again whether they changed or not (the

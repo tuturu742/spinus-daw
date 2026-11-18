@@ -1507,6 +1507,8 @@ SoundIndexer::Result SoundIndexer::updateInstrument (SoundIndex& index, const Op
     ++running;
     visitInstrument (
         index, index.instruments[source.key], options, source, shouldStop, [] (const juce::String&, bool) {}, result);
+    // Its sounds guessed as the update guesses them: learnt from the presets whose names say their role.
+    index.learnRoles();
     --running;
     index.saveIndex();
     return result;
