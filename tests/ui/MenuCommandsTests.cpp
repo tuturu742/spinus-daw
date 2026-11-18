@@ -255,13 +255,14 @@ TEST_CASE ("Menus: every item works, or is greyed out when it can't (no project 
     }
 
     // Greyed out: what needs a project document, the AI service, the free plugins or Windows plugins; Undo and
-    // Redo with nothing to undo; automating with nothing moved; layouts not saved yet.
+    // Redo with nothing to undo; automating with nothing moved; layouts not saved yet; finding missing audio files
+    // with none missing.
     const auto disabled = disabledItems (*f.view);
     std::set<juce::String> expected { "File > New",         "File > Open...",
                                       "File > Open recent", "File > Save",
                                       "File > Save as...",  "Edit > Undo",
                                       "Edit > Redo",        "Options > Get free plugins...",
-                                      "Options > AI..." };
+                                      "Options > AI...",    "File > Find missing audio files..." };
 #if JUCE_LINUX || JUCE_BSD
     expected.insert ("Options > Windows plugins...");
 #endif
@@ -307,7 +308,8 @@ TEST_CASE ("Menus: with a project, AI and plugins set up, every item works; undo
     for (auto& path : disabled)
     {
         INFO (path);
-        CHECK ((path.startsWith ("Edit > Create automation clip") || path.startsWith ("View > Layouts > Layout ")));
+        CHECK ((path.startsWith ("Edit > Create automation clip") || path.startsWith ("View > Layouts > Layout ") ||
+                path == "File > Find missing audio files...")); // none missing
     }
     bool recentListed = false;
     for (auto& item : allItems (*f.view))

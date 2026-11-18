@@ -126,8 +126,14 @@ example **Vocal +5 ×1.5** or **◀** when reversed. Each change is one undo ste
 
 **Your audio stays with the project.** In a saved project, a dropped file is copied into the project's
 `audio` folder at once. In a project you have not saved yet, the file is used where it is and copied when
-you first save. If a file is missing (for example, deleted outside Spinus), its clip turns red and says
-"Missing".
+you first save. If a file is missing (for example, deleted outside Spinus, or a project copied from another
+computer without its audio), its clip turns red and says "Missing", and opening the project says how many are
+missing.
+
+**Finding missing files.** Choose **File › Find missing audio files...** (or right-click a red clip). Pick a
+folder: Spinus looks in it and in every folder inside it for files with the same names, copies the ones it
+finds into the project's `audio` folder and plays them again (one undo step). It then says how many it found
+and which are still missing; choose another folder for those.
 
 ## Automation clips
 

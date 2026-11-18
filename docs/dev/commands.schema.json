@@ -1785,6 +1785,41 @@
         "additionalProperties": false
       }
     },
+    "project.relocateAudio": {
+      "description": "Point every audio clip that plays a file at another file, e.g. a missing file found in another folder (copy it into the project first, as clip.addAudio's files are). One undo step for all of them.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "description": "The file as the clips name it now"
+                },
+                "to": {
+                  "type": "string",
+                  "description": "Relative to the project's audio/ folder, or an absolute path"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Each file as the clips name it now (from) and the file to play instead (to)"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "additionalProperties": false
+      }
+    },
     "clip.addAutomation": {
       "description": "Add an automation clip: a curve for one parameter (a channel's or insert's volume or pan, or a device parameter by its ID). Without `lane`, it goes on a new lane at the bottom called `laneName`.",
       "parameters": {
