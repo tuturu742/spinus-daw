@@ -470,8 +470,8 @@ juce::StringArray validate (const Project& project)
                 problems.add (name + " plays through a missing channel");
             if (a->offset < 0 || a->fadeIn < 0 || a->fadeOut < 0)
                 problems.add (name + " has a negative offset or fade");
-            if (a->onTempoChange != "time" && a->onTempoChange != "beat")
-                problems.add (name + " has an unknown onTempoChange '" + a->onTempoChange + "'");
+            if (auto problem = onTempoChangeProblem (*a); problem.isNotEmpty())
+                problems.add (name + " " + problem);
         }
 
         if (auto* automation = std::get_if<AutomationClip> (&clip.content))
@@ -524,8 +524,8 @@ juce::StringArray validate (const Project& project)
                 problems.add (name + " plays through a missing channel");
             if (a->offset < 0 || a->fadeIn < 0 || a->fadeOut < 0)
                 problems.add (name + " has a negative offset or fade");
-            if (a->onTempoChange != "time" && a->onTempoChange != "beat")
-                problems.add (name + " has an unknown onTempoChange '" + a->onTempoChange + "'");
+            if (auto problem = onTempoChangeProblem (*a); problem.isNotEmpty())
+                problems.add (name + " " + problem);
         }
     }
 
@@ -743,7 +743,7 @@ juce::StringArray repair (Project& project)
             a->offset = std::max<Ticks> (0, a->offset);
             a->fadeIn = std::max<Ticks> (0, a->fadeIn);
             a->fadeOut = std::max<Ticks> (0, a->fadeOut);
-            if (a->onTempoChange != "time" && a->onTempoChange != "beat")
+            if (onTempoChangeProblem (*a).isNotEmpty())
                 a->onTempoChange = "beat";
         }
         return {};

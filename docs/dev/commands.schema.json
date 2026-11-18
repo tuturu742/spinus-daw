@@ -21,7 +21,7 @@
       }
     },
     "project.setTempoChange": {
-      "description": "Add a tempo change (a tempo marker: the tempo jumps there), or change one: give 'from', its position now, to move it. Audio clips follow as each one's onTempoChange says: \"time\" stays at its second, \"beat\" on its beat.",
+      "description": "Add a tempo change (a tempo marker: the tempo jumps there), or change one: give 'from', its position now, to move it. Audio clips follow as each one's onTempoChange says: \"time\" stays at its second, \"beat\" on its beat, \"stretch\" on its beats, stretched to the new tempo.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1550,9 +1550,16 @@
             "type": "string",
             "enum": [
               "time",
-              "beat"
+              "beat",
+              "stretch"
             ],
-            "description": "When the song's tempo changes: time (stays at its second) or beat (stays on its beat); default: time for audio over 20 seconds, else beat"
+            "description": "When the song's tempo changes: time (stays at its second), beat (stays on its beat) or stretch (a loop: stays on its beats, time-stretched to the tempo); default: stretch when the file name gives its tempo (\"drums_120bpm.wav\"; then give the length in the loop's beats), else time for audio over 20 seconds, else beat"
+          },
+          "sourceBpm": {
+            "type": "number",
+            "minimum": 20.0,
+            "maximum": 999.0,
+            "description": "The file's own tempo, for stretch (default: from its name, else the song's tempo at start)"
           }
         },
         "required": [
@@ -1626,9 +1633,16 @@
             "type": "string",
             "enum": [
               "time",
-              "beat"
+              "beat",
+              "stretch"
             ],
-            "description": "When the song's tempo changes: time (stays at its second: vocals, recordings) or beat (stays on its beat: one-shots); either way it plays as long as before"
+            "description": "When the song's tempo changes: time (stays at its second: vocals, recordings) or beat (stays on its beat: one-shots), either way playing as long as before; or stretch (loops: stays on its beats, time-stretched to the tempo). Changing it keeps the same audio in the clip"
+          },
+          "sourceBpm": {
+            "type": "number",
+            "minimum": 20.0,
+            "maximum": 999.0,
+            "description": "The file's own tempo, for stretch (default: from its name, else the song's tempo at the clip)"
           },
           "fit": {
             "type": "boolean",

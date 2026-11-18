@@ -136,15 +136,11 @@ public:
         {
             // The part of the file the clip plays: from its offset, for its length, at its speed; a reversed
             // clip plays the file from the end, so it is drawn mirrored.
-            // Its offset is in ticks at the tempo where it starts; a tempo change inside the clip is drawn evenly.
+            // A tempo change inside the clip is drawn evenly.
             const model::TempoMap tempo (project.settings);
-            const auto speed = model::getPlaybackSpeed (audio);
             const auto fileLength = thumbnail->getTotalLength();
-            auto fileStart =
-                (double)audio.offset * model::TempoMap::secondsPerTick (tempo.bpmAt ((double)clip.start)) * speed;
-            auto fileEnd =
-                fileStart +
-                (tempo.seconds ((double)(clip.start + clip.length)) - tempo.seconds ((double)clip.start)) * speed;
+            auto fileStart = model::secondsInFile (tempo, clip, audio, 0.0);
+            auto fileEnd = model::secondsInFile (tempo, clip, audio, (double)clip.length);
             if (audio.reversed)
                 std::tie (fileStart, fileEnd) = std::pair { fileLength - fileEnd, fileLength - fileStart };
             const auto area = r.reduced (1.0f, 14.0f).withTrimmedBottom (-12.0f);
@@ -867,8 +863,29 @@ private:
                        [set] { set ({ { "onTempoChange", "time" } }); });
         tempo.addItem ("On its beat (one-shots, chops)", true, audio.onTempoChange == "beat",
                        [set] { set ({ { "onTempoChange", "beat" } }); });
+        tempo.addItem ("Stretch to tempo (loops)", true, audio.onTempoChange == "stretch",
+                       [set] { set ({ { "onTempoChange", "stretch" } }); });
         tempo.addSeparator();
-        tempo.addItem ("Either way it plays as recorded, as long as before", false, false, nullptr);
+        if (audio.onTempoChange == "stretch")
+        {
+            const auto bpm = juce::String (audio.sourceBpm,
+                                           juce::exactlyEqual (audio.sourceBpm, std::round (audio.sourceBpm)) ? 0 : 2);
+            tempo.addItem ("The loop's own tempo: " + bpm + " BPM...",
+                           [set, bpm]
+                           {
+                               askForName (
+                                   "The loop's own tempo, in BPM", bpm,
+                                   [set] (const juce::String& text)
+                                   {
+                                       const auto value = text.retainCharacters ("0123456789.").getDoubleValue();
+                                       if (value > 0.0)
+                                           set ({ { "sourceBpm", value } }); // out of range is refused, with why
+                                   });
+                           });
+            tempo.addItem ("It follows the song's tempo, its pitch unchanged", false, false, nullptr);
+        }
+        else
+            tempo.addItem ("Either way it plays as recorded, as long as before", false, false, nullptr);
         menu.addSubMenu ("When the tempo changes", tempo);
         menu.addSeparator();
     }
@@ -1631,12 +1648,10 @@ bool Playlist::importAudio (const juce::File& file, juce::String& path, double& 
 
 model::Ticks Playlist::clipLength (model::Ticks start, model::Ticks offset, double seconds) const
 {
-    // The file from its offset (ticks at the tempo where the clip starts), at its own speed, through the song's
-    // tempo changes.
-    const model::TempoMap tempo (session.getProject().settings);
-    const auto from = tempo.seconds ((double)start);
-    const auto plays = seconds - (double)offset * model::TempoMap::secondsPerTick (tempo.bpmAt ((double)start));
-    return juce::jmax<model::Ticks> (1, (model::Ticks)std::llround (tempo.ticks (from + plays)) - start);
+    // The file from its offset (ticks at the tempo where the clip starts), through the song's tempo changes.
+    model::AudioClip audio;
+    audio.offset = offset;
+    return model::audioClipLength (model::TempoMap (session.getProject().settings), start, audio, seconds);
 }
 
 bool Playlist::addAudioFile (int row, model::Ticks start, const juce::File& file, model::Ticks offset)
@@ -1649,13 +1664,27 @@ bool Playlist::addAudioFile (int row, model::Ticks start, const juce::File& file
     const auto lane = ensureLane (row);
     if (! lane.isValid())
         return false;
-    return perform (
-        "clip.addAudio",
-        object ({ { "lane", (int)lane.value },
-                  { "file", path },
-                  { "start", (juce::int64)juce::jmax<model::Ticks> (0, start) },
-                  { "offset", (juce::int64)offset },
-                  { "length", (juce::int64)clipLength (juce::jmax<model::Ticks> (0, start), offset, seconds) } }));
+    start = juce::jmax<model::Ticks> (0, start);
+    auto params = object ({ { "lane", (int)lane.value },
+                            { "file", path },
+                            { "start", (juce::int64)start },
+                            { "offset", (juce::int64)offset },
+                            { "length", (juce::int64)clipLength (start, offset, seconds) } });
+
+    // A loop whose name gives its tempo ("drums_120bpm.wav") is stretched to the song's, its length in its beats.
+    if (const auto bpm = model::bpmFromFileName (file.getFileName()))
+    {
+        model::AudioClip loop;
+        loop.offset = offset;
+        loop.onTempoChange = "stretch";
+        loop.sourceBpm = *bpm;
+        auto* o = params.getDynamicObject();
+        o->setProperty ("onTempoChange", "stretch");
+        o->setProperty ("sourceBpm", *bpm);
+        o->setProperty ("length", (juce::int64)model::audioClipLength (model::TempoMap (session.getProject().settings),
+                                                                       start, loop, seconds));
+    }
+    return perform ("clip.addAudio", params);
 }
 
 bool Playlist::setPoints (model::ClipId id, const std::vector<model::AutomationPoint>& points)
