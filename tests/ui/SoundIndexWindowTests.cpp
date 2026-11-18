@@ -246,9 +246,12 @@ TEST_CASE ("Options > Sound index lists, ticks, measures, forgets and deletes", 
     REQUIRE (waitFor ([&] { return ! f.index.isUpdating(); }, 10000));
     page->getSounds().setFilter (SoundIndexView::Show::leftOut);
     page->getSounds().actOnAllShown(); // two: asks first
-    settle();
-    if (auto* box = dynamic_cast<juce::AlertWindow*> (juce::Component::getCurrentlyModalComponent()))
-        box->exitModalState (0);
+    // The question comes up (on a slow machine, after a moment), is answered No, and goes away.
+    const auto question = []
+    { return dynamic_cast<juce::AlertWindow*> (juce::Component::getCurrentlyModalComponent()); };
+    REQUIRE (waitFor ([&] { return question() != nullptr; }, 10000));
+    question()->exitModalState (0);
+    REQUIRE (waitFor ([&] { return question() == nullptr; }, 10000));
     settle();
     {
         LeftOutSounds left (f.index.getFolder());
