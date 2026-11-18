@@ -1,5 +1,6 @@
 #pragma once
 
+#include "InstrumentProfiles.h"
 #include "plugins/HostLibraries.h"
 
 #include <juce_events/juce_events.h>
@@ -139,6 +140,7 @@ public:
         juce::StringArray presetFolders; // the folders its preset files are in (the helper says)
         juce::String presetFilesStamp;   // presetFilesStamp() of them when it was measured
         int measuredWith = 0;            // the helperRevision that measured it (0: older than revision 2)
+        juce::String playedKeys;         // learnedKeys() it was measured on (empty: every key)
         juce::Time updated;
 
         /** It did not load, a preset crashed or hung the helper, or a sound was silent. */
@@ -190,6 +192,11 @@ public:
         measureAgain). A healthy one measured by an older helper is kept as it is; one that did not load is
         otherwise not tried again until it changes. */
     bool needsVisit (const SoundSource&) const;
+    /** The keys the instrument is learned to play (InstrumentProfiles, beside the index) as runs ("40-84,86"),
+        which the helper plays its test notes on; empty when it is not learned or plays every key. When this
+        changes (the user learned it), the next update measures it again. */
+    juce::String learnedKeys (const juce::String& instrument) const;
+    static juce::String keysStamp (const std::optional<PlayableKeys>&);
 
     /** Forgets what was measured of this instrument (its sounds and problems), so the next update measures it
         all again. Saves the index. False when it is not in the index. */
@@ -306,8 +313,9 @@ public:
     static Result update (SoundIndex&, const Options&, const std::vector<SoundSource>&,
                           const juce::Array<juce::File>& sampleFolders, const std::function<bool()>& shouldStop,
                           const std::function<void (const Progress&)>& onProgress);
-    /** One instrument brought up to date on the calling thread (a sound just saved), the rest of the index left
-        as it is. Saves the index. */
+    /** One instrument brought up to date on the calling thread (a sound just saved, Measure again, the Browser's
+        Refresh sound index), the rest of the index left as it is, then the role guess learnt again. Saves the
+        index. */
     static Result updateInstrument (SoundIndex&, const Options&, const SoundSource&,
                                     const std::function<bool()>& shouldStop);
     /** These sample files, and the ones in these folders, measured again whether they changed or not (the

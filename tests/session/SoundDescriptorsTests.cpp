@@ -1,10 +1,13 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "session/InstrumentProfiles.h"
 #include "session/SoundDescriptors.h"
+#include "session/SoundIndex.h"
 
 #include <cmath>
 #include <random>
+#include <set>
 
 using namespace spinus;
 using namespace spinus::sounds;
@@ -399,6 +402,67 @@ TEST_CASE ("Instruments: a drum kit is mapped key by key", "[sounds]")
     CHECK (s.role == "drums");
     const auto json = juce::JSON::toString (toVar (s));
     CHECK (json.contains ("drumMap"));
+}
+
+TEST_CASE ("Instruments: a learned instrument is measured on the keys it plays", "[sounds]")
+{
+    // A sampled guitar: E2 to C6 play notes, the low keys switch articulations (silent), the top ones play noises.
+    std::set<int> pressed;
+    const Player guitar = [&pressed] (const std::vector<Note>& notes, double tail)
+    {
+        double end = 0.0;
+        for (auto& n : notes)
+            end = std::max (end, n.start + n.length);
+        juce::AudioBuffer<float> b (1, (int)((end + tail) * rate));
+        b.clear();
+        juce::Random random (7); // the same noise each run
+        for (auto& n : notes)
+        {
+            pressed.insert (n.note);
+            const auto frequency = 440.0 * std::pow (2.0, (n.note - 69) / 12.0);
+            const auto from = (int)(n.start * rate),
+                       to = juce::jmin (b.getNumSamples(), (int)((n.start + n.length) * rate));
+            for (int i = from; i < to; ++i)
+            {
+                const auto t = (i - from) / rate;
+                if (n.note >= 40 && n.note <= 84)
+                    b.addSample (0, i, (float)(0.3 * saw (frequency * t) * std::exp (-t / 0.8)));
+                else if (n.note >= 89)
+                    b.addSample (0, i, (random.nextFloat() - 0.5f) * (float)std::exp (-t / 0.05));
+            }
+        }
+        return b;
+    };
+
+    // Not learned: the loud noise on the top test note gives it away.
+    const auto plain = describeInstrument (guitar, rate, "Clean", "");
+    CHECK (plain.oddKeys);
+    CHECK (pressed.contains (24));
+    CHECK (pressed.contains (96));
+
+    // Learned: no test note lands on a switch or a noise, and nothing is odd.
+    pressed.clear();
+    auto keys = PlayableKeys::between (40, 84);
+    const auto learned = describeInstrument (guitar, rate, "Clean", "", &keys);
+    for (auto n : pressed)
+        CHECK (keys.plays (n));
+    CHECK_FALSE (learned.oddKeys);
+    CHECK (learned.tracksPitch);
+    CHECK (learned.low >= 40);
+    CHECK (learned.high <= 84);
+    CHECK (learned.registerLevels.front() <= -60.0); // C1: a register it lacks
+    CHECK_FALSE (juce::JSON::toString (toVar (learned)).contains ("oddKeys"));
+    CHECK (juce::JSON::toString (toVar (plain)).contains ("oddKeys"));
+}
+
+TEST_CASE ("Instruments: the keys an instrument was measured on, as runs", "[sounds][index]")
+{
+    CHECK (SoundIndex::keysStamp (std::nullopt).isEmpty());
+    CHECK (SoundIndex::keysStamp (PlayableKeys::between (0, 127)).isEmpty()); // every key: as if not learned
+    auto keys = PlayableKeys::between (40, 84);
+    keys.keys.set (86);
+    keys.keys.reset (60);
+    CHECK (SoundIndex::keysStamp (keys) == "40-59,61-84,86");
 }
 
 TEST_CASE ("Instruments: role words in names", "[sounds]")

@@ -428,7 +428,10 @@ TEST_CASE ("Sound index: a saved sound plays as the user set it up, in the helpe
     REQUIRE (saved.add (threeOsc().key, "Deep Bass 2", state).has_value());
     index.instruments["other"].source.key = "other";
     SoundIndexer::updateInstrument (index, helperOptions(), threeOsc(), {});
-    CHECK (findSound (index.instruments.at (threeOsc().key), "Deep Bass 2") != nullptr);
+    const auto* deep = findSound (index.instruments.at (threeOsc().key), "Deep Bass 2");
+    REQUIRE (deep != nullptr);
+    // Its role guessed as a whole update guesses it (learnt, or the rules when too few presets say theirs).
+    CHECK ((*deep)["soundRoleFrom"].toString().isNotEmpty());
     CHECK (index.instruments.contains ("other"));
 
     // Deleted: it leaves the index at the next update.

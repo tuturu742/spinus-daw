@@ -96,6 +96,11 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
      parts keep the channel's volume; quieter parts go below it. A part whose loudness hardly changes gets no
      volume curve, and one that stays in one place gets a fixed pan instead of a curve. Each note's own loudness
      is in its velocity. Drums get no curves.
+   - Where a part's **tone opens and closes** over the song (a muffled intro that opens up, a filter sweep), by
+     an octave or more for the notes it plays, Spinus puts a **Filter** (low pass) on its mixer track and adds a
+     **cutoff curve** on a Playlist track of its own ("Guitar filter (<song>)"): open where the part is at its
+     brightest, closing where it is duller. This is a rough guess at the effect, not the producer's own settings,
+     and the instrument playing the notes has its own tone, so adjust the curve or delete the Filter to taste.
 
    Melodic stems play on **3x Osc**; the
    drums become steps on a **Drum Machine** (kick, snare, clap, hats, toms, rim, crash and ride on their

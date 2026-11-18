@@ -2601,7 +2601,7 @@ bool MainView::perform (const InvocationInfo& info)
         return true;
 
     case soundIndex:
-        SoundIndexWindow::show (session.getSoundIndex(), this);
+        SoundIndexWindow::show (session.getSoundIndex(), this, aiService);
         return true;
 
     case newProject:

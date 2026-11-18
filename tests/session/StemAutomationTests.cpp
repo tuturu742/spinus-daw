@@ -94,3 +94,81 @@ TEST_CASE ("A steady stem gets no curves, one off the centre a fixed pan", "[ana
 
     CHECK (stemautomation::measure ({}, rate, beats(), 0.5).volume.empty());
 }
+
+namespace
+{
+/** A saw over the beats at each beat's frequency, through a two-pole low pass at each beat's cutoff (0: open). */
+juce::AudioBuffer<float> saw (const std::function<std::pair<double, double> (int beat)>& hertzAndCutoff)
+{
+    juce::AudioBuffer<float> buffer (1, (int)(17.0 * rate));
+    buffer.clear();
+    double phase = 0.0, low = 0.0, lower = 0.0;
+    for (int s = (int)(0.5 * rate); s < buffer.getNumSamples(); ++s)
+    {
+        const auto beat = std::min (31, (int)(((double)s / rate - 0.5) / 0.5));
+        const auto [hertz, cutoff] = hertzAndCutoff (beat);
+        phase += hertz / rate;
+        phase -= std::floor (phase);
+        const auto x = 0.5 * (2.0 * phase - 1.0);
+        const auto k = cutoff > 0.0 ? 1.0 - std::exp (-juce::MathConstants<double>::twoPi * cutoff / rate) : 1.0;
+        low += k * (x - low);
+        lower += k * (low - lower);
+        buffer.setSample (0, s, (float)lower);
+    }
+    return buffer;
+}
+
+/** One note a beat, at each beat's pitch, in ticks from the first downbeat. */
+std::vector<model::Note> notesOf (const std::function<int (int beat)>& pitch)
+{
+    std::vector<model::Note> notes;
+    notes.reserve (32);
+    for (int beat = 0; beat < 32; ++beat)
+    {
+        model::Note n;
+        n.start = (model::Ticks)beat * model::ticksPerQuarterNote;
+        n.length = model::ticksPerQuarterNote;
+        n.pitch = pitch (beat);
+        notes.push_back (n);
+    }
+    return notes;
+}
+} // namespace
+
+TEST_CASE ("A stem whose tone opens gets a filter's cutoff curve", "[analyzer][stemautomation]")
+{
+    // Muffled for the first 16 beats (a low pass at 150 Hz), then open, on the same A3.
+    const auto stem = saw ([] (int beat) { return std::pair { 220.0, beat < 16 ? 150.0 : 0.0 }; });
+    const auto curves = stemautomation::measure (stem, rate, beats(), 0.5, 0.0f, notesOf ([] (int) { return 57; }));
+    REQUIRE (curves.cutoff.size() >= 2);
+    CHECK (curves.cutoff.size() < 12);
+    CHECK (curves.cutoff.front().value < stemautomation::cutoffSetting (3000.0)); // closed at first
+    CHECK (curves.cutoff.back().value == Catch::Approx (1.0f));                   // open at the end
+    for (size_t i = 1; i < curves.cutoff.size(); ++i)
+        CHECK (curves.cutoff[i].time > curves.cutoff[i - 1].time);
+
+    // Without notes its tone can't be told from its pitch: no curve.
+    CHECK (stemautomation::measure (stem, rate, beats(), 0.5).cutoff.empty());
+}
+
+TEST_CASE ("A stem that only plays higher gets no cutoff curve", "[analyzer][stemautomation]")
+{
+    // Low notes, then two octaves higher: brighter in hertz, the same tone for the notes it plays (its first four
+    // harmonics, as loud at every pitch).
+    juce::AudioBuffer<float> stem (1, (int)(17.0 * rate));
+    stem.clear();
+    for (int s = (int)(0.5 * rate); s < stem.getNumSamples(); ++s)
+    {
+        const auto beat = std::min (31, (int)(((double)s / rate - 0.5) / 0.5));
+        const auto hertz = beat < 16 ? 110.0 : 440.0;
+        double x = 0.0;
+        for (int h = 1; h <= 4; ++h)
+            x += std::sin (juce::MathConstants<double>::twoPi * hertz * h * s / rate) / h;
+        stem.setSample (0, s, (float)(0.3 * x));
+    }
+    const auto curves = stemautomation::measure (stem, rate, beats(), 0.5, 0.0f,
+                                                 notesOf ([] (int beat) { return beat < 16 ? 45 : 69; }));
+    CHECK (curves.cutoff.empty());
+    CHECK (stemautomation::cutoffSetting (1000.0) == Catch::Approx (0.5f).margin (0.001));
+    CHECK (stemautomation::cutoffSetting (20000.0) == Catch::Approx (1.0f));
+}

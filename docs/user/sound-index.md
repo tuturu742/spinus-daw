@@ -28,6 +28,16 @@ Select an instrument (or right-click it) for:
   your plugins is ticked for it).
 - **Forget its sounds**: its sounds leave the index and it is unticked.
 - **Show its sounds**: the Sounds tab, showing only its presets.
+- **Learn this instrument...**: tell Spinus which of its keys play notes and which switch what it plays or play
+  effects (see [Learn this instrument](channel-rack.md#learn-this-instrument)).
+
+**Learned instruments are measured better.** To hear a preset, Spinus plays a few test notes on it, from a very
+low C to a very high one. Many sampled instruments (guitars, basses, orchestral libraries) use some keys to switch
+articulations or play effect noises (fret squeaks, body hits) instead of notes. A test note on such a key gives a
+wrong picture, and a guitar can come out as "drums" or "fx". Once you have learned an instrument, Spinus plays its
+test notes only on the keys that play notes, and the next update measures it again. Under one of your plugins
+that isn't learned, the list says so; when its highest test notes played a loud noise instead of a note, it says
+the instrument seems to have such keys, and learning it gives better guesses.
 
 ## Sounds
 
@@ -51,7 +61,7 @@ Select a sound (Ctrl+click or Shift+click for several), or right-click it, for:
   **Leave out all shown** does it for everything the search and menus show: for example Role "bass" and From
   "Surge XT" leaves out all of Surge XT's bass presets. Spinus asks first when there are several.
 - **Use as** (presets): give it a role of your own ("Use as rhythm guitar"): Spinus uses yours before its own
-  guess.
+  guess. With several presets selected, they all get it.
 
 **Show › Left out** lists what you left out, with **Put back** and **Put back all shown**: they are measured
 again by the update, which starts. What you left out stays left out even after you delete the index.

@@ -1,6 +1,7 @@
 #include "FakeProvider.h"
 #include "engine/EngineHost.h"
 #include "session/Session.h"
+#include "session/InstrumentProfiles.h"
 #include "session/LeftOutSounds.h"
 #include "ui/SoundIndexWindow.h"
 #include "ui/Theme.h"
@@ -151,6 +152,10 @@ TEST_CASE ("Options > Sound index lists, ticks, measures, forgets and deletes", 
     REQUIRE (waitFor ([&] { return page->getStatusText().contains ("2 instruments"); }, 10000));
     CHECK (page->getStatusText().contains ("2 samples"));
     CHECK (rowOf (*page, testSynth().key)->state.contains ("6 presets measured"));
+    // The user's plugin is not learned: it says so (Spinus's own needn't be).
+    INFO (rowOf (*page, testSynth().key)->state);
+    CHECK (rowOf (*page, testSynth().key)->state.contains ("not learned"));
+    CHECK_FALSE (rowOf (*page, threeOsc().key)->state.contains ("learned"));
     REQUIRE (page->getFolders().size() == 1);
     CHECK (page->getFolders()[0].samples == 2);
     CHECK (page->getSounds().getShown().size() > 6);
@@ -222,13 +227,31 @@ TEST_CASE ("Options > Sound index lists, ticks, measures, forgets and deletes", 
                         [&] (const SoundIndex::Row& r) { return r.role == aRole; }));
     page->getSounds().setRole ({});
 
+    // Use as, on several selected presets at once.
+    page->getSounds().setFilter (SoundIndexView::Show::presets, testSynth().name);
+    {
+        juce::SparseSet<int> three;
+        three.addRange ({ 0, 3 });
+        page->getSounds().selectRows (three);
+    }
+    CHECK (page->getSounds().markSelected ("bass") == 3);
+    for (int row = 0; row < 3; ++row)
+        CHECK (page->getSounds().markOf (row) == "bass");
+    CHECK (page->getSounds().markOf (3).isEmpty());
+    CHECK (page->getSounds().markSelected ({}) == 3);
+    CHECK (page->getSounds().markOf (0).isEmpty());
+    page->getSounds().setFilter (SoundIndexView::Show::everything);
+
     // Put back: the update measures them again.
     REQUIRE (waitFor ([&] { return ! f.index.isUpdating(); }, 10000));
     page->getSounds().setFilter (SoundIndexView::Show::leftOut);
     page->getSounds().actOnAllShown(); // two: asks first
-    settle();
-    if (auto* box = dynamic_cast<juce::AlertWindow*> (juce::Component::getCurrentlyModalComponent()))
-        box->exitModalState (0);
+    // The question comes up (on a slow machine, after a moment), is answered No, and goes away.
+    const auto question = []
+    { return dynamic_cast<juce::AlertWindow*> (juce::Component::getCurrentlyModalComponent()); };
+    REQUIRE (waitFor ([&] { return question() != nullptr; }, 10000));
+    question()->exitModalState (0);
+    REQUIRE (waitFor ([&] { return question() == nullptr; }, 10000));
     settle();
     {
         LeftOutSounds left (f.index.getFolder());
@@ -269,6 +292,39 @@ TEST_CASE ("Options > Sound index lists, ticks, measures, forgets and deletes", 
     CHECK (f.index.getLastResult().value().soundsMeasured == 6);
     CHECK (f.index.getStatusText().startsWith ("Spinus Test Synth: 6 sounds measured."));
     CHECK (waitFor ([&] { return rowOf (*page, testSynth().key)->state.contains ("6 presets measured"); }, 10000));
+
+    // Learned (it plays C4 to C6 only): the next update measures it again, its test notes on those keys.
+    {
+        InstrumentProfiles profiles (f.index.getFolder());
+        profiles.load();
+        InstrumentProfiles::Profile profile;
+        profile.modes.emplace_back();
+        profile.modes[0].setKeys (60, 84, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+        profiles.set (testSynth().key, profile);
+        REQUIRE (profiles.save());
+    }
+    page->reload();
+    CHECK (rowOf (*page, testSynth().key)->learned);
+    CHECK (rowOf (*page, testSynth().key)->state.contains ("learned since it was measured"));
+    {
+        SoundIndex saved (f.index.getFolder());
+        saved.load();
+        CHECK (saved.learnedKeys (testSynth().key) == "60-84");
+        CHECK (saved.needsVisit (testSynth()));
+    }
+    f.index.update();
+    REQUIRE (f.waitForIt());
+    CHECK (waitFor ([&] { return rowOf (*page, testSynth().key)->state.contains ("measured on the keys it plays"); },
+                    10000));
+    {
+        SoundIndex saved (f.index.getFolder());
+        saved.load();
+        CHECK (saved.instruments[testSynth().key].playedKeys == "60-84");
+        CHECK_FALSE (saved.needsVisit (testSynth()));
+        CHECK (saved.instruments[testSynth().key].sounds.size() == 6);
+        for (const auto& sound : saved.instruments[testSynth().key].sounds)
+            CHECK ((int)sound["low"] >= 60);
+    }
 
     // Delete, after the user said yes.
     CHECK (page->deleteIndex());

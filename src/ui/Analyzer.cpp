@@ -1490,8 +1490,8 @@ void Analyzer::measureDynamics (const std::function<void()>& then)
     auto found = std::make_shared<std::map<juce::String, stemautomation::Curves>>();
     dynamicsTask = std::make_unique<BackgroundTask> (
         "Spinus analyzer dynamics",
-        [files, found, beats = placementBeats(),
-         first = rhythm ? rhythm->firstDownbeat : 0.0] (const std::function<bool()>& stop)
+        [files, found, beats = placementBeats(), first = rhythm ? rhythm->firstDownbeat : 0.0,
+         notes = transcribed] (const std::function<bool()>& stop)
         {
             juce::AudioFormatManager formats;
             formats.registerBasicFormats();
@@ -1505,7 +1505,10 @@ void Analyzer::measureDynamics (const std::function<void()>& then)
                 juce::AudioBuffer<float> audio ((int)juce::jlimit (1u, 2u, reader->numChannels),
                                                 (int)reader->lengthInSamples);
                 reader->read (&audio, 0, audio.getNumSamples(), 0, true, true);
-                (*found)[name] = stemautomation::measure (audio, reader->sampleRate, beats, first);
+                (*found)[name] = stemautomation::measure (
+                    audio, reader->sampleRate, beats, first, 0.0f,
+                    // A voice's tone changes with every vowel: no filter.
+                    notes.contains (name) && name != "vocals" ? notes.at (name) : std::vector<model::Note>());
             }
             return juce::Result::ok();
         },
@@ -2048,10 +2051,12 @@ bool Analyzer::addNotesToProject()
             steps.add ("marker.add", object ({ { "at", (juce::int64)at }, { "name", markers[(int)i] } })).isVoid())
             return failed();
     }
-    int count = 0, patternCount = 0, channelCount = 0, curveCount = 0;
+    int count = 0, patternCount = 0, channelCount = 0, curveCount = 0, filterCount = 0;
     // The stem's fades, swells and moves (stemautomation): volume and pan curves for its channel, each on a lane of
-    // its own, or a fixed pan when it stays in one place.
-    const auto addDynamics = [&] (const juce::String& name, const juce::var& channel, const juce::String& label)
+    // its own, or a fixed pan when it stays in one place; where its tone opens and closes, a Filter on its mixer
+    // insert with a cutoff curve.
+    const auto addDynamics =
+        [&] (const juce::String& name, const juce::var& channel, const juce::var& insert, const juce::String& label)
     {
         const auto found = dynamics.find (name);
         if (found == dynamics.end())
@@ -2061,8 +2066,10 @@ bool Analyzer::addNotesToProject()
             steps.add ("channel.set", object ({ { "channel", channel }, { "pan", (double)*curves.steadyPan } }))
                 .isVoid())
             return false;
+        juce::var filter; // the Filter added for the cutoff curve
         for (const auto& [kind, points, what] : { std::tuple { "channelVolume", &curves.volume, " volume" },
-                                                  std::tuple { "channelPan", &curves.pan, " pan" } })
+                                                  std::tuple { "channelPan", &curves.pan, " pan" },
+                                                  std::tuple { "deviceParameter", &curves.cutoff, " filter" } })
         {
             juce::Array<juce::var> list;
             for (const auto& p : *points)
@@ -2070,18 +2077,30 @@ bool Analyzer::addNotesToProject()
                     list.add (object ({ { "time", (juce::int64)p.time }, { "value", (double)p.value } }));
             if (list.size() < 2)
                 continue;
+            auto target = object ({ { "kind", kind }, { "channel", channel } });
+            if (points == &curves.cutoff)
+            {
+                if (insert.isVoid())
+                    continue;
+                filter = steps.add ("insert.addEffect",
+                                    object ({ { "insert", insert },
+                                              { "device", object ({ { "kind", "stock" },
+                                                                    { "stockType", "spinus.filter" } }) } }))["device"];
+                if (filter.isVoid())
+                    return false;
+                target = object ({ { "kind", kind }, { "device", filter }, { "parameterId", "cutoff" } });
+            }
             const auto lane = label.upToFirstOccurrenceOf (" (", false, false) + what +
                               label.fromFirstOccurrenceOf (" (", true, false);
             if (steps
-                    .add ("clip.addAutomation",
-                          object ({ { "laneName", lane },
-                                    { "start", 0 },
-                                    { "length", (juce::int64)length },
-                                    { "target", object ({ { "kind", kind }, { "channel", channel } }) },
-                                    { "points", list } }))
+                    .add ("clip.addAutomation", object ({ { "laneName", lane },
+                                                          { "start", 0 },
+                                                          { "length", (juce::int64)length },
+                                                          { "target", target },
+                                                          { "points", list } }))
                     .isVoid())
                 return false;
-            ++curveCount;
+            ++(points == &curves.cutoff ? filterCount : curveCount);
         }
         return true;
     };
@@ -2116,8 +2135,8 @@ bool Analyzer::addNotesToProject()
         {
             const auto label =
                 stemLabel (parts.size() > 1 ? name + " " + stemparts::nameOf (part.role).toLowerCase() : name, title);
-            const auto channel =
-                steps.add ("channel.add", object ({ { "name", label }, { "instrument", device } }))["channel"];
+            const auto added = steps.add ("channel.add", object ({ { "name", label }, { "instrument", device } }));
+            const auto& channel = added["channel"];
             if (channel.isVoid())
                 return failed();
             channels[name].push_back (model::ChannelId { (uint32_t)(int)channel });
@@ -2154,7 +2173,7 @@ bool Analyzer::addNotesToProject()
                                                            { "start", (juce::int64)placed.start } }))
                         .isVoid())
                     return failed();
-            if (! addDynamics (name, channel, label))
+            if (! addDynamics (name, channel, added["insert"], label))
                 return failed();
             patternCount += (int)split.pieces.size();
             ++channelCount;
@@ -2213,6 +2232,10 @@ bool Analyzer::addNotesToProject()
                                         (curveCount == 1 ? " volume or pan curve" : " volume and pan curves") +
                                         " from how the stems get louder, quieter or move"
                                   : juce::String()) +
+                  (filterCount > 0
+                       ? ", and a Filter with a cutoff curve on " + juce::String (filterCount) +
+                             (filterCount == 1 ? " channel" : " channels") + " whose tone opens and closes (roughly)"
+                       : juce::String()) +
                   (splitStems.isEmpty() ? juce::String()
                                         : ". Split by how they are played: " + splitStems.joinIntoString ("; ") +
                                               " (roughly where they play at the same moment)") +

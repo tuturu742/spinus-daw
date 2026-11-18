@@ -64,6 +64,9 @@ public:
     const std::vector<SoundIndex::Row>& getShown() const noexcept { return shown; }
     /** Gives a shown preset the user's own role (empty: Spinus's guess again); false for a sample. */
     bool mark (int row, const juce::String& role);
+    /** Gives every selected preset the user's own role (empty: Spinus's guess again), as the right-click menu's
+        Use as does for several; samples among them are left as they are. Returns how many presets changed. */
+    int markSelected (const juce::String& role);
     /** The user's role of a shown row, or empty. */
     juce::String markOf (int row) const;
     juce::String getCountText() const { return count.getText(); }

@@ -13,6 +13,11 @@
 
     Everything here is plain arithmetic on audio in memory (JUCE's FFT): no model, nothing downloaded, any
     thread but the audio thread (it allocates). */
+namespace spinus
+{
+struct PlayableKeys;
+}
+
 namespace spinus::sounds
 {
 
@@ -128,9 +133,17 @@ struct InstrumentSound
     juce::String ruleRole;  // what the rules (roleFromSound) say
     juce::String roleFrom;  // "name" (its name or category says) or "sound"
     std::vector<std::pair<int, juce::String>> drumMap; // a drum kit: the class of each note that sounds
+    /** In tune up to a point, and above it a test note out of tune yet as loud as the notes: the instrument likely
+        has keys that play effects there (a sampled guitar's fret noises), and its guesses may be off until it is
+        learned. */
+    bool oddKeys = false;
 };
 
-InstrumentSound describeInstrument (const Player&, double rate, const juce::String& name, const juce::String& category);
+/** `keys`: the keys a learned instrument plays (InstrumentProfiles). Every test note then lands on one of them
+    (moved by octaves), and a test note beyond them is not played (a register it lacks), so no test note presses a
+    key that switches the instrument or plays an effect. */
+InstrumentSound describeInstrument (const Player&, double rate, const juce::String& name, const juce::String& category,
+                                    const PlayableKeys* keys = nullptr);
 juce::var toVar (const InstrumentSound&);
 
 /** The role a preset's name or category names ("Basses/Deep Sub" is bass), or empty. */

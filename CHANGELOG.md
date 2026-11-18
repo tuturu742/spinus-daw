@@ -8,6 +8,17 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Send levels can be automated**: right-click a send's knob in the Mixer for **Create automation clip: send
   level** (more reverb in the chorus, an echo on one word). The knob moves with it while it plays, and removing
   the send removes its automation too.
+- **Analyzer**: where a part's tone opens and closes over the song (a muffled intro, a filter sweep), **Add to the
+  project** puts a Filter on its mixer track with a cutoff curve that follows it, roughly.
+- **Options › Sound index**: an instrument you taught Spinus (**Learn this instrument**) is measured only on the keys
+  it plays, so its test notes no longer press keys that switch articulations or play effect noises (a sampled
+  guitar's presets read as drums or effects before). The next update measures such instruments again. One of your
+  plugins that isn't learned says so, and says more plainly when its sounds suggest such keys; **Learn this
+  instrument...** is in its menu. **Use as** gives every selected preset the role at once.
+- Fixed: an instrument measured on its own (**Measure again**, the Browser's **Refresh sound index**, or a newly
+  ticked one) kept the simple rules' guess for its presets, so a bass plugin such as a 5-string bass could have
+  none listed as bass. Its presets are now guessed as a full update guesses them, learnt from the presets whose
+  names say their role.
 - **Options › Sound index**: listen to any sound (a preset is played by its instrument), and **Leave out**
   the ones you don't want, one, several or all that the search and menus show (for example every bass preset
   of one plugin); no update brings them back, and **Show › Left out** puts them back. A **Role** menu joins
