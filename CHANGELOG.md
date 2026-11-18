@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer**: where a part's tone opens and closes over the song (a muffled intro, a filter sweep), **Add to the
+  project** puts a Filter on its mixer track with a cutoff curve that follows it, roughly.
 - **Options › Sound index**: an instrument you taught Spinus (**Learn this instrument**) is measured only on the keys
   it plays, so its test notes no longer press keys that switch articulations or play effect noises (a sampled
   guitar's presets read as drums or effects before). The next update measures such instruments again. One of your
