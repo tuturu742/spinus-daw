@@ -5,6 +5,7 @@
 #include "SliderDrag.h"
 #include "Theme.h"
 #include "commands/CommandRegistry.h"
+#include "model/Tempo.h"
 #include "session/RecordingTime.h"
 #include "project/AudioImport.h"
 
@@ -463,9 +464,9 @@ juce::String AudioTracks::describeClips (model::ChannelId channel) const
     if (count == 0)
         return "No clips on the Playlist";
 
-    const auto secondsPerTick = 60.0 / (project.settings.tempoBpm * (double)model::ticksPerQuarterNote);
+    const model::TempoMap tempo (project.settings);
     return juce::String (count) + (count == 1 ? " clip, " : " clips, ") +
-           formatSeconds ((double)first * secondsPerTick) + " to " + formatSeconds ((double)end * secondsPerTick);
+           formatSeconds (tempo.seconds ((double)first)) + " to " + formatSeconds (tempo.seconds ((double)end));
 }
 
 //==============================================================================

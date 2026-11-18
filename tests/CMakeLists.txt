@@ -43,6 +43,7 @@ add_executable (spinus_tests
     engine/EngineHostTests.cpp
     golden/GoldenAudioTests.cpp
     model/ModelTests.cpp
+    model/TempoTests.cpp
     plugins/ClapGuiTests.cpp
     plugins/Lv2GuiTests.cpp
     plugins/ClapPluginFormatTests.cpp

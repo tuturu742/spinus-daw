@@ -7,6 +7,7 @@
 #include "MutePlugin.h"
 #include "ParameterIds.h"
 #include "model/Automation.h"
+#include "model/Tempo.h"
 
 #include "PluginCrashGuard.h"
 #include "plugins/SandboxList.h"
@@ -315,16 +316,20 @@ void EngineAdapter::syncAudioClips (const Project& project, bool force)
         }
 
         auto& track = *channelTracks.at (audio->channel);
+        const model::TempoMap tempo (project.settings);
+        const auto secondsPerTick = model::TempoMap::secondsPerTick (tempo.bpmAt ((double)clip.start));
+        auto inSeconds = [secondsPerTick] (Ticks t)
+        { return te::TimeDuration::fromSeconds ((double)t * secondsPerTick); };
         const te::ClipPosition position { { toTime (clip.start), toTime (clip.start + clip.length) },
-                                          toTime (audio->offset) - te::TimePosition() };
+                                          inSeconds (audio->offset) };
         auto wave = track.insertWaveClip (file.getFileNameWithoutExtension(), file, position, false);
         if (wave == nullptr)
             continue;
 
         applyPlayback (*wave, *audio);
         wave->setGainDB (audio->gainDb);
-        wave->setFadeIn (toTime (audio->fadeIn) - te::TimePosition());
-        wave->setFadeOut (toTime (audio->fadeOut) - te::TimePosition());
+        wave->setFadeIn (inSeconds (audio->fadeIn));
+        wave->setFadeOut (inSeconds (audio->fadeOut));
         wave->setMuted (muted);
         audioClips[clip.id] = wave;
     }
@@ -697,7 +702,8 @@ void EngineAdapter::sync (const Project& project)
 {
     const bool timingChanged = applied == nullptr ||
                                ! (applied->settings.timeSignature == project.settings.timeSignature) ||
-                               ! juce::exactlyEqual (applied->settings.tempoBpm, project.settings.tempoBpm);
+                               ! juce::exactlyEqual (applied->settings.tempoBpm, project.settings.tempoBpm) ||
+                               applied->settings.tempoChanges != project.settings.tempoChanges;
 
     // What frozen audio silences: only targets that still exist play frozen.
     std::vector<FreezeTarget> targets;
@@ -743,11 +749,19 @@ void EngineAdapter::sync (const Project& project)
 void EngineAdapter::syncSettings (const Project& project)
 {
     auto& s = project.settings;
-    edit.tempoSequence.getTempo (0)->setBpm (s.tempoBpm);
-
-    auto* timeSig = edit.tempoSequence.getTimeSig (0);
+    auto& tempos = edit.tempoSequence;
+    auto* timeSig = tempos.getTimeSig (0);
     timeSig->numerator = s.timeSignature.numerator;
     timeSig->denominator = s.timeSignature.denominator;
+
+    // The tempo from the start, then each tempo change: a jump (a curve of 1 holds a tempo up to the next). The
+    // clips are placed again from the model after this, so Tracktion moves none of them itself (no remap).
+    for (int i = tempos.getNumTempos(); --i > 0;)
+        tempos.removeTempo (i, false);
+    tempos.getTempo (0)->setBpm (s.tempoBpm);
+    tempos.getTempo (0)->setCurve (1.0f);
+    for (auto& change : s.tempoChanges)
+        tempos.insertTempo (toBeats (edit, (double)change.at), change.bpm, 1.0f);
 }
 
 //==============================================================================

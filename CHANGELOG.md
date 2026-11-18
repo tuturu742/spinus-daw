@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Tempo changes**: double-click the bar numbers on the Playlist's ruler to change the tempo from that bar
+  (a tag shows it; click to change or remove it, drag to move it). Audio clips don't get dragged around like
+  in FL: right-click one › **When the tempo changes** › **Fixed in time** (vocals, recordings: stays at its
+  second) or **On its beat** (one-shots: stays on its beat). Either way it plays as recorded. Long clips and
+  recordings start as Fixed in time.
 - **Send levels can be automated**: right-click a send's knob in the Mixer for **Create automation clip: send
   level** (more reverb in the chorus, an echo on one word). The knob moves with it while it plays, and removing
   the send removes its automation too.

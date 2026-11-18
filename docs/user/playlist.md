@@ -28,6 +28,7 @@ any pattern can go on any track. Switch to **song mode** (the PAT/SONG button, o
 | Choose a take | **Alt+click** an audio clip that has other takes at the same time: it plays, they are muted there (see [Takes and comping](audio-tracks.md#takes-and-comping)). |
 | Move the song position | Click or drag in the ruler. In pattern mode this moves the playhead too, but Play still starts the current pattern from its beginning: switch to song mode (**L**) to play the song from there. |
 | Markers | **Double-click** the ruler to put a marker there ("Marker 1"): a named point to see the song's parts. **Click** a marker to jump to it, **drag** it to move it, **right-click** it to rename or remove it. Its line shows faintly across the tracks. |
+| Tempo changes | **Double-click** the bar numbers at the top of the ruler to change the tempo from there: type the new tempo in BPM. A tag such as **140 BPM** marks it. **Click** the tag to change or remove it, **drag** it to move it. The tempo jumps there (gradual changes come later). Patterns, notes and automation stay on their beats; audio clips follow their own setting (see [Audio clips](#audio-clips)). The tempo box at the top is the tempo at the song's start. |
 | Loop part of the song | Hold the right mouse button and drag across the ruler: song mode then plays that part over and over (it starts there if the position is outside it). The part is shaded across the tracks too. Right-click the ruler to stop looping. |
 | Grid | The list next to the tools: bar, beat (the default), 1/2 or 1/4 beat, triplets, or no grid. Hold **Alt** while dragging to place freely. |
 | Scroll | Mouse wheel, **Shift**+wheel sideways, or the scroll bars. |
@@ -84,6 +85,16 @@ where you dropped it, showing its waveform; several files go on tracks one below
 - Move, resize, mute and delete audio clips like pattern clips. Making a clip shorter plays only the start
   of the file.
 - Audio plays at its own speed: changing the song's tempo does not stretch it (set its speed instead, below).
+- **When the tempo changes** (the song's tempo, or a tempo change before or under the clip): right-click the
+  clip › **When the tempo changes**:
+  - **Fixed in time**: the clip stays at the same second, as it was recorded. For vocals, recordings,
+    stems and whole songs. If the song gets slower, the beat moves away from the clip; that is expected.
+  - **On its beat**: the clip stays on its bar and beat, and still plays at its own speed. For one-shots,
+    chops and risers.
+
+  Either way the clip plays exactly as long as before. New clips longer than 20 seconds and recorded
+  takes are **Fixed in time**; shorter ones are **On its beat**. Projects saved before this get the same
+  choice when they open.
 - Audio clips play in song mode only.
 
 ### Reverse, pitch and speed

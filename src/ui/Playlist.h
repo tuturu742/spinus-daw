@@ -116,6 +116,9 @@ public:
     bool moveMarker (model::MarkerId, model::Ticks at);
     bool removeMarker (model::MarkerId);
     const model::Marker* findMarker (model::MarkerId) const;
+    /** Tempo changes on the ruler (each one undo step): added, or changed and moved from `from`. */
+    bool setTempoChange (model::Ticks at, double bpm, std::optional<model::Ticks> from = {});
+    bool removeTempoChange (model::Ticks at);
     void jumpTo (model::Ticks);
     /** A copy of the clip's pattern for it alone, made the current pattern (FL's Make unique). */
     bool makeClipUnique (model::ClipId);
@@ -246,8 +249,11 @@ private:
     /** Tells the Session the selected automation clips' targets (outlined in the Mixer and Channel Rack). */
     void updateHighlight();
     bool placeCopies (std::vector<model::Clip>, const juce::String& description);
-    /** Brings the file into the project (audio/ folder, FLAC when needed): its path there and its length. */
-    bool importAudio (const juce::File&, juce::String& path, model::Ticks& ticks);
+    /** Brings the file into the project (audio/ folder, FLAC when needed): its path there and its length in
+        seconds. */
+    bool importAudio (const juce::File&, juce::String& path, double& seconds);
+    /** How long a clip from `start` is that plays the file from `offset` to its end. */
+    model::Ticks clipLength (model::Ticks start, model::Ticks offset, double seconds) const;
     void updateScrollBars();
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override { triggerAsyncUpdate(); }

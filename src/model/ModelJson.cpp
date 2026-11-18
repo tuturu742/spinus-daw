@@ -1,6 +1,7 @@
 #include "ModelJson.h"
 
 #include "Migrations.h"
+#include "Tempo.h"
 #include "Validation.h"
 
 namespace spinus::model
@@ -130,6 +131,7 @@ juce::var write (const Clip& c)
             .set ("speed", a->speed)
             .set ("reversed", a->reversed)
             .set ("stretchMode", a->stretchMode)
+            .set ("onTempoChange", a->onTempoChange)
             .set ("fadeIn", ticks (a->fadeIn))
             .set ("fadeOut", ticks (a->fadeOut));
     if (auto* a = std::get_if<AudioClip> (&c.content); a != nullptr && ! a->tune.empty())
@@ -359,6 +361,7 @@ struct Reader
             a.speed = number (o, "speed", 1.0);
             a.reversed = (bool)o.getProperty ("reversed", false);
             a.stretchMode = text (o, "stretchMode", a.stretchMode);
+            a.onTempoChange = text (o, "onTempoChange", {}); // missing: the default, set once the clip is placed
             a.fadeIn = tick (o, "fadeIn", 0);
             a.fadeOut = tick (o, "fadeOut", 0);
             for (auto& n : array (o, "tune"))
@@ -460,6 +463,13 @@ juce::var toJson (const Project& p)
         .set ("title", p.settings.title)
         .set ("author", p.settings.author)
         .set ("comments", p.settings.comments);
+    if (! p.settings.tempoChanges.empty())
+    {
+        juce::Array<juce::var> changes;
+        for (auto& change : p.settings.tempoChanges)
+            changes.add (Obj().set ("at", ticks (change.at)).set ("bpm", change.bpm));
+        settings.set ("tempoChanges", changes);
+    }
 
     if (p.settings.key)
         settings.set ("key", Obj().set ("tonic", p.settings.key->tonic).set ("scale", p.settings.key->scale));
@@ -624,6 +634,8 @@ juce::Result readProject (const juce::var& input, Project& result, juce::StringA
     p.settings.title = r.text (settings, "title");
     p.settings.author = r.text (settings, "author");
     p.settings.comments = r.text (settings, "comments");
+    for (auto& change : r.array (settings, "tempoChanges"))
+        p.settings.tempoChanges.push_back ({ r.tick (change, "at", 0), r.number (change, "bpm", 120.0) });
 
     if (auto key = Reader::get (settings, "key"); key.isObject())
         p.settings.key = Key { r.integer (key, "tonic", 0), r.text (key, "scale", "major") };
@@ -756,6 +768,14 @@ juce::Result readProject (const juce::var& input, Project& result, juce::StringA
     for (auto& clip : p.launcher.clips)
         if (auto* audio = std::get_if<AudioClip> (&clip.content))
             markAudioTrack (*audio);
+
+    // Projects saved before tempo changes: each audio clip gets the default for what it is.
+    for (auto& clip : p.playlist.clips)
+        if (auto* audio = std::get_if<AudioClip> (&clip.content); audio != nullptr && audio->onTempoChange.isEmpty())
+            audio->onTempoChange = defaultOnTempoChange (p, clip);
+    for (auto& clip : p.launcher.clips)
+        if (auto* audio = std::get_if<AudioClip> (&clip.content); audio != nullptr && audio->onTempoChange.isEmpty())
+            audio->onTempoChange = "beat";
 
     if (! r.errors.isEmpty())
         return juce::Result::fail (r.errors.joinIntoString ("\n"));

@@ -83,7 +83,8 @@ are copied into the project's `audio` folder when it is saved, as when you save 
 ## An example song
 
 This script makes two bars of drums, a Reese bass and a warm pad. The pad dips on every kick and goes to
-a reverb on a send. It plays twice on the Playlist, with a filter sweep.
+a reverb on a send. It plays twice on the Playlist, with a filter sweep, a little faster the second time
+(a tempo change at bar 3).
 
 ```json
 [
@@ -122,7 +123,8 @@ a reverb on a send. It plays twice on the Playlist, with a filter sweep.
  {"command": "clip.addAutomation", "params": {"laneName": "Filter sweep", "start": 0, "length": 15360,
    "target": {"kind": "deviceParameter", "device": "$filter.device", "parameterId": "cutoff"},
    "points": [{"time": 0, "value": 0.3}, {"time": 15360, "value": 1.0}]}},
- {"command": "marker.add", "params": {"at": 0, "name": "Intro"}}
+ {"command": "marker.add", "params": {"at": 0, "name": "Intro"}},
+ {"command": "project.setTempoChange", "params": {"at": 7680, "bpm": 126}}
 ]
 ```
 

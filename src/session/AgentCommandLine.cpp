@@ -11,6 +11,7 @@
 #include "engine/Exporter.h"
 #include "engine/ParameterIds.h"
 #include "model/ModelJson.h"
+#include "model/Tempo.h"
 #include "model/StockDevices.h"
 #include "session/InstrumentPresets.h"
 #include "session/EffectProfiles.h"
@@ -551,13 +552,18 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
     for (auto& missing : session.getAdapter().getMissingDevices())
         problems.add ("device " + juce::String (missing.value) + " does not load here (its plugin is missing)");
 
+    juce::Array<juce::var> tempoChanges;
+    for (auto& change : p.settings.tempoChanges)
+        tempoChanges.add (object ({ { "bar", 1.0 + (double)change.at / (double)barTicks }, { "bpm", change.bpm } }));
+
     return object (
         { { "tempoBpm", p.settings.tempoBpm },
+          { "tempoChanges", tempoChanges },
           { "timeSignature", juce::String (p.settings.timeSignature.numerator) + "/" +
                                  juce::String (p.settings.timeSignature.denominator) },
           { "key", p.settings.key ? juce::var (keyName (*p.settings.key)) : juce::var() },
           { "bars", (double)end / (double)barTicks },
-          { "seconds", (double)end / (double)model::ticksPerQuarterNote * 60.0 / p.settings.tempoBpm },
+          { "seconds", model::TempoMap (p.settings).seconds ((double)end) },
           { "channels", channels },
           { "inserts", inserts },
           { "patterns", patterns },
