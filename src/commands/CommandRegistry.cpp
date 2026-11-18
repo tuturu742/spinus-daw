@@ -3131,6 +3131,52 @@ private:
     juce::String description;
 };
 
+/** Points every audio clip (Playlist and Launcher) that plays one file at another: missing files found again. */
+class RelocateAudio final : public SnapshotCommand
+{
+public:
+    RelocateAudio (juce::var p, std::vector<std::pair<juce::String, juce::String>> f)
+        : SnapshotCommand ("project.relocateAudio", std::move (p)), files (std::move (f))
+    {
+    }
+
+    juce::String getDescription() const override
+    {
+        return files.size() == 1 ? "Find missing audio file" : "Find missing audio files";
+    }
+
+protected:
+    juce::Result apply (Project& p) override
+    {
+        for (auto& [from, to] : files)
+        {
+            if (to.isEmpty())
+                return juce::Result::fail ("the new file for " + quoted (from) + " must not be empty");
+            bool used = false;
+            auto relocate = [&used, &from, &to] (AudioClip& audio)
+            {
+                if (audio.file == from)
+                {
+                    audio.file = to;
+                    used = true;
+                }
+            };
+            for (auto& clip : p.playlist.clips)
+                if (auto* audio = std::get_if<AudioClip> (&clip.content))
+                    relocate (*audio);
+            for (auto& clip : p.launcher.clips)
+                if (auto* audio = std::get_if<AudioClip> (&clip.content))
+                    relocate (*audio);
+            if (! used)
+                return juce::Result::fail ("no audio clip plays " + quoted (from));
+        }
+        return juce::Result::ok();
+    }
+
+private:
+    std::vector<std::pair<juce::String, juce::String>> files;
+};
+
 /** Checks automation points and puts them in time order. */
 juce::Result checkPoints (std::vector<AutomationPoint>& points)
 {
@@ -4349,6 +4395,34 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
                               return std::make_unique<SetTune> (p.json, p.id<ClipId> ("clip"), std::move (notes),
                                                                 p.string ("description").value_or (""));
                           }));
+
+    list.push_back (
+        info ("project.relocateAudio",
+              "Point every audio clip that plays a file at another file, e.g. a missing file found in another folder "
+              "(copy it into the project first, as clip.addAudio's files are). One undo step for all of them.",
+              ParameterSchema().custom (
+                  "files", "Each file as the clips name it now (from) and the file to play instead (to)", true,
+                  juce::JSON::parse (R"json({"type": "array", "minItems": 1, "items": {"type": "object", "properties": {
+                "from": {"type": "string", "description": "The file as the clips name it now"},
+                "to": {"type": "string", "description": "Relative to the project's audio/ folder, or an absolute path"}},
+                "required": ["from", "to"], "additionalProperties": false}})json")),
+              [] (Params& p) -> std::unique_ptr<Command>
+              {
+                  p.allowOnly ({ "files" });
+                  std::vector<std::pair<juce::String, juce::String>> files;
+                  if (auto* items = p.get ("files", true).getArray(); items != nullptr && ! items->isEmpty())
+                      for (auto& item : *items)
+                      {
+                          const auto from = item.getProperty ("from", {}).toString();
+                          const auto to = item.getProperty ("to", {}).toString();
+                          if (from.isEmpty() || to.isEmpty())
+                              p.errors.add ("each file needs a 'from' and a 'to'");
+                          files.emplace_back (from, to);
+                      }
+                  else
+                      p.errors.add ("'files' must be a list of {from, to}");
+                  return std::make_unique<RelocateAudio> (p.json, std::move (files));
+              }));
 
     const auto pointsSchema = juce::JSON::parse (R"json({"type": "array", "items": {"type": "object", "properties": {
         "time": {"type": "integer", "minimum": 0, "description": "Ticks from the clip's start"},
