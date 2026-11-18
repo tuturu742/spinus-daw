@@ -8,6 +8,7 @@
 #include "model/ModelJson.h"
 #include "model/Tempo.h"
 #include "project/AudioImport.h"
+#include "session/MissingAudio.h"
 #include "project/ProjectFiles.h"
 
 #include "Browser.h"
@@ -783,6 +784,13 @@ private:
         }
         else if (const auto* audio = std::get_if<model::AudioClip> (&clip.content))
         {
+            if (! playlist.session.resolveAudioFile (audio->file).existsAsFile())
+                menu.addItem ("Find missing audio files...",
+                              [safe]
+                              {
+                                  if (safe != nullptr)
+                                      safe->findMissingAudio();
+                              });
             addAudioItems (menu, *audio, id);
         }
         else if (const auto show = playlist.getShowTargetText (id); show.isNotEmpty())
@@ -1652,6 +1660,66 @@ model::Ticks Playlist::clipLength (model::Ticks start, model::Ticks offset, doub
     model::AudioClip audio;
     audio.offset = offset;
     return model::audioClipLength (model::TempoMap (session.getProject().settings), start, audio, seconds);
+}
+
+juce::StringArray Playlist::getMissingAudioFiles() const
+{
+    return missingaudio::find (session.getProject(), session.getProjectFolder());
+}
+
+int Playlist::findMissingAudioIn (const juce::File& folder)
+{
+    const auto missing = getMissingAudioFiles();
+    if (missing.isEmpty())
+    {
+        if (onProblem)
+            onProblem ("No audio files are missing.");
+        return 0;
+    }
+
+    // Copied into the project, as a dropped file is (decoded first if it needs to be).
+    juce::MouseCursor::showWaitCursor();
+    juce::Array<juce::var> files;
+    juce::StringArray stillMissing;
+    const auto found = missingaudio::search (missing, folder);
+    for (auto& file : missing)
+    {
+        juce::String path;
+        double seconds = 0.0;
+        if (auto f = found.find (file); f != found.end() && importAudio (f->second, path, seconds))
+            files.add (object ({ { "from", file }, { "to", path } }));
+        else
+            stillMissing.add (file.fromLastOccurrenceOf ("/", false, false).fromLastOccurrenceOf ("\\", false, false));
+    }
+    juce::MouseCursor::hideWaitCursor();
+
+    if (! files.isEmpty() && ! perform ("project.relocateAudio", object ({ { "files", files } })))
+        return 0;
+    if (onProblem)
+    {
+        const auto total = juce::String (missing.size()) + " missing audio file" + (missing.size() == 1 ? "" : "s");
+        if (stillMissing.isEmpty())
+            onProblem ("Found " + (missing.size() == 1 ? juce::String ("the ") : "all ") + total + " in " +
+                       folder.getFileName() + ", and copied them into the project.");
+        else
+            onProblem ("Found " + juce::String (files.size()) + " of " + total + " in " + folder.getFileName() +
+                       ". Still missing: " + stillMissing.joinIntoString (", ") +
+                       ". Try another folder: File > Find missing audio files...");
+    }
+    return files.size();
+}
+
+void Playlist::findMissingAudio()
+{
+    folderChooser = std::make_unique<core::FileDialog> (
+        "Find missing audio files: choose a folder to look in (and the folders inside it)",
+        juce::File::getSpecialLocation (juce::File::userMusicDirectory));
+    folderChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                                [safe = juce::Component::SafePointer<Playlist> (this)] (const core::FileDialog& fc)
+                                {
+                                    if (safe != nullptr && fc.getResult().isDirectory())
+                                        safe->findMissingAudioIn (fc.getResult());
+                                });
 }
 
 bool Playlist::addAudioFile (int row, model::Ticks start, const juce::File& file, model::Ticks offset)

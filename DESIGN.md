@@ -389,6 +389,8 @@ The browser shows these devices in a "Free open source" group with their own nam
 
 Time-stretch and pitch-shift on audio clips (Rubber Band). `AudioClip` has `pitchSemitones`, `speed` and `reversed`, and `stretchMode` `off` (as recorded), `stretch` / `stretch-drums` (Rubber Band melodic / percussive: pitch and speed apart) or `resample` (speed times the pitch ratio, like a record); `model::getPlaybackSpeed`. `clip.setAudio` changes them, with `fit` keeping the same audio in the clip (length, offset and fades scale with the speed). Tracktion is built with `TRACKTION_ENABLE_TIMESTRETCH_RUBBERBAND` against the system library (a generated forwarding header) and stretches in real time (`setUsesProxy (false)`: heard at once, ~4% of the audio time per stretched clip); a reversed clip plays from Tracktion's rendered copy, which exports wait for. The Playlist: right-click Reverse / Pitch / Speed / Pitch and speed, Alt+drag the end to stretch. The `tempo-sync` mode (older projects) plays as `off`; following the tempo is `onTempoChange` `stretch` (§7.2); slicing audio clips by transients is in §17 (the Beat Slicer already slices by transients).
 
+**Missing audio files** (`session/MissingAudio`): a clip's file is relative to the project's `audio/` folder or absolute; `missingaudio::find` lists the files the Playlist's and Launcher's clips play that are not there, and `missingaudio::search` looks for them by name (the same case first, then any) in a folder the user chooses and every folder inside it (at most 200,000 files). **File › Find missing audio files...** (also on a red clip's menu; `Playlist::findMissingAudio`) copies each one found into the project as a dropped file is (`project::importAudio`) and points its clips at it with `project.relocateAudio` (`files` [{from, to}], one undo step), then says how many were found and which are still missing. Opening a project with missing files says how many (unless a free-plugin download is being offered). Why copy rather than point at the found file: the project then holds its audio again, as it does for every dropped file.
+
 ### 11.4 Factory content
 
 The **Spinus Starter Pack** (`samples/Spinus Starter Pack/`, about 21 MB of FLAC; budget ≤ 60 MB, since it lives in git) ships with every package: 97 sounds from Signature Sounds (signaturesounds.org, formerly signaturesamples.co.uk): free for any use, CC0 1.0 where marked, included with the authors' permission (`THIRD_PARTY.md`; the pack's `README.md` names each file's source pack, original file and licence, `LICENSE.txt` is CC0's text). Folders: Drums (Kicks, Snares, Claps, Hats, Cymbals, Toms, Percussion, 808s), Loops (Drums, Melodic: tempo and key in the name when known), Instruments (a steel tongue drum by note), Vocals, Textures. `tools/starter-pack/make_pack.py` makes it from the original packs (a source folder given as an argument, never written to) by its `manifest.json`: one-shots trimmed to the sound (no leading silence, cut 60 dB down), loops cut to whole bars at their tempo, textures excerpted with fades, mono when the channels match, at most 48 kHz, peak −1 dBFS, FLAC at the source's 16 or 24 bits; then it checks peaks, silence, lengths, kits and size. The sounds were chosen by name and by the sound index's measurements (`tools/starter-pack`'s `spinus_describe_samples` prints `session/SoundDescriptors` for files).
@@ -975,12 +977,11 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   Test songs: the owner's own songs (made with Suno, and recordings of their old band whose original files are
   lost), used on the owner's computer only, never committed; the tests in the repository use short generated
   audio.
-- **What rc.1 left partly done:** tempo glides (tempo changes and loops that stretch to the tempo: done; send levels: done); automation that belongs to a pattern
-  and plays wherever it is placed; **finding missing audio files** a project points to (relocating them, a
-  folder at a time); and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI
+- **What rc.1 left partly done:** tempo glides (tempo changes and loops that stretch to the tempo: done; send levels: done; finding missing audio files: done, §11.3); automation that belongs to a pattern
+  and plays wherever it is placed; and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI
   out (§10.2).
 - **Known issues:** the short crackles when Spinus starts or a project opens; presets in the Browser (§8.1);
-  audio clips that follow the project's tempo and slicing by transients (§11.3); OB-Xf's own patch menu
+  slicing audio clips by transients (§11.3); OB-Xf's own patch menu
   listing its factory patches.
 - **The Track creator's downbeat** (`bar_starts`) bug.
 - **No Surge XT submodule:** tests and development builds use the same pinned, checksummed Surge XT release

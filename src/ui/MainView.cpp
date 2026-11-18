@@ -1200,6 +1200,12 @@ bool MainView::openProjectFile (const juce::File& file, juce::String* problem)
 
     hintBar.showMessage ("Opened " + document->getName());
     offeredDownloads = offerMissingDownloads();
+    if (const auto* playlist = dynamic_cast<const Playlist*> (workspace.getPanel ("playlist"));
+        ! offeredDownloads && playlist != nullptr)
+        if (const auto missing = playlist->getMissingAudioFiles(); ! missing.isEmpty())
+            hintBar.showMessage ("Opened " + document->getName() + ". " + juce::String (missing.size()) +
+                                 " audio file" + (missing.size() == 1 ? " it plays is" : "s it plays are") +
+                                 " missing (shown in red): File > Find missing audio files... looks for them");
     return true;
 }
 
@@ -1875,6 +1881,7 @@ juce::PopupMenu MainView::getMenuForIndex (int index, const juce::String&)
         menu.addCommandItem (cm, saveProjectAs);
         menu.addSeparator();
         menu.addCommandItem (cm, exportAudio);
+        menu.addCommandItem (cm, findMissingAudio);
         menu.addSeparator();
         menu.addCommandItem (cm, quit);
         break;
@@ -2078,6 +2085,7 @@ void MainView::getAllCommands (juce::Array<juce::CommandID>& ids)
                     automateLastMoved,
                     showAudioSettings,
                     exportAudio,
+                    findMissingAudio,
                     newProject,
                     openProject,
                     saveProject,
@@ -2323,6 +2331,15 @@ void MainView::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo&
                       "Export the song or pattern as WAV, FLAC, MP3, Opus or AAC, with stems (Ctrl+R)", "File", 0);
         info.addDefaultKeypress ('r', ctrl);
         break;
+    case findMissingAudio:
+    {
+        info.setInfo ("Find missing audio files...",
+                      "Look for the audio files this project's clips play that are not there, in a folder you choose",
+                      "File", 0);
+        const auto* playlist = dynamic_cast<const Playlist*> (workspace.getPanel ("playlist"));
+        info.setActive (playlist != nullptr && ! playlist->getMissingAudioFiles().isEmpty());
+        break;
+    }
     case newProject:
         info.setInfo ("New", "Start a new, empty project (Ctrl+N)", "File", 0);
         info.addDefaultKeypress ('n', ctrl);
@@ -2563,6 +2580,11 @@ bool MainView::perform (const InvocationInfo& info)
 
     case exportAudio:
         ExportDialog::show (session, this);
+        return true;
+
+    case findMissingAudio:
+        if (auto* playlist = dynamic_cast<Playlist*> (workspace.getPanel ("playlist")))
+            playlist->findMissingAudio();
         return true;
 
     case getFreePlugins:

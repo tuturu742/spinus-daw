@@ -276,6 +276,8 @@ add_library (spinus_core STATIC
     session/PresetFolders.cpp
     session/PresetFolders.h
     session/LeftOutSounds.cpp
+    session/MissingAudio.cpp
+    session/MissingAudio.h
     session/UserRoles.cpp
     session/UserRoles.h
     session/SongWriter.h

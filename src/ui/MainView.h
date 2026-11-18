@@ -88,6 +88,7 @@ public:
         reportProblem,    // Help › Report a problem: a report file and GitHub's new issue page
         showTrackCreator, // View › Track creator (experimental)
         soundIndex,       // Options › Sound index
+        findMissingAudio, // File › Find missing audio files
     };
 
     /** Which layout a layout command opens: 0 for Compose (layout1) to 8 (layout9); -1 for other commands. */

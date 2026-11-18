@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TimelineControls.h"
+#include "core/FileDialog.h"
 #include "Workspace.h"
 #include "session/Session.h"
 
@@ -146,6 +147,15 @@ public:
     /** Adds the files as audio clips on consecutive tracks from `row`, all at `start`. Returns how many
         were added. */
     int addAudioFiles (const juce::StringArray&, int row, model::Ticks start);
+    /** The audio files the project's clips play that are not there (session/MissingAudio). */
+    juce::StringArray getMissingAudioFiles() const;
+    /** Looks for the missing audio files in `folder` and the folders inside it, copies those found into the
+        project and points their clips at them (one undo step), then says through onProblem how many it found and
+        which are still missing. Returns how many it found. */
+    int findMissingAudioIn (const juce::File& folder);
+    /** Asks for a folder to look in, then findMissingAudioIn. */
+    void findMissingAudio();
+
     /** The first row below every track that holds a clip (where new audio tracks' clips go). */
     int getFirstFreeRow() const;
 
@@ -283,6 +293,7 @@ private:
     std::set<model::ClipId> selection;
     Tool tool = Tool::draw;
 
+    std::unique_ptr<core::FileDialog> folderChooser;
     std::unique_ptr<Lanes> lanes;
     std::unique_ptr<Headers> headers;
     std::unique_ptr<Ruler> ruler;

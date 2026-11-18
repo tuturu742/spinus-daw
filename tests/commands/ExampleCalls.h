@@ -70,6 +70,7 @@ inline const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
         { "clip.addTake", R"({"channel": 7, "file": "take2.wav", "start": 0, "length": 960})" },
         { "clip.useTake", R"({"clip": 24})" },
         { "clip.setAudio", R"({"clip": 16, "gainDb": -6, "fadeIn": 240})" },
+        { "project.relocateAudio", R"({"files": [{"from": "vocals.wav", "to": "/home/me/Bounces/vocals.wav"}]})" },
         { "clip.setAudio", R"({"clip": 16, "onTempoChange": "stretch", "sourceBpm": 92})" },
         { "clip.setTune",
           R"({"clip": 16, "notes": [{"start": 0.5, "end": 1.0, "pitch": 60.4, "shift": -0.4, "drift": 0.2},

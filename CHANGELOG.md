@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Find missing audio files**: when a project's audio files are not where it expects (moved, deleted, or a project
+  copied without its audio), opening it says how many are missing, and **File › Find missing audio files...** (or
+  right-click a red clip) looks for them in a folder you choose and the folders inside it, copies the ones it finds
+  into the project and plays them again.
 - **Tempo changes**: double-click the bar numbers on the Playlist's ruler to change the tempo from that bar
   (a tag shows it; click to change or remove it, drag to move it). Audio clips don't get dragged around like
   in FL: right-click one › **When the tempo changes** › **Fixed in time** (vocals, recordings: stays at its
