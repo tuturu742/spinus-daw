@@ -415,8 +415,7 @@ TEST_CASE ("Instruments: a learned instrument is measured on the keys it plays",
             end = std::max (end, n.start + n.length);
         juce::AudioBuffer<float> b (1, (int)((end + tail) * rate));
         b.clear();
-        std::mt19937 random (7);
-        std::uniform_real_distribution<float> white (-0.5f, 0.5f); // a noise as loud as a note, or louder
+        juce::Random random (7); // the same noise each run
         for (auto& n : notes)
         {
             pressed.insert (n.note);
@@ -429,7 +428,7 @@ TEST_CASE ("Instruments: a learned instrument is measured on the keys it plays",
                 if (n.note >= 40 && n.note <= 84)
                     b.addSample (0, i, (float)(0.3 * saw (frequency * t) * std::exp (-t / 0.8)));
                 else if (n.note >= 89)
-                    b.addSample (0, i, white (random) * (float)std::exp (-t / 0.05));
+                    b.addSample (0, i, (random.nextFloat() - 0.5f) * (float)std::exp (-t / 0.05));
             }
         }
         return b;
