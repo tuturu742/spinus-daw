@@ -145,6 +145,8 @@ juce::String Session::describeLastMovedControl() const
     case K::insertVolume:
     case K::insertPan:
         return p.findInsert (lastMoved->insert) != nullptr ? describeTarget (*lastMoved) : juce::String();
+    case K::insertSend:
+        return adapter->findParameter (*lastMoved) != nullptr ? describeTarget (*lastMoved) : juce::String();
     case K::deviceParameter:
         if (auto* parameter = adapter->findParameter (*lastMoved))
             return parameter->getParameterName() + " (" + getDeviceTitle (lastMoved->device) + ")";
@@ -677,6 +679,11 @@ juce::String Session::describeTarget (const model::ParameterTarget& target) cons
         if (auto* i = p.findInsert (target.insert))
             return i->name + (target.kind == K::insertVolume ? " volume" : " pan");
         break;
+    case K::insertSend:
+        if (auto* i = p.findInsert (target.insert))
+            if (auto* to = p.findInsert (target.sendTo))
+                return i->name + " send to " + to->name;
+        break;
     case K::deviceParameter:
     {
         auto name = target.parameterId;
@@ -848,6 +855,7 @@ Session::TargetPlace Session::findTargetPlace (const model::ParameterTarget& tar
         break;
     case K::insertVolume:
     case K::insertPan:
+    case K::insertSend:
         if (p.findInsert (target.insert) != nullptr)
         {
             place.insert = target.insert;
@@ -903,6 +911,10 @@ juce::String Session::describeTargetPlace (const model::ParameterTarget& target)
     case K::channelPan:
     case K::insertPan:
         return place.where + ": Pan";
+    case K::insertSend:
+        if (auto* to = getProject().findInsert (target.sendTo))
+            return place.where + ": Send to " + to->name;
+        return place.where + ": Send";
     case K::deviceParameter:
         break;
     }

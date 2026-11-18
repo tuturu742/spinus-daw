@@ -422,6 +422,18 @@ te::AutomatableParameter* EngineAdapter::findParameter (const ParameterTarget& t
             return target.kind == K::insertPan ? plugin->panParam.get() : plugin->volParam.get();
         }
         return volumeOf (getInsertTrack (target.insert), target.kind == K::insertPan);
+    case K::insertSend:
+    {
+        auto bus = returnBuses.find (target.sendTo);
+        auto* track = target.insert == masterInsertId ? nullptr : getInsertTrack (target.insert);
+        if (bus == returnBuses.end() || (track == nullptr && target.insert != masterInsertId))
+            return nullptr;
+        auto& list = track != nullptr ? track->pluginList : edit.getMasterPluginList();
+        for (auto* send : list.getPluginsOfType<te::AuxSendPlugin>())
+            if (send->getBusNumber() == bus->second)
+                return send->gain.get();
+        return nullptr;
+    }
     case K::deviceParameter:
         if (auto it = devicePlugins.find (target.device); it != devicePlugins.end())
             return it->second->getAutomatableParameterByID (target.parameterId).get();
@@ -1198,7 +1210,9 @@ void EngineAdapter::syncSends (const Project& project)
                     continue;
                 }
 
-                if (! juce::exactlyEqual (send->getGainDb(), w->second))
+                // The level set by hand or command (while its automation plays, the current one moves).
+                const auto position = te::decibelsToVolumeFaderPosition (w->second);
+                if (! juce::exactlyEqual (send->gain->getCurrentExplicitValue(), position))
                     send->setGainDb (w->second);
                 wanted.erase (w);
             }

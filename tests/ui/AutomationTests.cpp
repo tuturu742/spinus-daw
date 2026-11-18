@@ -633,3 +633,66 @@ TEST_CASE ("An automation clip plays its line as the Playlist draws it: flat bef
         CHECK (near (cutoff.at (9.0), knob));
     }
 }
+
+TEST_CASE ("A send's level is automated: heard on its bus, saved, and removed with the send", "[ui][automation][audio]")
+{
+    Fixture f;
+    auto& session = *f.session;
+    Mixer mixer (session);
+    f.session->setMode (Session::Mode::song);
+    for (int step = 0; step < 16; ++step)
+        REQUIRE (f.rack->toggleStep (f.lead().id, step));
+    REQUIRE (f.playlist->placePattern (0, 0));
+
+    // The Lead insert sends to a bus; moving the send makes it the last moved control.
+    REQUIRE (f.perform ("insert.add", R"({"name": "Bus"})"));
+    const auto from = f.lead().targetInsert;
+    const auto bus = session.getProject().mixer.inserts.back().id;
+    REQUIRE (mixer.setSend (from, bus, 0.0));
+    const auto last = session.getLastMovedControl().value_or (model::ParameterTarget {});
+    CHECK (last.kind == Kind::insertSend);
+    CHECK (last.insert == from);
+    CHECK (last.sendTo == bus);
+    CHECK (session.describeLastMovedControl().endsWith (" send to Bus"));
+    REQUIRE (session.getAdapter().findParameter (last) != nullptr);
+
+    // Silent send for the first beat, then up to full.
+    const auto id = session.createAutomationClip (last);
+    REQUIRE (id.isValid());
+    CHECK (f.automationOf (id).target == last);
+    REQUIRE (f.perform ("clip.setPoints", "{\"clip\": " + juce::String ((int)id.value) +
+                                              ", \"points\": [{\"time\": 0, \"value\": 0}, {\"time\": 960, \"value\": "
+                                              "0}, {\"time\": 1000, \"value\": 0.95}]}"));
+    CHECK (session.getAdapter().findParameter (last)->isAutomationActive());
+
+    test::RealtimeRunner runner (f.host.getEngine(),
+                                 { .outputChannels = 2, .maxSeconds = 4.0, .paceInRealTime = true });
+    runner.start();
+    runner.runUntil (0.2);
+    const auto start = runner.getSecondsProcessed();
+    session.play();
+    runner.runUntil (start + 1.3);
+    session.stop();
+    runner.stop();
+    const auto sr = runner.getParams().sampleRate;
+    auto level = [&] (double a, double b)
+    { return test::checks::rms (runner.getChannel (0), (int64_t)((start + a) * sr), (int64_t)((start + b) * sr)); };
+    const auto dry = level (0.1, 0.4); // first beat: only the Lead insert
+    const auto wet = level (0.8, 1.2); // then the bus adds the same sound again
+    INFO ("dry " << dry << ", with the send " << wet);
+    CHECK (dry > 0.002f);
+    CHECK (wet > dry * 1.5f);
+
+    // Saved and read back.
+    model::Project reopened;
+    REQUIRE (model::fromJson (model::toJson (session.getProject()), reopened).wasOk());
+    CHECK (std::get<model::AutomationClip> (reopened.findClip (id)->content).target == last);
+
+    // Removing the send removes its automation in the same step; Undo brings both back.
+    REQUIRE (mixer.removeSend (from, bus));
+    CHECK (session.getProject().findClip (id) == nullptr);
+    CHECK (session.getAdapter().findParameter (last) == nullptr);
+    REQUIRE (session.getHistory().undo());
+    CHECK (session.getProject().findClip (id) != nullptr);
+    CHECK (session.getAdapter().findParameter (last) != nullptr);
+}

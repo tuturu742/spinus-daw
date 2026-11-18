@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Send levels can be automated**: right-click a send's knob in the Mixer for **Create automation clip: send
+  level** (more reverb in the chorus, an echo on one word). The knob moves with it while it plays, and removing
+  the send removes its automation too.
 - **Options › Sound index**: listen to any sound (a preset is played by its instrument), and **Leave out**
   the ones you don't want, one, several or all that the search and menus show (for example every bass preset
   of one plugin); no update brings them back, and **Show › Left out** puts them back. A **Role** menu joins

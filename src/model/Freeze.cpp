@@ -279,6 +279,8 @@ FreezePlan makeFreezePlan (const Project& original, FreezeTarget target, std::op
             case K::insertVolume:
             case K::insertPan:
                 return t.insert != insertId && inserts.contains (t.insert); // the frozen insert's fader is live
+            case K::insertSend:
+                return t.insert != insertId && inserts.contains (t.insert) && inserts.contains (t.sendTo);
             case K::deviceParameter:
                 return devices.contains (t.device);
             }

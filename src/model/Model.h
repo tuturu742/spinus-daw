@@ -222,6 +222,7 @@ struct ParameterTarget
         channelPan,
         insertVolume,
         insertPan,
+        insertSend,     // the level of an insert's send to another insert (sendTo)
         deviceParameter // a parameter of an instrument or effect, by the plugin's parameter ID
     };
 
@@ -230,6 +231,7 @@ struct ParameterTarget
     InsertId insert;
     DeviceId device;
     juce::String parameterId;
+    InsertId sendTo; // insertSend: the insert the send goes to
 
     bool operator== (const ParameterTarget&) const = default;
 };
