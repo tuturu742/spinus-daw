@@ -7,7 +7,7 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 - **Pattern automation** (first part): a pattern can hold its own automation, which plays wherever the pattern is
   placed and in pattern mode. Where an automation clip on the Playlist moves the same setting, the Playlist's
-  clip wins. Drawing it under the Piano Roll comes next; agents can already write it.
+  clip wins. Draw it in the lane under the Piano Roll (its corner menu: **Automate...**).
 - **Find missing audio files**: when a project's audio files are not where it expects (moved, deleted, or a project
   copied without its audio), opening it says how many are missing, and **File › Find missing audio files...** (or
   right-click a red clip) looks for them in a folder you choose and the folders inside it, copies the ones it finds

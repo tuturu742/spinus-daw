@@ -7,7 +7,10 @@
 #include "commands/CommandRegistry.h"
 #include "model/ModelJson.h"
 #include "model/Scales.h"
+#include "model/StockDevices.h"
+#include "DeviceMenu.h"
 #include "MainView.h"
+#include "model/Automation.h"
 #include "session/InstrumentPresets.h"
 #include "session/SoundIndex.h"
 
@@ -816,6 +819,8 @@ public:
         g.fillAll (theme.get ("background"));
         g.setColour (theme.get ("border"));
         g.drawHorizontalLine (0, 0.0f, (float)getWidth());
+        if (roll.laneTarget)
+            return paintAutomation (g);
 
         const auto mode = roll.laneMode;
         const auto range = getLaneRange (mode);
@@ -854,14 +859,14 @@ public:
 
     float valueToY (float value) const
     {
-        const auto range = getLaneRange (roll.laneMode);
+        const auto range = roll.laneTarget ? juce::Range<float> (0.0f, 1.0f) : getLaneRange (roll.laneMode);
         const auto proportion = (value - range.getStart()) / range.getLength();
         return 3.0f + (1.0f - proportion) * (float)(getHeight() - 6);
     }
 
     float yToValue (float y) const
     {
-        const auto range = getLaneRange (roll.laneMode);
+        const auto range = roll.laneTarget ? juce::Range<float> (0.0f, 1.0f) : getLaneRange (roll.laneMode);
         const auto proportion = juce::jlimit (0.0f, 1.0f, 1.0f - (y - 3.0f) / (float)(getHeight() - 6));
         return range.getStart() + proportion * range.getLength();
     }
@@ -894,6 +899,8 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (roll.laneTarget)
+            return automationDown (e);
         index = noteAt (e.position);
         before = roll.notes;
         resetting = e.mods.isPopupMenu();
@@ -902,6 +909,8 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
+        if (roll.laneTarget)
+            return automationDrag (e);
         if (index < 0 || index >= (int)roll.notes.size())
             return;
         const auto value = resetting ? getLaneDefault (roll.laneMode) : yToValue (e.position.y);
@@ -912,6 +921,8 @@ public:
 
     void mouseUp (const juce::MouseEvent&) override
     {
+        if (roll.laneTarget)
+            return automationUp();
         const auto edited = std::exchange (index, -1);
         if (edited < 0 || edited >= (int)roll.notes.size())
         {
@@ -930,10 +941,108 @@ public:
     }
 
 private:
+    /** The points shown: those being edited while the mouse is down, else the pattern's. */
+    std::vector<model::AutomationPoint> shownPoints() const { return point >= 0 ? editing : roll.getLanePoints(); }
+
+    void paintAutomation (juce::Graphics& g)
+    {
+        const auto& theme = themeOf (*this);
+        auto points = shownPoints();
+        std::stable_sort (points.begin(), points.end(), [] (auto& a, auto& b) { return a.time < b.time; });
+        g.setColour (theme.get ("textDim"));
+        g.setFont (juce::FontOptions (11.0f));
+        if (points.empty())
+        {
+            g.drawText ("Click to draw this pattern's " +
+                            roll.session.describeTarget (roll.laneTarget.value_or (model::ParameterTarget {})),
+                        getLocalBounds().reduced (6, 4), juce::Justification::centredLeft, true);
+            return;
+        }
+
+        // The line as it plays (model::automationValueAt), to the pattern's end.
+        model::Ticks length = 0;
+        if (const auto* pattern = roll.session.getProject().findPattern (roll.session.getCurrentPattern()))
+            length = pattern->length;
+        juce::Path line;
+        const auto end = juce::jmin ((float)getWidth(), roll.tickToX (length));
+        const auto start = juce::jmax (0.0f, roll.tickToX (0));
+        for (int step = 0; start + (float)step * 2.0f <= end; ++step)
+        {
+            const auto x = start + (float)step * 2.0f;
+            const auto y = valueToY (model::automationValueAt (points, (double)roll.xToTick (x)));
+            if (line.isEmpty())
+                line.startNewSubPath (x, y);
+            else
+                line.lineTo (x, y);
+        }
+        g.setColour (theme.get ("accent"));
+        g.strokePath (line, juce::PathStrokeType (1.5f));
+        for (auto& p : points)
+            g.fillEllipse (roll.tickToX (p.time) - 3.5f, valueToY (p.value) - 3.5f, 7.0f, 7.0f);
+    }
+
+    /** The point at `p` (-1 if none is within a few pixels). */
+    int pointAt (const std::vector<model::AutomationPoint>& points, juce::Point<float> p) const
+    {
+        for (size_t i = 0; i < points.size(); ++i)
+            if (std::abs (roll.tickToX (points[i].time) - p.x) < 6.0f &&
+                std::abs (valueToY (points[i].value) - p.y) < 6.0f)
+                return (int)i;
+        return -1;
+    }
+
+    void automationDown (const juce::MouseEvent& e)
+    {
+        editing = roll.getLanePoints();
+        const auto at = pointAt (editing, e.position);
+        if (e.mods.isPopupMenu())
+        {
+            // Right-click a point: it goes (the last one takes the lane with it).
+            if (at >= 0)
+            {
+                editing.erase (editing.begin() + at);
+                roll.setLanePoints (editing);
+            }
+            return;
+        }
+        point = at;
+        if (point < 0)
+        {
+            editing.push_back ({ 0, 0.0f, 0.0f });
+            point = (int)editing.size() - 1;
+        }
+        automationDrag (e);
+    }
+
+    void automationDrag (const juce::MouseEvent& e)
+    {
+        if (point < 0 || point >= (int)editing.size())
+            return;
+        model::Ticks length = 0;
+        if (const auto* pattern = roll.session.getProject().findPattern (roll.session.getCurrentPattern()))
+            length = pattern->length;
+        auto time = roll.xToTick (e.position.x);
+        if (! e.mods.isAltDown())
+            time = roll.snapTicks (time);
+        editing[(size_t)point].time =
+            length > 0 ? juce::jlimit<model::Ticks> (0, length, time) : juce::jmax<model::Ticks> (0, time);
+        editing[(size_t)point].value = yToValue (e.position.y);
+        repaint();
+    }
+
+    void automationUp()
+    {
+        if (std::exchange (point, -1) >= 0 && ! (editing == roll.getLanePoints()))
+            roll.setLanePoints (editing);
+        repaint();
+    }
+
     PianoRoll& roll;
     int index = -1;
     bool resetting = false;
     std::vector<model::Note> before;
+    int point = -1; // the automation point being dragged
+    std::vector<model::AutomationPoint> editing;
 };
 
 //==============================================================================
@@ -943,7 +1052,8 @@ class PianoRoll::LaneChoice final : public juce::Component
 public:
     explicit LaneChoice (PianoRoll& r) : roll (r)
     {
-        setHelpText ("Click to choose what the lane edits: velocity, release, pan, fine pitch or volume");
+        setHelpText ("Click to choose what the lane edits: velocity, release, pan, fine pitch or volume, or this "
+                     "pattern's own automation of a control");
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
     }
 
@@ -955,8 +1065,9 @@ public:
         g.fillRoundedRectangle (area.toFloat(), 3.0f);
         g.setColour (theme.get ("text"));
         g.setFont (juce::FontOptions (11.0f));
-        g.drawFittedText (getLaneName (roll.laneMode), area.removeFromTop (30).reduced (2, 0),
-                          juce::Justification::centred, 2);
+        g.drawFittedText (roll.laneTarget ? roll.session.describeTarget (*roll.laneTarget)
+                                          : getLaneName (roll.laneMode),
+                          area.removeFromTop (30).reduced (2, 0), juce::Justification::centred, 2);
 
         juce::Path arrow;
         const auto centre = area.toFloat().getCentre().withY ((float)area.getY() + 4.0f);
@@ -973,12 +1084,67 @@ public:
     {
         juce::PopupMenu menu;
         for (int i = 0; i < numLaneModes; ++i)
-            menu.addItem (i + 1, getLaneName ((LaneMode)i), true, (int)roll.laneMode == i);
+            menu.addItem (i + 1, getLaneName ((LaneMode)i), true, ! roll.laneTarget && (int)roll.laneMode == i);
+
+        // The pattern's own automation (FL's pattern automation): its lanes, and a new one.
+        auto safe = juce::Component::SafePointer<PianoRoll> (&roll);
+        auto show = [safe] (const model::ParameterTarget& target)
+        {
+            if (safe != nullptr)
+                safe->setLaneTarget (target);
+        };
+        auto& session = roll.session;
+        const auto& project = session.getProject();
+        menu.addSectionHeader ("Pattern automation");
+        if (const auto* pattern = project.findPattern (session.getCurrentPattern()))
+            for (auto& lane : pattern->automation)
+                menu.addItem (session.describeTargetPlace (lane.target), true, roll.laneTarget == lane.target,
+                              [show, target = lane.target] { show (target); });
+
+        juce::PopupMenu automate;
+        using Kind = model::ParameterTarget::Kind;
+        if (const auto* channel = project.findChannel (session.getSelectedChannel()))
+        {
+            for (auto [kind, text] :
+                 { std::pair { Kind::channelVolume, "Channel volume" }, std::pair { Kind::channelPan, "Channel pan" } })
+            {
+                model::ParameterTarget target;
+                target.kind = kind;
+                target.channel = channel->id;
+                automate.addItem (text, [show, target] { show (target); });
+            }
+            if (channel->instrument)
+                automate.addSubMenu ("Instrument: " + channel->name,
+                                     makeAutomateParameterMenu (roll, session, channel->instrument->id, show));
+            if (const auto* insert = project.findInsert (channel->targetInsert))
+            {
+                for (auto [kind, text] : { std::pair { Kind::insertVolume, "Mixer track volume" },
+                                           std::pair { Kind::insertPan, "Mixer track pan" } })
+                {
+                    model::ParameterTarget target;
+                    target.kind = kind;
+                    target.insert = insert->id;
+                    automate.addItem (text, [show, target] { show (target); });
+                }
+                for (auto& slot : insert->effects)
+                    automate.addSubMenu ("Effect: " + model::getDeviceDisplayName (slot.device),
+                                         makeAutomateParameterMenu (roll, session, slot.device.id, show));
+            }
+        }
+        menu.addSubMenu ("Automate...", automate, automate.getNumItems() > 0);
+        if (roll.laneTarget && ! roll.getLanePoints().empty())
+            menu.addItem ("Remove this automation",
+                          [safe]
+                          {
+                              if (safe != nullptr)
+                                  safe->setLanePoints ({});
+                          });
+
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-                            [safe = juce::Component::SafePointer (this)] (int result)
+                            [safeChoice = juce::Component::SafePointer (this)] (int result)
                             {
-                                if (safe != nullptr && result > 0)
-                                    safe->roll.setLaneMode ((LaneMode)(result - 1));
+                                if (safeChoice != nullptr && result > 0)
+                                    safeChoice->roll.setLaneMode ((LaneMode)(result - 1));
                             });
     }
 
@@ -2200,8 +2366,57 @@ void PianoRoll::setGhostChannelShown (model::ChannelId channel, bool shown)
 }
 
 //==============================================================================
+void PianoRoll::setLaneTarget (const model::ParameterTarget& target)
+{
+    laneTarget = target;
+    laneChoice->repaint();
+    lane->setHelpText ("Pattern automation: " + session.describeTarget (target) +
+                       ", played wherever this pattern is placed (an automation clip on the Playlist for the same "
+                       "setting wins there). Click to add a point, drag to move it, right-click to delete it. Alt: no "
+                       "snap");
+    lane->repaint();
+}
+
+std::vector<model::AutomationPoint> PianoRoll::getLanePoints() const
+{
+    if (! laneTarget)
+        return {};
+    if (const auto* pattern = session.getProject().findPattern (session.getCurrentPattern()))
+        for (auto& own : pattern->automation)
+            if (own.target == *laneTarget)
+                return own.points;
+    return {};
+}
+
+bool PianoRoll::setLanePoints (const std::vector<model::AutomationPoint>& points)
+{
+    if (! laneTarget)
+        return false;
+    const auto target = *laneTarget;
+    if (! ensurePattern())
+        return false;
+    if (points.empty() && getLanePoints().empty())
+        return true; // nothing to remove
+    juce::Array<juce::var> list;
+    for (auto& point : points)
+        list.add (model::pointToJson (point));
+    juce::String error;
+    auto command =
+        commands::CommandRegistry::get().create ("pattern.setAutomation",
+                                                 object ({ { "pattern", (int)session.getCurrentPattern().value },
+                                                           { "target", model::targetToJson (target) },
+                                                           { "points", list } }),
+                                                 error);
+    const auto result =
+        command != nullptr ? session.getHistory().perform (std::move (command)) : juce::Result::fail (error);
+    lastProblem = result.failed() ? result.getErrorMessage() : juce::String();
+    lane->repaint();
+    return result.wasOk();
+}
+
 void PianoRoll::setLaneMode (LaneMode mode)
 {
+    laneTarget.reset();
     laneMode = mode;
     laneChoice->repaint();
 

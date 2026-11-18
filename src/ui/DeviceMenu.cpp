@@ -64,15 +64,22 @@ bool createAutomationClip (juce::Component& from, Session& session, const model:
 
 juce::PopupMenu makeAutomateParameterMenu (juce::Component& from, Session& session, model::DeviceId device)
 {
+    return makeAutomateParameterMenu (from, session, device, [&from, &session] (const model::ParameterTarget& target)
+                                      { createAutomationClip (from, session, target); });
+}
+
+juce::PopupMenu makeAutomateParameterMenu (juce::Component& from, Session& session, model::DeviceId device,
+                                           std::function<void (const model::ParameterTarget&)> chosen)
+{
     juce::PopupMenu menu;
     // The control moved last in this device's window comes first (FL: "last tweaked").
     if (const auto last = session.getLastMovedControl(); last && last->device == device)
     {
         menu.addItem ("Last moved: " + session.describeLastMovedControl(),
-                      [safe = juce::Component::SafePointer<juce::Component> (&from), &session, target = *last]
+                      [safe = juce::Component::SafePointer<juce::Component> (&from), chosen, target = *last]
                       {
                           if (safe != nullptr)
-                              createAutomationClip (*safe, session, target);
+                              chosen (target);
                       });
         menu.addSeparator();
     }
@@ -87,7 +94,7 @@ juce::PopupMenu makeAutomateParameterMenu (juce::Component& from, Session& sessi
         if (const auto value = session.getDeviceParameterValueText (device, id); value.isNotEmpty())
             label << "  (" << value << ")";
         to.addItem (label,
-                    [safe = juce::Component::SafePointer<juce::Component> (&from), &session, device, parameterId = id]
+                    [safe = juce::Component::SafePointer<juce::Component> (&from), chosen, device, parameterId = id]
                     {
                         if (safe == nullptr)
                             return;
@@ -95,7 +102,7 @@ juce::PopupMenu makeAutomateParameterMenu (juce::Component& from, Session& sessi
                         target.kind = model::ParameterTarget::Kind::deviceParameter;
                         target.device = device;
                         target.parameterId = parameterId;
-                        createAutomationClip (*safe, session, target);
+                        chosen (target);
                     });
     };
 

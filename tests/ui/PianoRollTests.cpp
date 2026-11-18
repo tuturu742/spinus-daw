@@ -1190,3 +1190,56 @@ TEST_CASE ("Keys the instrument does not play are shaded and its switch keys nam
     r.roll.paintEntireComponent (g, true);
     folder.getParentDirectory().deleteRecursively();
 }
+
+TEST_CASE ("The lane draws the pattern's own automation of a control", "[ui][pianoroll][pattern-automation]")
+{
+    Roll r;
+    REQUIRE (r.rack.addChannel ({}, "Lead"));
+    const auto channel = r.session.getProject().channels[0].id;
+
+    model::ParameterTarget pan;
+    pan.kind = model::ParameterTarget::Kind::channelPan;
+    pan.channel = channel;
+    r.roll.setLaneTarget (pan);
+    REQUIRE (r.roll.getLaneTarget() == pan);
+    CHECK (r.roll.getLanePoints().empty());
+
+    // The first points also make a pattern, as the first note does.
+    REQUIRE (r.roll.setLanePoints ({ { 0, 0.2f, 0.0f }, { 960, 0.8f, 0.0f } }));
+    const auto* pattern = r.session.getProject().findPattern (r.session.getCurrentPattern());
+    REQUIRE (pattern != nullptr);
+    REQUIRE (pattern->automation.size() == 1);
+    CHECK (pattern->automation[0].target == pan);
+    CHECK (r.roll.getLanePoints().size() == 2);
+    CHECK (r.session.getHistory().getUndoDescriptions().joinIntoString (" | ").endsWith ("pattern automation"));
+
+    // Moving a point is one undo step; undo brings the line back.
+    REQUIRE (r.roll.setLanePoints ({ { 0, 0.2f, 0.0f }, { 480, 0.5f, 0.0f } }));
+    CHECK (r.roll.getLanePoints()[1].time == 480);
+    r.session.getHistory().undo();
+    CHECK (r.roll.getLanePoints()[1].time == 960);
+
+    // With the mouse: a click on empty space adds a point there (snapped), right-click deletes it.
+    int laneIndex = -1;
+    for (int i = 0; i < r.roll.getNumChildComponents(); ++i)
+        if (r.roll.getChildComponent (i)->getHelpText().startsWith ("Pattern automation"))
+            laneIndex = i;
+    REQUIRE (laneIndex >= 0);
+    Mouse mouse (r.roll, laneIndex);
+    auto* lane = r.roll.getChildComponent (laneIndex);
+    const auto y = (float)lane->getHeight() * 0.25f; // near the top: a high value
+    mouse.click ({ r.roll.tickToX (1450), y });
+    REQUIRE (r.roll.getLanePoints().size() == 3);
+    CHECK (r.roll.getLanePoints()[2].time == 1440); // to the 16th
+    CHECK (r.roll.getLanePoints()[2].value > 0.6f);
+    mouse.click ({ r.roll.tickToX (1440), y }, juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier));
+    CHECK (r.roll.getLanePoints().size() == 2);
+
+    // Deleting every point removes the lane; choosing a note value leaves automation.
+    REQUIRE (r.roll.setLanePoints ({}));
+    CHECK (r.session.getProject().findPattern (r.session.getCurrentPattern())->automation.empty());
+    CHECK (r.roll.setLanePoints ({})); // nothing left to remove: fine
+    r.roll.setLaneMode (PianoRoll::LaneMode::velocity);
+    CHECK (! r.roll.getLaneTarget());
+    CHECK (! r.roll.setLanePoints ({ { 0, 0.5f, 0.0f } }));
+}
