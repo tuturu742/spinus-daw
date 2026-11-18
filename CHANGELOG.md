@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Pattern automation** (first part): a pattern can hold its own automation, which plays wherever the pattern is
+  placed and in pattern mode. Where an automation clip on the Playlist moves the same setting, the Playlist's
+  clip wins. Drawing it under the Piano Roll comes next; agents can already write it.
 - **Tempo changes**: double-click the bar numbers on the Playlist's ruler to change the tempo from that bar
   (a tag shows it; click to change or remove it, drag to move it). Audio clips don't get dragged around like
   in FL: right-click one › **When the tempo changes** › **Fixed in time** (vocals, recordings: stays at its

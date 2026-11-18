@@ -533,6 +533,19 @@ juce::var toJson (const Project& p)
             patternJson.set ("tripletSteps", true);
         if (pattern.swing > 0.0f)
             patternJson.set ("swing", (double)pattern.swing);
+        if (! pattern.automation.empty())
+        {
+            juce::Array<juce::var> automation;
+            for (auto& lane : pattern.automation)
+            {
+                juce::Array<juce::var> points;
+                for (auto& point : lane.points)
+                    points.add (
+                        Obj().set ("time", ticks (point.time)).set ("value", point.value).set ("curve", point.curve));
+                automation.add (Obj().set ("target", write (lane.target)).set ("points", points));
+            }
+            patternJson.set ("automation", automation);
+        }
         patterns.add (patternJson.set ("channels", perChannel));
     }
 
@@ -682,6 +695,15 @@ juce::Result readProject (const juce::var& input, Project& result, juce::StringA
                 TimeSignature { r.integer (own, "numerator", 4), r.integer (own, "denominator", 4) };
         pattern.tripletSteps = r.boolean (pj, "tripletSteps", false);
         pattern.swing = (float)juce::jlimit (0.0, 1.0, r.number (pj, "swing", 0.0));
+        for (auto& aj : r.array (pj, "automation"))
+        {
+            PatternAutomation lane;
+            lane.target = r.target (Reader::get (aj, "target"));
+            for (auto& point : r.array (aj, "points"))
+                lane.points.push_back (
+                    { r.tick (point, "time", 0), r.real (point, "value", 0.0f), r.real (point, "curve", 0.0f) });
+            pattern.automation.push_back (lane);
+        }
 
         for (auto& perChannel : r.array (pj, "channels"))
         {

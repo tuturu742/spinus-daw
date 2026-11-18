@@ -12,6 +12,7 @@
 #include "model/Tempo.h"
 #include "model/Validation.h"
 
+#include <functional>
 #include <set>
 
 namespace spinus::commands
@@ -191,6 +192,19 @@ struct Params
 // Helpers shared by the commands
 
 juce::String quoted (const juce::String& s) { return "'" + s + "'"; }
+
+/** Removes the automation of what is gone: its Playlist automation clips and its patterns' automation lanes. */
+void eraseAutomation (Project& p, const std::function<bool (const ParameterTarget&)>& gone)
+{
+    std::erase_if (p.playlist.clips,
+                   [&] (const Clip& clip)
+                   {
+                       auto* a = std::get_if<AutomationClip> (&clip.content);
+                       return a != nullptr && gone (a->target);
+                   });
+    for (auto& pattern : p.patterns)
+        std::erase_if (pattern.automation, [&] (const PatternAutomation& lane) { return gone (lane.target); });
+}
 
 /** "drums/Amen Break.wav" -> "Amen Break". Project paths use "/" on every system, and Windows also "\\". */
 juce::String fileStem (const juce::String& path)
@@ -590,14 +604,12 @@ void eraseInsert (Project& p, InsertId insert)
     for (auto& slot : removed.effects)
         devices.insert (slot.device.id);
 
-    std::erase_if (p.playlist.clips,
-                   [&] (const Clip& clip)
-                   {
-                       auto* a = std::get_if<AutomationClip> (&clip.content);
-                       return a != nullptr &&
-                              (a->target.insert == insert || devices.contains (a->target.device) ||
-                               (a->target.kind == ParameterTarget::Kind::insertSend && a->target.sendTo == insert));
-                   });
+    eraseAutomation (p,
+                     [&] (const ParameterTarget& t)
+                     {
+                         return (t.insert == insert || devices.contains (t.device) ||
+                                 (t.kind == ParameterTarget::Kind::insertSend && t.sendTo == insert));
+                     });
 }
 
 /** True if anything but the channels plays into the insert or takes its sound: another insert routed or sent
@@ -740,12 +752,11 @@ protected:
         std::erase_if (p.playlist.clips,
                        [&] (const Clip& clip)
                        {
-                           if (auto* audio = std::get_if<AudioClip> (&clip.content))
-                               return audio->channel == channel;
-                           auto* a = std::get_if<AutomationClip> (&clip.content);
-                           return a != nullptr &&
-                                  (a->target.channel == channel || (device && a->target.device == *device));
+                           auto* audio = std::get_if<AudioClip> (&clip.content);
+                           return audio != nullptr && audio->channel == channel;
                        });
+        eraseAutomation (p, [&] (const ParameterTarget& t)
+                         { return t.channel == channel || (device && t.device == *device); });
         std::erase_if (p.launcher.clips,
                        [&] (const LauncherClip& clip)
                        {
@@ -822,13 +833,8 @@ protected:
         }
 
         if (old)
-            std::erase_if (p.playlist.clips,
-                           [&] (const Clip& clip)
-                           {
-                               auto* a = std::get_if<AutomationClip> (&clip.content);
-                               return a != nullptr && a->target.kind == ParameterTarget::Kind::deviceParameter &&
-                                      a->target.device == old->id;
-                           });
+            eraseAutomation (p, [&] (const ParameterTarget& t)
+                             { return t.kind == ParameterTarget::Kind::deviceParameter && t.device == old->id; });
         return juce::Result::ok();
     }
 
@@ -1447,13 +1453,9 @@ protected:
                                        juce::String (target.value));
 
         // Its level's automation goes with it, in the same undo step.
-        std::erase_if (p.playlist.clips,
-                       [&] (const Clip& clip)
-                       {
-                           auto* a = std::get_if<AutomationClip> (&clip.content);
-                           return a != nullptr && a->target.kind == ParameterTarget::Kind::insertSend &&
-                                  a->target.insert == insert && a->target.sendTo == target;
-                       });
+        eraseAutomation (
+            p, [&] (const ParameterTarget& t)
+            { return t.kind == ParameterTarget::Kind::insertSend && t.insert == insert && t.sendTo == target; });
         return juce::Result::ok();
     }
 
@@ -1550,12 +1552,7 @@ protected:
         removedName = effectName (insert->effects[(size_t)slot].device);
         insert->effects.erase (insert->effects.begin() + slot);
 
-        std::erase_if (p.playlist.clips,
-                       [&] (const Clip& clip)
-                       {
-                           auto* a = std::get_if<AutomationClip> (&clip.content);
-                           return a != nullptr && a->target.device == device;
-                       });
+        eraseAutomation (p, [&] (const ParameterTarget& t) { return t.device == device; });
         return juce::Result::ok();
     }
 
@@ -1594,13 +1591,8 @@ protected:
         old.device = effect;
         old.device.id = deviceId;
 
-        std::erase_if (p.playlist.clips,
-                       [&] (const Clip& clip)
-                       {
-                           auto* a = std::get_if<AutomationClip> (&clip.content);
-                           return a != nullptr && a->target.kind == ParameterTarget::Kind::deviceParameter &&
-                                  a->target.device == device;
-                       });
+        eraseAutomation (p, [&] (const ParameterTarget& t)
+                         { return t.kind == ParameterTarget::Kind::deviceParameter && t.device == device; });
         return juce::Result::ok();
     }
 
@@ -3259,6 +3251,53 @@ private:
     std::vector<AutomationPoint> points;
 };
 
+/** Draws, replaces or removes a pattern's automation of one control (an empty list removes it). */
+class SetPatternAutomation final : public SnapshotCommand
+{
+public:
+    SetPatternAutomation (juce::var p, PatternId pat, ParameterTarget t, std::vector<AutomationPoint> pts)
+        : SnapshotCommand ("pattern.setAutomation", std::move (p)), pattern (pat), target (std::move (t)),
+          points (std::move (pts))
+    {
+    }
+
+    juce::String getDescription() const override
+    {
+        return points.empty() ? "Remove pattern automation" : "Edit pattern automation";
+    }
+
+protected:
+    juce::Result apply (Project& p) override
+    {
+        auto* pat = p.findPattern (pattern);
+        if (pat == nullptr)
+            return juce::Result::fail ("pattern " + juce::String (pattern.value) + " does not exist");
+        auto lane = std::find_if (pat->automation.begin(), pat->automation.end(),
+                                  [this] (const PatternAutomation& a) { return a.target == target; });
+        if (points.empty())
+        {
+            if (lane == pat->automation.end())
+                return juce::Result::fail ("the pattern does not automate that");
+            pat->automation.erase (lane);
+            return juce::Result::ok();
+        }
+        if (! targetExists (p, target))
+            return juce::Result::fail ("the automation target does not exist");
+        if (auto r = checkPoints (points); r.failed())
+            return r;
+        if (lane == pat->automation.end())
+            pat->automation.push_back ({ target, points });
+        else
+            lane->points = points;
+        return juce::Result::ok();
+    }
+
+private:
+    PatternId pattern;
+    ParameterTarget target;
+    std::vector<AutomationPoint> points;
+};
+
 class SetClip final : public JsonCommand
 {
 public:
@@ -4417,6 +4456,26 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
                               auto points = readPoints (p);
                               return std::make_unique<SetAutomationPoints> (p.json, p.id<ClipId> ("clip"),
                                                                             std::move (points));
+                          }));
+
+    list.push_back (info ("pattern.setAutomation",
+                          "Draw a pattern's own automation of one control (its points replace the lane's; an empty "
+                          "list removes it). It plays wherever the pattern is placed, and in pattern mode; where a "
+                          "Playlist automation clip moves the same control, the Playlist's wins. Times are ticks "
+                          "from the pattern's start.",
+                          ParameterSchema()
+                              .id ("pattern", "Pattern ID")
+                              .custom ("target", "What the lane automates", true, targetSchema)
+                              .custom ("points", "The curve's points; empty removes the lane", true, pointsSchema),
+                          [readPoints] (Params& p) -> std::unique_ptr<Command>
+                          {
+                              p.allowOnly ({ "pattern", "target", "points" });
+                              ParameterTarget target;
+                              if (auto e = model::targetFromJson (p.get ("target", true), target); e.isNotEmpty())
+                                  p.errors.add ("target: " + e);
+                              auto points = readPoints (p);
+                              return std::make_unique<SetPatternAutomation> (p.json, p.id<PatternId> ("pattern"),
+                                                                             target, std::move (points));
                           }));
 
     list.push_back (info ("clip.set", "Move, resize, mute or re-offset a playlist clip.",

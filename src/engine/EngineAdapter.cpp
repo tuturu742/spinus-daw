@@ -475,30 +475,54 @@ void EngineAdapter::syncAutomation (const Project& project)
     automated.clear();
     knobFollower.follow (*this);
 
-    if (playMode == PlayMode::pattern)
-        return; // the playlist is silent in pattern mode, its automation too
-
-    std::map<te::AutomatableParameter*, std::vector<const Clip*>> clipsOf;
-    for (auto& clip : project.playlist.clips)
+    std::map<te::AutomatableParameter*, std::vector<Automated::Span>> spansOf;
+    auto add = [this, &spansOf] (const model::ParameterTarget& target, Automated::Span span)
     {
-        auto* automation = std::get_if<AutomationClip> (&clip.content);
-        const auto* lane = project.findLane (clip.lane);
-        if (automation == nullptr || automation->points.empty() || clip.muted ||
-            (lane != nullptr && project.isLaneMuted (lane->id)))
-            continue;
-        if (auto* parameter = findParameter (automation->target))
-            clipsOf[parameter].push_back (&clip);
+        if (auto* parameter = findParameter (target); parameter != nullptr && ! span.points.empty() && span.length > 0)
+            spansOf[parameter].push_back (std::move (span));
+    };
+
+    if (playMode == PlayMode::pattern)
+    {
+        // The Playlist is silent in pattern mode, its automation too; the pattern plays its own from the start,
+        // where the transport loops over it.
+        if (const auto* pattern = project.findPattern (currentPattern))
+            for (auto& lane : pattern->automation)
+                add (lane.target, { 0, pattern->length, lane.points, true });
+    }
+    else
+    {
+        for (auto& clip : project.playlist.clips)
+        {
+            const auto* lane = project.findLane (clip.lane);
+            if (clip.muted || (lane != nullptr && project.isLaneMuted (lane->id)))
+                continue;
+            if (auto* automation = std::get_if<AutomationClip> (&clip.content))
+                add (automation->target, { clip.start, clip.length, automation->points, false });
+            else if (auto* placed = std::get_if<PatternClip> (&clip.content))
+            {
+                // A pattern clip plays its pattern from its offset, for its length, without looping: its automation
+                // too, the points moved to the clip.
+                const auto* pattern = project.findPattern (placed->pattern);
+                if (pattern == nullptr)
+                    continue;
+                const auto length = std::min (clip.length, pattern->length - placed->offset);
+                for (auto& patternLane : pattern->automation)
+                {
+                    auto points = patternLane.points;
+                    for (auto& point : points)
+                        point.time -= placed->offset;
+                    add (patternLane.target, { clip.start, length, std::move (points), true });
+                }
+            }
+        }
     }
 
-    for (auto& [parameter, clips] : clipsOf)
+    for (auto& [parameter, spans] : spansOf)
     {
         // By start; of two that start together, the later one in the Playlist counts as the later.
-        std::stable_sort (clips.begin(), clips.end(), [] (auto* a, auto* b) { return a->start < b->start; });
-        Automated a { parameter, {}, 0.0f };
-        for (auto* clip : clips)
-            a.clips.push_back ({ clip->start, clip->length, std::get<AutomationClip> (clip->content).points });
-        if (a.clips.empty())
-            continue;
+        std::stable_sort (spans.begin(), spans.end(), [] (auto& a, auto& b) { return a.start < b.start; });
+        Automated a { parameter, std::move (spans), 0.0f };
         writeCurve (a);
         automated.push_back (std::move (a));
     }
@@ -530,10 +554,14 @@ void EngineAdapter::writeCurve (Automated& a) const
     std::vector<Piece> pieces;
     for (size_t i = 0; i + 1 < edges.size(); ++i)
     {
-        const Automated::Span* playing = nullptr;
-        for (auto& clip : a.clips) // by start: the last one that covers the edge started last
+        // By start: the last one that covers the edge started last. A Playlist automation clip wins over the
+        // automation of a pattern placed there (owner, 2026-11-18).
+        const Automated::Span *playing = nullptr, *fromPattern = nullptr;
+        for (auto& clip : a.clips)
             if (clip.start <= edges[i] && edges[i] < clip.start + clip.length)
-                playing = &clip;
+                (clip.fromPattern ? fromPattern : playing) = &clip;
+        if (playing == nullptr)
+            playing = fromPattern;
         if (playing == nullptr)
             continue; // between clips
         if (! pieces.empty() && pieces.back().clip == playing && pieces.back().to == edges[i])

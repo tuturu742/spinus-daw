@@ -686,3 +686,78 @@ TEST_CASE ("A step setting (the Filter's Slope) follows its line: on a ramp it c
     f.session->stop();
     runner.stop();
 }
+
+//==============================================================================
+TEST_CASE ("A pattern's automation plays wherever the pattern is placed; a Playlist clip on the same control wins",
+           "[ui][automation-edge][pattern-automation]")
+{
+    Fixture f;
+    f.playNotes (1); // a one-bar pattern at bar 1
+    const auto pattern = f.session->getProject().patterns.front().id;
+    REQUIRE (f.playlist->placePattern (0, 2 * bar)); // and at bar 3
+    const auto cutoff = f.cutoff();
+    REQUIRE (f.perform ("device.setParameters",
+                        "{\"device\": " + juce::String ((int)f.filter().value) + ", \"values\": {\"cutoff\": 0.3}}"));
+
+    // Up over the pattern's bar: from 0 to 1.
+    const auto lane =
+        "{\"pattern\": " + juce::String ((int)pattern.value) + ", \"target\": " + Fixture::targetJson (cutoff) +
+        ", \"points\": [{\"time\": 0, \"value\": 0}, {\"time\": " + juce::String (bar) + ", \"value\": 1}]}";
+    REQUIRE (f.perform ("pattern.setAutomation", lane));
+    settle();
+    CHECK (near (f.at (cutoff, 2.0), 0.5f));                        // half way through the first placement
+    CHECK (near (f.at (cutoff, 10.0), 0.5f));                       // and through the second
+    CHECK (near (f.at (cutoff, 6.0), f.at (cutoff, 3.99f), 0.02f)); // between them it holds
+
+    // A Playlist clip over the second placement's first half: its line, then the pattern's again.
+    f.addClip (cutoff, 2 * bar, bar / 2, R"([{"time": 0, "value": 0.9}])");
+    settle();
+    CHECK (near (f.at (cutoff, 8.5), 0.9f));
+    CHECK (near (f.at (cutoff, 11.0), 0.75f));
+    CHECK (near (f.at (cutoff, 2.0), 0.5f)); // the first placement as before
+
+    // Pattern mode: the pattern's own automation, from the start.
+    f.session->setCurrentPattern (pattern);
+    f.session->setMode (Session::Mode::pattern);
+    settle();
+    CHECK (near (f.at (cutoff, 1.0), 0.25f));
+    f.session->setMode (Session::Mode::song);
+
+    // Removing the filter takes the pattern's lane with it; undo brings it back.
+    REQUIRE (f.mixer->removeEffect (f.filter()));
+    CHECK (f.session->getProject().findPattern (pattern)->automation.empty());
+    REQUIRE (f.session->getHistory().undo());
+    CHECK (f.session->getProject().findPattern (pattern)->automation.size() == 1);
+
+    // An empty list removes the lane: the knob is back where it was set.
+    REQUIRE (f.perform ("pattern.setAutomation", "{\"pattern\": " + juce::String ((int)pattern.value) +
+                                                     ", \"target\": " + Fixture::targetJson (f.cutoff()) +
+                                                     ", \"points\": []}"));
+    settle();
+    CHECK (f.session->getProject().findPattern (pattern)->automation.empty());
+    CHECK (near (f.at (f.cutoff(), 2.0), 0.3f));
+}
+
+TEST_CASE ("A pattern clip that starts later in its pattern plays its automation from there, and a muted one none",
+           "[ui][automation-edge][pattern-automation]")
+{
+    Fixture f;
+    f.playNotes (1);
+    const auto pattern = f.session->getProject().patterns.front().id;
+    const auto cutoff = f.cutoff();
+    REQUIRE (f.perform (
+        "pattern.setAutomation",
+        "{\"pattern\": " + juce::String ((int)pattern.value) + ", \"target\": " + Fixture::targetJson (cutoff) +
+            ", \"points\": [{\"time\": 0, \"value\": 0}, {\"time\": " + juce::String (bar) + ", \"value\": 1}]}"));
+    // The clip from half way through the pattern: it starts at 0.5.
+    const auto clip = f.session->getProject().playlist.clips.front().id;
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)clip.value) + ", \"offset\": " +
+                                        juce::String (bar / 2) + ", \"length\": " + juce::String (bar / 2) + "}"));
+    settle();
+    CHECK (near (f.at (cutoff, 0.0), 0.5f));
+    CHECK (near (f.at (cutoff, 1.0), 0.75f));
+
+    REQUIRE (f.perform ("clip.set", "{\"clip\": " + juce::String ((int)clip.value) + ", \"muted\": true}"));
+    settle();
+    CHECK (f.parameter (cutoff)->getCurve().getNumPoints() == 0);
+}

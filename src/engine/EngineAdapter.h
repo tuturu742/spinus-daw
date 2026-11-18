@@ -330,6 +330,7 @@ private:
         {
             model::Ticks start = 0, length = 0;
             std::vector<model::AutomationPoint> points; // all of them, in time order (some may be past its end)
+            bool fromPattern = false; // a placed pattern's own automation: a Playlist automation clip wins over it
         };
         tracktion::AutomatableParameter::Ptr parameter;
         std::vector<Span> clips; // by start
