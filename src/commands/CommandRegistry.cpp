@@ -2745,7 +2745,8 @@ public:
         juce::String file;
         std::optional<ChannelId> channel; // none: a new channel named `name`
         juce::String name;
-        std::optional<juce::String> onTempoChange; // none: the default for its length
+        std::optional<juce::String> onTempoChange; // none: stretch when its name gives its tempo, else for its length
+        std::optional<double> sourceBpm;           // for stretch; none: from its name, else the song's tempo there
     };
 
     AddAudioClip (juce::var p, Values v) : SnapshotCommand ("clip.addAudio", std::move (p)), values (std::move (v)) {}
@@ -2805,8 +2806,13 @@ protected:
         a.fadeOut = values.fadeOut;
         a.stretchMode = "off"; // time-stretch arrives with Rubber Band
         p.playlist.clips.push_back ({ clip, values.lane, values.start, values.length, false, a });
-        std::get<AudioClip> (p.playlist.clips.back().content).onTempoChange =
-            values.onTempoChange.value_or (defaultOnTempoChange (p, p.playlist.clips.back()));
+        auto& placed = p.playlist.clips.back();
+        auto& audio = std::get<AudioClip> (placed.content);
+        const auto named = bpmFromFileName (values.file);
+        audio.onTempoChange = values.onTempoChange.value_or (named ? "stretch" : defaultOnTempoChange (p, placed));
+        if (audio.onTempoChange == "stretch")
+            audio.sourceBpm =
+                values.sourceBpm.value_or (named.value_or (TempoMap (p.settings).bpmAt ((double)values.start)));
         return juce::Result::ok();
     }
 
@@ -2831,6 +2837,7 @@ public:
         std::optional<juce::String> stretch;
         std::optional<bool> reversed;
         std::optional<juce::String> onTempoChange;
+        std::optional<double> sourceBpm;
         bool fit = false; // the clip keeps the same audio: its length grows or shrinks with the speed
     };
 
@@ -2841,8 +2848,11 @@ public:
 
     juce::String getDescription() const override
     {
-        if (values.onTempoChange && ! values.reversed && ! values.pitch && ! values.speed && ! values.stretch)
-            return *values.onTempoChange == "time" ? "Keep clip fixed in time" : "Keep clip on its beat";
+        if ((values.onTempoChange || values.sourceBpm) && ! values.reversed && ! values.pitch && ! values.speed &&
+            ! values.stretch)
+            return values.onTempoChange == "time"   ? "Keep clip fixed in time"
+                   : values.onTempoChange == "beat" ? "Keep clip on its beat"
+                                                    : "Stretch clip to the tempo";
         if (values.reversed)
             return *values.reversed ? "Reverse clip" : "Play clip forwards";
         if (values.pitch || values.speed || values.stretch)
@@ -2862,6 +2872,7 @@ protected:
         if (a == nullptr)
             return juce::Result::fail ("clip " + juce::String (clip.value) + " is not an audio clip");
         const auto speedBefore = getPlaybackSpeed (*a);
+        const auto before = *a;
         if (values.file)
         {
             if (values.file->isEmpty())
@@ -2882,12 +2893,23 @@ protected:
             a->reversed = *values.reversed;
         if (values.onTempoChange)
             a->onTempoChange = *values.onTempoChange;
+        if (values.sourceBpm)
+            a->sourceBpm = *values.sourceBpm;
+        if (a->onTempoChange != "stretch")
+            a->sourceBpm = 0.0;
+        else if (a->sourceBpm <= 0.0)
+            a->sourceBpm = bpmFromFileName (a->file).value_or (TempoMap (p.settings).bpmAt ((double)c->start));
         if (values.stretch)
             a->stretchMode = *values.stretch;
         else if ((values.pitch || values.speed) && (a->stretchMode == "off" || a->stretchMode == "tempo-sync"))
             a->stretchMode = "stretch"; // a pitch or speed of its own: Rubber Band, unless resampling was chosen
 
-        if (values.fit)
+        if (a->onTempoChange != before.onTempoChange || ! juce::exactlyEqual (a->sourceBpm, before.sourceBpm))
+        {
+            // Stretched or not, or at another source tempo: the clip plays the same part of its file.
+            keepSameAudio (TempoMap (p.settings), *c, before);
+        }
+        else if (values.fit)
         {
             // The same audio in the clip: twice as fast, half as long (and its offset and fades with it).
             const auto ratio = speedBefore / getPlaybackSpeed (*a);
@@ -4162,14 +4184,20 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
             .integer ("fadeIn", "Fade-in length in ticks", false, 0, std::numeric_limits<int>::max())
             .integer ("fadeOut", "Fade-out length in ticks", false, 0, std::numeric_limits<int>::max())
             .custom ("onTempoChange",
-                     "When the song's tempo changes: time (stays at its second) or beat (stays on its beat); "
-                     "default: time for audio over 20 seconds, else beat",
+                     "When the song's tempo changes: time (stays at its second), beat (stays on its beat) or stretch "
+                     "(a loop: stays on its beats, time-stretched to the tempo); default: stretch when the file name "
+                     "gives its tempo (\"drums_120bpm.wav\"; then give the length in the loop's beats), else time for "
+                     "audio over 20 seconds, else beat",
                      false,
-                     schemaObject ({ { "type", "string" }, { "enum", juce::Array<juce::var> { "time", "beat" } } })),
+                     schemaObject (
+                         { { "type", "string" }, { "enum", juce::Array<juce::var> { "time", "beat", "stretch" } } }))
+            .number ("sourceBpm",
+                     "The file's own tempo, for stretch (default: from its name, else the song's tempo at start)",
+                     false, 20.0, 999.0),
         [] (Params& p) -> std::unique_ptr<Command>
         {
             p.allowOnly ({ "lane", "file", "start", "length", "channel", "name", "offset", "gainDb", "fadeIn",
-                           "fadeOut", "onTempoChange" });
+                           "fadeOut", "onTempoChange", "sourceBpm" });
             AddAudioClip::Values v;
             v.lane = p.id<LaneId> ("lane");
             v.file = p.string ("file", true).value_or (juce::String());
@@ -4185,8 +4213,9 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
             v.fadeIn = (Ticks)p.number ("fadeIn", 0, std::numeric_limits<int>::max()).value_or (0);
             v.fadeOut = (Ticks)p.number ("fadeOut", 0, std::numeric_limits<int>::max()).value_or (0);
             v.onTempoChange = p.string ("onTempoChange");
-            if (v.onTempoChange && *v.onTempoChange != "time" && *v.onTempoChange != "beat")
-                p.errors.add ("'onTempoChange' must be time or beat");
+            if (v.onTempoChange && ! juce::StringArray { "time", "beat", "stretch" }.contains (*v.onTempoChange))
+                p.errors.add ("'onTempoChange' must be time, beat or stretch");
+            v.sourceBpm = p.number ("sourceBpm", 20.0, 999.0);
             return std::make_unique<AddAudioClip> (p.json, std::move (v));
         }));
 
@@ -4213,14 +4242,19 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
             .boolean ("reversed", "Play it backwards")
             .custom ("onTempoChange",
                      "When the song's tempo changes: time (stays at its second: vocals, recordings) or beat (stays "
-                     "on its beat: one-shots); either way it plays as long as before",
+                     "on its beat: one-shots), either way playing as long as before; or stretch (loops: stays on its "
+                     "beats, time-stretched to the tempo). Changing it keeps the same audio in the clip",
                      false,
-                     schemaObject ({ { "type", "string" }, { "enum", juce::Array<juce::var> { "time", "beat" } } }))
+                     schemaObject (
+                         { { "type", "string" }, { "enum", juce::Array<juce::var> { "time", "beat", "stretch" } } }))
+            .number ("sourceBpm",
+                     "The file's own tempo, for stretch (default: from its name, else the song's tempo at the clip)",
+                     false, 20.0, 999.0)
             .boolean ("fit", "Keep the same audio in the clip: its length follows the new speed"),
         [] (Params& p) -> std::unique_ptr<Command>
         {
             p.allowOnly ({ "clip", "file", "gainDb", "fadeIn", "fadeOut", "pitch", "speed", "stretch", "reversed",
-                           "onTempoChange", "fit" });
+                           "onTempoChange", "sourceBpm", "fit" });
             SetAudioClip::Values v;
             v.file = p.string ("file");
             if (auto g = p.number ("gainDb", -100.0, 24.0))
@@ -4238,13 +4272,14 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
                 p.errors.add ("'stretch' must be off, stretch, stretch-drums or resample");
             v.reversed = p.boolean ("reversed");
             v.onTempoChange = p.string ("onTempoChange");
-            if (v.onTempoChange && *v.onTempoChange != "time" && *v.onTempoChange != "beat")
-                p.errors.add ("'onTempoChange' must be time or beat");
+            if (v.onTempoChange && ! juce::StringArray { "time", "beat", "stretch" }.contains (*v.onTempoChange))
+                p.errors.add ("'onTempoChange' must be time, beat or stretch");
+            v.sourceBpm = p.number ("sourceBpm", 20.0, 999.0);
             v.fit = p.boolean ("fit").value_or (false);
             if (! v.file && ! v.gainDb && ! v.fadeIn && ! v.fadeOut && ! v.pitch && ! v.speed && ! v.stretch &&
-                ! v.reversed && ! v.onTempoChange)
+                ! v.reversed && ! v.onTempoChange && ! v.sourceBpm)
                 p.errors.add ("nothing to change: give file, gainDb, fadeIn, fadeOut, pitch, speed, stretch, "
-                              "reversed or onTempoChange");
+                              "reversed, onTempoChange or sourceBpm");
             return std::make_unique<SetAudioClip> (p.json, p.id<ClipId> ("clip"), std::move (v));
         }));
 
@@ -4978,7 +5013,7 @@ CommandRegistry::CommandRegistry()
         "project.setTempoChange",
         "Add a tempo change (a tempo marker: the tempo jumps there), or change one: give 'from', its position now, "
         "to move it. Audio clips follow as each one's onTempoChange says: \"time\" stays at its second, \"beat\" on "
-        "its beat.",
+        "its beat, \"stretch\" on its beats, stretched to the new tempo.",
         ParameterSchema()
             .integer ("at", "Where the tempo changes, in ticks after the start", true, 1,
                       std::numeric_limits<int>::max())

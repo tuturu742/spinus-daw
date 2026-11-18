@@ -173,3 +173,97 @@ TEST_CASE ("Tempo changes and each clip's choice are saved; older projects get t
     CHECK (old.settings.tempoChanges.empty());
     CHECK (skipped.joinIntoString ("\n").contains ("tempo change"));
 }
+
+TEST_CASE ("A loop's own tempo is read from its file name", "[tempo]")
+{
+    CHECK (bpmFromFileName ("loops/drums_120bpm.wav") == 120.0);
+    CHECK (bpmFromFileName ("Bass Loop 92 BPM.flac") == 92.0);
+    CHECK (bpmFromFileName ("hats-bpm140-dry.wav") == 140.0);
+    CHECK (bpmFromFileName ("C:\\Samples\\Pad_87.5_BPM_Am.wav") == 87.5);
+    CHECK (! bpmFromFileName ("vocals.wav").has_value());
+    CHECK (! bpmFromFileName ("bpm.wav").has_value());
+    CHECK (! bpmFromFileName ("take 3000bpm.wav").has_value()); // not a tempo
+}
+
+TEST_CASE ("A loop stretched to the tempo keeps its beats when the tempo changes", "[tempo][commands]")
+{
+    auto start = twoClips();
+    const auto id = start.playlist.clips.back().id;
+    CommandHistory history (start);
+
+    // Stretched: at 60 BPM of its own, the same audio (2 s at 120) is 2 beats long; its offset (0.25 s) a quarter beat.
+    REQUIRE (history
+                 .perform (make ("clip.setAudio", "{\"clip\": " + juce::String (id.value) +
+                                                      ", \"onTempoChange\": \"stretch\", \"sourceBpm\": 60}"))
+                 .wasOk());
+    {
+        const auto& c = *history.getProject().findClip (id);
+        const auto& a = std::get<AudioClip> (c.content);
+        CHECK (a.onTempoChange == "stretch");
+        CHECK (a.sourceBpm == Approx (60.0));
+        CHECK (c.start == 2 * bar);
+        CHECK (c.length == 2 * ticksPerQuarterNote);
+        CHECK (a.offset == 240);
+        const TempoMap map (history.getProject().settings);
+        CHECK (secondsInFile (map, c, a, 0.0) == Approx (0.25));
+        CHECK (secondsInFile (map, c, a, (double)c.length) == Approx (2.25));
+    }
+    const auto stretched = *history.getProject().findClip (id);
+
+    // A tempo change before it: the loop keeps its ticks, so it plays faster or slower with the song.
+    REQUIRE (
+        history.perform (make ("project.setTempoChange", "{\"at\": " + juce::String (bar) + ", \"bpm\": 90}")).wasOk());
+    CHECK (*history.getProject().findClip (id) == stretched);
+    REQUIRE (history.perform (make ("project.setTempo", R"({"bpm": 100})")).wasOk());
+    CHECK (*history.getProject().findClip (id) == stretched);
+
+    // Its own tempo corrected: the same audio, in more or fewer beats.
+    REQUIRE (history.perform (make ("clip.setAudio", "{\"clip\": " + juce::String (id.value) + ", \"sourceBpm\": 120}"))
+                 .wasOk());
+    CHECK (history.getProject().findClip (id)->length == 4 * ticksPerQuarterNote);
+
+    // Back on its beat: plays as recorded again, the same audio.
+    REQUIRE (history
+                 .perform (
+                     make ("clip.setAudio", "{\"clip\": " + juce::String (id.value) + ", \"onTempoChange\": \"beat\"}"))
+                 .wasOk());
+    const auto& back = *history.getProject().findClip (id);
+    CHECK (std::get<AudioClip> (back.content).sourceBpm == Approx (0.0));
+    const TempoMap map (history.getProject().settings);
+    CHECK (secondsInFile (map, back, std::get<AudioClip> (back.content), 0.0) == Approx (0.25).margin (0.002));
+    CHECK (secondsInFile (map, back, std::get<AudioClip> (back.content), (double)back.length) ==
+           Approx (2.25).margin (0.002));
+}
+
+TEST_CASE ("A loop placed with its tempo in its name is stretched; its own tempo is saved and checked",
+           "[tempo][commands][model]")
+{
+    CommandHistory history (twoClips());
+    const auto lane = history.getProject().playlist.lanes.front().id;
+    REQUIRE (history
+                 .perform (make ("clip.addAudio", "{\"lane\": " + juce::String (lane.value) +
+                                                      R"(, "file": "drums_90bpm.wav", "start": 0, "length": 3840})"))
+                 .wasOk());
+    const auto& added = std::get<AudioClip> (history.getProject().playlist.clips.back().content);
+    CHECK (added.onTempoChange == "stretch");
+    CHECK (added.sourceBpm == Approx (90.0));
+
+    // Stretched without a tempo in its name: the song's, where it starts.
+    REQUIRE (history
+                 .perform (make ("clip.addAudio", "{\"lane\": " + juce::String (lane.value) +
+                                                      R"(, "file": "pad.wav", "start": 0, "length": 3840,)" +
+                                                      R"( "onTempoChange": "stretch"})"))
+                 .wasOk());
+    CHECK (std::get<AudioClip> (history.getProject().playlist.clips.back().content).sourceBpm == Approx (120.0));
+
+    Project read;
+    REQUIRE (fromJson (toJson (history.getProject()), read).wasOk());
+    CHECK (read == history.getProject());
+
+    auto bad = history.getProject();
+    std::get<AudioClip> (bad.playlist.clips.back().content).sourceBpm = 0.0;
+    CHECK (fromJson (toJson (bad), read).failed());
+    juce::StringArray skipped;
+    REQUIRE (fromJsonSalvaging (toJson (bad), read, skipped).wasOk());
+    CHECK (std::get<AudioClip> (read.playlist.clips.back().content).onTempoChange == "beat");
+}

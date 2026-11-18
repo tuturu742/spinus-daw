@@ -291,7 +291,7 @@ struct AudioClip
     float gainDb = 0.0f;
     /** How the audio is played: "off" as recorded; "stretch" with its pitch and speed set
         apart (Rubber Band; "stretch-drums" keeps hits sharp); "resample" faster is higher, like a record;
-        "tempo-sync" follows the song's tempo (not yet: plays as "off"). */
+        "tempo-sync" (older projects) plays as "off"; following the song's tempo is onTempoChange "stretch". */
     float pitchSemitones = 0.0f; // -24..24
     juce::String stretchMode = "tempo-sync";
     Ticks fadeIn = 0, fadeOut = 0;
@@ -299,8 +299,11 @@ struct AudioClip
     double speed = 1.0;         // 0.25..4: 2 plays twice as fast (half as long)
     bool reversed = false;
     /** When the tempo changes (model/Tempo.h): "time" stays at its second, "beat" stays on its beat; either way
-        it plays as long as before. Offset and fades are in ticks at the tempo where the clip starts. */
+        it plays as long as before. "stretch" (loops) stays on its beats and is time-stretched to the song's tempo:
+        its file plays at sourceBpm, as fast as the song. Offset and fades are in ticks at the tempo where the clip
+        starts; a stretched clip's offset is in its file's beats. */
     juce::String onTempoChange = "beat";
+    double sourceBpm = 0.0; // the file's own tempo, for "stretch"; 0 when not stretched
 
     bool operator== (const AudioClip&) const = default;
 };

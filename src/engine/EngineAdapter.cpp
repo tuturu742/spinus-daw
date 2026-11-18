@@ -247,7 +247,23 @@ void EngineAdapter::applyPlayback (te::WaveAudioClip& wave, const AudioClip& aud
         wave.setIsReversed (audio.reversed);
     const auto speed = juce::jlimit (0.25, 4.0, audio.speed);
     const auto pitch = juce::jlimit (-24.0f, 24.0f, audio.pitchSemitones);
-    if (audio.stretchMode == "stretch" || audio.stretchMode == "stretch-drums")
+    const auto info = wave.getWaveInfo();
+    if (audio.onTempoChange == "stretch" && audio.sourceBpm > 0.0 && info.sampleRate > 0.0)
+    {
+        // A loop: its file's beats (at its own tempo and speed) play as the song's, through tempo changes too.
+        // Tracktion keeps the offset in beats at the tempo where the clip starts, as the model does.
+        auto& loop = wave.getLoopInfo();
+        loop.setNumerator (4);
+        loop.setDenominator (4);
+        loop.setNumBeats ((double)info.lengthInSamples / info.sampleRate * audio.sourceBpm / 60.0 /
+                          model::getPlaybackSpeed (audio));
+        wave.setAutoTempo (true);
+        wave.setTimeStretchMode (audio.stretchMode == "stretch-drums" ? te::TimeStretcher::rubberbandPercussive
+                                                                      : te::TimeStretcher::rubberbandMelodic);
+        wave.setSpeedRatio (1.0);
+        wave.setPitchChange (pitch);
+    }
+    else if (audio.stretchMode == "stretch" || audio.stretchMode == "stretch-drums")
     {
         wave.setTimeStretchMode (audio.stretchMode == "stretch" ? te::TimeStretcher::rubberbandMelodic
                                                                 : te::TimeStretcher::rubberbandPercussive);
@@ -327,6 +343,8 @@ void EngineAdapter::syncAudioClips (const Project& project, bool force)
             continue;
 
         applyPlayback (*wave, *audio);
+        if (wave->getAutoTempo())
+            wave->setPosition (position); // as placed: its length is no longer the file's at its own speed
         wave->setGainDB (audio->gainDb);
         wave->setFadeIn (inSeconds (audio->fadeIn));
         wave->setFadeOut (inSeconds (audio->fadeOut));

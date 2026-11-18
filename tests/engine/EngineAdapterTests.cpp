@@ -932,3 +932,63 @@ TEST_CASE ("Tempo changes play as the model times them: notes and automation on 
     CHECK (edit->tempoSequence.getNumTempos() == 1);
     CHECK (ticksToTime (*edit, 3840.0).inSeconds() == Catch::Approx (2.0));
 }
+
+TEST_CASE ("A loop stretched to the tempo plays its own beats as the song's, through tempo changes too",
+           "[engine][tempo]")
+{
+    Fixture f;
+    auto edit = f.newEdit();
+    EngineAdapter adapter (*edit, f.factory);
+    auto project = makeExample();
+    project.settings.tempoBpm = 120.0;
+    project.settings.tempoChanges = { { 3840, 60.0 } };
+
+    juce::TemporaryFile wav (".wav");
+    {
+        juce::WavAudioFormat format;
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (wav.getFile());
+        auto writer = format.createWriterFor (
+            stream,
+            juce::AudioFormatWriterOptions().withSampleRate (48000.0).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        juce::AudioBuffer<float> silence (1, 48000 * 8); // 8 s: 12 beats at 90 BPM
+        silence.clear();
+        REQUIRE (writer->writeFromAudioSampleBuffer (silence, 0, silence.getNumSamples()));
+    }
+    model::AudioClip audio;
+    audio.file = wav.getFile().getFullPathName();
+    audio.channel = model::ChannelId { 7 };
+    audio.onTempoChange = "stretch";
+    audio.sourceBpm = 90.0;
+    audio.offset = 960; // from its second beat
+    const model::Clip clip {
+        project.allocateId<model::ClipId>(), project.playlist.lanes.front().id, 1920, 7680, false, audio
+    };
+    project.playlist.clips.push_back (clip);
+    adapter.sync (project);
+
+    auto* track = adapter.getChannelTrack (model::ChannelId { 7 });
+    REQUIRE (track != nullptr);
+    te::WaveAudioClip* wave = nullptr;
+    for (auto* c : track->getClips())
+        if (auto* w = dynamic_cast<te::WaveAudioClip*> (c))
+            wave = w;
+    REQUIRE (wave != nullptr);
+    CHECK (wave->getAutoTempo());
+    CHECK (wave->getLoopInfo().getBpm (wave->getWaveInfo()) == Catch::Approx (90.0));
+
+    // Where it plays and what it plays, as the model says: from beat 3 to beat 11, across the slower tempo.
+    const model::TempoMap map (project.settings);
+    CHECK (wave->getPosition().getStart().inSeconds() == Catch::Approx (map.seconds (1920.0)).margin (0.0005));
+    CHECK (wave->getPosition().getEnd().inSeconds() == Catch::Approx (map.seconds (9600.0)).margin (0.0005));
+    // Tracktion plays the file's beat b (from its loop info) at the clip's start beat + b - its offset in beats.
+    CHECK (wave->getOffsetInBeats().inBeats() == Catch::Approx (1.0).margin (0.0005));
+    CHECK (wave->getStartBeat().inBeats() == Catch::Approx (2.0).margin (0.0005));
+    CHECK (wave->getEndBeat().inBeats() == Catch::Approx (10.0).margin (0.0005));
+    for (double ticks : { 0.0, 960.0, 3000.0, 7000.0 })
+    {
+        const auto fileBeat = ticks / 960.0 + wave->getOffsetInBeats().inBeats();
+        CHECK (fileBeat * 60.0 / wave->getLoopInfo().getBpm (wave->getWaveInfo()) ==
+               Catch::Approx (model::secondsInFile (map, clip, audio, ticks)).margin (0.001));
+    }
+}

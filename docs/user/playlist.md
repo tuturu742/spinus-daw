@@ -84,17 +84,24 @@ where you dropped it, showing its waveform; several files go on tracks one below
   (to fix a vocal note by note).
 - Move, resize, mute and delete audio clips like pattern clips. Making a clip shorter plays only the start
   of the file.
-- Audio plays at its own speed: changing the song's tempo does not stretch it (set its speed instead, below).
+- Audio plays at its own speed: changing the song's tempo does not stretch it (set its speed instead, below),
+  unless the clip is set to **Stretch to tempo** (loops, below).
 - **When the tempo changes** (the song's tempo, or a tempo change before or under the clip): right-click the
   clip › **When the tempo changes**:
   - **Fixed in time**: the clip stays at the same second, as it was recorded. For vocals, recordings,
     stems and whole songs. If the song gets slower, the beat moves away from the clip; that is expected.
   - **On its beat**: the clip stays on its bar and beat, and still plays at its own speed. For one-shots,
     chops and risers.
+  - **Stretch to tempo**: for loops. The clip stays on its bars and beats and is sped up or slowed down
+    to the song's tempo (its pitch stays the same), so a drum loop keeps in time through every tempo
+    change. It needs to know the loop's own tempo: Spinus reads it from the file name when it's there
+    (`drums_120bpm.wav`, `Bass Loop 92 BPM.flac`), and otherwise takes the song's tempo where the clip
+    is. If it's wrong, fix it under **The loop's own tempo**. Choosing it keeps the same audio in the clip.
 
-  Either way the clip plays exactly as long as before. New clips longer than 20 seconds and recorded
-  takes are **Fixed in time**; shorter ones are **On its beat**. Projects saved before this get the same
-  choice when they open.
+  **Fixed in time** and **On its beat** play the clip exactly as long as before. New clips longer than
+  20 seconds and recorded takes are **Fixed in time**; shorter ones are **On its beat**; a file whose name
+  gives its tempo is **Stretch to tempo** (and fits the song's tempo when you drop it in). Projects saved
+  before this get the same choice when they open, except that nothing is stretched.
 - Audio clips play in song mode only.
 
 ### Reverse, pitch and speed

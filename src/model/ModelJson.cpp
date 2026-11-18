@@ -134,6 +134,8 @@ juce::var write (const Clip& c)
             .set ("onTempoChange", a->onTempoChange)
             .set ("fadeIn", ticks (a->fadeIn))
             .set ("fadeOut", ticks (a->fadeOut));
+    if (auto* a = std::get_if<AudioClip> (&c.content); a != nullptr && a->sourceBpm > 0.0)
+        o.set ("sourceBpm", a->sourceBpm);
     if (auto* a = std::get_if<AudioClip> (&c.content); a != nullptr && ! a->tune.empty())
     {
         juce::Array<juce::var> notes;
@@ -362,6 +364,7 @@ struct Reader
             a.reversed = (bool)o.getProperty ("reversed", false);
             a.stretchMode = text (o, "stretchMode", a.stretchMode);
             a.onTempoChange = text (o, "onTempoChange", {}); // missing: the default, set once the clip is placed
+            a.sourceBpm = number (o, "sourceBpm", 0.0);
             a.fadeIn = tick (o, "fadeIn", 0);
             a.fadeOut = tick (o, "fadeOut", 0);
             for (auto& n : array (o, "tune"))
