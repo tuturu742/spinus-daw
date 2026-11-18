@@ -160,6 +160,7 @@ add_library (spinus_core STATIC
     model/NoteTools.cpp
     model/Automation.h
     model/Freeze.cpp
+    model/Tempo.cpp
     model/Freeze.h
     model/Ids.h
     model/Scales.cpp

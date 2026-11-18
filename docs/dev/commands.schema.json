@@ -20,6 +20,55 @@
         "additionalProperties": false
       }
     },
+    "project.setTempoChange": {
+      "description": "Add a tempo change (a tempo marker: the tempo jumps there), or change one: give 'from', its position now, to move it. Audio clips follow as each one's onTempoChange says: \"time\" stays at its second, \"beat\" on its beat.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Where the tempo changes, in ticks after the start"
+          },
+          "bpm": {
+            "type": "number",
+            "minimum": 20.0,
+            "maximum": 999.0,
+            "description": "The tempo from there, in beats per minute"
+          },
+          "from": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "The position of the tempo change to move or change"
+          }
+        },
+        "required": [
+          "at",
+          "bpm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "project.removeTempoChange": {
+      "description": "Remove the tempo change at a position.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Its position in ticks"
+          }
+        },
+        "required": [
+          "at"
+        ],
+        "additionalProperties": false
+      }
+    },
     "project.setTimeSignature": {
       "description": "Set the song's time signature (patterns without their own follow it, as whole bars of it that hold their notes).",
       "parameters": {
@@ -1496,6 +1545,14 @@
             "minimum": 0,
             "maximum": 2147483647,
             "description": "Fade-out length in ticks"
+          },
+          "onTempoChange": {
+            "type": "string",
+            "enum": [
+              "time",
+              "beat"
+            ],
+            "description": "When the song's tempo changes: time (stays at its second) or beat (stays on its beat); default: time for audio over 20 seconds, else beat"
           }
         },
         "required": [
@@ -1564,6 +1621,14 @@
           "reversed": {
             "type": "boolean",
             "description": "Play it backwards"
+          },
+          "onTempoChange": {
+            "type": "string",
+            "enum": [
+              "time",
+              "beat"
+            ],
+            "description": "When the song's tempo changes: time (stays at its second: vocals, recordings) or beat (stays on its beat: one-shots); either way it plays as long as before"
           },
           "fit": {
             "type": "boolean",

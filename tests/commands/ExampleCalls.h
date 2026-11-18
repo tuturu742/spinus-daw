@@ -14,6 +14,8 @@ inline const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
 {
     static const std::vector<std::pair<juce::String, juce::String>> calls {
         { "project.setTempo", R"({"bpm": 128})" },
+        { "project.setTempoChange", R"({"at": 7680, "bpm": 90, "from": 3840})" },
+        { "project.removeTempoChange", R"({"at": 3840})" },
         { "project.setKey", R"({"tonic": 2, "scale": "dorian"})" },
         { "channel.add", R"({"name": "Hats", "instrument": {"kind": "stock", "stockType": "spinus.sampler"}})" },
         { "channel.remove", R"({"channel": 9})" },
@@ -110,6 +112,7 @@ inline Project exampleProjectFor (const juce::String& commandName)
     // ID 24: a muted second take of the vocals (clip 16), on lane 12, for clip.useTake.
     project.playlist.clips.push_back ({ project.allocateId<ClipId>(), LaneId { 12 }, 0, 960, true,
                                         std::get<AudioClip> (project.findClip (ClipId { 16 })->content) });
+    project.settings.tempoChanges = { { 3840, 100.0 } }; // bar 2, for the tempo change commands
     if (commandName == "device.loadPreset")
         project.channels[0].instrument.value().stockType = "spinus.3x-osc"; // only 3x Osc has built-in presets
     return project;

@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "../commands/ExampleCalls.h"
@@ -7,6 +8,8 @@
 #include "RealtimeRunner.h"
 #include "commands/CommandHistory.h"
 #include "commands/CommandRegistry.h"
+#include "model/Tempo.h"
+#include "engine/Beats.h"
 #include "engine/BundledDevices.h"
 #include "engine/EngineAdapter.h"
 #include "engine/EngineHost.h"
@@ -874,4 +877,58 @@ TEST_CASE ("Notes taken away, moved or cut short while they play stop sounding",
         session = nullptr;
         root.deleteRecursively();
     }
+}
+
+TEST_CASE ("Tempo changes play as the model times them: notes and automation on their beats, audio where it is",
+           "[engine][tempo]")
+{
+    Fixture f;
+    auto edit = f.newEdit();
+    EngineAdapter adapter (*edit, f.factory);
+    auto project = makeExample(); // its vocals: an audio clip on lane 13 from the start
+    project.settings.tempoBpm = 120.0;
+    project.settings.tempoChanges = { { 3840, 60.0 }, { 11520, 180.0 } };
+    adapter.sync (project);
+
+    const model::TempoMap map (project.settings);
+    for (double ticks : { 0.0, 1920.0, 3840.0, 5760.0, 3 * 3840.0, 4 * 3840.0 })
+        CHECK (ticksToTime (*edit, ticks).inSeconds() == Catch::Approx (map.seconds (ticks)).margin (0.0005));
+
+    // An audio clip across both changes ends where the model's ticks say.
+    juce::TemporaryFile wav (".wav");
+    {
+        juce::WavAudioFormat format;
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (wav.getFile());
+        auto writer = format.createWriterFor (
+            stream,
+            juce::AudioFormatWriterOptions().withSampleRate (48000.0).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        juce::AudioBuffer<float> silence (1, 48000 * 12);
+        silence.clear();
+        REQUIRE (writer->writeFromAudioSampleBuffer (silence, 0, silence.getNumSamples()));
+    }
+    model::AudioClip audio;
+    audio.file = wav.getFile().getFullPathName();
+    audio.channel = model::ChannelId { 7 };
+    const model::Clip clip {
+        project.allocateId<model::ClipId>(), project.playlist.lanes.front().id, 1920, 15360, false, audio
+    };
+    project.playlist.clips.push_back (clip);
+    adapter.sync (project);
+    auto* track = adapter.getChannelTrack (model::ChannelId { 7 });
+    REQUIRE (track != nullptr);
+    te::Clip* wave = nullptr;
+    for (auto* c : track->getClips())
+        if (dynamic_cast<te::WaveAudioClip*> (c) != nullptr)
+            wave = c;
+    REQUIRE (wave != nullptr);
+    CHECK (wave->getPosition().getStart().inSeconds() == Catch::Approx (map.seconds (1920.0)).margin (0.0005));
+    CHECK (wave->getPosition().getEnd().inSeconds() ==
+           Catch::Approx (map.seconds ((double)(clip.start + clip.length))).margin (0.0005));
+
+    // Removing them goes back to one tempo.
+    project.settings.tempoChanges.clear();
+    adapter.sync (project);
+    CHECK (edit->tempoSequence.getNumTempos() == 1);
+    CHECK (ticksToTime (*edit, 3840.0).inSeconds() == Catch::Approx (2.0));
 }

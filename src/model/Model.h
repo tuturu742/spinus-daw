@@ -60,9 +60,19 @@ struct Key
     bool operator== (const Key&) const = default;
 };
 
+/** The tempo jumps to `bpm` at `at` (a tempo marker on the Playlist's ruler). */
+struct TempoChange
+{
+    Ticks at = 0;
+    double bpm = 120.0;
+
+    bool operator== (const TempoChange&) const = default;
+};
+
 struct ProjectSettings
 {
-    double tempoBpm = 120.0;
+    double tempoBpm = 120.0;               // from the start
+    std::vector<TempoChange> tempoChanges; // later, in time order, each after the start (model/Tempo.h)
     TimeSignature timeSignature;
     std::optional<Key> key;
     double sampleRate = 48000.0;
@@ -288,6 +298,9 @@ struct AudioClip
     std::vector<TuneNote> tune; // Spinus Tune's notes, in time order; empty when not tuned
     double speed = 1.0;         // 0.25..4: 2 plays twice as fast (half as long)
     bool reversed = false;
+    /** When the tempo changes (model/Tempo.h): "time" stays at its second, "beat" stays on its beat; either way
+        it plays as long as before. Offset and fades are in ticks at the tempo where the clip starts. */
+    juce::String onTempoChange = "beat";
 
     bool operator== (const AudioClip&) const = default;
 };

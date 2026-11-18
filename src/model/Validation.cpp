@@ -1,4 +1,5 @@
 #include "Validation.h"
+#include "Tempo.h"
 
 #include <cmath>
 #include <functional>
@@ -326,6 +327,9 @@ juce::StringArray validate (const Project& project)
     std::set<uint32_t> ids;
     std::set<DeviceId> devices;
 
+    if (auto problem = tempoChangesProblem (project.settings.tempoChanges); problem.isNotEmpty())
+        problems.add (problem);
+
     auto checkId = [&] (uint32_t id, const juce::String& what)
     {
         if (id == 0)
@@ -466,6 +470,8 @@ juce::StringArray validate (const Project& project)
                 problems.add (name + " plays through a missing channel");
             if (a->offset < 0 || a->fadeIn < 0 || a->fadeOut < 0)
                 problems.add (name + " has a negative offset or fade");
+            if (a->onTempoChange != "time" && a->onTempoChange != "beat")
+                problems.add (name + " has an unknown onTempoChange '" + a->onTempoChange + "'");
         }
 
         if (auto* automation = std::get_if<AutomationClip> (&clip.content))
@@ -518,6 +524,8 @@ juce::StringArray validate (const Project& project)
                 problems.add (name + " plays through a missing channel");
             if (a->offset < 0 || a->fadeIn < 0 || a->fadeOut < 0)
                 problems.add (name + " has a negative offset or fade");
+            if (a->onTempoChange != "time" && a->onTempoChange != "beat")
+                problems.add (name + " has an unknown onTempoChange '" + a->onTempoChange + "'");
         }
     }
 
@@ -529,6 +537,24 @@ juce::StringArray repair (Project& project)
     juce::StringArray notes;
     std::set<uint32_t> ids;
     auto claim = [&ids] (uint32_t id) { return id != 0 && ids.insert (id).second; };
+
+    // Tempo changes: in order, after the start, one per position, each a tempo that can be.
+    {
+        auto& changes = project.settings.tempoChanges;
+        std::stable_sort (changes.begin(), changes.end(), [] (auto& a, auto& b) { return a.at < b.at; });
+        Ticks previous = 0;
+        const auto before = changes.size();
+        std::erase_if (changes,
+                       [&] (const TempoChange& c)
+                       {
+                           if (c.at <= previous || tempoChangesProblem ({ c }).isNotEmpty())
+                               return true;
+                           previous = c.at;
+                           return false;
+                       });
+        if (changes.size() != before)
+            notes.add (juce::String ((int)(before - changes.size())) + " tempo change(s) that could not be");
+    }
     auto named = [] (const juce::String& kind, const juce::String& name)
     { return name.isNotEmpty() ? kind + " '" + name + "'" : "a " + kind; };
 
@@ -717,6 +743,8 @@ juce::StringArray repair (Project& project)
             a->offset = std::max<Ticks> (0, a->offset);
             a->fadeIn = std::max<Ticks> (0, a->fadeIn);
             a->fadeOut = std::max<Ticks> (0, a->fadeOut);
+            if (a->onTempoChange != "time" && a->onTempoChange != "beat")
+                a->onTempoChange = "beat";
         }
         return {};
     };

@@ -142,6 +142,38 @@ TEST_CASE ("Right-dragging the Playlist's timeline loops part of the song; right
     CHECK (! s.session.getLoopRegion (Session::Mode::song));
 }
 
+TEST_CASE ("A tempo change is a tag on the timeline's bar numbers: dragged to move it, one undo step",
+           "[ui][playlist][tempo]")
+{
+    Song s;
+    auto* ruler = s.playlist.getChildComponent (2);
+    REQUIRE (ruler != nullptr);
+    REQUIRE (s.playlist.setTempoChange (7680, 140.0));
+    REQUIRE (s.session.getProject().settings.tempoChanges.size() == 1);
+
+    auto event = [&] (float x, bool dragged, float downX)
+    {
+        return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), { x, 8.0f },
+                                 juce::ModifierKeys::leftButtonModifier, juce::MouseInputSource::defaultPressure, 0.0f,
+                                 0.0f, 0.0f, 0.0f, ruler, ruler, juce::Time::getCurrentTime(), { downX, 8.0f },
+                                 juce::Time::getCurrentTime(), 1, dragged);
+    };
+    const auto from = s.playlist.tickToX (7680) + 4.0f, to = s.playlist.tickToX (15360) + 4.0f;
+    ruler->mouseDown (event (from, false, from));
+    ruler->mouseDrag (event (to, true, from));
+    ruler->mouseUp (event (to, true, from));
+    const auto& changes = s.session.getProject().settings.tempoChanges;
+    REQUIRE (changes.size() == 1);
+    CHECK (changes[0].at == 15360);
+    CHECK (juce::exactlyEqual (changes[0].bpm, 140.0));
+
+    REQUIRE (s.session.getHistory().undo());
+    CHECK (s.session.getProject().settings.tempoChanges[0].at == 7680);
+    REQUIRE (s.playlist.removeTempoChange (7680));
+    CHECK (s.session.getProject().settings.tempoChanges.empty());
+    CHECK (! s.playlist.setTempoChange (3840, 5.0)); // too slow: refused
+}
+
 namespace
 {
 /** Mouse gestures on the Playlist's tracks (child 0), at song ticks and rows. */

@@ -6,6 +6,7 @@
 #include "dsp/sampler/SamplerProcessor.h"
 #include "model/Automation.h"
 #include "model/ModelJson.h"
+#include "model/Tempo.h"
 #include "project/AudioImport.h"
 #include "project/ProjectFiles.h"
 
@@ -135,11 +136,15 @@ public:
         {
             // The part of the file the clip plays: from its offset, for its length, at its speed; a reversed
             // clip plays the file from the end, so it is drawn mirrored.
-            const auto secondsPerTick = 60.0 / (project.settings.tempoBpm * (double)model::ticksPerQuarterNote);
+            // Its offset is in ticks at the tempo where it starts; a tempo change inside the clip is drawn evenly.
+            const model::TempoMap tempo (project.settings);
             const auto speed = model::getPlaybackSpeed (audio);
             const auto fileLength = thumbnail->getTotalLength();
-            auto fileStart = (double)audio.offset * secondsPerTick * speed;
-            auto fileEnd = fileStart + (double)clip.length * secondsPerTick * speed;
+            auto fileStart =
+                (double)audio.offset * model::TempoMap::secondsPerTick (tempo.bpmAt ((double)clip.start)) * speed;
+            auto fileEnd =
+                fileStart +
+                (tempo.seconds ((double)(clip.start + clip.length)) - tempo.seconds ((double)clip.start)) * speed;
             if (audio.reversed)
                 std::tie (fileStart, fileEnd) = std::pair { fileLength - fileEnd, fileLength - fileStart };
             const auto area = r.reduced (1.0f, 14.0f).withTrimmedBottom (-12.0f);
@@ -856,6 +861,15 @@ private:
                          [set, m = juce::String (stretchMode)] { set ({ { "stretch", m }, { "fit", true } }); });
         }
         menu.addSubMenu ("Pitch and speed", how);
+
+        juce::PopupMenu tempo;
+        tempo.addItem ("Fixed in time (vocals, recordings)", true, audio.onTempoChange == "time",
+                       [set] { set ({ { "onTempoChange", "time" } }); });
+        tempo.addItem ("On its beat (one-shots, chops)", true, audio.onTempoChange == "beat",
+                       [set] { set ({ { "onTempoChange", "beat" } }); });
+        tempo.addSeparator();
+        tempo.addItem ("Either way it plays as recorded, as long as before", false, false, nullptr);
+        menu.addSubMenu ("When the tempo changes", tempo);
         menu.addSeparator();
     }
 
@@ -1136,7 +1150,8 @@ public:
     {
         setHelpText ("Timeline: click or drag to move the song position; right-drag to loop a part of the song, "
                      "right-click to stop looping. Double-click to add a marker; click a marker to jump to it, drag "
-                     "it to move it, right-click it to rename or remove it");
+                     "it to move it, right-click it to rename or remove it. Double-click the bar numbers to change "
+                     "the tempo from there; click a tempo change to change or remove it, drag it to move it");
     }
 
     void paint (juce::Graphics& g) override
@@ -1172,6 +1187,19 @@ public:
             g.drawText (marker.name, flag.reduced (4, 0), juce::Justification::centredLeft, true);
         }
 
+        // Tempo changes: a tag with the tempo along the bar numbers.
+        for (auto& change : playlist.session.getProject().settings.tempoChanges)
+        {
+            const auto tag = tempoBounds (change);
+            const bool dragged = draggedTempo && *draggedTempo == change.at;
+            g.setColour (theme.get ("accentAlt").withAlpha (dragged ? 0.6f : 1.0f));
+            g.drawVerticalLine (tag.getX(), 0.0f, (float)getHeight());
+            g.fillRoundedRectangle (tag.toFloat(), 2.0f);
+            g.setColour (theme.get ("panel"));
+            g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+            g.drawText (tempoText (change.bpm), tag.reduced (3, 0), juce::Justification::centredLeft, false);
+        }
+
         if (playlist.playheadTicks >= 0.0)
         {
             const auto x = playlist.tickToX ((model::Ticks)playlist.playheadTicks);
@@ -1195,6 +1223,12 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (const auto* change = tempoAt (e.position))
+        {
+            draggedTempo = change->at;
+            draggedTo = change->at;
+            return;
+        }
         if (const auto* marker = markerAt (e.position))
         {
             if (e.mods.isPopupMenu())
@@ -1209,12 +1243,35 @@ public:
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        if (markerAt (e.position) == nullptr && ! e.mods.isPopupMenu())
-            playlist.addMarker (juce::jmax<model::Ticks> (0, playlist.snapTicks (playlist.xToTick (e.position.x))));
+        if (e.mods.isPopupMenu() || tempoAt (e.position) != nullptr)
+            return;
+        const auto at = juce::jmax<model::Ticks> (0, playlist.snapTicks (playlist.xToTick (e.position.x)));
+        if (e.position.y < (float)numbersHeight)
+        {
+            if (at > 0) // the tempo at the start is the song's tempo
+                askForTempo (at, {});
+            return;
+        }
+        if (markerAt (e.position) == nullptr)
+            playlist.addMarker (at);
     }
 
     void mouseUp (const juce::MouseEvent& e) override
     {
+        if (auto from = std::exchange (draggedTempo, std::nullopt))
+        {
+            // Dragged: moved there (not to the start, which is the song's tempo). Clicked: its menu.
+            if (e.mouseWasDraggedSinceMouseDown())
+            {
+                if (draggedTo != *from && draggedTo > 0)
+                    if (const auto bpm = tempoOf (*from))
+                        playlist.setTempoChange (draggedTo, *bpm, from);
+            }
+            else
+                showTempoMenu (*from);
+            repaint();
+            return;
+        }
         if (auto marker = std::exchange (draggedMarker, std::nullopt))
         {
             // Dragged: moved there. Clicked: the song jumps to it.
@@ -1238,7 +1295,7 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
-        if (draggedMarker)
+        if (draggedMarker || draggedTempo)
         {
             draggedTo = juce::jmax<model::Ticks> (0, playlist.snapTicks (playlist.xToTick (e.position.x)));
             repaint();
@@ -1264,6 +1321,77 @@ public:
 
 private:
     static constexpr int numbersHeight = 16;
+
+    static juce::String tempoText (double bpm)
+    {
+        return juce::String (bpm, juce::exactlyEqual (bpm, std::round (bpm)) ? 0 : 2) + " BPM";
+    }
+
+    juce::Rectangle<int> tempoBounds (const model::TempoChange& change) const
+    {
+        const auto at = draggedTempo && *draggedTempo == change.at ? draggedTo : change.at;
+        const auto width = juce::GlyphArrangement::getStringWidthInt (juce::FontOptions (10.0f, juce::Font::bold),
+                                                                      tempoText (change.bpm)) +
+                           8;
+        return { (int)playlist.tickToX (at), 1, width, numbersHeight - 2 };
+    }
+
+    const model::TempoChange* tempoAt (juce::Point<float> position) const
+    {
+        const auto& changes = playlist.session.getProject().settings.tempoChanges;
+        for (auto it = changes.rbegin(); it != changes.rend(); ++it)
+            if (tempoBounds (*it).toFloat().contains (position))
+                return &*it;
+        return nullptr;
+    }
+
+    std::optional<double> tempoOf (model::Ticks at) const
+    {
+        for (auto& change : playlist.session.getProject().settings.tempoChanges)
+            if (change.at == at)
+                return change.bpm;
+        return std::nullopt;
+    }
+
+    /** Asks for the tempo from `at` on: a new tempo change, or the one at `from` changed. */
+    void askForTempo (model::Ticks at, std::optional<model::Ticks> from)
+    {
+        const auto& project = playlist.session.getProject();
+        const auto now = model::TempoMap (project.settings).bpmAt ((double)at);
+        const auto bar = barTicks (project);
+        const auto where = juce::String (at / bar + 1) + (at % bar != 0 ? " (after its start)" : "");
+        askForName ("Tempo from bar " + where + ", in BPM",
+                    juce::String (now, juce::exactlyEqual (now, std::round (now)) ? 0 : 2),
+                    [safe = juce::Component::SafePointer<Playlist> (&playlist), at, from] (const juce::String& text)
+                    {
+                        const auto bpm = text.retainCharacters ("0123456789.").getDoubleValue();
+                        if (safe != nullptr && bpm > 0.0)
+                            safe->setTempoChange (at, bpm, from); // a tempo out of range is refused, with why
+                    });
+    }
+
+    void showTempoMenu (model::Ticks at)
+    {
+        const auto bpm = tempoOf (at);
+        if (! bpm)
+            return;
+        juce::PopupMenu menu;
+        menu.addSectionHeader ("Tempo change: " + tempoText (*bpm));
+        auto safe = juce::Component::SafePointer<Ruler> (this);
+        menu.addItem ("Change tempo...",
+                      [safe, at]
+                      {
+                          if (safe != nullptr)
+                              safe->askForTempo (at, at);
+                      });
+        menu.addItem ("Remove tempo change",
+                      [safe, at]
+                      {
+                          if (safe != nullptr)
+                              safe->playlist.removeTempoChange (at);
+                      });
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
+    }
 
     juce::Rectangle<int> markerBounds (const model::Marker& marker) const
     {
@@ -1311,6 +1439,7 @@ private:
     Playlist& playlist;
     bool settingLoop = false;
     std::optional<model::MarkerId> draggedMarker;
+    std::optional<model::Ticks> draggedTempo; // the position of the tempo change being dragged
     model::Ticks draggedTo = 0;
 };
 
@@ -1418,18 +1547,20 @@ juce::AudioThumbnail* Playlist::getThumbnail (const juce::File& file)
 bool Playlist::addRecordedTake (const juce::File& file, double startSeconds, std::optional<model::ChannelId> into)
 {
     const auto& project = session.getProject();
-    const auto ticksPerSecond = project.settings.tempoBpm / 60.0 * (double)model::ticksPerQuarterNote;
-    const auto at = (model::Ticks)std::llround (startSeconds * ticksPerSecond);
-    const auto start = juce::jmax<model::Ticks> (0, at), offset = juce::jmax<model::Ticks> (0, -at);
+    const model::TempoMap tempo (project.settings);
+    // Recorded before the song's start (a count-in): that part is cut, as an offset at the start's tempo.
+    const auto start = (model::Ticks)std::llround (tempo.ticks (juce::jmax (0.0, startSeconds)));
+    const auto offset = (model::Ticks)std::llround (juce::jmax (0.0, -startSeconds) /
+                                                    model::TempoMap::secondsPerTick (tempo.bpmAt (0.0)));
     if (! into || project.findChannel (*into) == nullptr)
         return addAudioFile (getFirstFreeRow(), start, file, offset);
 
     // Into an audio track: as another take where it already has audio, otherwise on its first take's track.
     juce::String path;
-    model::Ticks ticks = 0;
-    if (! importAudio (file, path, ticks))
+    double seconds = 0.0;
+    if (! importAudio (file, path, seconds))
         return false;
-    const auto end = start + juce::jmax<model::Ticks> (1, ticks - offset);
+    const auto end = start + clipLength (start, offset, seconds);
     const model::Clip* first = nullptr;
     bool overlaps = false;
     for (const auto& clip : project.playlist.clips)
@@ -1475,7 +1606,7 @@ bool Playlist::hasOtherTakes (model::ClipId id) const
                         });
 }
 
-bool Playlist::importAudio (const juce::File& file, juce::String& path, model::Ticks& ticks)
+bool Playlist::importAudio (const juce::File& file, juce::String& path, double& seconds)
 {
     // Into the project first (decoded to FLAC if the engine cannot play it as it is).
     const auto folder = session.getProjectFolder();
@@ -1494,29 +1625,37 @@ bool Playlist::importAudio (const juce::File& file, juce::String& path, model::T
     if (reader == nullptr || reader->sampleRate <= 0.0)
         return false;
 
-    // The clip's length: the file's length at the project tempo (audio plays at its own speed).
-    const auto seconds = (double)reader->lengthInSamples / reader->sampleRate;
-    ticks = (model::Ticks)std::llround (seconds * session.getProject().settings.tempoBpm / 60.0 *
-                                        (double)model::ticksPerQuarterNote);
+    seconds = (double)reader->lengthInSamples / reader->sampleRate;
     return true;
+}
+
+model::Ticks Playlist::clipLength (model::Ticks start, model::Ticks offset, double seconds) const
+{
+    // The file from its offset (ticks at the tempo where the clip starts), at its own speed, through the song's
+    // tempo changes.
+    const model::TempoMap tempo (session.getProject().settings);
+    const auto from = tempo.seconds ((double)start);
+    const auto plays = seconds - (double)offset * model::TempoMap::secondsPerTick (tempo.bpmAt ((double)start));
+    return juce::jmax<model::Ticks> (1, (model::Ticks)std::llround (tempo.ticks (from + plays)) - start);
 }
 
 bool Playlist::addAudioFile (int row, model::Ticks start, const juce::File& file, model::Ticks offset)
 {
     juce::String path;
-    model::Ticks ticks = 0;
-    if (! importAudio (file, path, ticks))
+    double seconds = 0.0;
+    if (! importAudio (file, path, seconds))
         return false;
 
     const auto lane = ensureLane (row);
     if (! lane.isValid())
         return false;
-    return perform ("clip.addAudio",
-                    object ({ { "lane", (int)lane.value },
-                              { "file", path },
-                              { "start", (juce::int64)juce::jmax<model::Ticks> (0, start) },
-                              { "offset", (juce::int64)offset },
-                              { "length", (juce::int64)juce::jmax<model::Ticks> (1, ticks - offset) } }));
+    return perform (
+        "clip.addAudio",
+        object ({ { "lane", (int)lane.value },
+                  { "file", path },
+                  { "start", (juce::int64)juce::jmax<model::Ticks> (0, start) },
+                  { "offset", (juce::int64)offset },
+                  { "length", (juce::int64)clipLength (juce::jmax<model::Ticks> (0, start), offset, seconds) } }));
 }
 
 bool Playlist::setPoints (model::ClipId id, const std::vector<model::AutomationPoint>& points)
@@ -2111,6 +2250,19 @@ bool Playlist::moveMarker (model::MarkerId id, model::Ticks at)
 bool Playlist::removeMarker (model::MarkerId id)
 {
     return perform ("marker.remove", object ({ { "marker", (int)id.value } }));
+}
+
+bool Playlist::setTempoChange (model::Ticks at, double bpm, std::optional<model::Ticks> from)
+{
+    auto params = object ({ { "at", (juce::int64)at }, { "bpm", bpm } });
+    if (from)
+        params.getDynamicObject()->setProperty ("from", (juce::int64)*from);
+    return perform ("project.setTempoChange", params);
+}
+
+bool Playlist::removeTempoChange (model::Ticks at)
+{
+    return perform ("project.removeTempoChange", object ({ { "at", (juce::int64)at } }));
 }
 
 const model::Marker* Playlist::findMarker (model::MarkerId id) const
