@@ -3,6 +3,7 @@ chords, drum grooves, sections and loudness."""
 
 from __future__ import annotations
 
+import itertools
 import json
 from pathlib import Path
 from typing import Any
@@ -580,3 +581,21 @@ def test_a_songs_guitars_and_the_summary_of_them() -> None:
     assert "Guitars: in 2 of 3 songs, distorted and clean, mostly power chords, with a lead guitar in 1." in text
     assert "Guitars" not in "\n".join(style.summarize([older])["plain"])
     json.dumps(summary)
+
+
+def test_bar_starts_ignore_stray_downbeats() -> None:
+    """Beat This! without its DBN now and then gives a downbeat a beat early: bars stay four beats long, from
+    the place in the bar most downbeats fall on."""
+    beats = [i * 0.5 for i in range(33)]  # 120 BPM, 16 s
+    downbeats = [beats[i] for i in range(1, 33, 4)]  # the bars start on the second beat
+    downbeats.insert(3, beats[12])  # a stray one, a beat before the bar at beat 13
+    starts = style.bar_starts({"beats": beats, "downbeats": downbeats, "beatsPerBar": 4})
+    assert starts == beats[1::4]
+    assert all(abs((b - a) - 2.0) < 1e-9 for a, b in itertools.pairwise(starts))
+
+
+def test_bar_starts_without_downbeats_or_beats() -> None:
+    beats = [i * 0.5 for i in range(9)]
+    assert style.bar_starts({"beats": beats, "beatsPerBar": 4, "firstDownbeat": 1.0}) == beats[2::4]
+    assert style.bar_starts({"downbeats": [0.0, 2.0, 4.0]}) == [0.0, 2.0, 4.0]
+    assert style.bar_starts({}) == []

@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Track creator: bars and sections of reference songs are right more often**: a stray downbeat no longer makes a
+  one-beat bar, which threw off section lengths. Your references are measured again the next time you use them.
 - **OB-Xf's own patch menu lists its factory patches**: Spinus copies them where OB-Xf looks, when OB-Xf has none there
   yet (an OB-Xf installed with its own installer keeps its own).
 - **Presets in the Browser**: a **Presets** section lists each instrument's presets (3x Osc's, Surge XT's, OB-Xf's, Odin 2's
