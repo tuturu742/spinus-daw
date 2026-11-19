@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Presets in the Browser**: a **Presets** section lists each instrument's presets (3x Osc's, Surge XT's, OB-Xf's, Odin 2's
+  and your plugins'). Double-click one to add a channel playing it, or load it on the selected channel from its
+  right-click menu.
 - **Coding agents can read your analyzed songs**: `list_analyzed_songs` and `song_analysis` give what the Analyzer and
   the Track creator measured (tempo, key, loudness, sections, chords, groove, part ranges), by song name only, with
   Spinus's AI off too. The exact notes and drum hits only with **Provide full data through MCP** ticked in the

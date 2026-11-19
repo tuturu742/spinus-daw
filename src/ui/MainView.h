@@ -272,6 +272,8 @@ private:
     void historyChanged();
     void addPattern();
     void useDevice (const plugins::DeviceList::Entry&);
+    /** Loads one of the selected channel's instrument's presets (device.loadPreset): empty, or why not. */
+    juce::String loadPresetOnSelectedChannel (const juce::String& preset);
     /** Offers the free plugins an opened project uses that are not downloaded here; true if it did. */
     bool offerMissingDownloads();
     bool offeredDownloads = false;                                   // by the last project opened

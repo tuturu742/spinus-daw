@@ -5,6 +5,8 @@
 #include "session/ProjectList.h"
 #include "session/Session.h"
 
+#include <map>
+
 namespace spinus::ui
 {
 
@@ -28,6 +30,12 @@ namespace spinus::ui
     subfolders as a tree (only those with projects in them; a project's own folder is the project, not a
     subfolder), closed until clicked. Double-click a project to open it (onOpenProject, onOpenDemo: MainView
     asks to save changes first).
+
+    Presets (closed at first): each instrument that can be added with presets Spinus loads (3x Osc's, and the
+    plugins': their programs, the presets they list, Surge XT's patches, OB-Xf's and Odin 2's), closed until
+    clicked; opening one reads its presets (pluginPresets::find, which loads the plugin hidden the first
+    time). A search lists the presets of the instruments already opened. Double-click a preset to add a channel
+    playing it (onUsePreset), or load it on the selected channel from its right-click menu (onLoadPreset).
 */
 class Browser final : public juce::Component,
                       private juce::ListBoxModel,
@@ -40,6 +48,10 @@ public:
 
     /** Double-click or "Add" in the right-click menu. */
     std::function<void (const plugins::DeviceList::Entry&)> onUse;
+    /** Double-click on a preset: a channel with the instrument, playing the preset. */
+    std::function<void (const plugins::DeviceList::Entry&, const juce::String& preset)> onUsePreset;
+    /** "Load on the selected channel" on a preset (offered when that channel plays the same instrument). */
+    std::function<void (const juce::String& preset)> onLoadPreset;
 
     /** The same on a free open-source plugin that is not downloaded yet: the pack to offer (e.g. "surge-xt"). */
     std::function<void (const juce::String& pack)> onDownload;
@@ -112,11 +124,12 @@ public:
         device,
         problem,
         message,
-        folder,       // a sample folder (`path`), indented by `depth`; the starter pack's has key "starter"
-        sample,       // an audio file (`path`)
-        action,       // "+ Add a folder of samples" (key "addSamples"), "+ Add a folder of projects" ("addProjects")
-        project,      // a project folder (`path`), indented by `depth`; a demo song (its shipped folder) has key "demo"
-        projectFolder // a subfolder of a folder of projects that has projects in it (`path`), indented by `depth`
+        folder,  // a sample folder (`path`), indented by `depth`; the starter pack's has key "starter"
+        sample,  // an audio file (`path`)
+        action,  // "+ Add a folder of samples" (key "addSamples"), "+ Add a folder of projects" ("addProjects")
+        project, // a project folder (`path`), indented by `depth`; a demo song (its shipped folder) has key "demo"
+        projectFolder, // a subfolder of a folder of projects that has projects in it (`path`), indented by `depth`
+        preset         // an instrument's preset (`text`, its category as `note`, the instrument as `entry`)
     };
 
     struct Row
@@ -137,6 +150,11 @@ public:
     static int getRowContentWidth (const Row&);
     int getListContentWidth() const noexcept { return list.getViewport()->getViewedComponent()->getWidth(); }
     void toggleOpen (const juce::String& key);
+    /** Whether a section or group shows its rows (a search opens them all, but an instrument's presets show only
+        once read). */
+    bool isOpen (const juce::String& key) const;
+    /** The presets the Browser read for a device list entry ({name, category}); read now if not read yet. */
+    const std::vector<std::pair<juce::String, juce::String>>& getPresets (int entry);
     void useRow (int row);
     juce::String getStatusText() const { return status.getText(); }
 
@@ -176,7 +194,10 @@ private:
     juce::Label status;
     juce::TextButton scanButton { "Scan plugins" };
     std::vector<Row> rows;
-    std::set<juce::String> closed { "problems" };
+    std::set<juce::String> closed { "problems", "presets" };
+    std::set<juce::String> openPresetGroups; // "presets/<entry>": closed until clicked
+    std::map<juce::String, std::vector<std::pair<juce::String, juce::String>>> presetsRead; // by entry key
+    juce::String presetKey (int entry) const;
     juce::Array<juce::File> sampleFolders;
     juce::File sampleFoldersFile;
     juce::File starterPack;

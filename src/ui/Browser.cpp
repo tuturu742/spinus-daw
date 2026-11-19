@@ -5,7 +5,9 @@
 #include "dsp/sampler/SamplerProcessor.h"
 #include "project/AudioImport.h"
 #include "project/ProjectFiles.h"
+#include "dsp/threeosc/ThreeOscPresets.h"
 #include "session/InstrumentPresets.h"
+#include "session/PluginPresets.h"
 
 namespace spinus::ui
 {
@@ -141,7 +143,7 @@ void Browser::rebuildRows()
     rows.clear();
     const auto query = search.getText().trim();
     const bool searching = query.isNotEmpty();
-    auto isOpen = [&] (const juce::String& key) { return searching || ! closed.contains (key); };
+    auto isOpen = [this] (const juce::String& key) { return this->isOpen (key); };
     auto* catalog = devices.getCatalog();
 
     const auto& entries = devices.getEntries();
@@ -203,6 +205,46 @@ void Browser::rebuildRows()
                 rows.push_back ({ RowKind::message, "None yet: click Scan plugins", {}, {} });
             for (auto& r : items)
                 rows.push_back (r);
+        }
+    }
+
+    // Presets: each instrument with presets Spinus loads, closed until clicked (reading them may load the plugin).
+    rows.push_back ({ RowKind::section, "Presets", {}, "presets" });
+    if (isOpen ("presets"))
+    {
+        for (size_t i = 0; i < entries.size(); ++i)
+        {
+            const auto& e = entries[i];
+            const bool hasPresets = e.device.stockType == "spinus.3x-osc" ||
+                                    e.device.kind == model::Device::Kind::plugin ||
+                                    e.device.stockType.startsWith ("bundled.");
+            if (! e.instrument || ! e.available || ! hasPresets)
+                continue;
+            const auto key = presetKey ((int)i);
+            const auto read = presetsRead.find (key);
+            std::vector<Row> items;
+            if (read != presetsRead.end())
+                for (auto& [name, category] : read->second)
+                    if (! searching || name.containsIgnoreCase (query) || category.containsIgnoreCase (query) ||
+                        e.name.containsIgnoreCase (query))
+                    {
+                        Row row { RowKind::preset, name, {}, key, (int)i };
+                        row.note = category;
+                        items.push_back (std::move (row));
+                    }
+            // While searching, only instruments whose presets match (or whose name does) are listed.
+            if (searching && items.empty() && ! e.name.containsIgnoreCase (query))
+                continue;
+            Row group { RowKind::group, e.name, {}, key, (int)i };
+            if (read != presetsRead.end())
+                group.text << "  (" << juce::String ((int)read->second.size()) << ")";
+            rows.push_back (std::move (group));
+            if (! isOpen (key))
+                continue;
+            if (read != presetsRead.end() && read->second.empty())
+                rows.push_back ({ RowKind::message, "No presets Spinus can load", {}, {} });
+            for (auto& r : items)
+                rows.push_back (std::move (r));
         }
     }
 
@@ -630,8 +672,57 @@ std::optional<juce::File> Browser::sampleFromDrag (const juce::var& description)
     return std::nullopt;
 }
 
+juce::String Browser::presetKey (int entry) const
+{
+    return "presets/" + InstrumentPresets::libraryOf (devices.getEntries()[(size_t)entry].device);
+}
+
+bool Browser::isOpen (const juce::String& key) const
+{
+    if (key.startsWith ("presets/"))
+        return openPresetGroups.contains (key) || (search.getText().trim().isNotEmpty() && presetsRead.contains (key));
+    return search.getText().trim().isNotEmpty() || ! closed.contains (key);
+}
+
+const std::vector<std::pair<juce::String, juce::String>>& Browser::getPresets (int entry)
+{
+    const auto key = presetKey (entry);
+    if (auto kept = presetsRead.find (key); kept != presetsRead.end())
+        return kept->second;
+    const auto& device = devices.getEntries()[(size_t)entry].device;
+    std::vector<std::pair<juce::String, juce::String>> found;
+    if (device.stockType == "spinus.3x-osc")
+    {
+        for (auto& p : dsp::threeOscPresets::all())
+            found.emplace_back (p.name, juce::String());
+    }
+    else
+    {
+        juce::String problem;
+        for (const auto& p : pluginPresets::find (session, device, problem))
+            found.emplace_back (p.name, p.category);
+        if (problem.isNotEmpty())
+            status.setText (problem, juce::dontSendNotification);
+    }
+    return presetsRead[key] = std::move (found);
+}
+
 void Browser::toggleOpen (const juce::String& key)
 {
+    if (key.startsWith ("presets/"))
+    {
+        if (openPresetGroups.contains (key))
+            openPresetGroups.erase (key);
+        else
+        {
+            openPresetGroups.insert (key);
+            for (const auto& r : rows)
+                if (r.kind == RowKind::group && r.key == key && r.entry >= 0)
+                    getPresets (r.entry);
+        }
+        rebuildRows();
+        return;
+    }
     if (closed.contains (key))
         closed.erase (key);
     else
@@ -658,6 +749,12 @@ void Browser::useRow (int row)
         {
             onOpenProject (juce::File (r.path));
         }
+        return;
+    }
+    if (juce::isPositiveAndBelow (row, (int)rows.size()) && rows[(size_t)row].kind == RowKind::preset)
+    {
+        if (onUsePreset)
+            onUsePreset (devices.getEntries()[(size_t)rows[(size_t)row].entry], rows[(size_t)row].text);
         return;
     }
     if (juce::isPositiveAndBelow (row, (int)rows.size()) && rows[(size_t)row].kind == RowKind::sample)
@@ -715,6 +812,8 @@ int Browser::getRowContentWidth (const Row& r)
         return 30 + 12 * r.depth + 14 + textWidth (r.text, 12.5f) + noteWidth (10.5f) + 38 + end;
     case RowKind::action:
         return 22 + textWidth (r.text, 12.0f) + end;
+    case RowKind::preset:
+        return 30 + 14 + textWidth (r.text, 12.5f) + noteWidth (10.5f) + end;
     }
     return 0;
 }
@@ -734,7 +833,7 @@ void Browser::paintListBoxItem (int row, juce::Graphics& g, int width, int heigh
     case RowKind::group:
     {
         const bool section = r.kind == RowKind::section;
-        const bool open = search.getText().trim().isNotEmpty() || ! closed.contains (r.key);
+        const bool open = isOpen (r.key);
         area.removeFromLeft (section ? 6 : 16);
         g.setColour (theme.get (section ? "text" : "textDim"));
         g.setFont (juce::FontOptions (section ? 13.0f : 12.0f, juce::Font::bold));
@@ -861,6 +960,26 @@ void Browser::paintListBoxItem (int row, juce::Graphics& g, int width, int heigh
         g.setFont (juce::FontOptions (12.0f));
         g.drawText (r.text, area.withTrimmedLeft (22), juce::Justification::centredLeft, true);
         break;
+    case RowKind::preset:
+    {
+        area.removeFromLeft (30);
+        g.setColour (theme.get ("textDim"));
+        g.setFont (juce::FontOptions (10.0f));
+        g.drawText (juce::CharPointer_UTF8 ("\xe2\x97\x87"), area.removeFromLeft (14), // ◇
+                    juce::Justification::centredLeft);
+        if (r.note.isNotEmpty())
+        {
+            g.setFont (juce::FontOptions (10.5f));
+            const auto noteWidth = juce::jmin (
+                area.getWidth() / 2, juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), r.note) + 8);
+            g.drawText (r.note, area.removeFromRight (noteWidth).withTrimmedRight (4),
+                        juce::Justification::centredRight, true);
+        }
+        g.setColour (theme.get ("text"));
+        g.setFont (juce::FontOptions (12.5f));
+        g.drawText (r.text, area.withTrimmedRight (4), juce::Justification::centredLeft, true);
+        break;
+    }
     }
 }
 
@@ -924,6 +1043,27 @@ void Browser::showRowMenu (int row)
     const auto r = rows[(size_t)row];
     juce::PopupMenu menu;
 
+    if (r.kind == RowKind::preset)
+    {
+        const auto& entry = devices.getEntries()[(size_t)r.entry];
+        menu.addSectionHeader (r.text);
+        menu.addItem ("Add a channel playing it", [this, row] { useRow (row); });
+        // Loading it on the selected channel: only when that channel plays this instrument.
+        const auto* channel = session.getProject().findChannel (session.getSelectedChannel());
+        const bool same =
+            channel != nullptr && channel->instrument &&
+            InstrumentPresets::libraryOf (*channel->instrument) == InstrumentPresets::libraryOf (entry.device);
+        menu.addItem ("Load on the selected channel" +
+                          (channel != nullptr ? " (" + channel->name + ")" : juce::String()),
+                      same && onLoadPreset != nullptr, false,
+                      [this, preset = r.text]
+                      {
+                          if (onLoadPreset)
+                              onLoadPreset (preset);
+                      });
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
+        return;
+    }
     if (r.kind == RowKind::device)
     {
         const auto& entry = devices.getEntries()[(size_t)r.entry];
