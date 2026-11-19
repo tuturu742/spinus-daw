@@ -989,7 +989,7 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   Later (owner, 2026-11-19).
 - **Known issues:** none left from rc.1: slicing audio clips by transients is done (§11.3). (The short crackles at start-up, on opening a project and when
   the Automixer switches Before and After are gone: owner, 2026-11-18 and 2026-11-19.)
-- **The Track creator's downbeat** (`bar_starts`) bug.
+- **The Track creator's downbeat** (`bar_starts`) bug: done. Bars are every `beatsPerBar`-th beat from the place in the bar most of Beat This!'s downbeats fall on (without its DBN it gives stray downbeats a beat or two apart, which made one-beat bars and wrong section lengths); features version 6, so references are measured again.
 - **No Surge XT submodule:** tests and development builds use the same pinned, checksummed Surge XT release
   users download (cached in CI), instead of compiling Surge from `external/surge`, which then goes (owner
   decision 2026-11-14). Tests then run the build users run, and the repository and clean builds get lighter.

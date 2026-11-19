@@ -38,7 +38,7 @@ import numpy as np
 
 from . import keynames
 
-FEATURES_VERSION = 5  # change when what analyze_song measures changes (Spinus then analyzes songs again)
+FEATURES_VERSION = 6  # change when what analyze_song measures changes (Spinus then analyzes songs again)
 SUMMARY_VERSION = 2  # change when the summary's format changes
 
 NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
@@ -86,18 +86,26 @@ DEGREES = {
 
 
 def bar_starts(song: dict[str, Any]) -> list[float]:
-    """The times bars start (seconds): the downbeats, or every beatsPerBar-th beat from the first
-    downbeat. Empty without a beat."""
+    """The times bars start (seconds): every beatsPerBar-th beat, from the place in the bar most downbeats
+    fall on (Beat This! without its DBN gives stray downbeats a beat or two apart now and then, which would
+    make one-beat bars), or from the first downbeat. The downbeats themselves without beats."""
     beats = [float(b) for b in song.get("beats") or []]
     downbeats = [float(b) for b in song.get("downbeats") or []]
-    if len(downbeats) >= 2:
-        return downbeats
     if len(beats) < 2:
-        return []
+        return downbeats if len(downbeats) >= 2 else []
     per_bar = max(1, int(song.get("beatsPerBar") or 4))
-    given = song.get("firstDownbeat")
-    first = float(given) if given is not None else beats[0]
-    start = int(np.argmin([abs(b - first) for b in beats]))
+    times = np.array(beats)
+    votes: Counter[int] = Counter()
+    for d in downbeats:
+        i = int(np.argmin(np.abs(times - d)))
+        if abs(times[i] - d) < 0.07:
+            votes[i % per_bar] += 1
+    if votes:
+        start = votes.most_common(1)[0][0]
+    else:
+        given = song.get("firstDownbeat")
+        first = float(given) if given is not None else beats[0]
+        start = int(np.argmin(np.abs(times - first))) % per_bar
     return beats[start::per_bar]
 
 

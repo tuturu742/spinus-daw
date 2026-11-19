@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Track creator: bars and sections of reference songs are right more often**: a stray downbeat no longer makes a
+  one-beat bar, which threw off section lengths. Your references are measured again the next time you use them.
 - **Slice at hits**: Shift+right-click an audio clip on the Playlist and choose **Slice at hits** to cut it at each drum hit
   or note start, so each hit is a clip of its own.
 - **OB-Xf's own patch menu lists its factory patches**: Spinus copies them where OB-Xf looks, when OB-Xf has none there
