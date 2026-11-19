@@ -675,9 +675,21 @@ TEST_CASE ("A reversed, pitched and sped-up audio clip exports as it plays, also
     player.runner.start();
     player.started = true;
     player.runner.runUntil (0.2);
-    // A reversed clip plays from a reversed copy Tracktion writes in the background: wait for it.
-    for (int i = 0; i < 200 && song.session->getEdit().engine.getRenderManager().getNumJobs() > 0; ++i)
+    // A reversed clip plays from a reversed copy Tracktion writes in the background: wait until it is there (the
+    // render job may not have started yet, so no job running is not enough), then for the jobs to end.
+    const auto reversedCopyReady = [&]
+    {
+        for (auto* track : tracktion::getAudioTracks (song.session->getEdit()))
+            for (auto* c : track->getClips())
+                if (auto* audio = dynamic_cast<tracktion::AudioClipBase*> (c);
+                    audio != nullptr && audio->getIsReversed())
+                    return audio->getPlaybackFile().isValid();
+        return false;
+    };
+    for (int i = 0;
+         i < 200 && (! reversedCopyReady() || song.session->getEdit().engine.getRenderManager().getNumJobs() > 0); ++i)
         player.runFor (0.05);
+    REQUIRE (reversedCopyReady());
     const auto start = player.play();
     player.runFor (3.0);
     song.session->stop();
