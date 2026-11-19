@@ -423,6 +423,10 @@ private:
         engineButton { "Set up the analysis engine..." }, cancelButton { "Cancel" },
         drumFolderButton { "Drum samples..." }, continueButton { "Continue from the existing analysis" },
         anewButton { "Analyze anew" }, libraryButton { "Saved analyses..." };
+    /** "Provide full data through MCP": agents may read the exact notes and drum hits of analyzed songs
+        (agents::fullDataAllowed); turning it on asks first. */
+    juce::ToggleButton fullDataToggle { "Provide full data through MCP" };
+    void setFullData (bool on);
     juce::ComboBox stemCount;
     juce::Viewport stemsView;
     juce::Component stemRows; // the stems' rows, scrolled by stemsView

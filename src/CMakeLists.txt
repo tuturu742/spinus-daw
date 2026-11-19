@@ -244,6 +244,8 @@ add_library (spinus_core STATIC
     session/StemAutomation.cpp
     session/StemAutomation.h
     session/SongPreparation.cpp
+    session/AnalysisForAgents.cpp
+    session/AnalysisForAgents.h
     session/AnalysisLibrary.cpp
     session/AnalysisLibrary.h
     session/SongPreparation.h

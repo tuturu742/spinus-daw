@@ -3,6 +3,7 @@
 
 #include "ai/AgentInterface.h"
 #include "ai/ProjectContext.h"
+#include "session/AnalysisForAgents.h"
 #include "session/EffectProfiles.h"
 #include "session/InstrumentProfiles.h"
 #include "commands/CommandRegistry.h"
@@ -1214,4 +1215,87 @@ TEST_CASE ("The music tools are told what a learned effect suits and what its se
         if (d["device"]["stockType"].toString() == "spinus.filter")
             listed = d["goodFor"].toString() == "taming harsh highs";
     CHECK (listed);
+}
+
+TEST_CASE ("Agents read analyzed songs: what was measured, the exact notes only when the user allows it",
+           "[ai][agents][analysis]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto sessionId = f.connect();
+
+    // Nothing analyzed yet.
+    auto result = f.call (sessionId, "list_analyzed_songs", object ({}));
+    CHECK_FALSE ((bool)result["isError"]);
+    CHECK (result["content"][0]["text"].toString().startsWith ("No songs are analyzed yet"));
+
+    // One song in the library, as the Analyzer and the Track creator keep it.
+    const auto aiFolder = f.folder.root.getChildFile ("ai");
+    auto library = AnalysisLibrary::inAiFolder (aiFolder);
+    const juce::String digest = "0123456789abcdef0123456789abcdef";
+    juce::Array<juce::var> beats, downbeats, notes, hits;
+    for (int i = 0; i < 16; ++i)
+        beats.add (i * 0.5);
+    for (int i = 0; i < 4; ++i)
+        downbeats.add (i * 2.0);
+    for (int i = 0; i < 10; ++i)
+        notes.add (
+            object ({ { "start", i * 1.0 }, { "end", i * 1.0 + 0.5 }, { "pitch", 40 + i }, { "velocity", 90 } }));
+    hits.add (object ({ { "time", 0.0 }, { "kind", "kick" }, { "velocity", 100 } }));
+    REQUIRE (library.set (
+        digest, "Reference Song.flac", "rhythm",
+        object ({ { "tempo", 120.0 }, { "beatsPerBar", 4 }, { "beats", beats }, { "downbeats", downbeats } })));
+    REQUIRE (library.set (digest, "Reference Song.flac", "key", object ({ { "name", "A minor" } })));
+    REQUIRE (library.setIn (digest, "Reference Song.flac", "notes", "htdemucs/bass", notes));
+    REQUIRE (library.setIn (digest, "Reference Song.flac", "drums", "htdemucs", hits));
+
+    result = f.call (sessionId, "list_analyzed_songs", object ({}));
+    auto text = result["content"][0]["text"].toString();
+    INFO (text);
+    CHECK (text.contains ("Reference Song.flac"));
+    CHECK (text.contains ("notes: htdemucs/bass"));
+    CHECK_FALSE (text.contains (f.folder.root.getFullPathName())); // names only, no paths
+
+    // What was measured, by a part of its name; no notes by default.
+    result = f.call (sessionId, "song_analysis", object ({ { "song", "reference" } }));
+    REQUIRE_FALSE ((bool)result["isError"]);
+    auto found = juce::JSON::parse (result["content"][0]["text"].toString());
+    CHECK (found["name"] == "Reference Song.flac");
+    CHECK ((double)found["rhythm"]["tempo"] == Catch::Approx (120.0));
+    CHECK ((int)found["rhythm"]["bars"] == 4);
+    CHECK (found["key"]["name"] == "A minor");
+    CHECK_FALSE ((bool)found["fullData"]);
+    CHECK (found["exactNotes"].toString().contains ("Provide full data through MCP"));
+    CHECK (! found.hasProperty ("notes"));
+
+    result = f.call (sessionId, "song_analysis", object ({ { "song", "Reference Song" }, { "part", "bass" } }));
+    CHECK ((bool)result["isError"]);
+    CHECK (result["content"][0]["text"].toString().contains ("Provide full data through MCP"));
+    result = f.call (sessionId, "song_analysis", object ({ { "song", "Another" } }));
+    CHECK ((bool)result["isError"]);
+
+    // Allowed: one part's notes, a stretch of time, and the drum hits.
+    agents::setFullDataAllowed (aiFolder, true);
+    result = f.call (sessionId, "song_analysis",
+                     object ({ { "song", "Reference Song" }, { "part", "bass" }, { "from", 2.0 }, { "to", 5.0 } }));
+    REQUIRE_FALSE ((bool)result["isError"]);
+    found = juce::JSON::parse (result["content"][0]["text"].toString());
+    CHECK (found["part"] == "htdemucs/bass");
+    REQUIRE (found["notes"].getArray() != nullptr);
+    CHECK (found["notes"].getArray()->size() == 3); // starting at 2, 3 and 4 s
+    CHECK ((int)found["notes"][0]["pitch"] == 42);
+
+    result =
+        f.call (sessionId, "song_analysis", object ({ { "song", digest.substring (0, 20) }, { "part", "drums" } }));
+    REQUIRE_FALSE ((bool)result["isError"]);
+    found = juce::JSON::parse (result["content"][0]["text"].toString());
+    CHECK (found["hits"][0]["kind"] == "kick");
+
+    result = f.call (sessionId, "song_analysis", object ({ { "song", "Reference Song" }, { "part", "vocals" } }));
+    CHECK ((bool)result["isError"]);
+    CHECK (result["content"][0]["text"].toString().contains ("htdemucs/bass"));
+
+    // The setting keeps the Analyzer's other settings.
+    agents::setFullDataAllowed (aiFolder, false);
+    CHECK_FALSE (agents::fullDataAllowed (aiFolder));
 }
