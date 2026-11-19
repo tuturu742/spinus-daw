@@ -231,8 +231,8 @@ off the grid) and right-click a point to remove it. Move, resize and delete the 
 - **A pattern's own automation** plays wherever the pattern is placed, and in pattern mode. Where an
   automation clip on the Playlist moves the same setting, the Playlist's clip wins; before and after it,
   the pattern's line plays again. Where two placed patterns move the same setting at once, the one that
-  starts later wins. Drawing it in the Piano Roll comes next; for now agents can write it
-  (`pattern.setAutomation`).
+  starts later wins. Draw it in the lane under the
+  [Piano Roll](piano-roll.md#pattern-automation); agents write it with `pattern.setAutomation`.
 - A setting with steps (a switch, or a choice such as the Filter's Slope) follows the line and takes the
   nearest step, as in FL Studio: on a slope between two points it changes halfway. To change exactly on a
   point, make the line jump there (the **Square** shape, or two points at the same place).

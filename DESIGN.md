@@ -978,7 +978,7 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   lost), used on the owner's computer only, never committed; the tests in the repository use short generated
   audio.
 - **What rc.1 left partly done:** tempo glides (tempo changes and loops that stretch to the tempo: done; send levels: done; finding missing audio files: done, §11.3); automation that belongs to a pattern
-  and plays wherever it is placed (playback done; drawing it in the Piano Roll next); and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI
+  and plays wherever it is placed (done: drawn in the Piano Roll's lane); and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI
   out (§10.2).
 - **Known issues:** short crackles when the Automixer switches Before and After (those at start-up and on opening a project are gone, owner 2026-11-18); presets in the Browser (§8.1);
   slicing audio clips by transients (§11.3); OB-Xf's own patch menu

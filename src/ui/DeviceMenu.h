@@ -21,5 +21,8 @@ bool createAutomationClip (juce::Component& from, Session&, const model::Paramet
 /** A submenu of a device's parameters (in groups of 40 for big plugins); choosing one creates an
     automation clip for it. */
 juce::PopupMenu makeAutomateParameterMenu (juce::Component& from, Session&, model::DeviceId);
+/** The same, calling `chosen` with the parameter chosen (while `from` is still there). */
+juce::PopupMenu makeAutomateParameterMenu (juce::Component& from, Session&, model::DeviceId,
+                                           std::function<void (const model::ParameterTarget&)> chosen);
 
 } // namespace spinus::ui

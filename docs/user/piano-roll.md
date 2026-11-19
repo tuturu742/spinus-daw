@@ -228,6 +228,21 @@ to choose what the bars show and change:
   with CLAP plugins that support per-note changes, such as Surge XT. Other plugins (VST3, LV2) play the
   notes without them; the lane says so when the selected channel has such a plugin.
 
+### Pattern automation
+
+The same corner menu also draws **automation that belongs to the pattern**: a line that moves a
+setting over the pattern, and plays wherever the pattern is placed on the Playlist (and in pattern mode).
+
+- Under **Pattern automation**, **Automate...** lists what you can move: the channel's volume and pan,
+  the instrument's knobs, the mixer track's volume and pan, and the knobs of the effects on that track.
+  Pick one and the lane shows its line for this pattern.
+- Click in the lane to add a point and drag it into place (it snaps to the grid; hold **Alt** to place
+  it freely). Drag a point to move it, right-click a point to delete it. Each change is one undo step.
+- The lines the pattern already has are listed under **Pattern automation**, to go back to one.
+  **Remove this automation** deletes the shown line.
+- Where an automation clip on the Playlist moves the same setting, the Playlist's clip wins there.
+- Choose **Velocity** (or another note value) to go back to editing the notes.
+
 ## Playing with the computer keyboard
 
 No MIDI keyboard? Press **Ctrl+T** (or click **⌨** in the top bar, or **Options › Typing keyboard to

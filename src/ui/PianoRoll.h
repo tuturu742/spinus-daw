@@ -20,7 +20,8 @@ namespace spinus::ui
     and duplicate. Notes snap to the grid
     (the pattern's step by default, or the snap chosen beside the tools; hold Alt to place freely). The lane at the
    bottom edits one value of each note, chosen in its corner as in FL: velocity, release velocity, pan, fine pitch or
-   volume; right-click a bar to reset it. The wheel scrolls (Shift: sideways), Ctrl+wheel zooms around the mouse
+   volume; right-click a bar to reset it. The same corner draws the pattern's own automation of a control instead
+   (setLaneTarget). The wheel scrolls (Shift: sideways), Ctrl+wheel zooms around the mouse
    (Ctrl+Shift+wheel: the keys' height); the toolbar's zoom buttons, Ctrl+= and Ctrl+- zoom too, Ctrl+0 fits the
    pattern. Follow (on by default, remembered) turns the page while the pattern plays.
 
@@ -80,6 +81,16 @@ public:
     static void setNoteValue (model::Note&, LaneMode, float value);
     /** Why the selected channel's instrument may not respond to the lane (empty when it does). */
     juce::String getLaneNote() const;
+
+    /** Pattern automation (FL's): the lane shows the current pattern's own automation of this control instead
+        of a note value (setLaneMode goes back to one). Click to add a point and drag it, drag a point to move it,
+        right-click a point to delete it; each gesture is one undo step. */
+    void setLaneTarget (const model::ParameterTarget&);
+    const std::optional<model::ParameterTarget>& getLaneTarget() const noexcept { return laneTarget; }
+    /** The current pattern's points for the lane's control, in time order (empty when it has none). */
+    std::vector<model::AutomationPoint> getLanePoints() const;
+    /** Replaces them as one undo step (pattern.setAutomation); an empty list removes the pattern's lane. */
+    bool setLanePoints (const std::vector<model::AutomationPoint>&);
 
     /** The notes being shown (the selected channel's notes in the current pattern, sorted by start). */
     const std::vector<model::Note>& getNotes() const noexcept { return notes; }
@@ -382,6 +393,7 @@ private:
     model::Ticks lastLength = 240;
     float lastVelocity = 0.78f;
     LaneMode laneMode = LaneMode::velocity;
+    std::optional<model::ParameterTarget> laneTarget; // pattern automation shown in the lane instead
     double playheadTicks = -1.0;
 
     /** The pattern's loop region as shown: the one being dragged on the timeline, or the session's. */
