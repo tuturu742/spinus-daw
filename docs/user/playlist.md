@@ -111,6 +111,7 @@ where you dropped it, showing its waveform; several files go on tracks one below
 | Item | What it does |
 |---|---|
 | **Reverse** | Plays the clip backwards (for reverse cymbals and risers). The waveform turns round too. |
+| **Slice at hits** | Cuts the clip at each drum hit or note start it finds (like FL Studio's Chop), so each hit is a clip of its own to move, delete or repeat. The cuts fall just before each hit, not on the grid. One undo step. |
 | **Pitch** | Up or down by up to an octave, keeping its length. |
 | **Speed** | Half speed to double speed, keeping its pitch. The clip grows or shrinks so the same audio still fits. |
 | **Pitch and speed** | **Apart (stretch)**, the default: pitch and speed change separately. **For drums and hits**: the same, keeping drum hits sharp. **Together, like a record (resample)**: faster is higher and higher is faster, as on a turntable. **Off**: as recorded. |

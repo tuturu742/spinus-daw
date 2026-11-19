@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "commands/CommandRegistry.h"
@@ -839,4 +840,54 @@ TEST_CASE ("Playlist selection and moves with a folded group", "[ui][playlist][g
     CHECK (s.model().lanes.size() == 5);    // Bass's went onto a new track
     CHECK (clipOn (lane (4)).id.isValid());
     CHECK (! clipOn (lane (0)).id.isValid());
+}
+
+TEST_CASE ("Slice at hits cuts an audio clip where its hits are, as one undo step", "[ui][playlist][slice]")
+{
+    Song s;
+    REQUIRE (s.session.getProject().settings.tempoBpm == Catch::Approx (120.0));
+
+    // Two seconds of drum-like hits every half second: at 120 BPM, every 960 ticks.
+    const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getChildFile ("spinus-hits-" + juce::Uuid().toString() + ".wav");
+    {
+        constexpr double rate = 48000.0;
+        juce::AudioBuffer<float> audio (1, (int)(2.0 * rate));
+        audio.clear();
+        juce::Random random (7);
+        for (const auto time : { 0.0, 0.5, 1.0, 1.5 })
+            for (int i = 0; i < (int)(0.12 * rate); ++i)
+                audio.setSample (0, (int)(time * rate) + i,
+                                 0.8f * std::exp (-(float)i / (float)(0.025 * rate)) *
+                                     (random.nextFloat() * 2.0f - 1.0f));
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
+        auto writer = wav.createWriterFor (
+            stream, juce::AudioFormatWriterOptions().withSampleRate (rate).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+    }
+    REQUIRE (s.playlist.addAudioFile (0, 0, file));
+    const auto id = s.model().clips.back().id;
+
+    const auto hits = s.playlist.findHits (id);
+    REQUIRE (hits.size() == 3);
+    for (size_t i = 0; i < hits.size(); ++i)
+        CHECK (std::abs ((double)hits[i] - 960.0 * (double)(i + 1)) < 30.0); // a zero crossing just before
+
+    const auto steps = s.session.getHistory().getUndoDescriptions().size();
+    REQUIRE (s.playlist.sliceAtHits (id));
+    REQUIRE (s.model().clips.size() == 4);
+    CHECK (s.session.getHistory().getUndoDescriptions().size() == steps + 1);
+    CHECK (s.session.getHistory().getUndoDescriptions().strings.getLast() == "Slice clip at hits");
+    // Each part plays on from where the last one ended: together they are the clip as it was.
+    auto clips = s.model().clips;
+    std::sort (clips.begin(), clips.end(), [] (auto& a, auto& b) { return a.start < b.start; });
+    for (size_t i = 1; i < clips.size(); ++i)
+        CHECK (clips[i].start == clips[i - 1].start + clips[i - 1].length);
+    CHECK (clips.back().start + clips.back().length == 3840);
+
+    s.session.getHistory().undo();
+    CHECK (s.model().clips.size() == 1);
+    file.deleteFile();
 }
