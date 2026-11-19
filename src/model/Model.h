@@ -192,36 +192,6 @@ struct Note
 };
 
 /** A pattern holds notes per channel (the step sequencer is a view of the same notes). */
-struct Pattern
-{
-    PatternId id;
-    juce::String name;
-    juce::uint32 colour = 0xff6aa84f;
-    Ticks length = ticksPerQuarterNote * 16; // four 4/4 bars (one bar = 3840 ticks)
-    std::map<ChannelId, std::vector<Note>> notes;
-    /** The pattern's own time signature (its bars in the Piano Roll and Channel Rack); none: the song's. */
-    std::optional<TimeSignature> timeSignature;
-    /** The Channel Rack's steps are sixteenth-note triplets (six per quarter note) instead of sixteenths. */
-    bool tripletSteps = false;
-
-    /** Swing, 0 (straight) to 1: notes on every second step play later, by up to half a step (a dotted
-        feel). Only how the pattern plays: the notes themselves stay where they are. */
-    float swing = 0.0f;
-
-    /** One Channel Rack step: a sixteenth, or a sixteenth-note triplet. */
-    Ticks getStepTicks() const noexcept { return ticksPerQuarterNote / (tripletSteps ? 6 : 4); }
-    /** How much later a note starting at `start` plays because of the swing: notes on every second step. */
-    Ticks getSwingDelay (Ticks start) const noexcept
-    {
-        const auto step = getStepTicks();
-        if (swing <= 0.0f || step <= 0 || start % (2 * step) != step)
-            return 0;
-        return (Ticks)std::llround ((double)swing * (double)step / 2.0);
-    }
-
-    bool operator== (const Pattern&) const = default;
-};
-
 //==============================================================================
 /** Something automation can control. */
 struct ParameterTarget
@@ -253,6 +223,50 @@ struct AutomationPoint
     float curve = 0.0f; // -1..1, shape of the segment that starts here (0 = linear)
 
     bool operator== (const AutomationPoint&) const = default;
+};
+
+/** A pattern's own automation of one control (FL's pattern automation, drawn under the Piano Roll): it plays
+    wherever the pattern is placed, and in pattern mode. Times are ticks from the pattern's start. */
+struct PatternAutomation
+{
+    ParameterTarget target;
+    std::vector<AutomationPoint> points; // in time order
+
+    bool operator== (const PatternAutomation&) const = default;
+};
+
+struct Pattern
+{
+    PatternId id;
+    juce::String name;
+    juce::uint32 colour = 0xff6aa84f;
+    Ticks length = ticksPerQuarterNote * 16; // four 4/4 bars (one bar = 3840 ticks)
+    std::map<ChannelId, std::vector<Note>> notes;
+    /** The pattern's own time signature (its bars in the Piano Roll and Channel Rack); none: the song's. */
+    std::optional<TimeSignature> timeSignature;
+    /** The Channel Rack's steps are sixteenth-note triplets (six per quarter note) instead of sixteenths. */
+    bool tripletSteps = false;
+
+    /** Swing, 0 (straight) to 1: notes on every second step play later, by up to half a step (a dotted
+        feel). Only how the pattern plays: the notes themselves stay where they are. */
+    float swing = 0.0f;
+
+    /** The pattern's automation, one lane per control. Where a Playlist automation clip moves the same control,
+        the Playlist's wins (owner, 2026-11-18). */
+    std::vector<PatternAutomation> automation;
+
+    /** One Channel Rack step: a sixteenth, or a sixteenth-note triplet. */
+    Ticks getStepTicks() const noexcept { return ticksPerQuarterNote / (tripletSteps ? 6 : 4); }
+    /** How much later a note starting at `start` plays because of the swing: notes on every second step. */
+    Ticks getSwingDelay (Ticks start) const noexcept
+    {
+        const auto step = getStepTicks();
+        if (swing <= 0.0f || step <= 0 || start % (2 * step) != step)
+            return 0;
+        return (Ticks)std::llround ((double)swing * (double)step / 2.0);
+    }
+
+    bool operator== (const Pattern&) const = default;
 };
 
 struct PatternClip

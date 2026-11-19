@@ -442,6 +442,23 @@ juce::StringArray validate (const Project& project)
                     break;
                 }
         }
+
+        std::vector<ParameterTarget> automated;
+        for (auto& lane : pattern.automation)
+        {
+            if (! targetFound (project, devices, lane.target))
+                problems.add (name + " automates a missing target");
+            if (std::find (automated.begin(), automated.end(), lane.target) != automated.end())
+                problems.add (name + " has two automation lanes for one control");
+            automated.push_back (lane.target);
+            for (size_t i = 0; i < lane.points.size(); ++i)
+                if (lane.points[i].value < 0.0f || lane.points[i].value > 1.0f || lane.points[i].time < 0 ||
+                    (i > 0 && lane.points[i].time < lane.points[i - 1].time))
+                {
+                    problems.add (name + " has invalid automation points");
+                    break;
+                }
+        }
     }
 
     // Playlist
@@ -728,6 +745,35 @@ juce::StringArray repair (Project& project)
     for (auto& insert : project.mixer.inserts)
         for (auto& slot : insert.effects)
             addDevice (slot.device);
+
+    // A pattern's automation of something no longer there goes; its points are put in order.
+    for (auto& pattern : project.patterns)
+    {
+        std::vector<ParameterTarget> automated;
+        const auto removed = std::erase_if (pattern.automation,
+                                            [&] (const PatternAutomation& lane)
+                                            {
+                                                const bool keep = targetFound (project, devices, lane.target) &&
+                                                                  std::find (automated.begin(), automated.end(),
+                                                                             lane.target) == automated.end();
+                                                automated.push_back (lane.target);
+                                                return ! keep;
+                                            });
+        if (removed > 0)
+            notes.add (juce::String ((int)removed) + " automation lane" + (removed == 1 ? "" : "s") + " in " +
+                       named ("pattern", pattern.name));
+        for (auto& lane : pattern.automation)
+        {
+            auto& points = lane.points;
+            std::erase_if (points, [] (const AutomationPoint& p) { return ! std::isfinite (p.value); });
+            for (auto& point : points)
+            {
+                point.value = juce::jlimit (0.0f, 1.0f, point.value);
+                point.time = std::max<Ticks> (0, point.time);
+            }
+            std::stable_sort (points.begin(), points.end(), [] (auto& a, auto& b) { return a.time < b.time; });
+        }
+    }
 
     /** Why a clip's content cannot be kept, or empty. Fixes what can be fixed. */
     auto contentProblem = [&] (auto& content) -> juce::String

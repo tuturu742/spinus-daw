@@ -6,10 +6,10 @@ what happened, and attach the project if you can.
 
 ## Being worked on
 
-- **Short crackles or clipping on some systems** when Spinus starts, when a project opens, or when
-  switching **Before** and **After** in the [Automixer](automixer.md). Spinus's own output is clean in
-  tests, so the cause may be the sound system switching devices. If you hear it, please report which
-  sound card and sound system (PipeWire, JACK) you use.
+- **Short crackles or clipping on some systems** when switching **Before** and **After** in the
+  [Automixer](automixer.md). (The crackles when Spinus started or a project opened are gone.) Spinus's own
+  output is clean in tests, so the cause may be the sound system switching devices. If you hear it, please
+  report which sound card and sound system (PipeWire, JACK) you use.
 - **Flatpak: JACK can make every program crackle** with newer PipeWire versions, and Spinus then
   can't quit. The Flatpak now uses ALSA with PipeWire Sound Server; see
   [Troubleshooting](troubleshooting.md#crackles-and-dropouts) if you chose JACK yourself.

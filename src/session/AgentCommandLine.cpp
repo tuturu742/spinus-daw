@@ -163,7 +163,7 @@ juce::String keyName (const model::Key& key)
     target as the control shows it (Session::parseTargetValue). The params as they were when nothing needs it. */
 juce::var readPointTexts (Session& session, const juce::String& command, const juce::var& params, juce::String& error)
 {
-    if (command != "clip.addAutomation" && command != "clip.setPoints")
+    if (command != "clip.addAutomation" && command != "clip.setPoints" && command != "pattern.setAutomation")
         return params;
     const auto* points = params["points"].getArray();
     if (points == nullptr)
@@ -175,7 +175,7 @@ juce::var readPointTexts (Session& session, const juce::String& command, const j
         return params;
 
     model::ParameterTarget target;
-    if (command == "clip.addAutomation")
+    if (command == "clip.addAutomation" || command == "pattern.setAutomation")
     {
         if (auto e = model::targetFromJson (params["target"], target); e.isNotEmpty())
             return params; // the command says what is wrong with it
@@ -486,10 +486,19 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
         int notes = 0;
         for (auto& [channel, list] : pat.notes)
             notes += (int)list.size();
-        patterns.add (object ({ { "pattern", (int)pat.id.value },
-                                { "name", pat.name },
-                                { "bars", (double)pat.length / (double)barTicks },
-                                { "notes", notes } }));
+        auto summary = object ({ { "pattern", (int)pat.id.value },
+                                 { "name", pat.name },
+                                 { "bars", (double)pat.length / (double)barTicks },
+                                 { "notes", notes } });
+        if (! pat.automation.empty())
+        {
+            // What the pattern automates itself (pattern.setAutomation), wherever it is placed.
+            juce::Array<juce::var> automated;
+            for (auto& lane : pat.automation)
+                automated.add (model::targetToJson (lane.target));
+            summary.getDynamicObject()->setProperty ("automation", automated);
+        }
+        patterns.add (summary);
     }
 
     // Each lane with its clips, in order (where they are and what they play), so an agent can move them (clip.set).

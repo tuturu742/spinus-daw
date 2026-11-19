@@ -88,6 +88,8 @@ inline const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
         { "pattern.set", R"({"pattern": 11, "name": "Chorus drums", "colour": "#ffd65c5c"})" },
         { "pattern.clone", R"({"pattern": 11})" },
         { "pattern.setSwing", R"({"pattern": 11, "swing": 0.6})" },
+        { "pattern.setAutomation", R"({"pattern": 11, "target": {"kind": "channelPan", "channel": 7},
+              "points": [{"time": 0, "value": 0.2}, {"time": 3840, "value": 0.8, "curve": 0.3}]})" },
         { "project.setTimeSignature", R"({"numerator": 6, "denominator": 8})" },
         { "pattern.setNotes",
           R"({"pattern": 11, "channel": 9, "notes": [{"start": 0, "length": 480, "pitch": 48, "velocity": 0.6}]})" },

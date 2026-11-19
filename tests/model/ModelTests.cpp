@@ -346,3 +346,28 @@ TEST_CASE ("Keys written with flats name their notes and chords with flats", "[m
     CHECK (nameChord ({ 63, 67, 70 }, true) == "Eb");
     CHECK (nameChord ({ 62, 67, 70 }, true) == "Gm/D");
 }
+
+TEST_CASE ("A pattern's automation is saved, and a lane of something missing is refused or left out",
+           "[model][pattern-automation]")
+{
+    auto p = makeExample();
+    ParameterTarget pan;
+    pan.kind = ParameterTarget::Kind::channelPan;
+    pan.channel = p.channels.front().id;
+    p.patterns.front().automation.push_back ({ pan, { { 0, 0.2f, 0.0f }, { 3840, 0.8f, 0.5f } } });
+    REQUIRE (validate (p).isEmpty());
+    CHECK (roundTrip (p) == p);
+
+    auto missing = p;
+    missing.patterns.front().automation.front().target.channel = ChannelId { 999 };
+    expectInvalid (missing, "automates a missing target");
+    Project salvaged;
+    juce::StringArray skipped;
+    REQUIRE (fromJsonSalvaging (toJson (missing), salvaged, skipped).wasOk());
+    CHECK (salvaged.patterns.front().automation.empty());
+    CHECK (skipped.joinIntoString ("\n").contains ("automation lane"));
+
+    auto twice = p;
+    twice.patterns.front().automation.push_back (twice.patterns.front().automation.front());
+    expectInvalid (twice, "two automation lanes for one control");
+}
