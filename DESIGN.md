@@ -984,9 +984,9 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   Test songs: the owner's own songs (made with Suno, and recordings of their old band whose original files are
   lost), used on the owner's computer only, never committed; the tests in the repository use short generated
   audio.
-- **What rc.1 left partly done:** tempo glides (tempo changes and loops that stretch to the tempo: done; send levels: done; finding missing audio files: done, §11.3); automation that belongs to a pattern
-  and plays wherever it is placed (done: drawn in the Piano Roll's lane); and plugins in a separate process on Windows: their own windows, sidechain inputs, MIDI
-  out (§10.2).
+- **What rc.1 left partly done:** tempo glides (tempo changes and loops that stretch to the tempo: done; send levels: done; finding missing audio files: done, §11.3); and automation that belongs to a pattern
+  and plays wherever it is placed (done: drawn in the Piano Roll's lane). Plugins in a separate process on Windows moved to
+  Later (owner, 2026-11-19).
 - **Known issues:** short crackles when the Automixer switches Before and After (those at start-up and on opening a project are gone, owner 2026-11-18); presets in the Browser (§8.1);
   slicing audio clips by transients (§11.3); OB-Xf's own patch menu
   listing its factory patches.
@@ -997,6 +997,10 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
 
 ### Later
 
+- **Plugins in a separate process, the rest** (§10.2; moved from 0.2.0, owner 2026-11-19): on Windows such a
+  plugin's own window (it plays but cannot be opened); and, on both systems, sidechain inputs, MIDI output and
+  more than eight channels there. It only matters for a plugin that crashed Spinus and was moved to its own
+  process, and the window needs testing on a real Windows computer.
 - **Dancing Spinus** (for fun): a small "useless" visual plugin like FL
   Studio's Fruity Dance: the Spinus bird (a siskin, as in the logo) dances in its own little window, in
   time with the song (tempo and playing state from the transport; livelier when the Master is louder). It
