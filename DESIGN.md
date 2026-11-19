@@ -987,7 +987,7 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
 - **What rc.1 left partly done:** tempo glides (tempo changes and loops that stretch to the tempo: done; send levels: done; finding missing audio files: done, §11.3); and automation that belongs to a pattern
   and plays wherever it is placed (done: drawn in the Piano Roll's lane). Plugins in a separate process on Windows moved to
   Later (owner, 2026-11-19).
-- **Known issues:** slicing audio clips by transients (§11.3). (The short crackles at start-up, on opening a project and when
+- **Known issues:** none left from rc.1: slicing audio clips by transients is done (§11.3). (The short crackles at start-up, on opening a project and when
   the Automixer switches Before and After are gone: owner, 2026-11-18 and 2026-11-19.)
 - **The Track creator's downbeat** (`bar_starts`) bug.
 - **No Surge XT submodule:** tests and development builds use the same pinned, checksummed Surge XT release
