@@ -1,4 +1,5 @@
 #include "Playlist.h"
+#include "dsp/slicer/Slicing.h"
 #include "AskForName.h"
 #include "ColourMenu.h"
 #include "engine/Beats.h"
@@ -832,6 +833,12 @@ private:
                           });
         menu.addItem ("Reverse", true, audio.reversed,
                       [set, reversed = audio.reversed] { set ({ { "reversed", ! reversed } }); });
+        menu.addItem ("Slice at hits",
+                      [safe, id]
+                      {
+                          if (safe != nullptr && ! safe->sliceAtHits (id) && safe->onProblem)
+                              safe->onProblem ("No hits were found in this clip to slice it at.");
+                      });
 
         juce::PopupMenu pitch;
         for (int semitones : { 12, 7, 5, 2, 1, 0, -1, -2, -5, -7, -12 })
@@ -2198,6 +2205,71 @@ bool Playlist::slice (model::Ticks at, int firstRow, int lastRow)
                 at < clip.start + clip.length)
                 steps.add (step ("clip.split", object ({ { "clip", (int)clip.id.value }, { "at", (juce::int64)at } })));
     return performAll (steps.size() == 1 ? "Slice clip" : "Slice clips", steps);
+}
+
+std::vector<model::Ticks> Playlist::findHits (model::ClipId id, float sensitivity) const
+{
+    const auto& project = session.getProject();
+    const auto* clip = project.findClip (id);
+    const auto* audio = clip != nullptr ? std::get_if<model::AudioClip> (&clip->content) : nullptr;
+    if (audio == nullptr || clip->length <= 1)
+        return {};
+    std::unique_ptr<juce::AudioFormatReader> reader (
+        dsp::SamplerProcessor::getFormats().createReaderFor (session.resolveAudioFile (audio->file)));
+    constexpr double longest = 20.0 * 60.0; // seconds: longer files are not read whole for this
+    if (reader == nullptr || reader->sampleRate <= 0.0 ||
+        (double)reader->lengthInSamples / reader->sampleRate > longest)
+        return {};
+
+    // The part of the file the clip plays, as heard (a reversed clip plays its file backwards).
+    const model::TempoMap map (project.settings);
+    const auto rate = reader->sampleRate;
+    const auto total = (juce::int64)reader->lengthInSamples;
+    juce::AudioBuffer<float> file ((int)reader->numChannels, (int)total);
+    reader->read (&file, 0, (int)total, 0, true, true);
+    if (audio->reversed)
+        file.reverse (0, (int)total);
+    const auto from =
+        juce::jlimit<juce::int64> (0, total, (juce::int64)(model::secondsInFile (map, *clip, *audio, 0.0) * rate));
+    const auto to = juce::jlimit<juce::int64> (
+        from, total, (juce::int64)(model::secondsInFile (map, *clip, *audio, (double)clip->length) * rate));
+    if (to - from < (juce::int64)(rate * 0.05))
+        return {};
+    juce::AudioBuffer<float> played (file.getNumChannels(), (int)(to - from));
+    for (int c = 0; c < file.getNumChannels(); ++c)
+        played.copyFrom (c, 0, file, c, (int)from, (int)(to - from));
+
+    // Each hit back to song ticks: secondsInFile grows with the ticks, so search for it.
+    std::vector<model::Ticks> hits;
+    for (auto point : dsp::slicing::byTransients (played, rate, sensitivity))
+    {
+        if (point <= 0)
+            continue;
+        const auto seconds = (double)(from + point) / rate;
+        model::Ticks low = 0, high = clip->length;
+        while (high - low > 1)
+        {
+            const auto middle = (low + high) / 2;
+            (model::secondsInFile (map, *clip, *audio, (double)middle) < seconds ? low : high) = middle;
+        }
+        if (high > 0 && high < clip->length && (hits.empty() || high > hits.back()))
+            hits.push_back (high);
+    }
+    return hits;
+}
+
+bool Playlist::sliceAtHits (model::ClipId id, float sensitivity)
+{
+    const auto hits = findHits (id, sensitivity);
+    const auto* clip = session.getProject().findClip (id);
+    if (hits.empty() || clip == nullptr)
+        return false;
+    // The latest cut first: the clip keeps its id as the part before each cut.
+    juce::Array<juce::var> steps;
+    for (auto it = hits.rbegin(); it != hits.rend(); ++it)
+        steps.add (
+            step ("clip.split", object ({ { "clip", (int)id.value }, { "at", (juce::int64)(clip->start + *it) } })));
+    return performAll ("Slice clip at hits", steps);
 }
 
 std::vector<model::Ticks> Playlist::paintPositions (model::Ticks from, model::Ticks to) const

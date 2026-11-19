@@ -57,6 +57,13 @@ public:
     bool deleteSelection() { return deleteClips (selection); }
     /** Cuts the clips on rows `firstRow` to `lastRow` that play across `at` into two there. */
     bool slice (model::Ticks at, int firstRow, int lastRow);
+    /** Where an audio clip's hits are (dsp::slicing::byTransients on the part of its file it plays, reversed when
+        it is), in song ticks inside the clip, earliest first; `sensitivity` 0..1 (higher: quieter hits too).
+        Empty when its file can't be read or it has none. */
+    std::vector<model::Ticks> findHits (model::ClipId, float sensitivity = 0.5f) const;
+    /** Cuts an audio clip at each of its hits (findHits), as one undo step: FL's "Chop" by transients. False when
+        it has none. */
+    bool sliceAtHits (model::ClipId, float sensitivity = 0.5f);
     /** Places the current pattern from `from` again and again (one pattern length apart) up to `to`,
         at least once. */
     bool paintPattern (int row, model::Ticks from, model::Ticks to);
