@@ -552,6 +552,27 @@ MainView::MainView (Session& s, ProjectDocument* d) : session (s), document (d),
         hintBar.showMessage (index.getStatusText());
     };
     browser->onUse = [this] (const plugins::DeviceList::Entry& e) { useDevice (e); };
+    browser->onUsePreset = [this] (const plugins::DeviceList::Entry& e, const juce::String& preset)
+    {
+        // A channel with the instrument, then the preset on it: one undo step.
+        auto& steps = session.getHistory();
+        const auto before = steps.getStateId();
+        useDevice (e);
+        if (steps.getStateId() == before)
+            return;
+        if (const auto error = loadPresetOnSelectedChannel (preset); error.isNotEmpty())
+            hintBar.showMessage ("Added a channel with " + e.name + ", but its preset did not load: " + error);
+        else
+        {
+            steps.joinStepsSince (before);
+            hintBar.showMessage ("Added a channel with " + e.name + " playing " + preset);
+        }
+    };
+    browser->onLoadPreset = [this] (const juce::String& preset)
+    {
+        const auto error = loadPresetOnSelectedChannel (preset);
+        hintBar.showMessage (error.isEmpty() ? "Loaded " + preset : "The preset did not load: " + error);
+    };
     browser->onUseSample = [this] (const juce::File& file)
     {
         // As if dropped on the Channel Rack: a Sampler channel, or an audio track for long audio.
@@ -1952,6 +1973,22 @@ void MainView::menuItemSelected (int itemId, int)
 }
 
 //==============================================================================
+juce::String MainView::loadPresetOnSelectedChannel (const juce::String& preset)
+{
+    const auto* channel = session.getProject().findChannel (session.getSelectedChannel());
+    if (channel == nullptr || ! channel->instrument)
+        return "no channel with an instrument is selected";
+    juce::String error;
+    auto* params = new juce::DynamicObject();
+    params->setProperty ("device", (int)channel->instrument->id.value);
+    params->setProperty ("preset", preset);
+    auto command = commands::CommandRegistry::get().create ("device.loadPreset", juce::var (params), error);
+    if (command == nullptr)
+        return error;
+    const auto result = session.getHistory().perform (std::move (command));
+    return result.failed() ? result.getErrorMessage() : juce::String();
+}
+
 void MainView::useDevice (const plugins::DeviceList::Entry& entry)
 {
     if (entry.instrument)

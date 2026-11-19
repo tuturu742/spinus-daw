@@ -15,6 +15,7 @@ appears along the bottom of the list: drag it (or swipe sideways on a touchpad) 
 | **Instruments** › **Free open source** | Free, open-source instruments made by others, which Spinus downloads for you: Surge XT and OB-Xf, by the Surge Synth Team, Odin 2 (Linux), by TheWaveWarden, and the Six Sines FM synthesizer. |
 | **Effects** › **Installed plugins** | Effect plugins found on your computer. |
 | **Effects** › **Free open source** | Free, open-source effects made by others, which Spinus downloads for you: another EQ, compressor, limiter and gate, a multiband compressor and a spectrum analyzer from LSP Plugins, reverbs from Dragonfly Reverb, Surge XT Effects, the PeakEater clipper, and the TIME-12 and GATE-12 shapers. The project each one comes from is shown next to its name; hover over it for its license. |
+| **Presets** | Each instrument's presets: 3x Osc's, and the plugins' own (see [Presets](#presets) below). Folded at first. |
 | **Problem plugins** | Plugin files that crashed or hung while Spinus checked them. |
 
 Free open-source plugins that are not downloaded yet are greyed out with "get it" after the name.
@@ -59,7 +60,17 @@ the folders Spinus looks in.
 Type in the **Search** box to filter by name, maker, project or format (for example `reverb`, `lsp`, `xfer` or `vst3`).
 Click a section or group title to fold it away.
 
-Presets don't show in the Browser yet.
+## Presets
+
+Open **Presets** to see the instruments that have presets Spinus can load: 3x Osc, the free instruments you
+downloaded (Surge XT, OB-Xf, Odin 2) and your installed instrument plugins.
+
+- **Click an instrument** to list its presets, with their category on the right. The first time, Spinus
+  loads the plugin out of sight to read them, which can take a moment.
+- **Double-click a preset** to add a channel playing it. Ctrl+Z takes back both the channel and the preset.
+- **Right-click a preset** and choose **Load on the selected channel** to put it on the channel selected in
+  the Channel Rack, when that channel plays the same instrument.
+- The **Search** box also finds presets, in the instruments you have opened.
 
 ## Projects
 

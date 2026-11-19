@@ -141,7 +141,7 @@ TEST_CASE ("The browser groups, folds and searches", "[ui][browser]")
     browser.setSize (220, 600);
 
     CHECK (texts (browser, Browser::RowKind::section) ==
-           juce::StringArray { "Projects", "Samples", "Instruments", "Effects", "Problem plugins  (1)" });
+           juce::StringArray { "Projects", "Samples", "Instruments", "Effects", "Presets", "Problem plugins  (1)" });
     // Spinus's own devices between installed and bundled: four instruments; the Filter, the Ducker, the Stereo
     // Utility, Spinus Tune and the Loudness Meter.
     CHECK (texts (browser, Browser::RowKind::group) ==
@@ -352,4 +352,52 @@ TEST_CASE ("Asked to scan during a scan the Browser scans again afterwards", "[u
 
     f.session.getDeviceList().setCatalog (nullptr);
     setenv ("HOME", home.toRawUTF8(), 1); // NOLINT(concurrency-mt-unsafe)
+}
+
+TEST_CASE ("Presets in the browser: an instrument's open when clicked, and a double-click adds a channel playing one",
+           "[ui][browser][presets]")
+{
+    Fixture f;
+    MainView view (f.session);
+    auto& browser = view.getBrowser();
+
+    const auto rowOf = [&] (Browser::RowKind kind, const juce::String& prefix)
+    {
+        const auto& rows = browser.getRows();
+        for (size_t i = 0; i < rows.size(); ++i)
+            if (rows[i].kind == kind && rows[i].text.startsWith (prefix))
+                return (int)i;
+        return -1;
+    };
+
+    // Closed at first: no instruments' presets are read until asked for.
+    REQUIRE (rowOf (Browser::RowKind::section, "Presets") >= 0);
+    CHECK (rowOf (Browser::RowKind::group, "3x Osc") < 0);
+    browser.toggleOpen ("presets");
+    const auto group = rowOf (Browser::RowKind::group, "3x Osc");
+    REQUIRE (group >= 0);
+    CHECK (texts (browser, Browser::RowKind::preset).isEmpty());
+
+    // Clicked: its presets are read and listed.
+    browser.toggleOpen (browser.getRows()[(size_t)group].key);
+    const auto presets = texts (browser, Browser::RowKind::preset);
+    REQUIRE (presets.size() > 3);
+    CHECK (browser.getRows()[(size_t)rowOf (Browser::RowKind::group, "3x Osc")].text.contains ("("));
+
+    // A search lists the presets read whose names match.
+    browser.setSearchText (presets[2]);
+    CHECK (texts (browser, Browser::RowKind::preset).contains (presets[2]));
+    browser.setSearchText ({});
+
+    // Double-click: a channel with 3x Osc, playing it, as one undo step.
+    const auto& project = f.session.getProject();
+    auto& history = f.session.getHistory();
+    const auto steps = history.getUndoDescriptions().size();
+    browser.useRow (rowOf (Browser::RowKind::preset, presets[1]));
+    REQUIRE (project.channels.size() == 1);
+    REQUIRE (project.channels[0].instrument.has_value());
+    CHECK (project.channels[0].instrument.value_or (model::Device {}).stockType == "spinus.3x-osc");
+    CHECK (history.getUndoDescriptions().size() == steps + 1);
+    history.undo();
+    CHECK (project.channels.empty());
 }
