@@ -103,7 +103,7 @@ modules:
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
       - -DSPINUS_BUILD_TESTS=OFF
-      - -DSPINUS_BUILD_SURGE=OFF
+      - -DSPINUS_GET_SURGE=OFF
       - -DSPINUS_BUILD_BUNDLED_PLUGINS=OFF
       - -DSPINUS_BUILD_OWN_PLUGINS=OFF
     post-install:

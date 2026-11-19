@@ -36,7 +36,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "SPINUS_BUILD_OWN_PLUGINS": "OFF",
-        "SPINUS_BUILD_SURGE": "OFF",
+        "SPINUS_GET_SURGE": "OFF",
         "SPINUS_BUILD_BUNDLED_PLUGINS": "OFF",
         "SPINUS_BUILD_TESTS": "OFF"
       }
@@ -52,7 +52,7 @@
         "CMAKE_C_COMPILER": "cl",
         "CMAKE_CXX_COMPILER": "cl",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
-        "SPINUS_BUILD_SURGE": "OFF",
+        "SPINUS_GET_SURGE": "OFF",
         "SPINUS_BUILD_BUNDLED_PLUGINS": "OFF",
         "SPINUS_BUILD_TESTS": "OFF"
       }

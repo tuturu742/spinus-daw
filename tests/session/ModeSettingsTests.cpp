@@ -251,7 +251,7 @@ TEST_CASE ("While the audio thread plays a plugin, a change takes effect there, 
     plugin->releaseResources();
 }
 
-/** The real Surge XT Effects: built with Spinus (SPINUS_BUILD_SURGE), or downloaded: point
+/** The real Surge XT Effects: the release the build downloads (SPINUS_GET_SURGE), or downloaded by hand: point
     SPINUS_CHECK_DOWNLOADED at a folder holding the unpacked "Surge XT Effects.clap" (searched recursively), as the
     OB-Xf check in DeviceParametersTests.cpp. */
 TEST_CASE ("Surge XT Effects is set up as a chorus from words, and saved as one", "[session][engine][surge]")

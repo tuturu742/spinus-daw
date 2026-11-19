@@ -48,7 +48,7 @@ jobs:
           - name: Debug + AddressSanitizer
             preset: asan
             tidy: false
-            surge: "OFF"   # Surge is a separately built plugin; building it twice doubles CI time
+            surge: "OFF"   # the Release job plays Surge XT; once is enough
     steps:
       - name: Install Arch packages
         run: pacman -Syu --noconfirm --needed $ARCH_PACKAGES
@@ -57,11 +57,12 @@ jobs:
         with:
           submodules: true   # not recursive: Tracktion's own JUCE submodule is not used
 
-      - name: Fetch Surge XT's submodules
+      - name: Restore downloaded Surge XT release
         if: matrix.surge == 'ON'
-        run: |
-          git config --global --add safe.directory '*'
-          git submodule update --init --recursive --depth 1 external/surge
+        uses: actions/cache@v4
+        with:
+          path: .downloads
+          key: downloads-surge-xt-1.3.4
 
       - name: Restore compiler cache
         uses: actions/cache@v4
@@ -76,7 +77,8 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DSPINUS_WARNINGS_AS_ERRORS=ON
-          -DSPINUS_BUILD_SURGE=${{ matrix.surge }}
+          -DSPINUS_GET_SURGE=${{ matrix.surge }}
+          -DSPINUS_DOWNLOADS_DIR=${{ github.workspace }}/.downloads
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
 

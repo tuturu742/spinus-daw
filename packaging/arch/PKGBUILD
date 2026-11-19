@@ -59,7 +59,6 @@ pkgver() {
 
 prepare() {
   cd "${_name}"
-  # Not external/surge: the package does not build Surge XT.
   git submodule update --init --recursive --depth 1 -- external/JUCE external/tracktion_engine external/clap external/fst
 }
 
@@ -68,7 +67,7 @@ build() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DSPINUS_BUILD_TESTS=OFF \
-    -DSPINUS_BUILD_SURGE=OFF \
+    -DSPINUS_GET_SURGE=OFF \
     -DSPINUS_BUILD_BUNDLED_PLUGINS=OFF
   cmake --build build
 }

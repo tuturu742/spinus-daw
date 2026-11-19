@@ -76,8 +76,7 @@ sudo pacman -S --needed base-devel git cmake ninja alsa-lib jack2 freetype2 font
 
 git clone https://github.com/tuturu742/spinus-daw.git
 cd spinus-daw
-git submodule update --init                              # JUCE, Tracktion, Catch2, CLAP, FST, Rubber Band
-git submodule update --init --recursive external/surge  # Surge XT and its libraries
+git submodule update --init      # JUCE, Tracktion, Catch2, CLAP, FST, Rubber Band
 cmake --preset release
 cmake --build --preset release
 ctest --preset release          # unit tests and pluginval checks
@@ -90,9 +89,10 @@ Other presets: `debug`, and `asan` (Debug with AddressSanitizer). Useful app opt
 - `--snapshot file.png`: render the main window to an image and exit (for screenshots)
 - `--version`
 
-The first build takes 10–15 minutes because it compiles JUCE, Tracktion Engine, the bundled Surge XT synth and
-the bundled effects (LSP Plugins, Dragonfly Reverb; their source is downloaded during the build).
-Add `-DSPINUS_BUILD_SURGE=OFF` or `-DSPINUS_BUILD_BUNDLED_PLUGINS=OFF` to the first `cmake` command to skip them.
+The first build takes about 10 minutes because it compiles JUCE, Tracktion Engine and the bundled effects (LSP
+Plugins, Dragonfly Reverb; their source is downloaded during the build). It also downloads Surge XT's release (about
+350 MB, once), the same one users get, for the tests that play it.
+Add `-DSPINUS_GET_SURGE=OFF` or `-DSPINUS_BUILD_BUNDLED_PLUGINS=OFF` to the first `cmake` command to skip them.
 
 The presets put `/usr/bin` first on `PATH`, so tools and libraries from Homebrew (Linuxbrew) or similar can't
 replace Arch's own. If you configure without a preset, check that `pkg-config` is `/usr/bin/pkg-config`.

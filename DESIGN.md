@@ -351,9 +351,9 @@ Stock devices come from two sources:
 
 **Surge XT integration rules**
 
-- Users get the Surge project's own Linux release (CLAP), with its factory content as `SurgeXTData` beside the plugin file. Development builds compile it as a separate CMake sub-build (it pins its own JUCE fork) for tests.
+- Users get the Surge project's own Linux release (CLAP), with its factory content as `SurgeXTData` beside the plugin file. Development builds download the same pinned release, checked by the same SHA-256 hashes (`cmake/SpinusSurge.cmake`, `SPINUS_GET_SURGE`), for the tests that play it; CI caches the archives.
 
-- Spinus does not fork Surge XT's DSP. Patches to Surge XT go upstream where possible; any local patch would live in `external/patches/surge/` with a reason (there are none).
+- Spinus does not fork Surge XT's DSP. Spinus uses Surge XT's releases as they are: fixes go to the Surge project.
 - **No Spinus wrapper**: Surge XT's window is its own editor, like any plugin, with no Spinus panel, preset list or styling around it. The same holds for every free plugin Spinus suggests: one way to use them, the one their own manuals describe; Spinus's own devices keep Spinus's look. Spinus lists Surge XT's patch files only for closest preset and sound matching.
 - The AI sound-matching feature (§12.7) targets **3x Osc, Surge XT, Odin 2 and OB-Xf** with profiles
   of Spinus's own, and any other instrument plugin experimentally.
@@ -796,7 +796,7 @@ Reference system: a 16-core laptop CPU with an integrated GPU, 48 kHz, 128-sampl
 - `packaging/arch/PKGBUILD` for `spinus-git` (AUR), building the app, Spinus's own plugins and the AI service virtualenv. The free open-source plugins are not packaged; the package depends on what they need at runtime (`libsndfile`, `cairo`) and on `curl` and `libarchive` to download them, and lists the Arch repositories' CLAP packages as optional alternatives. Audio: depends on the virtual `jack` provider and recommends `pipewire-jack` (which replaces `jack2` on Arch).
 - AI service installed into `/usr/lib/spinus/ai`, run by the system's Python. PyTorch is not part of the package: when the user asks in Options › AI › Analysis engine, Spinus installs the torch build matching the detected GPU (TheRock for AMD, CUDA for Nvidia, XPU for Intel, or CPU) with `uv` into `~/.local/share/spinus/python/<build>/`, after stating the download and disk size (about 1.8 GB and 6.3 GB for gfx1151, 0.2 GB and 0.8 GB for CPU). `uv` is an optional dependency.
 - Desktop entry, icon, MIME type for `.spn` project files, so a double-click opens the project.
-- `packaging/arch/PKGBUILD` builds the app, its helpers and the AI service with `cmake --install` rules (`cmake/SpinusInstall.cmake`). It builds neither Surge XT nor the effects (`SPINUS_BUILD_SURGE=OFF`, `SPINUS_BUILD_BUNDLED_PLUGINS=OFF`) and does not check out `external/surge`.
+- `packaging/arch/PKGBUILD` builds the app, its helpers and the AI service with `cmake --install` rules (`cmake/SpinusInstall.cmake`). It neither downloads Surge XT nor builds the effects (`SPINUS_GET_SURGE=OFF`, `SPINUS_BUILD_BUNDLED_PLUGINS=OFF`).
 - `packaging/arch/release/PKGBUILD` builds a tagged release the same way.
 - AppImage (`packaging/appimage/`) and Flatpak (`packaging/flatpak/`) packages are built too; Flathub is in §17.
 - **Windows** (`packaging/windows/`, [docs/dev/windows-build.md](docs/dev/windows-build.md)): a per-user NSIS installer (`spinus.nsi`, staged by `stage.py`) with the embeddable Python for the AI service, built with MSVC by `.github/workflows/windows.yml` or on Linux with clang-cl and xwin (`build-on-linux.sh`). ASIO, WASAPI and DirectSound; Windows plugins load natively, so the Wine bridge is left out.
@@ -990,8 +990,8 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
 - **Known issues:** none left from rc.1: slicing audio clips by transients is done (§11.3). (The short crackles at start-up, on opening a project and when
   the Automixer switches Before and After are gone: owner, 2026-11-18 and 2026-11-19.)
 - **The Track creator's downbeat** (`bar_starts`) bug: done. Bars are every `beatsPerBar`-th beat from the place in the bar most of Beat This!'s downbeats fall on (without its DBN it gives stray downbeats a beat or two apart, which made one-beat bars and wrong section lengths); features version 6, so references are measured again.
-- **No Surge XT submodule:** tests and development builds use the same pinned, checksummed Surge XT release
-  users download (cached in CI), instead of compiling Surge from `external/surge`, which then goes (owner
+- **No Surge XT submodule:** done. Tests and development builds use the same pinned, checksummed Surge XT release
+  users download (cached in CI), instead of compiling Surge from `external/surge`, which is gone (owner
   decision 2026-11-14). Tests then run the build users run, and the repository and clean builds get lighter.
 
 ### Later
