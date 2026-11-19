@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **For developers: Surge XT is downloaded, not compiled.** Builds and tests use the same Surge XT release users get
+  (checked the same way), and the Surge XT source code is no longer part of the repository, so cloning and clean builds
+  are lighter.
 - **Track creator: bars and sections of reference songs are right more often**: a stray downbeat no longer makes a
   one-beat bar, which threw off section lengths. Your references are measured again the next time you use them.
 - **Slice at hits**: Shift+right-click an audio clip on the Playlist and choose **Slice at hits** to cut it at each drum hit

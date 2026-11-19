@@ -17,7 +17,7 @@ endif()
 
 # The curated LSP Plugins, Dragonfly Reverb and Surge XT Effects through Spinus's CLAP host and JUCE's VST3
 # host: scanning, clean processing, state, random parameters, the channel budget.
-if (SPINUS_BUILD_SURGE AND SPINUS_BUILD_BUNDLED_PLUGINS)
+if (SPINUS_GET_SURGE AND SPINUS_BUILD_BUNDLED_PLUGINS)
     add_executable (spinus_bundled_plugin_checks ../TestMain.cpp BundledPluginTests.cpp)
     target_link_libraries (spinus_bundled_plugin_checks PRIVATE spinus_test_support spinus_warnings Catch2::Catch2)
     target_compile_definitions (spinus_bundled_plugin_checks PRIVATE SPINUS_PLUGINS_DIR="${SPINUS_PLUGINS_DIR}")

@@ -221,7 +221,7 @@ if (SPINUS_BUILD_OWN_PLUGINS)
     spinus_add_pluginval_test (spinus-delay "${SPINUS_DELAY_VST3}")
 endif()
 
-if (SPINUS_BUILD_SURGE)
+if (SPINUS_GET_SURGE)
     spinus_add_pluginval_test (surge-xt "${SPINUS_SURGE_VST3}")
     spinus_add_pluginval_test (surge-xt-effects "${SPINUS_SURGE_FX_VST3}")
 endif()

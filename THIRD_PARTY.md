@@ -16,12 +16,12 @@ When you add, upgrade or remove a dependency, update this file in the same pull 
 | [Catch2](https://github.com/catchorg/Catch2) | v3.16.1 (`0809213`) | BSL-1.0 | Unit tests only (not shipped) | |
 | [CLAP SDK](https://github.com/free-audio/clap) | 1.2.10 (`195b42a`) | MIT | CLAP plugin hosting (headers only) | Spinus's own CLAP host |
 | [FST](https://git.iem.at/zmoelnig/FST) | v0.177.0 (`30f49e6`) | GPL-3.0-or-later | VST2 interface header for JUCE's VST2 host | Reverse-engineered without the VST2 SDK. Compiled from a generated copy with one layout fix |
-| [Surge XT](https://github.com/surge-synthesizer/surge) | release_xt_1.3.4 (`f7b97c682`) | GPLv3 | Development builds only: compiled for tests; not shipped (users download Surge XT, see below) | Built as a separate sub-build |
+| [Surge XT](https://github.com/surge-synthesizer/surge) | 1.3.4 (the Surge project's release archives) | GPLv3 | Development builds only: downloaded for tests; not shipped (users download Surge XT, see below) | The same archives and SHA-256 hashes users get (`cmake/SpinusSurge.cmake`) |
 
 ### Code bundled inside Surge XT
 
-Compiled into the Surge XT plugin binary only (not into Spinus). Licenses read from each library's
-LICENSE file at the pinned commit; recheck on every Surge upgrade.
+Inside the Surge XT plugin binary only (not in Spinus). Licenses read from each library's LICENSE file in
+Surge XT 1.3.4's source; recheck on every Surge upgrade.
 
 | Component | License |
 |---|---|
@@ -33,7 +33,7 @@ LICENSE file at the pinned commit; recheck on every Surge upgrade.
 | libsamplerate | BSD-2-Clause |
 | pffft | BSD-like (FFTPACK) |
 | ODDSound MTS-ESP client | Permissive (ISC-style) |
-| Factory patches and wavetables (`resources/data`) | Distributed by the Surge project with Surge XT. Spinus does not distribute them: development builds use them from the submodule, and users download them from Surge's own release page |
+| Factory patches and wavetables (`resources/data`) | Distributed by the Surge project with Surge XT. Spinus does not distribute them: development builds and users download them from Surge's own release page |
 
 ### Code bundled inside Tracktion Engine
 
@@ -158,7 +158,7 @@ from source for pluginval and the plugin tests. Not installed by the package.
 |---|---|---|---|---|
 | [LSP Plugins](https://github.com/lsp-plugins/lsp-plugins) | 1.2.35, `lsp-plugins-src-1.2.35.tar.gz` (SHA-256 `2c95ec7b…5bb6c`) | LGPL-3.0-or-later | Parametric EQ, Compressor, Limiter, Gate, Multiband Compressor, Spectrum Analyzer | Only the modules in `SPINUS_LSP_MODULES` are built. Runtime libraries: libsndfile (LGPL-2.1+), cairo (LGPL-2.1 / MPL-1.1) |
 | [Dragonfly Reverb](https://github.com/michaelwillis/dragonfly-reverb) | 3.2.10, `dragonfly-reverb-3.2.10-src.tar.xz` (SHA-256 `18af55a9…f7743`) | GPL-3.0-or-later | Hall, Room, Plate reverbs, Early Reflections | |
-| Surge XT Effects | Surge XT release_xt_1.3.4 (see Surge XT above) | GPLv3 | Delay, chorus, phaser, flanger, distortion and other character effects | Built by the Surge sub-build |
+| Surge XT Effects | Surge XT release_xt_1.3.4 (see Surge XT above) | GPLv3 | Delay, chorus, phaser, flanger, distortion and other character effects | In Surge XT's release archives |
 
 ### Code inside these plugins (also in the downloaded releases)
 

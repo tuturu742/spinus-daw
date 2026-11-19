@@ -1,17 +1,17 @@
-# Surge XT, the bundled flagship synth, and Surge XT Effects, its effects
-# as a separate plugin.
+# Surge XT, the flagship synth, and Surge XT Effects, its effects as a separate plugin, for the tests
+# that play them.
 #
-# Surge XT is built as its own CMake project because it pins its own JUCE fork, which must not
-# mix with Spinus's JUCE 9. Spinus loads the resulting VST3 in-process like any plugin; the
-# plugin binary keeps its JUCE symbols private.
+# These are the Surge project's own pinned releases that users get from Options > Get free plugins
+# (src/plugins/PluginDownloads.cpp: the same archives and SHA-256 hashes), so tests run the build users
+# run. Nothing is compiled. The archives are kept in SPINUS_DOWNLOADS_DIR, which CI caches.
 #
 # Output (in the build tree):
 #   plugins/Surge XT.vst3, plugins/Surge XT.clap
 #   plugins/Surge XT Effects.vst3, plugins/Surge XT Effects.clap
 #   plugins/SurgeXTData -> factory patches and wavetables ("portable mode": Surge looks for a
-#                          SurgeXTData folder beside its binary, so no system install is needed)
+#                          SurgeXTData folder beside its plugin file, so no system install is needed)
 
-option (SPINUS_BUILD_SURGE "Build the bundled Surge XT synth (adds several minutes to a clean build)" ON)
+option (SPINUS_GET_SURGE "Download Surge XT's release (about 350 MB, once) for the tests that play it" ON)
 
 set (SPINUS_PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
 set (SPINUS_SURGE_VST3 "${SPINUS_PLUGINS_DIR}/Surge XT.vst3")
@@ -19,42 +19,48 @@ set (SPINUS_SURGE_CLAP "${SPINUS_PLUGINS_DIR}/Surge XT.clap")
 set (SPINUS_SURGE_FX_VST3 "${SPINUS_PLUGINS_DIR}/Surge XT Effects.vst3")
 set (SPINUS_SURGE_FX_CLAP "${SPINUS_PLUGINS_DIR}/Surge XT Effects.clap")
 
-if (NOT SPINUS_BUILD_SURGE)
+if (NOT SPINUS_GET_SURGE)
     return()
-endif()
-
-if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/surge/CMakeLists.txt")
-    message (FATAL_ERROR "external/surge is missing. Run: git submodule update --init --recursive external/surge")
 endif()
 
 include (ExternalProject)
 
-set (surgeSource "${CMAKE_CURRENT_SOURCE_DIR}/external/surge")
-set (surgeBinary "${CMAKE_BINARY_DIR}/surge-build")
-set (surgeProducts "${surgeBinary}/surge_xt_products")
+set (SPINUS_DOWNLOADS_DIR "${CMAKE_BINARY_DIR}/downloads" CACHE PATH "Where downloaded release archives are kept")
+
+set (surgeRelease "https://github.com/surge-synthesizer/releases-xt/releases/download/1.3.4")
+if (WIN32)
+    set (surgePlugins "${surgeRelease}/surge-xt-win64-1.3.4-pluginsonly.zip")
+    set (surgePluginsHash 564e162c560af07ad4ed47fe1bfcd827cf97a575de30d06c48249aad2e7c35e6)
+else()
+    set (surgePlugins "${surgeRelease}/surge-xt-linux-1.3.4-pluginsonly.tar.gz")
+    set (surgePluginsHash dd431b75f5fa197c4bffa6ca27ca46970f0a94c834119bb1db7decdeec4c28db)
+endif()
+
+# The sounds, the same on every system.
+ExternalProject_Add (surge_xt_content
+    URL "${surgeRelease}/surge-xt-portable-content-1.3.4.tar.gz"
+    URL_HASH SHA256=7ed24822eab69f73101d8558222979b1bceb4882a780292bb7087309b7b101bd
+    DOWNLOAD_DIR "${SPINUS_DOWNLOADS_DIR}"
+    DOWNLOAD_EXTRACT_TIMESTAMP ON
+    PREFIX "${CMAKE_BINARY_DIR}/surge-xt-content"
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E make_directory "${SPINUS_PLUGINS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink "<SOURCE_DIR>/Surge Synth Team/SurgeXTData"
+                "${SPINUS_PLUGINS_DIR}/SurgeXTData")
 
 ExternalProject_Add (surge_xt
-    SOURCE_DIR "${surgeSource}"
-    BINARY_DIR "${surgeBinary}"
-    CMAKE_GENERATOR Ninja
-    CMAKE_ARGS
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-        -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-        -DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
-        -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}
-        -DSURGE_BUILD_TESTRUNNER=OFF
-        -DSURGE_BUILD_LV2=OFF
-        -DSURGE_SKIP_WERROR=ON
-        # Surge XT 1.3.4's bundled libraries predate CMake 4.
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-    BUILD_COMMAND ${CMAKE_COMMAND} --build "${surgeBinary}" --target surge-xt_VST3 surge-xt_CLAP surge-fx_VST3 surge-fx_CLAP
-    INSTALL_COMMAND
-        ${CMAKE_COMMAND} -E make_directory "${SPINUS_PLUGINS_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${surgeProducts}/Surge XT.vst3" "${SPINUS_SURGE_VST3}"
-        COMMAND ${CMAKE_COMMAND} -E copy "${surgeProducts}/Surge XT.clap" "${SPINUS_SURGE_CLAP}"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${surgeProducts}/Surge XT Effects.vst3" "${SPINUS_SURGE_FX_VST3}"
-        COMMAND ${CMAKE_COMMAND} -E copy "${surgeProducts}/Surge XT Effects.clap" "${SPINUS_SURGE_FX_CLAP}"
-        COMMAND ${CMAKE_COMMAND} -E create_symlink "${surgeSource}/resources/data" "${SPINUS_PLUGINS_DIR}/SurgeXTData"
-    BUILD_BYPRODUCTS "${SPINUS_SURGE_CLAP}" "${SPINUS_SURGE_FX_CLAP}"
-    USES_TERMINAL_BUILD ON)
+    URL "${surgePlugins}"
+    URL_HASH SHA256=${surgePluginsHash}
+    DOWNLOAD_DIR "${SPINUS_DOWNLOADS_DIR}"
+    DOWNLOAD_EXTRACT_TIMESTAMP ON
+    PREFIX "${CMAKE_BINARY_DIR}/surge-xt"
+    DEPENDS surge_xt_content
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E make_directory "${SPINUS_PLUGINS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "<SOURCE_DIR>/Surge XT.vst3" "${SPINUS_SURGE_VST3}"
+        COMMAND ${CMAKE_COMMAND} -E copy "<SOURCE_DIR>/Surge XT.clap" "${SPINUS_SURGE_CLAP}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "<SOURCE_DIR>/Surge XT Effects.vst3" "${SPINUS_SURGE_FX_VST3}"
+        COMMAND ${CMAKE_COMMAND} -E copy "<SOURCE_DIR>/Surge XT Effects.clap" "${SPINUS_SURGE_FX_CLAP}"
+    BUILD_BYPRODUCTS "${SPINUS_SURGE_CLAP}" "${SPINUS_SURGE_FX_CLAP}")

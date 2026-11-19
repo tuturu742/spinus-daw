@@ -7,9 +7,6 @@
 [submodule "external/Catch2"]
 	path = external/Catch2
 	url = https://github.com/catchorg/Catch2.git
-[submodule "external/surge"]
-	path = external/surge
-	url = https://github.com/surge-synthesizer/surge.git
 [submodule "external/clap"]
 	path = external/clap
 	url = https://github.com/free-audio/clap.git

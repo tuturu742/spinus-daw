@@ -3,7 +3,7 @@
 # Spinus ships a curated set of third-party effects instead of writing its own for v1:
 #   LSP Plugins (LGPL-3.0-or-later): EQ, compressor, limiter, gate, multiband, analyzer, delay, ...
 #   Dragonfly Reverb (GPL-3.0-or-later): hall, room, plate and early-reflections reverbs
-# Surge XT Effects comes from the Surge sub-build (cmake/SpinusSurge.cmake).
+# Surge XT Effects comes with Surge XT's release (cmake/SpinusSurge.cmake).
 #
 # Both projects use their own Makefiles, so they are built as external projects from pinned
 # release tarballs (checked by SHA-256). Spinus loads the CLAP builds in-process like any plugin.
