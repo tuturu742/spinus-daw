@@ -220,6 +220,7 @@ public:
         // The free open-source plugins: downloaded on request into the user's data folder,
         // or found in a development build's plugins/ folder or the system's CLAP folders.
         downloads = std::make_unique<plugins::PluginDownloads> (getDataFolder().getChildFile ("plugins"));
+        downloads->shareObxfPatches(); // for an OB-Xf downloaded before Spinus did this
         const auto bundledFolders = downloads->getSearchFolders ({ getProgramFolder().getChildFile ("plugins") });
         auto devices = std::make_unique<engine::DefaultDeviceFactory>();
         engine::registerBundledDevices (*devices, engineHost->getEngine(), bundledFolders);

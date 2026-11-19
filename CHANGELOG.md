@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **OB-Xf's own patch menu lists its factory patches**: Spinus copies them where OB-Xf looks, when OB-Xf has none there
+  yet (an OB-Xf installed with its own installer keeps its own).
 - **Presets in the Browser**: a **Presets** section lists each instrument's presets (3x Osc's, Surge XT's, OB-Xf's, Odin 2's
   and your plugins'). Double-click one to add a channel playing it, or load it on the selected channel from its
   right-click menu.

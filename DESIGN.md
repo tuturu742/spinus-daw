@@ -342,7 +342,7 @@ Stock devices come from two sources:
 |---|---|---|
 | **Surge XT** (free download) | The one serious synth | Downloaded on request from the Surge project's pinned release, with its factory sounds, and loaded in-process like a stock device. Appears first in the browser's Instruments list, under its own name with credits. Comes with Surge XT's full factory library. Opens on Surge XT's own editor, as its makers designed it: presets are picked in its own patch browser and its macros are in its window. |
 | **Odin 2** (free download, Linux) | Second synth with character | TheWaveWarden's GPL-3.0 synth: analog-style, wavetable, FM and chiptune oscillators, factory presets built in |
-| **OB-Xf** (free download) | Analog-style polysynth | The Surge Synth Team's GPL-3.0 successor of OB-Xd; its factory patches are not downloaded (they live outside the pack's folder) |
+| **OB-Xf** (free download) | Analog-style polysynth | The Surge Synth Team's GPL-3.0 successor of OB-Xd; its factory patches come in a second archive, into the pack's Patches folder, and are copied to OB-Xf's own local factory folder when it has none anywhere (`PluginDownloads::shareObxfPatches`; owner 2026-11-19), so its own patch menu lists them |
 | **Six Sines** (free download) | FM synth | Paul Walker's six-operator phase/FM synth (code MIT, builds GPL-3.0); factory patches built in, picked in its own window (it has no CLAP preset discovery, so closest preset does not list them) |
 | **3x Osc** | Quick, simple synth (FL 3xOsc equivalent) | 3 oscillators (sine/tri/saw/square/noise; saw and square band-limited with PolyBLEP), coarse/fine tune, level, pan, phase; amp envelope; filter with envelope amount; 16 voices; 23 factory presets built in |
 | **Sampler** | Play any sample | One-shot and multi-sample, root note, ADSR, filter, loop points, round-robin |
@@ -988,8 +988,7 @@ Owner decision 2026-11-14 (distribution, below in Later, waits):
   and plays wherever it is placed (done: drawn in the Piano Roll's lane). Plugins in a separate process on Windows moved to
   Later (owner, 2026-11-19).
 - **Known issues:** short crackles when the Automixer switches Before and After (those at start-up and on opening a project are gone, owner 2026-11-18);
-  slicing audio clips by transients (§11.3); OB-Xf's own patch menu
-  listing its factory patches.
+  slicing audio clips by transients (§11.3).
 - **The Track creator's downbeat** (`bar_starts`) bug.
 - **No Surge XT submodule:** tests and development builds use the same pinned, checksummed Surge XT release
   users download (cached in CI), instead of compiling Surge from `external/surge`, which then goes (owner

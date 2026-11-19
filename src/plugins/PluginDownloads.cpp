@@ -306,9 +306,8 @@ DownloadPack dragonflyReverb (juce::String url, juce::String sha256, juce::int64
 }
 
 // The Surge Synth Team's OB-Xf (the open-source OB-Xd's successor). Its factory patches (GPL-3.0, like the
-// rest of its repository) are a separate download, the same for every system. OB-Xf's own browser looks for
-// them only in its shared folder, outside the pack's; Spinus finds them in the pack's Patches folder for
-// closest preset.
+// rest of its repository) are a separate download, the same for every system. Spinus finds them in the pack's
+// Patches folder; OB-Xf's own browser looks only in its own folder, so shareObxfPatches copies them there.
 DownloadPack obXf (juce::String url, juce::String sha256, juce::int64 size)
 {
     return { "ob-xf",
@@ -512,13 +511,70 @@ juce::Result PluginDownloads::install (const DownloadPack& pack,
     auto result = installUnlogged (pack, onProgress, cancel);
     const auto took = juce::String ((juce::Time::getMillisecondCounter() - started) / 1000.0, 1) + " s";
     if (result.wasOk())
+    {
         core::Logs::info ("download", "Installed " + pack.name + " " + pack.version + " in " + took + " (" +
                                           getPackFolder (pack).getFullPathName() + ")");
+        if (pack.id == "ob-xf")
+            shareObxfPatches();
+    }
     else if (cancel != nullptr && cancel->load())
         core::Logs::info ("download", pack.name + ": cancelled after " + took);
     else
         core::Logs::warning ("download", pack.name + " was not installed: " + result.getErrorMessage());
     return result;
+}
+
+juce::File PluginDownloads::getObxfLocalFolder()
+{
+#if JUCE_WINDOWS
+    return juce::File::getSpecialLocation (juce::File::windowsLocalAppData).getChildFile ("Surge Synth Team/OB-Xf");
+#else
+    const auto xdg = juce::SystemStats::getEnvironmentVariable ("XDG_DATA_HOME", {});
+    const auto root =
+        juce::File::isAbsolutePath (xdg)
+            ? juce::File (xdg)
+            : juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile (".local/share");
+    return root.getChildFile ("Surge Synth Team/OB-Xf");
+#endif
+}
+
+std::vector<juce::File> PluginDownloads::getObxfSystemFolders()
+{
+#if JUCE_WINDOWS
+    return { juce::File::getSpecialLocation (juce::File::commonApplicationDataDirectory)
+                 .getChildFile ("Surge Synth Team/OB-Xf") };
+#else
+    return { juce::File ("/usr/share/Surge Synth Team/OB-Xf"), juce::File ("/usr/local/share/Surge Synth Team/OB-Xf") };
+#endif
+}
+
+juce::Result PluginDownloads::shareObxfPatches() const
+{
+    const auto* pack = findStandardPack ("ob-xf");
+    if (pack == nullptr || ! isInstalled (*pack))
+        return juce::Result::ok();
+    return shareObxfPatches (getPackFolder (*pack).getChildFile ("Patches"), getObxfLocalFolder(),
+                             getObxfSystemFolders());
+}
+
+juce::Result PluginDownloads::shareObxfPatches (const juce::File& packPatches, const juce::File& localFolder,
+                                                const std::vector<juce::File>& systemFolders)
+{
+    if (! packPatches.isDirectory() || localFolder.isDirectory())
+        return juce::Result::ok(); // nothing to copy, or OB-Xf has its own folder already
+    for (const auto& system : systemFolders)
+        if (system.isDirectory())
+            return juce::Result::ok(); // installed otherwise: a folder of ours would hide that one
+    const auto target = localFolder.getChildFile ("Patches");
+    if (! target.getParentDirectory().createDirectory() || ! packPatches.copyDirectoryTo (target))
+    {
+        localFolder.deleteRecursively(); // not left half there: OB-Xf would use it
+        core::Logs::warning ("download", "Could not copy OB-Xf's factory patches to " + localFolder.getFullPathName());
+        return juce::Result::fail ("Could not copy OB-Xf's factory patches to " + localFolder.getFullPathName() + ".");
+    }
+    core::Logs::info ("download",
+                      "Copied OB-Xf's factory patches to " + localFolder.getFullPathName() + " for its own patch menu");
+    return juce::Result::ok();
 }
 
 juce::Result PluginDownloads::installUnlogged (const DownloadPack& pack,
