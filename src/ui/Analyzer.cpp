@@ -1,4 +1,5 @@
 #include "Analyzer.h"
+#include "session/AnalysisForAgents.h"
 #include "AskForName.h"
 #include "AnalysisLibraryView.h"
 #include "session/SoundIndex.h"
@@ -239,11 +240,15 @@ Analyzer::Analyzer (Session& s, ai::AiService* a) : Panel ("analyzer", "Analyzer
     libraryButton.setTooltip ("The songs Spinus has analyzed (here and in the Track creator), the space they take, "
                               "and deleting them");
     libraryButton.onClick = [this] { showLibrary(); };
+    fullDataToggle.setTooltip (
+        "Lets coding agents connected through MCP read the exact notes and drum hits of the songs "
+        "you analyzed, not only their tempo, key, chords, sections and groove");
+    fullDataToggle.onClick = [this] { setFullData (fullDataToggle.getToggleState()); };
 
     for (auto* c : std::initializer_list<juce::Component*> {
              &intro, &songText, &status, &tempoLabel, &tempoText, &keyLabel, &keyText, &stemsLabel, &stemsText, &notice,
-             &chooseButton, &useTempoButton, &useKeyButton, &separateButton, &stemCount, &sourcesButton,
-             &libraryButton })
+             &chooseButton, &useTempoButton, &useKeyButton, &separateButton, &stemCount, &sourcesButton, &libraryButton,
+             &fullDataToggle })
         addAndMakeVisible (c);
     for (auto* c : std::initializer_list<juce::Component*> { &needsText, &downloadButton, &engineButton, &bar,
                                                              &cancelButton, &addButton, &continueButton, &anewButton })
@@ -287,6 +292,8 @@ void Analyzer::setService (ai::AiService* newService)
     if (const auto settings = getSettingsFile(); settings.existsAsFile())
         if (const auto path = juce::JSON::parse (settings)["drumSamples"].toString(); juce::File::isAbsolutePath (path))
             drumSamplesFolder = juce::File (path);
+    fullDataToggle.setToggleState (agents::fullDataAllowed (getSettingsFile().getParentDirectory()),
+                                   juce::dontSendNotification);
     if (service != nullptr)
         listener = service->addListener (
             [this] (const juce::String& method, const juce::var& params)
@@ -1647,7 +1654,45 @@ void Analyzer::setDrumSamplesFolder (const juce::File& folder)
 {
     drumSamplesFolder = folder;
     if (const auto file = getSettingsFile(); file != juce::File())
-        file.replaceWithText (juce::JSON::toString (object ({ { "drumSamples", folder.getFullPathName() } })));
+    {
+        // The file keeps the other settings (fullDataThroughMcp).
+        auto settings = juce::JSON::parse (file);
+        if (! settings.isObject())
+            settings = juce::var (new juce::DynamicObject());
+        settings.getDynamicObject()->setProperty ("drumSamples", folder.getFullPathName());
+        file.replaceWithText (juce::JSON::toString (settings));
+    }
+}
+
+void Analyzer::setFullData (bool on)
+{
+    const auto aiFolder = getSettingsFile().getParentDirectory();
+    if (! on || aiFolder == juce::File())
+    {
+        agents::setFullDataAllowed (aiFolder, false);
+        fullDataToggle.setToggleState (false, juce::dontSendNotification);
+        return;
+    }
+    // Asked first: the notes can copy a song, and they leave this computer.
+    fullDataToggle.setToggleState (false, juce::dontSendNotification);
+    juce::AlertWindow::showOkCancelBox (
+        juce::MessageBoxIconType::WarningIcon, "Provide full data through MCP?",
+        "Coding agents connected to Spinus through MCP will be able to read the exact notes and drum hits of every "
+        "song you analyzed, not only its tempo, key, chords, sections and groove.\n\n"
+        "- Melodies and riffs copied from songs by other people can be protected by copyright. Use the notes to "
+        "learn from a song, not to copy it into your own.\n"
+        "- What an agent reads is sent to the company that runs it (its AI provider), like everything else the "
+        "agent sees.\n\n"
+        "You can turn this off again at any time.",
+        "Allow", "Cancel", this,
+        juce::ModalCallbackFunction::create (
+            [safe = juce::Component::SafePointer (this), aiFolder] (int result)
+            {
+                if (safe == nullptr || result == 0)
+                    return;
+                agents::setFullDataAllowed (aiFolder, true);
+                safe->fullDataToggle.setToggleState (true, juce::dontSendNotification);
+            }));
 }
 
 void Analyzer::measureDrumSamples (const std::function<void()>& then)
@@ -2470,6 +2515,8 @@ void Analyzer::resized()
     {
         auto r = area.removeFromBottom (48);
         sourcesButton.setBounds (r.removeFromRight (180).withSizeKeepingCentre (180, 26));
+        r.removeFromRight (8);
+        fullDataToggle.setBounds (r.removeFromRight (230).withSizeKeepingCentre (230, 26));
         r.removeFromRight (8);
         notice.setBounds (r);
     }

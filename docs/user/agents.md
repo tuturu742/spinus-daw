@@ -8,6 +8,10 @@ Spinus, while you watch and play it here:
 - **Looking things up:** Spinus's manual, and the style of your reference songs in the
   [Track creator](track-creator.md) (what they share: tempo, key, chords, drums, parts), so "make it like my
   references" works.
+- **Your analyzed songs:** what the [Analyzer](analyzer.md) and the Track creator measured of the songs you
+  analyzed (tempo, bars, key, loudness, sections, chords, drum groove, each part's range), to work with one as
+  a reference. This works with Spinus's AI off. The exact notes and drum hits only when you allow it (see
+  [Your analyzed songs](#your-analyzed-songs)).
 - **Listening by numbers:** rendering it to measure the mix's loudness and peaks, each section's loudness and
   each part's.
 
@@ -80,6 +84,21 @@ settings, the device and preset lists, the manual, your references' style, check
 replace** what is there (writing notes over a part's, copying bars, automation, a new sound, Spinus's
 commands). Clients that use this can run the ones that only look without asking you each time and ask before
 the rest. Every change is still one undo step.
+
+## Your analyzed songs
+
+An agent can list the songs you analyzed (`list_analyzed_songs`) and read what was measured of one
+(`song_analysis`): its tempo and where the bars start, key, loudness and, when the Track creator measured it,
+its sections, chords per bar, drum groove, and each part's range and how busy it is. Songs are named by their
+file name only: an agent never learns where they are on your computer.
+
+The **exact notes and drum hits** the Analyzer heard are not shared unless you tick **Provide full data
+through MCP** at the bottom of the [Analyzer](analyzer.md#sharing-with-coding-agents). Spinus asks first,
+because:
+
+- melodies and riffs copied from other people's songs can be protected by copyright: use them to learn from
+  a song, not to copy it into yours;
+- what an agent reads goes to the company that runs it (its AI provider).
 
 ## While an agent works
 

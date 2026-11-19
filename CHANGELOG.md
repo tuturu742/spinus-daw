@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Coding agents can read your analyzed songs**: `list_analyzed_songs` and `song_analysis` give what the Analyzer and
+  the Track creator measured (tempo, key, loudness, sections, chords, groove, part ranges), by song name only, with
+  Spinus's AI off too. The exact notes and drum hits only with **Provide full data through MCP** ticked in the
+  Analyzer (off at first; Spinus explains the copyright and privacy side before turning it on).
 - **Pattern automation** (first part): a pattern can hold its own automation, which plays wherever the pattern is
   placed and in pattern mode. Where an automation clip on the Playlist moves the same setting, the Playlist's
   clip wins. Draw it in the lane under the Piano Roll (its corner menu: **Automate...**).

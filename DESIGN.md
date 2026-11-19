@@ -682,6 +682,13 @@ can work on the open project while the user watches and listens.
     starting are refused while the project has unsaved changes (`ProjectDocument::hasUnsavedChanges`), so an
     agent never discards the user's work; they aren't undo steps, and the agent that did it has seen the new
     project (`markSeen`), while the others are told as for File › Open.
+    And the analysis library (§12.7; owner decision 2026-11-18): `list_analyzed_songs` and `song_analysis`
+    (`agents::listSongs`, `describeSong`), read from song.json in C++, so they work with AI off. Songs are named
+    by file name and library key, never by path. By default: tempo, bar starts, key, loudness and the Track
+    creator's features (sections, chords, groove, parts, guitars). The exact notes and drum hits, one part at a
+    time (at most 3,000 per answer, `from`/`to` seconds for the rest), only while the Analyzer's **Provide full
+    data through MCP** is on (`fullDataThroughMcp` in the AI folder's `analyzer.json`, off by default), which asks
+    first with the copyright and provider disclaimer.
   - **The project harness's (§12.11), through the local AI service when AI is on:** `ai.v1.project.tools` lists
     them; `ai.v1.project.tool` runs one on the context and returns its steps, which the interface performs. The
     AI service needs no AI connection or internet for these, so an agent works offline; with AI off it still has

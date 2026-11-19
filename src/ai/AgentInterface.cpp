@@ -1,4 +1,5 @@
 #include "AgentInterface.h"
+#include "session/AnalysisForAgents.h"
 
 #include "ProjectContext.h"
 #include "Proposal.h"
@@ -1065,6 +1066,25 @@ juce::var AgentInterface::nativeTools() const
                 object ({ { "type", "array" }, { "description", "The commands, in order" }, { "items", step } }) } },
             { "steps" }),
         Does::replaces));
+    tools.add (
+        tool ("list_analyzed_songs",
+              "The songs the user has analyzed in Spinus (the Analyzer or the Track creator), by name, with what "
+              "was measured of each. Works without Spinus's AI. song_analysis tells what was found.",
+              noInput, Does::reads));
+    tools.add (tool (
+        "song_analysis",
+        "What Spinus measured of an analyzed song, to work with it as a reference: tempo and where the bars start, "
+        "key, loudness, and (when the Track creator measured it) its sections, chords per bar, drum groove, each "
+        "part's range and how busy it is. The exact notes and drum hits only when the user allows it in the "
+        "Analyzer (Provide full data through MCP): then ask for one part with `part`.",
+        schema (
+            { { "song", property ("string", "The song's name (or part of it) or its key from list_analyzed_songs") },
+              { "part", property ("string", "One part's exact notes, such as \"bass\", \"htdemucs/vocals\", or "
+                                            "\"drums\" for the drum hits (only when the user allows it)") },
+              { "from", property ("number", "With part: from this many seconds into the song") },
+              { "to", property ("number", "With part: up to this many seconds") } },
+            { "song" }),
+        Does::reads));
     tools.add (tool ("command_help", "A Spinus command's parameters (JSON Schema), or the list of commands.",
                      schema ({ { "command", property ("string", "The command's name; leave it out for the list") } }),
                      Does::reads));
@@ -1323,6 +1343,26 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
         markSeen (*agent);
         return reply (text (
             juce::JSON::toString (cli::summarize (session, host.projectFolder ? host.projectFolder() : juce::File()))));
+    }
+    if (name == "list_analyzed_songs" || name == "song_analysis")
+    {
+        const auto aiFolder = settingsFile.getParentDirectory().getChildFile ("ai");
+        const auto library = AnalysisLibrary::inAiFolder (aiFolder);
+        if (name == "list_analyzed_songs")
+        {
+            const auto songs = agents::listSongs (library);
+            return reply (text (songs.getArray() != nullptr && ! songs.getArray()->isEmpty()
+                                    ? juce::JSON::toString (songs)
+                                    : "No songs are analyzed yet. The user analyzes one in Spinus's Analyzer "
+                                      "(Track Analyzer) or the Track creator."));
+        }
+        juce::String error;
+        const auto readSeconds = [&arguments] (const char* key)
+        { return arguments.hasProperty (key) ? (double)arguments[key] : -1.0; };
+        const auto found =
+            agents::describeSong (library, arguments["song"].toString(), agents::fullDataAllowed (aiFolder),
+                                  arguments["part"].toString(), readSeconds ("from"), readSeconds ("to"), error);
+        return reply (error.isEmpty() ? text (juce::JSON::toString (found)) : text ("Not done: " + error, true));
     }
     if (name == "what_changed")
     {

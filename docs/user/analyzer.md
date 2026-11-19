@@ -225,6 +225,14 @@ the Track creator), the Analyzer says what it has and offers:
 **Saved analyses...** (at the bottom) shows how much space this takes and lets you delete stems or whole
 songs.
 
+## Sharing with coding agents
+
+A [coding agent](agents.md#your-analyzed-songs) connected to Spinus can read what was measured of the songs
+you analyzed: tempo, bars, key, loudness, sections, chords, groove and each part's range. The exact notes and
+drum hits stay here unless you tick **Provide full data through MCP** (at the bottom, off at first). Spinus
+asks before turning it on: melodies copied from other people's songs can be protected by copyright, and what
+an agent reads goes to its AI provider. Untick it to stop sharing them.
+
 ## About other people's songs
 
 The analysis and the separation use freely available open-source models made by others; they are not
