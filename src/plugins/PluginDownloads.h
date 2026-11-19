@@ -82,6 +82,23 @@ public:
     juce::Result install (const DownloadPack&, const std::function<void (const Progress&)>& onProgress = {},
                           const std::atomic<bool>* cancel = nullptr) const;
 
+    /** OB-Xf's own patch menu looks for its factory patches only in its own folder (owner decision 2026-11-19: copy
+        them there): when the ob-xf pack is installed and OB-Xf has no factory folder anywhere yet, its Patches are
+        copied to OB-Xf's local factory folder (getObxfLocalFolder). OB-Xf prefers that folder to a system-wide one,
+        so it is never made when a system-wide one exists (an OB-Xf installed otherwise), and never written into
+        when it is there already. Called after installing the pack and at start (cheap when there is nothing to
+        do). */
+    juce::Result shareObxfPatches() const;
+    /** The same, with the folders given (tests): the pack's Patches, OB-Xf's local factory folder, and the
+        system-wide folders it would use instead. */
+    static juce::Result shareObxfPatches (const juce::File& packPatches, const juce::File& localFolder,
+                                          const std::vector<juce::File>& systemFolders);
+    /** Where OB-Xf looks for its factory folder of the user: $XDG_DATA_HOME (or ~/.local/share)/Surge Synth
+        Team/OB-Xf on Linux, %LOCALAPPDATA%\Surge Synth Team\OB-Xf on Windows (sst-plugininfra's
+        bestLibrarySharedVendorFolderPathFor, as OB-Xf 1.0.3 uses it); and the system-wide ones. */
+    static juce::File getObxfLocalFolder();
+    static std::vector<juce::File> getObxfSystemFolders();
+
     /** Deletes the pack's folder (Options > Get free plugins > Remove). Its plugin files go first: if one of
         them cannot be deleted (in use, or no permission), nothing else is, the pack stays installed, and the
         result says which. If only other files are left behind, the pack counts as removed and the result names

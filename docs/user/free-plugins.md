@@ -23,12 +23,12 @@ not a version that needs an account or that hides features. Plugins whose projec
 installer program (like Odin 2 for Windows) are not offered, because Spinus never runs another
 program's installer.
 
-**OB-Xf's factory patches** (488 sounds) come with its download, and the Analyzer's
-[Closest preset](analyzer.md) chooses from them. OB-Xf's own patch menu does not list them, though: OB-Xf
-only looks in its own shared folder, outside the folder Spinus downloads into (the patches are in
-`~/.local/share/Spinus DAW/plugins/ob-xf/Patches` on Linux). To browse them in OB-Xf's own window,
-install OB-Xf with its own installer from its
-[releases page](https://github.com/surge-synthesizer/OB-Xf/releases).
+**OB-Xf's factory patches** (488 sounds) come with its download: pick them in OB-Xf's own patch menu, in
+the Browser's [Presets](browser.md#presets), and the Analyzer's [Closest preset](analyzer.md) chooses from
+them. OB-Xf only looks for them in its own folder, so Spinus also copies them there
+(`~/.local/share/Surge Synth Team/OB-Xf` on Linux, `AppData\Local\Surge Synth Team\OB-Xf` on Windows). It
+does that only when OB-Xf has no such folder yet: an OB-Xf you installed with its own installer keeps its
+own patches, and Spinus never changes patches already there.
 
 **Six Sines' factory patches** are inside the plugin: pick them with the arrows at the top of its own
 window. The Analyzer's Closest preset does not list them (Six Sines does not tell other programs what

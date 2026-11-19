@@ -23,13 +23,6 @@ what happened, and attach the project if you can.
 - Song analysis on the graphics card has been tested on a few cards only; see
   [the analysis engine](analysis-engine.md). Every computer can use the CPU instead.
 
-## Free plugins
-
-- **OB-Xf's own patch menu does not list its factory patches**: Spinus downloads them (the Analyzer's
-  Closest preset uses them), but OB-Xf only looks in its own shared folder, outside the folder Spinus
-  downloads into. Install OB-Xf with its own installer to browse them there; see
-  [Get free plugins](free-plugins.md).
-
 ## Windows
 
 - The installer isn't signed yet, so Windows shows **"Windows protected your PC"** the first time: click

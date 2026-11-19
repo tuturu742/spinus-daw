@@ -1011,3 +1011,37 @@ TEST_CASE ("Get free plugins without internet: the download fails at once, says 
     CHECK (dialog.getStatusText().contains ("internet"));
     CHECK (! f.downloads.isInstalled (offline));
 }
+
+TEST_CASE ("OB-Xf's factory patches are copied where its own patch menu looks, only when it has none",
+           "[plugins][downloads][obxf]")
+{
+    const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getChildFile ("spinus-obxf-test-" + juce::Uuid().toString());
+    const auto patches = root.getChildFile ("pack/Patches");
+    REQUIRE (patches.getChildFile ("Leads/Brass.fxp").create().wasOk());
+    REQUIRE (patches.getChildFile ("Pads/Warm.fxp").create().wasOk());
+    const auto local = root.getChildFile ("home/.local/share/Surge Synth Team/OB-Xf");
+    const auto system = root.getChildFile ("usr/share/Surge Synth Team/OB-Xf");
+
+    // OB-Xf installed otherwise (a system-wide folder): nothing is made, since ours would hide it.
+    REQUIRE (system.createDirectory().wasOk());
+    CHECK (plugins::PluginDownloads::shareObxfPatches (patches, local, { system }).wasOk());
+    CHECK_FALSE (local.exists());
+    REQUIRE (system.deleteRecursively());
+
+    // None anywhere: copied, with its categories.
+    CHECK (plugins::PluginDownloads::shareObxfPatches (patches, local, { system }).wasOk());
+    CHECK (local.getChildFile ("Patches/Leads/Brass.fxp").existsAsFile());
+    CHECK (local.getChildFile ("Patches/Pads/Warm.fxp").existsAsFile());
+
+    // There already (the user's, or copied before): left as it is.
+    REQUIRE (local.getChildFile ("Patches/Leads/Brass.fxp").deleteFile());
+    CHECK (plugins::PluginDownloads::shareObxfPatches (patches, local, { system }).wasOk());
+    CHECK_FALSE (local.getChildFile ("Patches/Leads/Brass.fxp").exists());
+
+    // No pack patches: nothing to do.
+    CHECK (plugins::PluginDownloads::shareObxfPatches (root.getChildFile ("none"), root.getChildFile ("other"), {})
+               .wasOk());
+    CHECK_FALSE (root.getChildFile ("other").exists());
+    root.deleteRecursively();
+}
