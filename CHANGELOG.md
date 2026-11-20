@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Spinus Tune: move notes in time and change their length.** In the note editor, drag a note sideways to sing it
+  earlier or later, or drag its edge to make it longer or shorter. The notes around it stay where they are. A moved
+  note's pitch now changes exactly where the note starts; before, it changed about 70 ms early.
 - **Spinus Tune: each note's volume and formant.** In the note editor, **Volume** makes the selected notes louder or
   quieter and **Formant** changes the voice's character (smaller and brighter, or bigger and darker) without changing the
   note. **Edit notes (Spinus Tune)...** in an audio clip's right-click menu opens the editor, as a double-click does.
