@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: songs whose tempo changes.** A band's song that slows down for its second half, or speeds up for a
+  chorus, now gets tempo changes in the project where its tempo changes, so the replicated notes stay on the bars.
+  The tempo is also steadier for every song: a beat the Analyzer missed or found twice no longer shifts the bars
+  (they could end up seconds off on live recordings, about a second on generated songs).
 - **Coding agents see the song in detail, with AI on or off.** New tools read a pattern's notes (`read_pattern`), a
   clip's settings, such as an audio clip's fades or an automation clip's points (`read_clip`), and an instrument's or
   effect's settings with their values (`device_settings`). `song_summary` now also shows pan, mute and solo, swing, which
