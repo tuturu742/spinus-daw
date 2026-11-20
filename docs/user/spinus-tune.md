@@ -40,7 +40,8 @@ Where the melody has no note, the key and scale are used. **Notes from channel**
 ![Spinus Tune's editor](images/spinus-tune-editor.png)
 
 For a recorded vocal, Spinus Tune can also fix notes one by one, like Melodyne: double-click the audio
-clip in the [Playlist](playlist.md). The first time, Spinus listens to the vocal (with its AI service, on
+clip in the [Playlist](playlist.md), or **Shift**+right-click it and choose **Edit notes (Spinus Tune)...**. The
+first time, Spinus listens to the vocal (with its AI service, on
 your computer; turn AI on in Options › AI...), which takes a few seconds per minute of singing.
 
 | What you see | Meaning |
@@ -52,13 +53,15 @@ your computer; turn AI on in Options › AI...), which takes a few seconds per m
 | To | Do |
 |---|---|
 | Move a note | Drag it up or down: it lands on a whole note. Hold **Alt** to move it freely. **Up** and **Down** keys move the selected notes by a semitone. |
-| Select notes | Click one; **Shift**-click to add more. Drift, Vibrato, Snap and Reset work on the selection (or on all notes when none is selected). |
+| Select notes | Click one; **Shift**-click to add more. Drift, Vibrato, Volume, Formant, Snap and Reset work on the selection (or on all notes when none is selected). |
 | Split a note | Double-click it where it should be split. |
 | Join two notes | Select the first and click **Join** (or press **J**): it joins the next one. |
 | Straighten wandering | **Drift**: 1 keeps how the note wanders slowly; 0 holds it straight on the note. |
 | Change vibrato | **Vibrato**: 1 as sung, 0 removes it, 2 makes it twice as wide. |
+| Make a note louder or quieter | **Volume**: from 24 dB quieter to 12 dB louder; 0 dB is as sung. Good for a word that sticks out or gets lost. |
+| Change the voice's character | **Formant**: up (in semitones) sounds smaller and brighter, down bigger and darker, without changing the note. A little (1 or 2) sounds natural; a lot is an effect. |
 | Put every note in the key | **Snap to key**: each note moves to the nearest note of the song's key (the **Key** button in the top bar), or the nearest semitone without a key. |
-| Start over | **Reset** undoes every correction of the selected notes. |
+| Start over | **Reset** undoes every correction of the selected notes. Double-click the **Volume** or **Formant** slider to set it back to 0. |
 | Zoom | The **−**, **+** and **Fit** buttons at the top left (Fit shows the whole clip), **Ctrl+=**, **Ctrl+-** and **Ctrl+0**, or **Ctrl**+wheel around the mouse. **Ctrl+Shift**+wheel makes the rows taller or shorter. **Shift**+wheel scrolls in time, the wheel up and down. |
 
 Every change is one undo step (**Ctrl+Z**). Spinus then renders the tuned vocal in the background (the

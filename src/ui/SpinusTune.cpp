@@ -73,6 +73,36 @@ SpinusTuneEditor::SpinusTuneEditor (Session& s, model::ClipId c, ai::AiService* 
     vibratoSlider.setTooltip ("How wide the selected notes' vibrato is: 0 = none, 1 = as sung, 2 = twice as wide");
     driftSlider.onDragEnd = [this] { setDrift (selectedOrAll(), (float)driftSlider.getValue()); };
     vibratoSlider.onDragEnd = [this] { setVibrato (selectedOrAll(), (float)vibratoSlider.getValue()); };
+    for (auto [slider, label, text, low, high, unit] :
+         { std::tuple { &volumeSlider, &volumeLabel, "Volume", -24.0, 12.0, " dB" },
+           std::tuple { &formantSlider, &formantLabel, "Formant", -12.0, 12.0, " st" } })
+    {
+        slider->setRange (low, high, 0.1);
+        slider->setValue (0.0, juce::dontSendNotification);
+        slider->setDoubleClickReturnValue (true, 0.0);
+        slider->setTextValueSuffix (unit);
+        slider->setSliderStyle (juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
+        label->setText (text, juce::dontSendNotification);
+        addAndMakeVisible (slider);
+        addAndMakeVisible (label);
+    }
+    volumeSlider.setTooltip ("How loud the selected notes (or all) are, in dB: 0 = as sung. Double-click: back to 0");
+    formantSlider.setTooltip ("The voice's character in the selected notes (or all), in semitones: up sounds "
+                              "smaller and brighter, down bigger and darker; 0 = as sung. Double-click: back to 0");
+    volumeSlider.onDragEnd = [this] { setVolume (selectedOrAll(), (float)volumeSlider.getValue()); };
+    formantSlider.onDragEnd = [this] { setFormant (selectedOrAll(), (float)formantSlider.getValue()); };
+    // A double-click (back to 0) or typing a value is not a drag.
+    volumeSlider.onValueChange = [this]
+    {
+        if (! volumeSlider.isMouseButtonDown())
+            setVolume (selectedOrAll(), (float)volumeSlider.getValue());
+    };
+    formantSlider.onValueChange = [this]
+    {
+        if (! formantSlider.isMouseButtonDown())
+            setFormant (selectedOrAll(), (float)formantSlider.getValue());
+    };
     addAndMakeVisible (status);
 
     historyListener = session.getHistory().addListener ([this] (const commands::ChangeSet&) { load(); });
@@ -201,8 +231,8 @@ juce::String SpinusTuneEditor::getStatusText() const
     case Tuner::State::none:
         break;
     }
-    return "Drag a note up or down to move it (Alt: freely); double-click to split; select notes for Drift and "
-           "Vibrato.";
+    return "Drag a note up or down to move it (Alt: freely); double-click to split; select notes for Drift, "
+           "Vibrato, Volume and Formant.";
 }
 
 //==============================================================================
@@ -290,6 +320,24 @@ bool SpinusTuneEditor::setVibrato (const std::vector<int>& indices, float vibrat
     return commit (changed, "Change vibrato");
 }
 
+bool SpinusTuneEditor::setVolume (const std::vector<int>& indices, float gainDb)
+{
+    auto changed = notes;
+    for (auto i : indices)
+        if (juce::isPositiveAndBelow (i, (int)changed.size()))
+            changed[(size_t)i].gainDb = juce::jlimit (-24.0f, 12.0f, gainDb);
+    return commit (changed, "Change note volume");
+}
+
+bool SpinusTuneEditor::setFormant (const std::vector<int>& indices, float semitones)
+{
+    auto changed = notes;
+    for (auto i : indices)
+        if (juce::isPositiveAndBelow (i, (int)changed.size()))
+            changed[(size_t)i].formant = juce::jlimit (-12.0f, 12.0f, semitones);
+    return commit (changed, "Change formant");
+}
+
 bool SpinusTuneEditor::snapToKey (const std::vector<int>& indices)
 {
     const auto key = session.getProject().settings.key.value_or (model::Key { 0, "chromatic" });
@@ -313,6 +361,8 @@ bool SpinusTuneEditor::reset (const std::vector<int>& indices)
             n.shift = 0.0f;
             n.drift = 1.0f;
             n.vibrato = 1.0f;
+            n.gainDb = 0.0f;
+            n.formant = 0.0f;
         }
     return commit (changed, "Reset notes");
 }
@@ -327,6 +377,8 @@ void SpinusTuneEditor::select (std::vector<int> indices)
         const auto& n = notes[(size_t)*selected.begin()];
         driftSlider.setValue (n.drift, juce::dontSendNotification);
         vibratoSlider.setValue (n.vibrato, juce::dontSendNotification);
+        volumeSlider.setValue (n.gainDb, juce::dontSendNotification);
+        formantSlider.setValue (n.formant, juce::dontSendNotification);
     }
     repaint();
 }
@@ -378,10 +430,13 @@ void SpinusTuneEditor::resized()
     toolbar.removeFromRight (6);
     joinButton.setBounds (toolbar.removeFromRight (60));
     toolbar.removeFromRight (12);
-    vibratoSlider.setBounds (toolbar.removeFromRight (150));
-    vibratoLabel.setBounds (toolbar.removeFromRight (56));
-    driftSlider.setBounds (toolbar.removeFromRight (150));
-    driftLabel.setBounds (toolbar.removeFromRight (42));
+    for (auto [slider, label, labelWidth] :
+         { std::tuple { &formantSlider, &formantLabel, 58 }, std::tuple { &volumeSlider, &volumeLabel, 54 },
+           std::tuple { &vibratoSlider, &vibratoLabel, 56 }, std::tuple { &driftSlider, &driftLabel, 42 } })
+    {
+        slider->setBounds (toolbar.removeFromRight (130));
+        label->setBounds (toolbar.removeFromRight (labelWidth));
+    }
     zoomControls.setBounds (toolbar.removeFromLeft (zoomControls.getPreferredWidth()));
     status.setBounds (area.removeFromBottom (24).reduced (6, 2));
     keyboard = area.removeFromLeft (keyboardWidth);
@@ -600,10 +655,11 @@ SpinusTuneWindow::SpinusTuneWindow (Session& session, model::ClipId clip, ai::Ai
 {
     auto content = std::make_unique<SpinusTuneEditor> (session, clip, service);
     editor = content.get();
-    content->setSize (900, 480);
+    content->setSize (1180, 520);
     setContentOwned (content.release(), true);
     setUsingNativeTitleBar (true);
     setResizable (true, false);
+    setResizeLimits (SpinusTuneEditor::minimumWidth, 320, 10000, 10000);
     centreWithSize (getWidth(), getHeight());
     shortcuts::addTo (*this);
 }

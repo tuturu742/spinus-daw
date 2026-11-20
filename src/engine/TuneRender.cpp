@@ -85,6 +85,27 @@ std::vector<float> TuneRender::corrections (const PitchTrack& track, const std::
     return result;
 }
 
+TuneRender::Shaping TuneRender::shaping (const std::vector<model::TuneNote>& notes, double step, double seconds)
+{
+    const auto frames = (size_t)std::ceil (seconds / step) + 1;
+    Shaping result { std::vector<float> (frames, 0.0f), std::vector<float> (frames, 0.0f) };
+    for (auto& note : notes)
+    {
+        if (juce::exactlyEqual (note.gainDb, 0.0f) && juce::exactlyEqual (note.formant, 0.0f))
+            continue;
+        const auto first = juce::jmax (0, (int)std::floor (note.start / step));
+        const auto last = juce::jmin ((int)frames - 1, (int)std::ceil (note.end / step));
+        for (int f = first; f <= last; ++f)
+        {
+            const auto t = f * step;
+            const auto edge = (float)juce::jlimit (0.0, 1.0, juce::jmin (t - note.start, note.end - t) / edgeSeconds);
+            result.gainDb[(size_t)f] = edge * note.gainDb;
+            result.formant[(size_t)f] = edge * note.formant;
+        }
+    }
+    return result;
+}
+
 juce::Result TuneRender::render (const juce::File& source, const PitchTrack& track,
                                  const std::vector<model::TuneNote>& notes, const juce::File& destination,
                                  std::atomic<float>* progress, const std::atomic<bool>* cancel)
@@ -99,6 +120,12 @@ juce::Result TuneRender::render (const juce::File& source, const PitchTrack& tra
     const auto channels = (int)juce::jlimit (1u, 2u, reader->numChannels);
     const auto length = (int64_t)reader->lengthInSamples;
     const auto correction = corrections (track, notes, (double)length / rate);
+    const auto shape = shaping (notes, track.frameSeconds, (double)length / rate);
+    auto frameAt = [&] (double samples)
+    {
+        return (size_t)juce::jlimit<int64_t> (0, (int64_t)correction.size() - 1,
+                                              (int64_t)std::llround (samples / rate / track.frameSeconds));
+    };
 
     using Stretcher = RubberBand::RubberBandStretcher;
     // Rubber Band's options are bit flags in a plain int.
@@ -168,10 +195,18 @@ juce::Result TuneRender::render (const juce::File& source, const PitchTrack& tra
         const auto count = (int)juce::jmin<int64_t> (blockSize, length - position);
         in.clear();
         reader->read (&in, 0, count, position, true, channels > 1);
-        const auto frame = (size_t)juce::jlimit<int64_t> (
-            0, (int64_t)correction.size() - 1,
-            (int64_t)std::llround (((double)position + count / 2.0) / rate / track.frameSeconds));
+        const auto frame = frameAt ((double)position + count / 2.0);
         stretcher.setPitchScale (std::pow (2.0, (double)correction[frame] / 12.0));
+        // A formant of its own only where a note has one: otherwise Rubber Band keeps the voice's (0 = automatic).
+        const auto formant = shape.formant[frame];
+        stretcher.setFormantScale (juce::exactlyEqual (formant, 0.0f) ? 0.0 : std::pow (2.0, (double)formant / 12.0));
+        // The volume per sample, between the frames' values, so it changes without steps.
+        const auto gainFrom = shape.gainDb[frameAt ((double)position)];
+        const auto gainTo = shape.gainDb[frameAt ((double)(position + count))];
+        if (! juce::exactlyEqual (gainFrom, 0.0f) || ! juce::exactlyEqual (gainTo, 0.0f))
+            for (int c = 0; c < channels; ++c)
+                in.applyGainRamp (c, 0, count, juce::Decibels::decibelsToGain (gainFrom),
+                                  juce::Decibels::decibelsToGain (gainTo));
         stretcher.process (in.getArrayOfReadPointers(), (size_t)count, position + count >= length);
         drain();
 

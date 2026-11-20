@@ -68,7 +68,9 @@ struct Vocal
 };
 } // namespace
 
-TEST_CASE ("Spinus Tune's window: move, split, join, drift, vibrato, snap and reset, one undo step each", "[ui][tune]")
+TEST_CASE (
+    "Spinus Tune's window: move, split, join, drift, vibrato, volume, formant, snap and reset, one undo step each",
+    "[ui][tune]")
 {
     Vocal v;
     ui::SpinusTuneEditor editor (v.session, v.clip, nullptr);
@@ -99,6 +101,15 @@ TEST_CASE ("Spinus Tune's window: move, split, join, drift, vibrato, snap and re
     REQUIRE (editor.setVibrato ({ 0 }, 0.0f));
     REQUIRE (editor.setDrift ({ 0 }, 0.0f));
     CHECK (juce::approximatelyEqual (editor.getNotes()[0].vibrato, 0.0f));
+    REQUIRE (editor.setVolume ({ 0 }, -6.0f));
+    REQUIRE (editor.setFormant ({ 1 }, 3.0f));
+    CHECK (editor.getNotes()[0].gainDb == Catch::Approx (-6.0f));
+    CHECK (editor.getNotes()[1].formant == Catch::Approx (3.0f));
+    CHECK (editor.getNotes()[1].pitch + editor.getNotes()[1].shift ==
+           Catch::Approx (59.35f).margin (0.01f)); // pitch kept
+    CHECK (! editor.setVolume ({ 0 }, -6.0f));     // nothing to change
+    CHECK (editor.setFormant ({ 0 }, 40.0f));
+    CHECK (editor.getNotes()[0].formant == Catch::Approx (12.0f)); // at most an octave
 
     // Snap to the song's key (A minor): 57.3 -> A (57), 59.6 -> C (60).
     REQUIRE (editor.snapToKey ({ 0, 1 }));
@@ -111,7 +122,8 @@ TEST_CASE ("Spinus Tune's window: move, split, join, drift, vibrato, snap and re
 
     CHECK (
         v.session.getHistory().getUndoDescriptions().joinIntoString ("|") ==
-        "Move note|Move note|Split note|Join notes|Change vibrato|Straighten drift|Snap notes to the key|Reset notes");
+        "Move note|Move note|Split note|Join notes|Change vibrato|Straighten drift|Change note volume|Change formant|"
+        "Change formant|Snap notes to the key|Reset notes");
     v.session.getHistory().undo();
     CHECK (editor.getNotes()[1].pitch + editor.getNotes()[1].shift == Catch::Approx (60.0f)); // the window follows
 
@@ -124,7 +136,7 @@ TEST_CASE ("Spinus Tune's toolbar holds its controls, and the rows stay out of i
     ui::SpinusLookAndFeel lookAndFeel { ui::Theme::dark() };
     ui::SpinusTuneEditor editor (v.session, v.clip, nullptr);
     editor.setLookAndFeel (&lookAndFeel);
-    for (auto width : { 900, 1400 })
+    for (auto width : { ui::SpinusTuneEditor::minimumWidth, 1400 })
     {
         editor.setSize (width, 420);
         const auto bar = editor.getLocalBounds().removeFromTop (ui::SpinusTuneEditor::toolbarHeight);
@@ -135,7 +147,17 @@ TEST_CASE ("Spinus Tune's toolbar holds its controls, and the rows stay out of i
                 CHECK (bar.contains (child->getBounds()));
                 ++inBar;
             }
-        CHECK (inBar == 8); // Fit/zoom, Drift and Vibrato (each a label and a slider), Join, Snap to key, Reset
+        // Fit/zoom, Drift, Vibrato, Volume and Formant (each a label and a slider), Join, Snap to key, Reset; none
+        // squeezed to nothing and none over another.
+        CHECK (inBar == 12);
+        for (auto* a : editor.getChildren())
+            if (a->isVisible() && a->getY() < bar.getBottom())
+            {
+                CHECK (a->getWidth() >= 26);
+                for (auto* b : editor.getChildren())
+                    if (b != a && b->isVisible() && b->getY() < bar.getBottom())
+                        CHECK (! a->getBounds().intersects (b->getBounds()));
+            }
 
         // The bar is painted in the toolbar colour all the way down to its bottom edge, over no row of the grid.
         const auto image = editor.createComponentSnapshot (editor.getLocalBounds(), true, 1.0f);
@@ -156,9 +178,10 @@ TEST_CASE ("Spinus Tune editor screenshot for the manual", "[.screenshot][tune]"
     ui::SpinusLookAndFeel lookAndFeel { ui::Theme::dark() };
     ui::SpinusTuneEditor editor (v.session, v.clip, nullptr);
     editor.setLookAndFeel (&lookAndFeel);
-    editor.setSize (900, 420);
+    editor.setSize (ui::SpinusTuneEditor::minimumWidth, 420);
     editor.moveNotes ({ 1 }, -0.6f);
     editor.setVibrato ({ 0 }, 0.3f);
+    editor.setFormant ({ 0 }, 2.0f);
     editor.select ({ 0 });
     const auto image = editor.createComponentSnapshot (editor.getLocalBounds(), true, 1.0f);
     const auto file = juce::File (SPINUS_TEST_FILES_DIR)

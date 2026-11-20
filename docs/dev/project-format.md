@@ -64,7 +64,7 @@ Roll writes `volume` there (0–1, linear gain; left out at the default of 1) an
 
 **Clip**: `id`, `lane`, `start`, `length`, `muted`, `type` and per-type fields:
 - `pattern`: `pattern`, `offset`
-- `audio`: `file` (relative to `audio/`, or absolute until the project is first saved), `channel` (the channel it plays through; 0 = none), `offset`, `gainDb`, `pitchSemitones` (-24..24), `speed` (0.25..4, 1 = as recorded), `reversed`, `stretchMode` (`off`: as recorded, pitch and speed ignored; `stretch`/`stretch-drums`: pitch and speed apart, Rubber Band melodic/percussive; `resample`: speed and pitch together, like a record; `tempo-sync`: not yet, plays as `off`), `fadeIn`, `fadeOut`, optional `tune [{start, end, pitch, shift, drift, vibrato}]` (Spinus Tune's notes, seconds in the file)
+- `audio`: `file` (relative to `audio/`, or absolute until the project is first saved), `channel` (the channel it plays through; 0 = none), `offset`, `gainDb`, `pitchSemitones` (-24..24), `speed` (0.25..4, 1 = as recorded), `reversed`, `stretchMode` (`off`: as recorded, pitch and speed ignored; `stretch`/`stretch-drums`: pitch and speed apart, Rubber Band melodic/percussive; `resample`: speed and pitch together, like a record; `tempo-sync`: not yet, plays as `off`), `fadeIn`, `fadeOut`, optional `tune [{start, end, pitch, shift, drift, vibrato, gainDb, formant}]` (`gainDb` -24..12 and `formant` -12..12 semitones written only when not 0) (Spinus Tune's notes, seconds in the file)
 - `automation`: `target {kind, channel | insert | device + parameterId}`, `points [{time, value, curve}]`
 
 **Launcher clip**: as a clip of type `pattern` or `audio`, placed by `track` and `scene` instead of `lane`,

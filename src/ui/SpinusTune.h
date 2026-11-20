@@ -11,7 +11,7 @@ namespace spinus::ui
     keyboard, with the pitch as sung (grey) and as it will sound (yellow).
 
     Drag a note up or down to move it (by semitones; Alt: freely), double-click to split it, Join two
-    neighbours, straighten its Drift or change its Vibrato, Snap to the key, Reset. Every edit is one
+    neighbours, straighten its Drift, change its Vibrato, Volume or Formant, Snap to the key, Reset. Every edit is one
     command (clip.setTune) and one undo step; the Tuner renders the result.
 
     The vocal is analysed by the AI service (ai.v1.listen.vocal) the first time; the analysis is kept by
@@ -22,6 +22,8 @@ class SpinusTuneEditor final : public juce::Component, private juce::ChangeListe
 public:
     /** The toolbar's height, as in the Piano Roll, the Playlist and the Automation editor. */
     static constexpr int toolbarHeight = 30;
+    /** Narrow enough for most screens, wide enough for every control in the toolbar. */
+    static constexpr int minimumWidth = 1100;
 
     SpinusTuneEditor (Session&, model::ClipId, ai::AiService*);
     ~SpinusTuneEditor() override;
@@ -37,6 +39,8 @@ public:
     bool joinNotes (int first, int second);
     bool setDrift (const std::vector<int>& indices, float drift);
     bool setVibrato (const std::vector<int>& indices, float vibrato);
+    bool setVolume (const std::vector<int>& indices, float gainDb);
+    bool setFormant (const std::vector<int>& indices, float semitones);
     bool snapToKey (const std::vector<int>& indices);
     bool reset (const std::vector<int>& indices);
 
@@ -99,8 +103,8 @@ private:
 
     juce::TextButton joinButton { "Join" }, snapButton { "Snap to key" }, resetButton { "Reset" };
     TimelineControls zoomControls { nullptr, {} };
-    juce::Slider driftSlider, vibratoSlider;
-    juce::Label driftLabel, vibratoLabel, status;
+    juce::Slider driftSlider, vibratoSlider, volumeSlider, formantSlider;
+    juce::Label driftLabel, vibratoLabel, volumeLabel, formantLabel, status;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpinusTuneEditor)
 };

@@ -874,13 +874,19 @@ juce::String pointFromJson (const juce::var& json, AutomationPoint& result)
 
 juce::var tuneNoteToJson (const TuneNote& n)
 {
-    return Obj()
-        .set ("start", n.start)
-        .set ("end", n.end)
-        .set ("pitch", n.pitch)
-        .set ("shift", n.shift)
-        .set ("drift", n.drift)
-        .set ("vibrato", n.vibrato);
+    auto json = Obj()
+                    .set ("start", n.start)
+                    .set ("end", n.end)
+                    .set ("pitch", n.pitch)
+                    .set ("shift", n.shift)
+                    .set ("drift", n.drift)
+                    .set ("vibrato", n.vibrato);
+    // Only when changed, so notes saved before these existed are written as they were.
+    if (! juce::exactlyEqual (n.gainDb, 0.0f))
+        json.set ("gainDb", n.gainDb);
+    if (! juce::exactlyEqual (n.formant, 0.0f))
+        json.set ("formant", n.formant);
+    return json;
 }
 
 juce::String tuneNoteFromJson (const juce::var& json, TuneNote& result)
@@ -894,11 +900,15 @@ juce::String tuneNoteFromJson (const juce::var& json, TuneNote& result)
     result.shift = r.real (json, "shift", 0.0f);
     result.drift = r.real (json, "drift", 1.0f);
     result.vibrato = r.real (json, "vibrato", 1.0f);
+    result.gainDb = r.real (json, "gainDb", 0.0f);
+    result.formant = r.real (json, "formant", 0.0f);
     if (! (result.start >= 0.0 && result.end > result.start))
         r.errors.add ("a tune note needs 0 <= start < end (seconds)");
     if (result.pitch < 0.0f || result.pitch > 127.0f || std::abs (result.shift) > 24.0f || result.drift < 0.0f ||
         result.drift > 1.0f || result.vibrato < 0.0f || result.vibrato > 2.0f)
         r.errors.add ("a tune note needs pitch 0..127, shift -24..24, drift 0..1 and vibrato 0..2");
+    if (result.gainDb < -24.0f || result.gainDb > 12.0f || std::abs (result.formant) > 12.0f)
+        r.errors.add ("a tune note needs gainDb -24..12 and formant -12..12");
     return r.errors.joinIntoString ("; ");
 }
 
