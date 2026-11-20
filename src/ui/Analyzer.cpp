@@ -2341,7 +2341,8 @@ bool Analyzer::addNotesToProject()
                                                            (tempoChanges == 1 ? " tempo change" : " tempo changes") +
                                                            " where the song's tempo changes")
                             : juce::String()) +
-                  (songtempo::driftFrom (beatTimes, placementBeats()) > 0.08
+                  // The beat finder's own wobble is up to about 0.2 s on songs made to a click.
+                  (songtempo::driftFrom (beatTimes, placementBeats()) > 0.25
                        ? ". This song speeds up and slows down (played live, not to a click): the notes keep the "
                          "recording's timing, so in places they are up to " +
                              juce::String (songtempo::driftFrom (beatTimes, placementBeats()), 1) + " s off the grid"
