@@ -10,6 +10,9 @@
 #include "engine/BundledDevices.h"
 #include "engine/DeviceFactory.h"
 #include "engine/EngineHost.h"
+#include "engine/EngineAdapter.h"
+#include "dsp/drums/DrumMachineProcessor.h"
+#include "dsp/sampler/SamplerProcessor.h"
 #include "session/Session.h"
 #include "ui/AgentInterfacePage.h"
 
@@ -1493,4 +1496,77 @@ TEST_CASE ("Agents read what song_summary only names: a pattern's notes, a clip'
     CHECK (feedback[0]["value"] == "35%");
     CHECK (feedback[0]["range"].toString().endsWith ("95%"));
     CHECK ((bool)f.call (id, "device_settings", object ({ { "device", 999 } }))["isError"]);
+}
+
+TEST_CASE ("Agents load a Drum Machine kit and samples, only from the project and the sample folders", "[ai][agents]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto hit = f.openFolder.getChildFile ("hit.wav");
+    {
+        REQUIRE (f.openFolder.createDirectory());
+        std::vector<float> click (4800, 0.0f);
+        click[0] = 1.0f;
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (hit);
+        auto writer = wav.createWriterFor (
+            stream,
+            juce::AudioFormatWriterOptions().withSampleRate (48000.0).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        const float* channels[] = { click.data() };
+        writer->writeFromFloatArrays (channels, 1, (int)click.size());
+    }
+    const auto add = [&] (const juce::String& type)
+    {
+        REQUIRE_FALSE ((bool)f.call (
+            id, "run_commands",
+            stepsOf ({ command (
+                "channel.add",
+                object ({ { "name", type },
+                          { "instrument", object ({ { "kind", "stock" }, { "stockType", type } }) } })) }))["isError"]);
+        f.session.getEdit().dispatchPendingUpdatesSynchronously();
+        const auto device = f.session.getProject().channels.back().instrument.value().id;
+        auto* plugin = dynamic_cast<tracktion::ExternalPlugin*> (f.session.getAdapter().getDevicePlugin (device));
+        REQUIRE (plugin != nullptr);
+        return std::pair { (int)device.value, plugin->getAudioPluginInstance() };
+    };
+    const auto [drumsId, drumsInstance] = add ("spinus.drum-machine");
+    auto* drums = dynamic_cast<dsp::DrumMachineProcessor*> (drumsInstance);
+    REQUIRE (drums != nullptr);
+
+    // list_presets names the kits; load_sounds loads one.
+    CHECK (said (f.call (id, "list_presets", object ({ { "device", drumsId } }))).contains ("Spinus Synth Kit"));
+    auto result = f.call (id, "load_sounds", object ({ { "device", drumsId }, { "kit", "Spinus Synth Kit" } }));
+    INFO (said (result));
+    CHECK_FALSE ((bool)result["isError"]);
+    CHECK (drums->getKitDisplayName() == "Spinus Synth Kit");
+
+    // A file in the project's folder, by its path there, onto pad 2.
+    result =
+        f.call (id, "load_sounds",
+                object ({ { "device", drumsId }, { "files", juce::Array<juce::var> { "hit.wav" } }, { "pad", 2 } }));
+    INFO (said (result));
+    CHECK_FALSE ((bool)result["isError"]);
+    CHECK (drums->getPads()[1].name.containsIgnoreCase ("hit"));
+
+    const auto [samplerId, samplerInstance] = add ("spinus.sampler");
+    auto* sampler = dynamic_cast<dsp::SamplerProcessor*> (samplerInstance);
+    REQUIRE (sampler != nullptr);
+    result =
+        f.call (id, "load_sounds",
+                object ({ { "device", samplerId }, { "files", juce::Array<juce::var> { hit.getFullPathName() } } }));
+    INFO (said (result));
+    CHECK_FALSE ((bool)result["isError"]);
+    CHECK (sampler->getZones().size() == 1);
+
+    // Refused: a file outside, both or neither of kit and files, a kit on a Sampler, no such kit.
+    CHECK ((bool)f.call (
+        id, "load_sounds",
+        object ({ { "device", samplerId }, { "files", juce::Array<juce::var> { "/etc/hostname" } } }))["isError"]);
+    CHECK ((bool)f.call (id, "load_sounds", object ({ { "device", samplerId } }))["isError"]);
+    CHECK ((bool)f.call (id, "load_sounds", object ({ { "device", samplerId }, { "kit", "Magpie" } }))["isError"]);
+    result = f.call (id, "load_sounds", object ({ { "device", drumsId }, { "kit", "No Such Kit" } }));
+    CHECK ((bool)result["isError"]);
+    CHECK (said (result).contains ("Spinus Synth Kit"));
 }

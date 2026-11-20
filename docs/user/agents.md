@@ -166,10 +166,15 @@ Each change is one undo step, and Spinus renders the tuned vocal in the backgrou
   until the project is saved. Opening and starting aren't undo steps, like File › Open and
   File › New.
 
+## Kits and samples
+
+An agent loads a Drum Machine kit ("Magpie", "Spinus Synth Kit" or a `.spinuskit` file) or samples into a Sampler
+or onto a Drum Machine's pads with `load_sounds`, as the device's window does. Like loading them yourself, this
+isn't an undo step: load another kit to go back. It only takes files from your sample folders and the project's
+folder.
+
 ## What an agent can't do
 
-- **Load a Drum Machine kit or a Sampler's samples.** Load them in the device's window, then let the agent work
-  with them. A preset that is a kit (such as "Magpie") can't be loaded by an agent either.
 - **Load presets on Spinus's own devices other than 3x Osc.** They have none: the agent changes their settings
   one by one instead.
 - **Change Spinus's settings** or use files outside the places listed under Safety.
