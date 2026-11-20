@@ -13,6 +13,8 @@
 #include "session/Session.h"
 #include "ui/AgentInterfacePage.h"
 
+#include <juce_audio_formats/juce_audio_formats.h>
+
 #include <map>
 #include <array>
 #include <thread>
@@ -61,6 +63,7 @@ struct Fixture
     juce::Array<juce::File> roots { folder.root.getChildFile ("Projects"), folder.root.getChildFile ("Mine") };
     bool unsaved = false;
     juce::File savedTo { "/nowhere" };
+    juce::var heard; // what the AI service hears in a vocal (void: AI is off)
 
     static std::unique_ptr<engine::DeviceFactory> makeDevices (tracktion::Engine& engine)
     {
@@ -96,6 +99,13 @@ struct Fixture
             session.loadProject ({});
             openFolder = juce::File();
             return juce::String();
+        };
+        h.listenToVocal = [this] (const juce::File& audio, const std::function<void (const juce::String&)>& done)
+        {
+            if (! heard.isObject())
+                return done ("listening to a vocal needs Spinus's AI turned on (Options > AI)");
+            session.getTuner().storeAnalysis (audio, heard);
+            done ({});
         };
         h.sampleFolders = [] { return juce::Array<juce::File>(); };
         h.context = [] { return object ({ { "project", juce::var (new juce::DynamicObject()) } }); };
@@ -1298,4 +1308,81 @@ TEST_CASE ("Agents read analyzed songs: what was measured, the exact notes only 
     // The setting keeps the Analyzer's other settings.
     agents::setFullDataAllowed (aiFolder, false);
     CHECK_FALSE (agents::fullDataAllowed (aiFolder));
+}
+
+TEST_CASE ("Agents tune a vocal: listen to it, read its notes and a melody's, match it to the melody",
+           "[ai][agents][tune]")
+{
+    Fixture f;
+    const auto take = f.folder.root.getChildFile ("vocal.wav");
+    {
+        std::vector<float> silence (96000, 0.0f);
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (take);
+        auto writer = wav.createWriterFor (
+            stream,
+            juce::AudioFormatWriterOptions().withSampleRate (48000.0).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        const float* channels[] = { silence.data() };
+        writer->writeFromFloatArrays (channels, 1, (int)silence.size());
+    }
+
+    model::Project p;
+    model::Channel melodyChannel;
+    melodyChannel.id = p.allocateId<model::ChannelId>();
+    melodyChannel.name = "Melody";
+    p.channels = { melodyChannel };
+    model::Lane lane { p.allocateId<model::LaneId>(), "Vocal" };
+    p.playlist.lanes = { lane };
+    model::Pattern melody;
+    melody.id = p.allocateId<model::PatternId>();
+    melody.notes[melodyChannel.id] = { { 0, 1920, 57 }, { 1920, 1440, 60 } }; // at 120 BPM: 0..1 s, 1..1.75 s
+    p.patterns = { melody };
+    model::AudioClip audio;
+    audio.file = take.getFullPathName();
+    audio.onTempoChange = "time";
+    const auto clip = p.allocateId<model::ClipId>();
+    p.playlist.clips.push_back ({ clip, lane.id, 0, 7680, false, audio });
+    p.playlist.clips.push_back (
+        { p.allocateId<model::ClipId>(), lane.id, 0, 7680, false, model::PatternClip { melody.id, 0 } });
+    f.session.getHistory().reset (p);
+
+    f.listen();
+    const auto id = f.connect();
+    auto said = [] (const juce::var& result) { return result["content"][0]["text"].toString(); };
+    const auto clipArgs = object ({ { "clip", (int)clip.value } });
+    CHECK (said (f.call (id, "vocal_notes", clipArgs)).contains ("listen_to_vocal"));
+    auto result = f.call (id, "listen_to_vocal", clipArgs); // AI off
+    CHECK ((bool)result["isError"]);
+    CHECK (said (result).contains ("AI"));
+
+    f.heard = juce::JSON::parse (R"({"duration": 2.0, "track": {"times": [0, 0.005], "hz": [220, 220]},
+                                     "notes": [{"start": 0.0, "end": 1.0, "pitch": 57.3},
+                                               {"start": 1.0, "end": 1.9, "pitch": 59.6}]})");
+    CHECK (said (f.call (id, "listen_to_vocal", clipArgs)).startsWith ("Listened"));
+
+    auto notes = juce::JSON::parse (said (f.call (
+        id, "vocal_notes", object ({ { "clip", (int)clip.value }, { "channel", (int)melodyChannel.id.value } }))));
+    REQUIRE (notes["notes"].size() == 2);
+    CHECK ((int)notes["notes"][1]["index"] == 1);
+    CHECK ((double)notes["notes"][1]["sounds"] == Catch::Approx (59.6));
+    REQUIRE (notes["melody"].size() == 2);
+    CHECK ((double)notes["melody"][1]["end"] == Catch::Approx (1.75));
+    CHECK (! (bool)notes["tuned"]);
+
+    result = f.call (id, "match_vocal_to_melody",
+                     object ({ { "clip", (int)clip.value }, { "channel", (int)melodyChannel.id.value } }));
+    INFO (said (result));
+    CHECK (! (bool)result["isError"]);
+    CHECK (said (result).contains ("2 notes on the melody's pitch, 2 of them on its timing"));
+    const auto& tuned = std::get<model::AudioClip> (f.session.getProject().findClip (clip)->content).tune;
+    REQUIRE (tuned.size() == 2);
+    CHECK (tuned[0].pitch + tuned[0].shift == Catch::Approx (57.0f));
+    CHECK (tuned[1].pitch + tuned[1].shift == Catch::Approx (60.0f));
+    CHECK (tuned[1].outputEnd() == Catch::Approx (1.75));
+    CHECK (f.session.getHistory().getUndoDescriptions().joinIntoString ("|").contains ("Match vocal to melody"));
+
+    // A channel that plays nothing there.
+    result = f.call (id, "match_vocal_to_melody", object ({ { "clip", (int)clip.value }, { "channel", 999 } }));
+    CHECK ((bool)result["isError"]);
 }

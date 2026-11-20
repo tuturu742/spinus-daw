@@ -81,6 +81,11 @@ public:
         std::function<juce::String (const juce::File& folder)> saveProject; // no folder: where it is
         std::function<juce::String (const juce::File& folder)> openProject;
         std::function<juce::String()> newProject;
+
+        /** Spinus Tune's first step for a vocal (listen_to_vocal): the AI service listens to the audio file and the
+            Tuner keeps what it heard. `done` gets an error text, empty when done (unset: not available). */
+        std::function<void (const juce::File& audio, std::function<void (const juce::String& error)> done)>
+            listenToVocal;
     };
 
     /** `settingsFolder` keeps agent-interface.json (on or off, the port, the token). */
@@ -176,6 +181,9 @@ private:
     juce::var nativeTools() const;
     /** Performs steps as one undo step of the agent's; an error text (empty when done). */
     juce::String apply (const juce::String& sessionId, const juce::var& steps, const juce::String& summary);
+    // Spinus Tune for agents: a vocal clip's notes (and a channel's melody over it), and matching it to the melody.
+    juce::var vocalNotes (const juce::var& arguments) const;
+    juce::var matchVocal (const juce::String& sessionId, const juce::var& arguments);
     juce::String checkPaths (const juce::var& value) const;
     void render (bool stems, const ToolReply& reply);
     /** Playback for the user to hear: bars ("9-16", a section's name; empty: from where it is), looped or not. An

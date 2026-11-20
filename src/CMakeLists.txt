@@ -290,6 +290,8 @@ add_library (spinus_core STATIC
     session/SynthProfile.cpp
     session/Suggestions.cpp
     session/Suggestions.h
+    session/MelodyMatch.cpp
+    session/MelodyMatch.h
     session/Tuner.cpp
     session/Tuner.h
     session/SlicesToPattern.h

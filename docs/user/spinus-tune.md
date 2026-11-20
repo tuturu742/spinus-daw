@@ -62,6 +62,7 @@ your computer; turn AI on in Options › AI...), which takes a few seconds per m
 | Change vibrato | **Vibrato**: 1 as sung, 0 removes it, 2 makes it twice as wide. |
 | Make a note louder or quieter | **Volume**: from 24 dB quieter to 12 dB louder; 0 dB is as sung. Good for a word that sticks out or gets lost. |
 | Change the voice's character | **Formant**: up (in semitones) sounds smaller and brighter, down bigger and darker, without changing the note. A little (1 or 2) sounds natural; a lot is an effect. |
+| Follow a melody | Pick a channel in the **Melody** menu at the bottom left: its notes show as faint boxes behind the sung notes (in the octave the vocal is sung in). See [Matching a melody](#matching-a-melody). |
 | Put every note in the key | **Snap to key**: each note moves to the nearest note of the song's key (the **Key** button in the top bar), or the nearest semitone without a key. |
 | Start over | **Reset** undoes every correction of the selected notes, including moves in time and length. Double-click the **Volume** or **Formant** slider to set it back to 0. |
 | Zoom | The **−**, **+** and **Fit** buttons at the top left (Fit shows the whole clip), **Ctrl+=**, **Ctrl+-** and **Ctrl+0**, or **Ctrl**+wheel around the mouse. **Ctrl+Shift**+wheel makes the rows taller or shorter. **Shift**+wheel scrolls in time, the wheel up and down. |
@@ -70,6 +71,24 @@ Every change is one undo step (**Ctrl+Z**). Spinus then renders the tuned vocal 
 bar at the bottom shows how far) with natural-sounding shifting that keeps the voice's character; until
 then you hear the previous version. The recording itself is never changed: Reset all the notes to hear
 it again. Moving notes in time keeps the clip as long as it was.
+
+### Matching a melody
+
+When the vocal should follow a melody you wrote (on any channel, in the [Piano Roll](piano-roll.md)), Spinus
+Tune can fit it for you:
+
+1. Pick the melody's channel in the **Melody** menu at the bottom left of the editor. If the vocal's mixer
+   insert already follows a channel (**Notes from channel**, above), that one is picked for you.
+2. Select the notes to fit, or none for all of them.
+3. Click **Match melody**. Each sung note goes to the melody note it overlaps most: to its pitch, in the octave
+   it is sung in. With **Timing too** ticked (the default) it also starts where the melody note starts and
+   lasts as long, when it is the only sung note on that melody note.
+
+Sung notes with no melody note clearly theirs (an extra syllable, an ad-lib) are left as they were; the bar at
+the bottom says how many. Two syllables sung on one long melody note both get its pitch but keep their timing.
+It's one undo step, and you can fix any note by hand afterwards.
+
+Coding agents can do the same: see [Tuning a vocal](agents.md#tuning-a-vocal).
 
 ## Good to know
 

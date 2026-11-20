@@ -2,6 +2,7 @@
 
 #include "TimelineControls.h"
 #include "ai/AiService.h"
+#include "session/MelodyMatch.h"
 #include "session/Session.h"
 
 namespace spinus::ui
@@ -12,8 +13,9 @@ namespace spinus::ui
 
     Drag a note up or down to move it (by semitones; Alt: freely), sideways to move it in time, or by an edge
     to make it longer or shorter (its neighbours stay where they are); double-click to split it, Join two
-    neighbours, straighten its Drift, change its Vibrato, Volume or Formant, Snap to the key, Reset. Every edit is one
-    command (clip.setTune) and one undo step; the Tuner renders the result.
+    neighbours, straighten its Drift, change its Vibrato, Volume or Formant, Snap to the key, Reset. A channel picked
+    as the melody shows its notes as ghosts behind the sung ones, and Match melody fits the sung notes to them
+    (MelodyMatch). Every edit is one command (clip.setTune) and one undo step; the Tuner renders the result.
 
     The vocal is analysed by the AI service (ai.v1.listen.vocal) the first time; the analysis is kept by
     the Tuner, so later the window opens without AI.
@@ -54,6 +56,14 @@ public:
     bool setFormant (const std::vector<int>& indices, float semitones);
     bool snapToKey (const std::vector<int>& indices);
     bool reset (const std::vector<int>& indices);
+    /** Fits the notes (all when none are given) to the melody's notes: their pitch, and with `timing` their time. */
+    bool matchToMelody (const std::vector<int>& indices, bool timing);
+
+    /** The channel whose notes are shown as the melody (none: no melody). At first the one the clip's mixer insert
+        takes its notes from (live Spinus Tune's Notes from channel), or the one picked last for this clip. */
+    void setMelodyChannel (model::ChannelId);
+    model::ChannelId getMelodyChannel() const noexcept { return melodyChannel; }
+    const std::vector<MelodyMatch::Note>& getMelody() const noexcept { return melody; }
 
     std::vector<int> getSelection() const;
     void select (std::vector<int>);
@@ -103,12 +113,14 @@ private:
     model::ClipId clip;
     ai::AiService* service;
     int historyListener = 0, aiListener = 0;
-    juce::String job, problem;
+    juce::String job, problem, notice;
 
     std::vector<model::TuneNote> notes;
     std::optional<std::vector<float>> track; // pitch as sung (MIDI per 5 ms frame, 0 where none)
     double frameSeconds = 0.005, duration = 1.0;
     std::set<int> selected;
+    model::ChannelId melodyChannel;
+    std::vector<MelodyMatch::Note> melody; // in seconds into the file
 
     // View.
     juce::Rectangle<int> grid, keyboard;
@@ -129,6 +141,10 @@ private:
     TimelineControls zoomControls { nullptr, {} };
     juce::Slider driftSlider, vibratoSlider, volumeSlider, formantSlider;
     juce::Label driftLabel, vibratoLabel, volumeLabel, formantLabel, status;
+    juce::ComboBox melodyBox;
+    juce::TextButton matchButton { "Match melody" };
+    juce::ToggleButton timingToggle { "Timing too" };
+    void fillMelodyBox();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpinusTuneEditor)
 };

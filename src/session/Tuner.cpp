@@ -120,6 +120,28 @@ void Tuner::storeAnalysis (const juce::File& audio, const juce::var& analysis)
     triggerAsyncUpdate(); // clips waiting for it can render now
 }
 
+juce::File Tuner::getSourceFile (ClipId clip) const
+{
+    const auto* c = session.getProject().findClip (clip);
+    const auto* audio = c != nullptr ? std::get_if<AudioClip> (&c->content) : nullptr;
+    return audio != nullptr ? session.resolveAudioFile (audio->file) : juce::File();
+}
+
+std::vector<TuneNote> Tuner::getNotes (ClipId clip) const
+{
+    const auto* c = session.getProject().findClip (clip);
+    const auto* audio = c != nullptr ? std::get_if<AudioClip> (&c->content) : nullptr;
+    if (audio == nullptr)
+        return {};
+    if (! audio->tune.empty())
+        return audio->tune;
+    std::vector<TuneNote> notes;
+    if (auto* found = getAnalysis (getSourceFile (clip))["notes"].getArray())
+        for (auto& n : *found)
+            notes.push_back ({ (double)n["start"], (double)n["end"], (float)(double)n["pitch"] });
+    return notes;
+}
+
 juce::var Tuner::getAnalysis (const juce::File& audio) const
 {
     const auto id = identify (audio);

@@ -10,6 +10,7 @@
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
 #include "session/AgentCommandLine.h"
+#include "session/MelodyMatch.h"
 #include "session/Session.h"
 
 #include <SpinusVersion.h>
@@ -257,7 +258,8 @@ juce::String instructionsFor (bool musicTools)
         "it). save_project saves the project (and names an untitled one, in a folder of projects list_projects "
         "shows or a new folder in one); new_project starts an empty one and "
         "open_project opens one of the projects list_projects shows (the Browser's): both only when nothing is "
-        "left unsaved. ";
+        "left unsaved. A sung vocal is tuned with Spinus Tune's tools: listen_to_vocal once, vocal_notes to read "
+        "its notes (and a melody channel's), match_vocal_to_melody, or clip.setTune for any note by hand. ";
     const juce::String tools =
         musicTools ? "Start with song_overview (or song_summary). Edit with the music tools (write_part, add_part, "
                      "insert_bars, automate, add_effect, send, duck, set_sound, shape_sound) or with run_commands "
@@ -1164,7 +1166,155 @@ juce::var AgentInterface::nativeTools() const
                                                                "if it isn't there ('Album/Act 1' is inside the "
                                                                "first)") } }),
                      Does::adds));
+
+    // Spinus Tune: a vocal clip's notes, edited with clip.setTune (each a run_commands step).
+    tools.add (tool (
+        "vocal_notes",
+        "Spinus Tune's notes of a vocal audio clip: each sung note (seconds in the clip's file, its pitch as sung "
+        "as a MIDI number) with how it is corrected (shift, drift, vibrato, gainDb, formant, move, stretch) and where "
+        "and at what pitch it sounds. Change them with run_commands' clip.setTune, sending every note as listed "
+        "with your changes. With `channel`, also that channel's notes while the clip plays (the melody, in the same "
+        "seconds), as Spinus Tune shows them as ghosts. A vocal Spinus hasn't listened to yet has no notes: "
+        "listen_to_vocal first.",
+        schema ({ { "clip", property ("integer", "The audio clip's id, as song_summary shows it") },
+                  { "channel", property ("integer", "Optional: a channel whose notes are the melody") } },
+                { "clip" }),
+        Does::reads));
+    tools.add (tool (
+        "listen_to_vocal",
+        "Spinus Tune's first step for a vocal audio clip: Spinus listens to it and finds its sung notes "
+        "and their pitch (a few seconds per minute of singing; needs Spinus's AI on). Then "
+        "vocal_notes lists them. The song is not changed.",
+        schema ({ { "clip", property ("integer", "The audio clip's id, as song_summary shows it") } }, { "clip" }),
+        Does::reads));
+    tools.add (
+        tool ("match_vocal_to_melody",
+              "Spinus Tune's Match melody: each sung note of a vocal clip goes to the melody note (a channel's notes "
+              "while the clip plays) it overlaps most: to its pitch, in the octave sung, and with `timing` also to its "
+              "start and length, when it is that melody note's only sung note. Notes with no melody note clearly "
+              "theirs stay as they are, and are listed. One undo step.",
+              schema ({ { "clip", property ("integer", "The audio clip's id, as song_summary shows it") },
+                        { "channel", property ("integer", "The channel whose notes are the melody") },
+                        { "timing", property ("boolean", "Also move and stretch notes onto the melody's timing (true "
+                                                         "when left out); false matches the pitch only") },
+                        { "notes", object ({ { "type", "array" },
+                                             { "items", object ({ { "type", "integer" } }) },
+                                             { "description", "Only these notes, by their index in vocal_notes (all "
+                                                              "when left out)" } }) } },
+                      { "clip", "channel" }),
+              Does::replaces));
     return tools;
+}
+
+namespace
+{
+/** A tune note as agents see it: as saved, with its index and where and at what pitch it sounds. */
+juce::var vocalNoteToJson (const model::TuneNote& n, int index)
+{
+    auto json = model::tuneNoteToJson (n);
+    if (auto* o = json.getDynamicObject())
+    {
+        o->setProperty ("index", index);
+        o->setProperty ("sounds", n.pitch + n.shift);
+        o->setProperty ("soundsFrom", n.outputStart());
+        o->setProperty ("soundsTo", n.outputEnd());
+    }
+    return json;
+}
+
+/** How long an audio file is, in seconds (0 when it can't be read). */
+double fileLength (const juce::File& file)
+{
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+    return reader != nullptr && reader->sampleRate > 0.0 ? (double)reader->lengthInSamples / reader->sampleRate : 0.0;
+}
+} // namespace
+
+juce::var AgentInterface::vocalNotes (const juce::var& arguments) const
+{
+    const model::ClipId clip { (uint32_t)(int)arguments["clip"] };
+    const auto* c = session.getProject().findClip (clip);
+    if (c == nullptr || ! std::holds_alternative<model::AudioClip> (c->content))
+        return text ("There is no audio clip " + arguments["clip"].toString() + " (song_summary lists the clips).",
+                     true);
+    const auto& tuner = session.getTuner();
+    const auto notes = tuner.getNotes (clip);
+    if (notes.empty())
+        return text ("Spinus hasn't listened to this vocal yet: call listen_to_vocal (it needs Spinus's AI on).");
+
+    juce::Array<juce::var> list;
+    for (int i = 0; i < (int)notes.size(); ++i)
+        list.add (vocalNoteToJson (notes[(size_t)i], i));
+    auto* answer = new juce::DynamicObject();
+    answer->setProperty ("clip", (int)clip.value);
+    answer->setProperty ("tuned", ! std::get<model::AudioClip> (c->content).tune.empty());
+    answer->setProperty ("notes", list);
+    if (arguments.hasProperty ("channel"))
+    {
+        juce::Array<juce::var> melody;
+        for (auto& m : MelodyMatch::melodyFor (session.getProject(), clip,
+                                               model::ChannelId { (uint32_t)(int)arguments["channel"] }))
+            melody.add (object ({ { "start", m.start }, { "end", m.end }, { "pitch", m.pitch } }));
+        answer->setProperty ("melody", melody);
+    }
+    return text (juce::JSON::toString (juce::var (answer)));
+}
+
+juce::var AgentInterface::matchVocal (const juce::String& sessionId, const juce::var& arguments)
+{
+    const model::ClipId clip { (uint32_t)(int)arguments["clip"] };
+    const model::ChannelId channel { (uint32_t)(int)arguments["channel"] };
+    const auto* c = session.getProject().findClip (clip);
+    if (c == nullptr || ! std::holds_alternative<model::AudioClip> (c->content))
+        return text ("Not done: there is no audio clip " + arguments["clip"].toString() +
+                         " (song_summary lists the "
+                         "clips).",
+                     true);
+    if (session.getProject().findChannel (channel) == nullptr)
+        return text ("Not done: there is no channel " + arguments["channel"].toString() + ".", true);
+    auto& tuner = session.getTuner();
+    const auto notes = tuner.getNotes (clip);
+    if (notes.empty())
+        return text ("Not done: Spinus hasn't listened to this vocal yet: call listen_to_vocal first.", true);
+    const auto melody = MelodyMatch::melodyFor (session.getProject(), clip, channel);
+    if (melody.empty())
+        return text ("Not done: channel " + arguments["channel"].toString() +
+                         " plays no notes while this clip plays (vocal_notes with `channel` shows the melody).",
+                     true);
+
+    std::vector<int> indices;
+    if (auto* chosen = arguments["notes"].getArray())
+        for (auto& i : *chosen)
+            indices.push_back ((int)i);
+    const auto source = tuner.getSourceFile (clip);
+    auto seconds = (double)tuner.getAnalysis (source)["duration"];
+    if (seconds <= 0.0)
+        seconds = fileLength (source);
+    const auto timing = arguments.hasProperty ("timing") ? (bool)arguments["timing"] : true;
+    const auto result = MelodyMatch::match (notes, melody, timing, indices, seconds);
+    if (result.matched == 0)
+        return text ("Not done: no sung note overlaps a melody note, or starts near one.", true);
+
+    juce::Array<juce::var> list;
+    for (auto& n : result.notes)
+        list.add (model::tuneNoteToJson (n));
+    juce::Array<juce::var> steps { object (
+        { { "command", "clip.setTune" },
+          { "parameters",
+            object ({ { "clip", (int)clip.value }, { "notes", list }, { "description", "Match to melody" } }) } }) };
+    if (const auto error = apply (sessionId, steps, "Match vocal to melody"); error.isNotEmpty())
+        return text ("Not done: " + error, true);
+
+    juce::StringArray left;
+    for (auto i : result.unmatched)
+        left.add (juce::String (i));
+    return text ("Done, as one undo step: " + juce::String (result.matched) + " notes on the melody's pitch" +
+                 (timing ? ", " + juce::String (result.timed) + " of them on its timing" : juce::String()) + "." +
+                 (left.isEmpty()
+                      ? juce::String()
+                      : " Left as sung (no melody note clearly theirs): " + left.joinIntoString (", ") + "."));
 }
 
 namespace
@@ -1462,6 +1612,29 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
         }
         return reply (text (juce::JSON::toString (entry)));
     }
+    if (name == "vocal_notes")
+    {
+        markSeen (*agent);
+        return reply (vocalNotes (arguments));
+    }
+    if (name == "listen_to_vocal")
+    {
+        const auto source = session.getTuner().getSourceFile (model::ClipId { (uint32_t)(int)arguments["clip"] });
+        if (source == juce::File())
+            return reply (text ("There is no audio clip " + arguments["clip"].toString() + ".", true));
+        if (session.getTuner().getAnalysis (source).isObject())
+            return reply (text ("Spinus has listened to this vocal already: vocal_notes lists its notes."));
+        if (! host.listenToVocal)
+            return reply (text ("Spinus can't listen to vocals for agents here.", true));
+        return host.listenToVocal (source,
+                                   [reply] (const juce::String& error)
+                                   {
+                                       reply (error.isEmpty() ? text ("Listened: vocal_notes lists its notes now.")
+                                                              : text ("Not done: " + error, true));
+                                   });
+    }
+    if (name == "match_vocal_to_melody")
+        return reply (matchVocal (sessionId, arguments));
     if (name == "run_commands")
     {
         auto steps = arguments["steps"];
@@ -1744,7 +1917,7 @@ juce::String AgentInterface::userChanges (const AgentSession& agent) const
 
 bool AgentInterface::changesProject (const juce::String& tool) const
 {
-    if (tool == "run_commands" || tool == "undo_last")
+    if (tool == "run_commands" || tool == "undo_last" || tool == "match_vocal_to_melody")
         return true;
     if (auto* listed = harnessTools.getArray())
         for (auto& t : *listed)
