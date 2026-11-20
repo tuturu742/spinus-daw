@@ -443,7 +443,12 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
                                 { "audioTrack", c.audioTrack },
                                 { "insert", (int)c.targetInsert.value },
                                 { "volumeDb", c.volumeDb },
+                                { "pan", c.pan },
                                 { "used", used.count (c.id) > 0 } }));
+        if (c.muted)
+            channels.getReference (channels.size() - 1).getDynamicObject()->setProperty ("muted", true);
+        if (c.solo)
+            channels.getReference (channels.size() - 1).getDynamicObject()->setProperty ("solo", true);
         if (c.instrument)
             if (const auto profile = profiles.get (InstrumentPresets::libraryOf (*c.instrument)))
                 if (auto keys = InstrumentProfiles::describeForAgents (*profile); ! keys.isVoid())
@@ -468,13 +473,24 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
             sends.add (object ({ { "to", (int)s.target.value }, { "levelDb", s.levelDb } }));
         for (auto& s : in.sidechainSources)
             sidechains.add ((int)s.value);
-        return object ({ { "insert", (int)in.id.value },
-                         { "name", in.name },
-                         { "volumeDb", in.volumeDb },
-                         { "output", (int)in.output.value },
-                         { "effects", effects },
-                         { "sends", sends },
-                         { "sidechainFrom", sidechains } });
+        auto summary = object ({ { "insert", (int)in.id.value },
+                                 { "name", in.name },
+                                 { "volumeDb", in.volumeDb },
+                                 { "pan", in.pan },
+                                 { "output", (int)in.output.value },
+                                 { "effects", effects },
+                                 { "sends", sends },
+                                 { "sidechainFrom", sidechains } });
+        auto* o = summary.getDynamicObject();
+        if (in.muted)
+            o->setProperty ("muted", true);
+        if (in.solo)
+            o->setProperty ("solo", true);
+        if (! juce::exactlyEqual (in.stereoWidth, 1.0f))
+            o->setProperty ("stereoWidth", in.stereoWidth);
+        if (in.notesFrom.isValid()) // its effects get this channel's notes (Spinus Tune's Notes from channel)
+            o->setProperty ("notesFrom", (int)in.notesFrom.value);
+        return summary;
     };
     inserts.add (insertSummary (p.mixer.master));
     for (auto& in : p.mixer.inserts)
@@ -490,6 +506,14 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
                                  { "name", pat.name },
                                  { "bars", (double)pat.length / (double)barTicks },
                                  { "notes", notes } });
+        if (pat.swing > 0.0f)
+            summary.getDynamicObject()->setProperty ("swing", (double)pat.swing);
+        if (pat.timeSignature)
+        {
+            const auto signature = pat.timeSignature.value_or (model::TimeSignature {});
+            summary.getDynamicObject()->setProperty ("timeSignature", juce::String (signature.numerator) + "/" +
+                                                                          juce::String (signature.denominator));
+        }
         if (! pat.automation.empty())
         {
             // What the pattern automates itself (pattern.setAutomation), wherever it is placed.
@@ -529,10 +553,43 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
 
     juce::Array<juce::var> lanes;
     for (auto& lane : p.playlist.lanes)
+    {
         lanes.add (object ({ { "lane", (int)lane.id.value },
                              { "name", lane.name },
                              { "muted", lane.muted },
                              { "clips", clipsOn[lane.id] } }));
+        if (lane.solo)
+            lanes.getReference (lanes.size() - 1).getDynamicObject()->setProperty ("solo", true);
+    }
+
+    // The clip launcher's tracks, scenes and clips (read_clip gives a clip's settings).
+    juce::var launcher;
+    if (! p.launcher.isEmpty())
+    {
+        juce::Array<juce::var> tracks, scenes, launched;
+        for (auto& t : p.launcher.tracks)
+            tracks.add (object ({ { "track", (int)t.id.value }, { "name", t.name } }));
+        for (auto& scene : p.launcher.scenes)
+            scenes.add (object ({ { "scene", (int)scene.id.value }, { "name", scene.name } }));
+        for (auto& clip : p.launcher.clips)
+        {
+            auto summary = object ({ { "clip", (int)clip.id.value },
+                                     { "track", (int)clip.track.value },
+                                     { "scene", (int)clip.scene.value },
+                                     { "bars", (double)clip.length / (double)barTicks },
+                                     { "loop", clip.loop } });
+            if (const auto* pattern = std::get_if<model::PatternClip> (&clip.content))
+                summary.getDynamicObject()->setProperty ("pattern", (int)pattern->pattern.value);
+            else if (const auto* audio = std::get_if<model::AudioClip> (&clip.content))
+                summary.getDynamicObject()->setProperty ("audio", audio->file);
+            launched.add (summary);
+        }
+        const auto quantize = p.launcher.quantize == model::LaunchQuantize::none   ? "none"
+                              : p.launcher.quantize == model::LaunchQuantize::beat ? "beat"
+                                                                                   : "bar";
+        launcher =
+            object ({ { "tracks", tracks }, { "scenes", scenes }, { "clips", launched }, { "quantize", quantize } });
+    }
 
     int patternClips = 0, audioClips = 0, automationClips = 0;
     const auto audioFolder = projectFolder == juce::File() ? juce::File() : projectFolder.getChildFile ("audio");
@@ -580,6 +637,7 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
           { "clips",
             object ({ { "pattern", patternClips }, { "audio", audioClips }, { "automation", automationClips } }) },
           { "markers", markers },
+          { "launcher", launcher },
           { "unusedChannels", unused }, // channels no clip plays: not a problem, but often a mistake
           { "problems", problems } });
 }

@@ -80,10 +80,23 @@ first.
 ## Tools that only look
 
 Each tool tells the agent's client what it does: **only looks** (the song's summary, a part's notes, a sound's
-settings, the device and preset lists, the manual, your references' style, check, render, a vocal's notes), **adds** (a part, an effect, a send, bars) or **may
+settings, a pattern's notes, a clip's or device's settings, the device and preset lists, the manual, your references' style, check, render, a vocal's notes), **adds** (a part, an effect, a send, bars) or **may
 replace** what is there (writing notes over a part's, copying bars, automation, a new sound, Spinus's
 commands). Clients that use this can run the ones that only look without asking you each time and ask before
 the rest. Every change is still one undo step.
+
+## Reading the song in detail
+
+These work with Spinus's AI off too:
+
+- `song_summary`: the song at a glance. It covers tempo, key, channels, mixer inserts (volume, pan, mute, solo,
+  effects, sends), patterns, Playlist tracks and their clips, markers and the clip launcher.
+- `read_pattern`: a pattern's notes, per channel, exactly as Spinus keeps them, with its swing, time signature
+  and the automation it carries.
+- `read_clip`: one clip's settings. For an audio clip that's its file, offset, gain, pitch, speed, fades and
+  stretch mode; for an automation clip, its points. Launcher clips work too.
+- `device_settings`: an instrument's or effect's settings with the values it shows now ("-6 dB", "220 ms"),
+  and the ends of each one's range. The agent can look for some by name ("cutoff").
 
 ## Your analyzed songs
 

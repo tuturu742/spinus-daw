@@ -1386,3 +1386,111 @@ TEST_CASE ("Agents tune a vocal: listen to it, read its notes and a melody's, ma
     result = f.call (id, "match_vocal_to_melody", object ({ { "clip", (int)clip.value }, { "channel", 999 } }));
     CHECK ((bool)result["isError"]);
 }
+
+TEST_CASE ("Agents read what song_summary only names: a pattern's notes, a clip's settings, a device's settings",
+           "[ai][agents]")
+{
+    Fixture f;
+    model::Project p;
+    model::Channel lead;
+    lead.id = p.allocateId<model::ChannelId>();
+    lead.name = "Lead";
+    lead.pan = -0.5f;
+    lead.muted = true;
+    p.channels = { lead };
+    model::Insert vocals;
+    vocals.id = p.allocateId<model::InsertId>();
+    vocals.name = "Vocals";
+    vocals.notesFrom = lead.id;
+    model::Device delay;
+    delay.id = p.allocateId<model::DeviceId>();
+    delay.stockType = "spinus.delay";
+    vocals.effects.push_back ({ delay });
+    p.mixer.inserts = { vocals };
+    model::Pattern riff;
+    riff.id = p.allocateId<model::PatternId>();
+    riff.name = "Riff";
+    riff.swing = 0.25f;
+    riff.notes[lead.id] = { { 0, 480, 64 }, { 480, 480, 67 } };
+    riff.automation.push_back (
+        { { model::ParameterTarget::Kind::channelPan, lead.id }, { { 0, 0.5f }, { 960, 1.0f } } });
+    p.patterns = { riff };
+    model::Lane lane { p.allocateId<model::LaneId>(), "Lane" };
+    lane.solo = true;
+    p.playlist.lanes = { lane };
+    model::AudioClip audio;
+    audio.file = "take.wav";
+    audio.gainDb = -3.0f;
+    audio.fadeIn = 240;
+    const auto audioClip = p.allocateId<model::ClipId>();
+    p.playlist.clips.push_back ({ audioClip, lane.id, 0, 3840, false, audio });
+    model::AutomationClip sweep;
+    sweep.target = { model::ParameterTarget::Kind::channelVolume, lead.id };
+    sweep.points = { { 0, 0.2f }, { 1920, 0.8f, 0.5f } };
+    const auto sweepClip = p.allocateId<model::ClipId>();
+    p.playlist.clips.push_back ({ sweepClip, lane.id, 3840, 1920, false, sweep });
+    const model::LauncherTrack track { p.allocateId<model::LauncherTrackId>(), "Loops" };
+    const model::Scene scene { p.allocateId<model::SceneId>(), "Intro" };
+    p.launcher.tracks = { track };
+    p.launcher.scenes = { scene };
+    const auto launched = p.allocateId<model::ClipId>();
+    p.launcher.clips.push_back ({ launched, track.id, scene.id, 3840, false, model::PatternClip { riff.id, 0 } });
+    f.session.getHistory().reset (p);
+
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto read = [&] (const juce::String& tool, const juce::var& arguments)
+    {
+        const auto result = f.call (id, tool, arguments);
+        INFO (said (result));
+        CHECK_FALSE ((bool)result["isError"]);
+        return juce::JSON::parse (said (result));
+    };
+
+    // What song_summary now shows of the mixer, the lanes, the patterns and the launcher.
+    const auto summary = read ("song_summary", {});
+    CHECK ((double)summary["channels"][0]["pan"] == Catch::Approx (-0.5));
+    CHECK ((bool)summary["channels"][0]["muted"]);
+    CHECK ((int)summary["inserts"][1]["notesFrom"] == (int)lead.id.value);
+    CHECK ((bool)summary["lanes"][0]["solo"]);
+    CHECK ((double)summary["patterns"][0]["swing"] == Catch::Approx (0.25));
+    CHECK (summary["launcher"]["scenes"][0]["name"] == "Intro");
+    CHECK ((int)summary["launcher"]["clips"][0]["pattern"] == (int)riff.id.value);
+    CHECK_FALSE ((bool)summary["launcher"]["clips"][0]["loop"]);
+
+    const auto pattern = read ("read_pattern", object ({ { "pattern", (int)riff.id.value } }));
+    REQUIRE (pattern["channels"].size() == 1);
+    CHECK (pattern["channels"][0]["name"] == "Lead");
+    REQUIRE (pattern["channels"][0]["notes"].size() == 2);
+    CHECK ((int)pattern["channels"][0]["notes"][1]["pitch"] == 67);
+    CHECK ((int)pattern["channels"][0]["notes"][1]["start"] == 480);
+    CHECK (pattern["automation"][0]["target"]["kind"] == "channelPan");
+    CHECK ((double)pattern["automation"][0]["points"][1]["value"] == Catch::Approx (1.0));
+    CHECK (
+        read ("read_pattern", object ({ { "pattern", (int)riff.id.value }, { "channel", 999 } }))["channels"].size() ==
+        0);
+    CHECK ((bool)f.call (id, "read_pattern", object ({ { "pattern", 999 } }))["isError"]);
+
+    const auto clip = read ("read_clip", object ({ { "clip", (int)audioClip.value } }));
+    CHECK (clip["type"] == "audio");
+    CHECK ((double)clip["gainDb"] == Catch::Approx (-3.0));
+    CHECK ((int)clip["fadeIn"] == 240);
+    const auto points = read ("read_clip", object ({ { "clip", (int)sweepClip.value } }));
+    CHECK (points["target"]["kind"] == "channelVolume");
+    CHECK ((double)points["points"][1]["curve"] == Catch::Approx (0.5));
+    const auto inLauncher = read ("read_clip", object ({ { "clip", (int)launched.value } }));
+    CHECK ((bool)inLauncher["launcher"]);
+    CHECK ((int)inLauncher["scene"] == (int)scene.id.value);
+    CHECK_FALSE (inLauncher.hasProperty ("lane"));
+    CHECK ((bool)f.call (id, "read_clip", object ({ { "clip", 999 } }))["isError"]);
+
+    const auto settings = read ("device_settings", object ({ { "device", (int)delay.id.value } }));
+    CHECK (settings["settings"].size() > 3);
+    const auto feedback =
+        read ("device_settings", object ({ { "device", (int)delay.id.value }, { "find", "feed" } }))["settings"];
+    REQUIRE (feedback.size() == 1);
+    CHECK (feedback[0]["id"] == "feedback");
+    CHECK (feedback[0]["value"] == "35%");
+    CHECK (feedback[0]["range"].toString().endsWith ("95%"));
+    CHECK ((bool)f.call (id, "device_settings", object ({ { "device", 999 } }))["isError"]);
+}

@@ -673,7 +673,10 @@ can work on the open project while the user watches and listens.
 - **Tools:**
   - **Spinus's own, always, in C++:** `song_summary` (`cli::summarize`), `run_commands`, `command_help`,
     `list_devices`, `list_presets`, `render` (an offline export measured: mix, sections, stems), `undo_last`,
-    `what_changed`, `play`, `stop`; and the project as files (owner decision 2026-11-13), when the host gives
+    `what_changed`, `play`, `stop`, the reads of what the summary only names (owner, 2026-11-20: everything the UI
+    does reachable by agents): `read_pattern` (notes as `pattern.setNotes` takes them, its automation),
+    `read_clip` (a Playlist or launcher clip as `clipToJson` writes it, without tune notes) and
+    `device_settings` (`Session::getDeviceParameterTexts`, at most 300, `find` by name); and the project as files (owner decision 2026-11-13), when the host gives
     them (`Host::projects`, `openProject`...; MainView without message boxes): `save_project` (an untitled
     project needs a name: a new folder in the Browser's first folder of projects, or in `folder`: one of the
     Browser's folders of projects or a folder inside one, made if missing, at most 4 deep, never inside a
