@@ -2,6 +2,7 @@
 #include "session/AnalysisForAgents.h"
 #include "AskForName.h"
 #include "AnalysisLibraryView.h"
+#include "session/PresetFolders.h"
 #include "session/SoundIndex.h"
 #include "ai/AnalysisJobs.h"
 #include "project/AudioImport.h"
@@ -1118,16 +1119,21 @@ void Analyzer::fillWays (const juce::String& stem, StemRow& row)
     {
         const bool presets =
             std::find (source->ways.begin(), source->ways.end(), Way::closestPreset) != source->ways.end();
-        row.way->setTooltip ("How it plays them: as it is" +
-                             juce::String (presets ? "; with the " + source->name +
-                                                         " preset that sounds most like the " + stemDisplayName (stem) +
-                                                         (source->kind == Source::Kind::surge || ! source->experimental
-                                                              ? juce::String()
-                                                              : " (if it has presets Spinus can choose from)")
-                                                   : juce::String()) +
-                             "; or tuned until it sounds like it (about half a minute)" +
-                             (source->experimental
-                                  ? ". Experimental: Spinus has not tried this plugin. Its presets are played and it "
+        row.way->setTooltip (
+            "How it plays them: as it is" +
+            juce::String (presets ? "; with the " + source->name + " preset that sounds most like the " +
+                                        stemDisplayName (stem) +
+                                        (source->kind == Source::Kind::surge || ! source->experimental
+                                             ? juce::String()
+                                             : " (if it has presets Spinus can choose from)")
+                                  : juce::String()) +
+            "; or tuned until it sounds like it (about half a minute)" +
+            (! presets && source->device.kind == model::Device::Kind::plugin && source->device.plugin.format != "VST"
+                 ? ". Spinus found no presets in it it can choose from. If it keeps them as files in "
+                   "a folder of its own, add that folder (right-click its channel in the Channel "
+                   "Rack > Preset files) to choose the closest one"
+                 : "") +
+            (source->experimental ? ". Experimental: Spinus has not tried this plugin. Its presets are played and it "
                                     "is tuned inside Spinus, so a plugin that crashes takes Spinus down with it: "
                                     "save first."
                                   : ""));
@@ -1522,7 +1528,12 @@ bool Analyzer::mayHavePresets (const model::Device& device) const
     if (device.kind != model::Device::Kind::plugin)
         return true;
     const auto found = presetCounts.find (instrumentKey (device) + "|" + pluginVersionOf (device));
-    return found == presetCounts.end() || found->second > 1;
+    if (found == presetCounts.end() || found->second > 1)
+        return true;
+    // None found then, but a folder of its preset files chosen since (or before): looked for again.
+    PresetFolders chosen (SoundIndex::getDefaultFolder());
+    chosen.load();
+    return device.plugin.format != "VST" && ! chosen.get (InstrumentPresets::libraryOf (device)).isEmpty();
 }
 
 void Analyzer::rememberPresets (const model::Device& device, int count)
@@ -1980,7 +1991,12 @@ void Analyzer::measurePresets (std::vector<model::Device> instruments, size_t in
         playsAsIs (device.kind == model::Device::Kind::stock && device.stockType == "bundled.ob-xf"
                        ? "OB-Xf's factory patches are missing (remove OB-Xf in Options > Plugins and download it "
                          "again to get them); it plays its own sound."
-                       : name + " has no presets Spinus can choose from; it plays its own sound.");
+                       : name + " has no presets Spinus can choose from; it plays its own sound." +
+                             juce::String (device.kind == model::Device::Kind::plugin && device.plugin.format != "VST"
+                                               ? " If it keeps them as files in a folder of its own, add that "
+                                                 "folder: right-click its channel in the Channel Rack > Preset "
+                                                 "files."
+                                               : ""));
         return next();
     }
 

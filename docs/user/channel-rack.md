@@ -45,10 +45,11 @@ the names themselves.
 
 ## Preset files
 
-Many sampled instruments keep their presets as files in a folder of their own that no host can list (Ample
-Sound's guitars and basses, for example). Right-click a channel's name › **Preset files** › **Add a folder of its
+Many sampled instruments keep their presets as files in a folder of their own that no host can list (many sampled
+guitars and basses keep them in a "Presets" folder under Documents). Right-click a channel's name › **Preset files** › **Add a folder of its
 preset files...** and choose that folder: the assistant and coding agents can then list and load those presets
-on any channel with that instrument (`list_presets`, `device.loadPreset`), and the Track creator can pick them.
+on any channel with that instrument (`list_presets`, `device.loadPreset`), the Track creator can pick them, and
+the [Analyzer](analyzer.md)'s **Closest preset** chooses from them.
 **Stop using** a folder in the same menu. It is there for plugins, but not VST2 plugins, which keep their sound in
 a format Spinus can't write: use the instrument's VST3 version.
 
