@@ -159,7 +159,10 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
        so the choice is offered for every instrument plugin. If a plugin has none Spinus can choose from,
        it plays its own sound and the status line says so after adding ("... has no presets Spinus can
        choose from; it plays its own sound."); Spinus remembers this, and from then on that plugin doesn't
-       offer Closest preset (until the plugin is updated). Windows plugins work the same way when they
+       offer Closest preset (until the plugin is updated, or you give Spinus a folder of its preset files).
+       Plugins that keep their presets as files in a folder of their own: add that folder once (right-click
+       the instrument's channel in the [Channel Rack](channel-rack.md#preset-files) › **Preset files**),
+       and Closest preset chooses from those files. Windows plugins work the same way when they
        show their programs through the bridge; one set to run separately (after a crash) has none Spinus
        can see. **Save your project first:** the plugin plays its presets inside Spinus, so a plugin that
        crashes then closes Spinus with it.

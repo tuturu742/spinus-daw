@@ -700,7 +700,7 @@ std::vector<juce::StringArray> WindowsPlugins::getPrefixSettingsCommands (const 
 {
     // The font for text in a font the prefix doesn't have. Programs made with JUCE (most plugins and their
     // installers) then take the first font of Windows's font list, which Wine keeps in alphabetical order:
-    // a symbol font an installer added can come first (Ample Sound's AmpleSoundTab: every letter a
+    // a symbol font an installer added can come first (one whose every letter is a
     // guitar-tab sign). An entry named to sort first makes that Wine's own Arial. Other programs already
     // get Wine's Arial, Courier New or Times New Roman.
     const auto arial = r.wine.getParentDirectory().getSiblingFile ("share/wine/fonts/arial.ttf");

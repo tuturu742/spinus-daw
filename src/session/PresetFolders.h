@@ -9,12 +9,12 @@ namespace spinus
 
 /** Folders of an instrument's own preset files that the user chose, by the sound index's instrument key. Many
     instruments keep their presets as files in a folder of their own that no host can list, and some of those files
-    are the instrument's saved state itself (Ample Sound's guitars and basses): given to the instrument as its
+    are the instrument's saved state itself (an XML file of the plugin's own settings): given to the instrument as its
     state, such a file is the preset. Spinus does not know where each maker keeps them, so the user points to the
-    folder once (the instrument's menu in the Track creator's parts list); InstrumentPresets then lists every file
-    there as one of the instrument's presets, and the sound index measures them like any other. Kept beside the
-    index's folder (`sound-preset-folders.json` next to it), like the user's roles and note ranges, so they survive a
-    new scan. Plain data: any thread but the audio thread, one at a time. */
+    folder once (the instrument's menu in the Channel Rack or the Track creator's parts list); InstrumentPresets then
+   lists every file there as one of the instrument's presets, and the sound index measures them like any other. Kept
+   beside the index's folder (`sound-preset-folders.json` next to it), like the user's roles and note ranges, so they
+   survive a new scan. Plain data: any thread but the audio thread, one at a time. */
 class PresetFolders
 {
 public:

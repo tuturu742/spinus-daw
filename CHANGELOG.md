@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: Closest preset for plugins that keep their presets in a folder.** A plugin where Spinus found no
+  presets stopped offering Closest preset for good, even after you gave Spinus a folder of its preset files (right-click
+  its channel › Preset files). It now offers it again, and when it finds none it says how to add such a folder.
 - **Analyzer: songs whose tempo changes.** A band's song that slows down for its second half, or speeds up for a
   chorus, now gets tempo changes in the project where its tempo changes, so the replicated notes stay on the bars.
   The tempo is also steadier for every song: a beat the Analyzer missed or found twice no longer shifts the bars
