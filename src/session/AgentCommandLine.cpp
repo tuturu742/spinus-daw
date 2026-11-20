@@ -83,25 +83,27 @@ juce::var resolvePaths (const juce::var& params, const juce::File& folder)
     return params;
 }
 
-/** The instance a device plays through, once the engine has made it (a moment after its command). */
-juce::AudioPluginInstance* instanceOf (Session& session, model::DeviceId device)
+/** The instance a device plays through, once the engine has made it (a moment after its command); without `wait`,
+    only if it is made already. */
+juce::AudioPluginInstance* instanceOf (Session& session, model::DeviceId device, bool wait = true)
 {
-    for (int i = 0; i < 100; ++i)
+    for (int i = 0; i < (wait ? 100 : 1); ++i)
     {
         session.getEdit().dispatchPendingUpdatesSynchronously();
         if (auto* external = dynamic_cast<te::ExternalPlugin*> (session.getAdapter().getDevicePlugin (device)))
             if (auto* instance = external->getAudioPluginInstance())
                 return instance;
-        settle (20);
+        if (wait)
+            settle (20);
     }
     return nullptr;
 }
 
-juce::Result loadKit (Session& session, const juce::var& params)
+juce::Result loadKit (Session& session, const juce::var& params, bool wait)
 {
     const auto device = model::DeviceId { (uint32_t)(int)params["device"] };
     const auto kit = params["kit"].toString();
-    auto* drums = dynamic_cast<dsp::DrumMachineProcessor*> (instanceOf (session, device));
+    auto* drums = dynamic_cast<dsp::DrumMachineProcessor*> (instanceOf (session, device, wait));
     if (drums == nullptr)
         return juce::Result::fail ("device " + params["device"].toString() + " is not a Drum Machine");
     if (kit.equalsIgnoreCase ("Spinus Synth Kit"))
@@ -123,7 +125,7 @@ juce::Result loadKit (Session& session, const juce::var& params)
                                ", or a .spinuskit file");
 }
 
-juce::Result loadSamples (Session& session, const juce::var& params)
+juce::Result loadSamples (Session& session, const juce::var& params, bool wait)
 {
     const auto device = model::DeviceId { (uint32_t)(int)params["device"] };
     juce::Array<juce::File> files;
@@ -138,7 +140,7 @@ juce::Result loadSamples (Session& session, const juce::var& params)
         if (! f.existsAsFile())
             return juce::Result::fail ("no file " + f.getFullPathName());
 
-    auto* instance = instanceOf (session, device);
+    auto* instance = instanceOf (session, device, wait);
     if (auto* sampler = dynamic_cast<dsp::SamplerProcessor*> (instance))
         return sampler->loadFiles (files, ! params.hasProperty ("replace") || (bool)params["replace"]);
     if (auto* drums = dynamic_cast<dsp::DrumMachineProcessor*> (instance))
@@ -349,10 +351,7 @@ int runSteps (Session& session, const juce::var& steps, const RunOptions& option
         juce::var result;
         if (action.isNotEmpty())
         {
-            const auto done = action == "loadKit" ? loadKit (session, params)
-                              : action == "loadSamples"
-                                  ? loadSamples (session, params)
-                                  : juce::Result::fail ("unknown action \"" + action + "\" (loadKit or loadSamples)");
+            const auto done = loadSounds (session, action, params, true);
             if (done.failed())
                 error = done.getErrorMessage();
             result = object ({ { "device", params["device"] } });
@@ -390,6 +389,23 @@ int runSteps (Session& session, const juce::var& steps, const RunOptions& option
     session.getEdit().dispatchPendingUpdatesSynchronously();
     settle (50);
     return failed ? 2 : 0;
+}
+
+juce::Result loadSounds (Session& session, const juce::String& action, const juce::var& params, bool wait)
+{
+    if (action == "loadKit")
+        return loadKit (session, params, wait);
+    if (action == "loadSamples")
+        return loadSamples (session, params, wait);
+    return juce::Result::fail ("unknown action \"" + action + "\" (loadKit or loadSamples)");
+}
+
+juce::StringArray kitNames()
+{
+    juce::StringArray names { "Spinus Synth Kit" };
+    for (auto& k : dsp::starter::readKits (dsp::starter::findPack()))
+        names.add (k.name);
+    return names;
 }
 
 //==============================================================================
@@ -813,9 +829,12 @@ juce::var presets (Session& session, int device, const juce::String& find)
                             "settings with device.setParameters (spinus --describe " +
                             d.stockType + " lists them).";
                 if (d.stockType == "spinus.drum-machine")
-                    note << " Its kits load in its window or with spinus --run's loadKit action.";
+                    note << " Its kits (" << kitNames().joinIntoString (", ")
+                         << ", or a .spinuskit file) load in its window, with the live interface's load_sounds or "
+                            "spinus --run's loadKit action.";
                 if (d.stockType == "spinus.sampler")
-                    note << " Its samples load in its window or with spinus --run's loadSamples action.";
+                    note << " Its samples load in its window, with the live interface's load_sounds or spinus "
+                            "--run's loadSamples action.";
                 out.add (object ({ { "device", (int)d.id.value },
                                    { "name", model::getDeviceDisplayName (d) },
                                    { "presets", juce::Array<juce::var>() },

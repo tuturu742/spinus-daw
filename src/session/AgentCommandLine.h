@@ -51,6 +51,16 @@ struct RunOptions
     automatically. 0 when every step worked, 2 when one failed, 1 when `steps` is not a list of steps. */
 int runSteps (Session&, const juce::var& steps, const RunOptions&, const Say& say);
 
+/** Changes a device's sounds, as the device's window does (not an undo step): `action` "loadKit" ({device, kit}: a
+    starter pack kit by name, "Spinus Synth Kit" or a .spinuskit file) on a Drum Machine, or "loadSamples" ({device,
+    files, replace} on a Sampler; {device, files, pad} on a Drum Machine, one file per pad from `pad`, 1 to 16).
+    --run's actions and the live interface's load_sounds. With `wait`, waits for the engine to make a device that
+    was just added; without, such a device fails at once. */
+juce::Result loadSounds (Session&, const juce::String& action, const juce::var& params, bool wait);
+
+/** The Drum Machine's kits by name: the Spinus Synth Kit and the starter pack's. */
+juce::StringArray kitNames();
+
 /** What the open project holds, for --check: tempo, key, length, channels, inserts (effects, sends,
     sidechains), patterns, lanes, clips, markers, and what is missing here (devices, audio files) under
     `problems`. `projectFolder` is where its audio/ folder is (none for an unsaved project). A channel whose

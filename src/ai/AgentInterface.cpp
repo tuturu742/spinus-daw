@@ -6,6 +6,7 @@
 #include "commands/CommandRegistry.h"
 #include "core/Log.h"
 #include "dsp/loudness/LoudnessEngine.h"
+#include "dsp/drums/DrumMachineProcessor.h"
 #include "dsp/drums/StarterPack.h"
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
@@ -244,8 +245,8 @@ const juce::String conventions =
     "device shows ('-6 dB', '220 ms', '1.2 kHz', '30% L', a choice by name); a plain number in "
     "device.setParameters' values is 0 to 1 over the setting's whole range. A part's volume is its fader in dB. "
     "run_commands: a step may be labelled with \"as\" (\"bass\") and later steps name its result as "
-    "\"$bass.channel\", or by its number from 1 (\"$1.channel\"). What the live interface can't do: save, open or "
-    "start a project, load a Drum Machine kit or a Sampler's samples (the user does those in Spinus).";
+    "\"$bass.channel\", or by its number from 1 (\"$1.channel\"). load_sounds loads a Drum Machine's kit or a "
+    "Sampler's samples.";
 
 /** What the agent is told when it connects (MCP's instructions), for the tools it has: the music tools only
     while AI is on. */
@@ -1163,6 +1164,25 @@ juce::var AgentInterface::nativeTools() const
                                { "find", property ("string", "Words the setting's name must have") } },
                              { "device" }),
                      Does::reads));
+    tools.add (tool (
+        "load_sounds",
+        "Load a Drum Machine kit or samples, as the device's window does (not an undo step: load another kit to go "
+        "back). `kit`: a kit by name (list_presets on the Drum Machine lists them) or a .spinuskit file. `files`: "
+        "audio files from the user's sample folders or the project, into a Sampler (replacing its samples unless "
+        "`replace` is false) or onto a Drum Machine's pads, one per pad from `pad`.",
+        schema ({ { "device", property ("integer", "The Drum Machine's or Sampler's device id, as song_summary "
+                                                   "shows it") },
+                  { "kit", property ("string", "A kit's name or a .spinuskit file (Drum Machine)") },
+                  { "files", object ({ { "type", "array" },
+                                       { "items", object ({ { "type", "string" } }) },
+                                       { "description", "Audio files: full paths in the user's sample folders, "
+                                                        "or paths in the project's folder" } }) },
+                  { "pad", property ("integer", "Drum Machine: the first pad the files go on, 1 to 16 (1 when "
+                                                "left out)") },
+                  { "replace", property ("boolean", "Sampler: replace its samples (true when left out) or add to "
+                                                    "them") } },
+                { "device" }),
+        Does::replaces));
     if (! host.projects || ! host.openProject || ! host.newProject || ! host.saveProject)
         return tools;
     tools.add (tool ("list_projects",
@@ -1733,6 +1753,34 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
                                                                 ": give 'find' words to narrow them");
         return reply (text (juce::JSON::toString (answer)));
     }
+    if (name == "load_sounds")
+    {
+        if (auto e = checkPaths (arguments); e.isNotEmpty())
+            return reply (text ("Not done: " + e + ".", true));
+        const auto kit = arguments.hasProperty ("kit");
+        if (kit == arguments.hasProperty ("files"))
+            return reply (text ("Not done: give either 'kit' or 'files'.", true));
+        // A path that isn't full is in the project's folder (checkPaths keeps it from climbing out).
+        const auto folder = host.projectFolder ? host.projectFolder() : juce::File();
+        const auto inProject = [&folder] (const juce::var& path)
+        {
+            const auto given = path.toString();
+            return juce::var (juce::File::isAbsolutePath (given) || folder == juce::File()
+                                  ? given
+                                  : folder.getChildFile (given).getFullPathName());
+        };
+        auto params = juce::JSON::parse (juce::JSON::toString (arguments));
+        if (auto* files = params["files"].getArray())
+            for (auto& f : *files)
+                f = inProject (f);
+        if (const auto given = params["kit"].toString();
+            given.endsWithIgnoreCase (dsp::DrumMachineProcessor::kitExtension))
+            params.getDynamicObject()->setProperty ("kit", inProject (given));
+        const auto done = cli::loadSounds (session, kit ? "loadKit" : "loadSamples", params, false);
+        if (done.failed())
+            return reply (text ("Not done: " + done.getErrorMessage() + ".", true));
+        return reply (text (kit ? "Loaded the kit." : "Loaded the samples."));
+    }
     if (name == "list_presets")
     {
         const auto device = (int)arguments["device"];
@@ -1955,8 +2003,8 @@ juce::String AgentInterface::apply (const juce::String& sessionId, const juce::v
             return "step " + juce::String (normalised.size() + 1) +
                    " is not a step: each is {\"command\": ..., \"parameters\": {...}}";
         if (step.hasProperty ("action"))
-            return "\"action\" steps (loadKit, loadSamples) are for spinus --run; the live interface can't load "
-                   "kits or samples (the user does it in Spinus). Use commands here (device.loadPreset for presets)";
+            return "\"action\" steps (loadKit, loadSamples) are for spinus --run: load kits and samples with "
+                   "load_sounds here, and presets with device.loadPreset";
         normalised.add (object (
             { { "command", step["command"] },
               { "parameters", relabel (step.hasProperty ("parameters") ? step["parameters"] : step["params"]) } }));
