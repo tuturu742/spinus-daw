@@ -80,7 +80,7 @@ first.
 ## Tools that only look
 
 Each tool tells the agent's client what it does: **only looks** (the song's summary, a part's notes, a sound's
-settings, the device and preset lists, the manual, your references' style, check, render), **adds** (a part, an effect, a send, bars) or **may
+settings, the device and preset lists, the manual, your references' style, check, render, a vocal's notes), **adds** (a part, an effect, a send, bars) or **may
 replace** what is there (writing notes over a part's, copying bars, automation, a new sound, Spinus's
 commands). Clients that use this can run the ones that only look without asking you each time and ask before
 the rest. Every change is still one undo step.
@@ -99,6 +99,21 @@ because:
 - melodies and riffs copied from other people's songs can be protected by copyright: use them to learn from
   a song, not to copy it into yours;
 - what an agent reads goes to the company that runs it (its AI provider).
+
+## Tuning a vocal
+
+An agent can tune a sung vocal clip with [Spinus Tune](spinus-tune.md#editing-a-vocal-note-by-note), as you do in
+its note editor:
+
+- `listen_to_vocal`: Spinus listens to the vocal once to find its notes (this needs AI turned on in Spinus).
+- `vocal_notes`: the sung notes, their pitch and how each is corrected; given a channel, also that channel's
+  notes over the vocal (the melody).
+- `match_vocal_to_melody`: fits the vocal to a channel's melody, in pitch and (unless told not to) in time, like
+  **Match melody**. Notes with no melody note clearly theirs are left alone, and the agent is told which.
+- Any note by hand (pitch, drift, vibrato, volume, formant, moving it in time, its length) through Spinus's
+  `clip.setTune` command.
+
+Each change is one undo step, and Spinus renders the tuned vocal in the background as usual.
 
 ## While an agent works
 

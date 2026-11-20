@@ -101,6 +101,7 @@ add_executable (spinus_tests
     session/SongWriterTests.cpp
     session/SuggestionsTests.cpp
     session/TunerTests.cpp
+    session/MelodyMatchTests.cpp
     ui/AnalysisEngineTests.cpp
     ui/AnalyzerTests.cpp
     ui/TrackCreatorTests.cpp

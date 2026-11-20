@@ -30,6 +30,7 @@
 #include "plugins/windows/PluginDialogs.h"
 #include "plugins/windows/WindowsPlugins.h"
 #include "ai/AgentInterface.h"
+#include "ai/AnalysisJobs.h"
 #include "ai/AiService.h"
 #include "ai/ProjectContext.h"
 #include "ui/About.h"
@@ -366,6 +367,7 @@ public:
         ui::AboutSpinus::closeWindow();
         ui::ExportDialog::closeWindow(); // cancels a running export
         windowIcons = nullptr;
+        *agentJobsAlive = false;  // no AI job started for an agent calls back any more
         agentInterface = nullptr; // stops the live interface before what it reads goes
         mainWindow = nullptr;
         aiService = nullptr; // stops the AI service
@@ -792,6 +794,7 @@ private:
     std::unique_ptr<core::FileDialog> checkDialog;
     std::unique_ptr<ui::WindowIcons> windowIcons;
     std::unique_ptr<ai::AgentInterface> agentInterface;
+    std::shared_ptr<bool> agentJobsAlive = std::make_shared<bool> (true);
 
     /** The live interface for coding agents: the open project, the user's sample folders, and the project
         harness's tools through the AI service when AI is on. */
@@ -858,6 +861,20 @@ private:
         {
             view.startNewProject();
             return juce::String();
+        };
+        host.listenToVocal = [this] (const juce::File& audio, const std::function<void (const juce::String&)>& done)
+        {
+            if (aiService == nullptr || ! aiService->isEnabled())
+                return done ("listening to a vocal needs Spinus's AI turned on (Options > AI)");
+            auto* params = new juce::DynamicObject();
+            params->setProperty ("file", audio.getFullPathName());
+            ai::runJob (*aiService, "ai.v1.listen.vocal", juce::var (params), agentJobsAlive, {},
+                        [this, audio, done] (const juce::var& result, const juce::String& error)
+                        {
+                            if (error.isEmpty())
+                                session->getTuner().storeAnalysis (audio, result);
+                            done (error);
+                        });
         };
         return std::make_unique<ai::AgentInterface> (*session, getSettingsFolder(), std::move (host));
     }

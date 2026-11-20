@@ -219,6 +219,45 @@ TEST_CASE ("Spinus Tune's window: notes moved in time and made longer or shorter
         "Reset notes|Move note in time|Move note in time|Change note length"));
 }
 
+TEST_CASE ("Spinus Tune's window: a channel's melody as ghosts, and the vocal matched to it", "[ui][tune]")
+{
+    Vocal v; // notes at 0..1 s (A3, a little sharp) and 1..1.9 s (B3, sharp) of a clip at the song's start
+    auto project = v.session.getProject();
+    Channel melodyChannel;
+    melodyChannel.id = project.allocateId<ChannelId>();
+    melodyChannel.name = "Melody";
+    project.channels.push_back (melodyChannel);
+    Pattern melody;
+    melody.id = project.allocateId<PatternId>();
+    melody.notes[melodyChannel.id] = { { 0, 1920, 45 }, { 1920, 1440, 48 } }; // A2 for a second, C3 for 0.75 s
+    project.patterns.push_back (melody);
+    project.playlist.clips.push_back (
+        { project.allocateId<ClipId>(), project.playlist.lanes[0].id, 0, 7680, false, PatternClip { melody.id, 0 } });
+    v.session.getHistory().reset (project);
+
+    ui::SpinusTuneEditor editor (v.session, v.clip, nullptr);
+    editor.setSize (ui::SpinusTuneEditor::minimumWidth, 480);
+    CHECK (! editor.getMelodyChannel());
+    CHECK (! editor.matchToMelody ({}, true)); // no melody yet
+
+    editor.setMelodyChannel (melodyChannel.id);
+    REQUIRE (editor.getMelody().size() == 2);
+    CHECK (editor.getMelody()[1].start == Catch::Approx (1.0));
+
+    REQUIRE (editor.matchToMelody ({}, true));
+    auto note = [&] (int i) { return editor.getNotes()[(size_t)i]; };
+    CHECK (note (0).pitch + note (0).shift == Catch::Approx (57.0f)); // A, in the octave sung
+    CHECK (note (1).pitch + note (1).shift == Catch::Approx (60.0f));
+    CHECK (note (1).outputStart() == Catch::Approx (1.0));
+    CHECK (note (1).outputEnd() == Catch::Approx (1.75));
+    CHECK (v.session.getHistory().getUndoDescriptions().joinIntoString ("|") == "Match to melody");
+    CHECK (editor.getStatusText().startsWith ("Matched 2 notes"));
+
+    // The choice is kept for the clip: another window on it shows the same melody.
+    ui::SpinusTuneEditor again (v.session, v.clip, nullptr);
+    CHECK (again.getMelodyChannel() == melodyChannel.id);
+}
+
 TEST_CASE ("Spinus Tune's toolbar holds its controls, and the rows stay out of it", "[ui][tune]")
 {
     Vocal v;

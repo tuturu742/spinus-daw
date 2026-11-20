@@ -35,6 +35,14 @@ juce::String noteName (int pitch)
 }
 
 constexpr int keyboardWidth = 52;
+constexpr int bottomBarHeight = 28;
+
+/** The melody channel picked for each clip while Spinus runs. */
+std::map<juce::uint32, juce::uint32>& melodyChoices()
+{
+    static std::map<juce::uint32, juce::uint32> choices;
+    return choices;
+}
 } // namespace
 
 SpinusTuneEditor::SpinusTuneEditor (Session& s, model::ClipId c, ai::AiService* ai)
@@ -105,6 +113,28 @@ SpinusTuneEditor::SpinusTuneEditor (Session& s, model::ClipId c, ai::AiService* 
     };
     addAndMakeVisible (status);
 
+    melodyBox.setTooltip ("A channel whose notes are the melody the vocal should sing: shown as ghosts behind the "
+                          "sung notes, and used by Match melody");
+    melodyBox.onChange = [this]
+    {
+        const auto id = melodyBox.getSelectedId();
+        setMelodyChannel (model::ChannelId { id > 1 ? (juce::uint32)(id - 1) : 0u });
+    };
+    matchButton.setTooltip ("Move the selected notes (or all) onto the melody's notes; with Timing too, also onto "
+                            "where they start and how long they are");
+    matchButton.onClick = [this] { matchToMelody (selectedOrAll(), timingToggle.getToggleState()); };
+    timingToggle.setToggleState (true, juce::dontSendNotification);
+    timingToggle.setTooltip ("Match melody also moves notes in time and changes their length to the melody's");
+    for (auto* control : std::initializer_list<juce::Component*> { &melodyBox, &matchButton, &timingToggle })
+        addAndMakeVisible (control);
+    if (auto it = melodyChoices().find (clip.value); it != melodyChoices().end())
+        melodyChannel = model::ChannelId { it->second };
+    else if (const auto* vocal = session.getProject().findClip (clip))
+        if (const auto* audio = std::get_if<model::AudioClip> (&vocal->content))
+            if (const auto* channel = session.getProject().findChannel (audio->channel))
+                if (const auto* insert = session.getProject().findInsert (channel->targetInsert))
+                    melodyChannel = insert->notesFrom;
+
     historyListener = session.getHistory().addListener ([this] (const commands::ChangeSet&) { load(); });
     session.getTuner().addChangeListener (this);
     if (service != nullptr)
@@ -169,11 +199,11 @@ void SpinusTuneEditor::load()
         duration = juce::jmax (0.1, (double)analysis["duration"]);
     }
 
-    notes = audio->tune;
-    if (notes.empty() && analysis.isObject())
-        if (auto* found = analysis["notes"].getArray())
-            for (auto& n : *found)
-                notes.push_back ({ (double)n["start"], (double)n["end"], (float)(double)n["pitch"], 0.0f, 1.0f, 1.0f });
+    notes = session.getTuner().getNotes (clip);
+    if (session.getProject().findChannel (melodyChannel) == nullptr)
+        melodyChannel = {};
+    melody = MelodyMatch::melodyFor (session.getProject(), clip, melodyChannel);
+    fillMelodyBox();
 
     // Show the notes' range, with some room.
     if (! notes.empty())
@@ -213,20 +243,61 @@ void SpinusTuneEditor::analyse()
                    });
 }
 
+void SpinusTuneEditor::fillMelodyBox()
+{
+    melodyBox.clear (juce::dontSendNotification);
+    melodyBox.addItem ("Melody: none", 1);
+    for (auto& c : session.getProject().channels)
+        if (! c.audioTrack)
+            melodyBox.addItem ("Melody: " + c.name, (int)c.id.value + 1);
+    melodyBox.setSelectedId (melodyChannel ? (int)melodyChannel.value + 1 : 1, juce::dontSendNotification);
+    matchButton.setEnabled (! melody.empty() && ! notes.empty());
+}
+
+void SpinusTuneEditor::setMelodyChannel (model::ChannelId channel)
+{
+    melodyChannel = session.getProject().findChannel (channel) != nullptr ? channel : model::ChannelId {};
+    melodyChoices()[clip.value] = melodyChannel.value;
+    notice.clear();
+    load();
+}
+
+bool SpinusTuneEditor::matchToMelody (const std::vector<int>& indices, bool timing)
+{
+    const auto result = MelodyMatch::match (notes, melody, timing, indices, duration);
+    if (result.matched == 0)
+    {
+        notice = melody.empty() ? "Pick a melody channel first (the menu at the bottom left)."
+                                : "No sung note overlaps a melody note.";
+        timerCallback();
+        return false;
+    }
+    const auto changed = commit (result.notes, "Match to melody");
+    notice = "Matched " + juce::String (result.matched) + (result.matched == 1 ? " note" : " notes") +
+             (timing ? " (" + juce::String (result.timed) + " in time)" : juce::String()) +
+             (result.unmatched.empty() ? juce::String (".")
+                                       : "; " + juce::String ((int)result.unmatched.size()) +
+                                             " left as sung (no melody note clearly theirs).");
+    timerCallback();
+    return changed;
+}
+
 juce::String SpinusTuneEditor::getStatusText() const
 {
     if (problem.isNotEmpty())
         return problem;
     if (! track)
         return "Listening to the vocal...";
+    const auto withNotice = [this] (const juce::String& text) { return notice.isEmpty() ? text : notice + " " + text; };
     switch (const auto s = session.getTuner().getStatus (clip); s.state)
     {
     case Tuner::State::rendering:
-        return "Rendering the tuned vocal... " + juce::String (juce::roundToInt (s.progress * 100.0f)) + "%";
+        return withNotice ("Rendering the tuned vocal... " + juce::String (juce::roundToInt (s.progress * 100.0f)) +
+                           "%");
     case Tuner::State::failed:
         return s.message;
     case Tuner::State::ready:
-        return "Tuned. Play the song to hear it.";
+        return withNotice ("Tuned. Play the song to hear it.");
     case Tuner::State::needsAnalysis:
     case Tuner::State::none:
         break;
@@ -238,6 +309,7 @@ juce::String SpinusTuneEditor::getStatusText() const
 //==============================================================================
 bool SpinusTuneEditor::commit (const std::vector<model::TuneNote>& changed, const juce::String& description)
 {
+    notice.clear();
     if (changed == notes)
         return false;
     juce::Array<juce::var> list;
@@ -544,7 +616,13 @@ void SpinusTuneEditor::resized()
         label->setBounds (toolbar.removeFromRight (labelWidth));
     }
     zoomControls.setBounds (toolbar.removeFromLeft (zoomControls.getPreferredWidth()));
-    status.setBounds (area.removeFromBottom (24).reduced (6, 2));
+    auto bottom = area.removeFromBottom (bottomBarHeight).reduced (4, 3);
+    melodyBox.setBounds (bottom.removeFromLeft (190));
+    bottom.removeFromLeft (6);
+    matchButton.setBounds (bottom.removeFromLeft (110));
+    bottom.removeFromLeft (6);
+    timingToggle.setBounds (bottom.removeFromLeft (100));
+    status.setBounds (bottom.reduced (6, 0));
     keyboard = area.removeFromLeft (keyboardWidth);
     grid = area;
     if (pixelsPerSecond * duration < grid.getWidth())
@@ -618,6 +696,29 @@ void SpinusTuneEditor::paint (juce::Graphics& g)
         }
         g.setColour (theme.get ("textDim").withAlpha (0.7f));
         g.strokePath (sung, juce::PathStrokeType (1.2f));
+
+        // The melody's notes as ghosts, in the octave the vocal is sung in.
+        if (! melody.empty() && ! notes.empty())
+        {
+            double sungPitch = 0.0, writtenPitch = 0.0;
+            for (auto& n : notes)
+                sungPitch += n.pitch;
+            for (auto& m : melody)
+                writtenPitch += m.pitch;
+            const auto octave =
+                12.0f *
+                (float)std::round ((sungPitch / (double)notes.size() - writtenPitch / (double)melody.size()) / 12.0);
+            for (auto& m : melody)
+            {
+                const auto y = pitchToY ((float)m.pitch + octave);
+                const auto r = juce::Rectangle<float>::leftTopRightBottom (timeToX (m.start), y - rowHeight * 0.5f,
+                                                                           timeToX (m.end), y + rowHeight * 0.5f);
+                g.setColour (theme.get ("text").withAlpha (0.08f));
+                g.fillRect (r);
+                g.setColour (theme.get ("text").withAlpha (0.35f));
+                g.drawRect (r, 1.0f);
+            }
+        }
 
         for (int i = 0; i < (int)shown.size(); ++i)
         {

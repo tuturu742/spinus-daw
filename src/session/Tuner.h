@@ -40,6 +40,12 @@ public:
     /** The stored analysis of an audio file (track and notes), or void. */
     juce::var getAnalysis (const juce::File& audio) const;
 
+    /** An audio clip's notes for Spinus Tune: its tuned notes, or the analysis's notes as sung before the first
+        edit; empty when it is neither tuned nor analysed. */
+    std::vector<model::TuneNote> getNotes (model::ClipId) const;
+    /** The audio file an audio clip plays (none for another clip). */
+    juce::File getSourceFile (model::ClipId) const;
+
     enum class State
     {
         none,          // not tuned
