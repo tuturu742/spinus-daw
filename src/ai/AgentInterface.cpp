@@ -1136,6 +1136,33 @@ juce::var AgentInterface::nativeTools() const
                         { "loop", property ("boolean", "Loop the bars (true when left out)") } }),
               Does::plays));
     tools.add (tool ("stop", "Stop playback (the playhead goes back to where it started).", noInput, Does::plays));
+
+    // What song_summary only counts or names: a pattern's notes, a clip's settings and points, a device's settings.
+    tools.add (tool (
+        "read_pattern",
+        "A pattern's notes, each as pattern.setNotes takes it (start and length in ticks from the pattern's start, "
+        "pitch as a MIDI number, velocity 0 to 1...), per channel, with its length, swing, time signature and "
+        "the automation it carries (pattern.setAutomation's points).",
+        schema ({ { "pattern", property ("integer", "The pattern's id, as song_summary shows it") },
+                  { "channel", property ("integer", "Optional: only this channel's notes") } },
+                { "pattern" }),
+        Does::reads));
+    tools.add (tool (
+        "read_clip",
+        "A Playlist or clip launcher clip as the project saves it: an audio clip's settings (file, offset, gain, "
+        "pitch, speed, fades, stretch mode, reversed...), an automation clip's target and points, a pattern clip's "
+        "pattern and offset; a launcher clip's track, scene and loop. clip.set, clip.setAudio, clip.setPoints and "
+        "launcher.setClip change them.",
+        schema ({ { "clip", property ("integer", "The clip's id, as song_summary shows it") } }, { "clip" }),
+        Does::reads));
+    tools.add (tool ("device_settings",
+                     "An instrument's or effect's settings with their values as the device shows them now (\"-6 "
+                     "dB\", \"220 ms\", a choice by name) and the ends of each one's range: the ids "
+                     "device.setParameters and automation take.",
+                     schema ({ { "device", property ("integer", "The device's id, as song_summary shows it") },
+                               { "find", property ("string", "Words the setting's name must have") } },
+                             { "device" }),
+                     Does::reads));
     if (! host.projects || ! host.openProject || ! host.newProject || ! host.saveProject)
         return tools;
     tools.add (tool ("list_projects",
@@ -1229,6 +1256,68 @@ double fileLength (const juce::File& file)
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
     return reader != nullptr && reader->sampleRate > 0.0 ? (double)reader->lengthInSamples / reader->sampleRate : 0.0;
+}
+
+/** read_pattern's answer: the pattern's notes per channel (or one channel's), its settings and its automation. */
+juce::var patternToJson (const model::Project& project, const model::Pattern& pattern, model::ChannelId only)
+{
+    juce::Array<juce::var> channels, automation;
+    for (auto& [channel, notes] : pattern.notes)
+    {
+        if (only.isValid() && channel != only)
+            continue;
+        juce::Array<juce::var> list;
+        for (auto& n : notes)
+            list.add (model::noteToJson (n));
+        const auto* c = project.findChannel (channel);
+        channels.add (object ({ { "channel", (int)channel.value },
+                                { "name", c != nullptr ? c->name : juce::String() },
+                                { "notes", list } }));
+    }
+    for (auto& lane : pattern.automation)
+    {
+        juce::Array<juce::var> points;
+        for (auto& point : lane.points)
+            points.add (model::pointToJson (point));
+        automation.add (object ({ { "target", model::targetToJson (lane.target) }, { "points", points } }));
+    }
+    const auto signature = project.getTimeSignature (pattern.id);
+    return object (
+        { { "pattern", (int)pattern.id.value },
+          { "name", pattern.name },
+          { "length", (juce::int64)pattern.length },
+          { "timeSignature", juce::String (signature.numerator) + "/" + juce::String (signature.denominator) },
+          { "swing", (double)pattern.swing },
+          { "tripletSteps", pattern.tripletSteps },
+          { "channels", channels },
+          { "automation", automation } });
+}
+
+/** read_clip's answer: a Playlist or launcher clip as the project saves it, without a vocal's tune notes
+    (vocal_notes lists those). Void when there is no such clip. */
+juce::var clipDetails (const model::Project& project, model::ClipId id)
+{
+    juce::var json;
+    if (const auto* clip = project.findClip (id))
+        json = model::clipToJson (*clip);
+    else if (const auto* launched = project.launcher.findClip (id))
+    {
+        model::Clip asPlaylistClip;
+        asPlaylistClip.id = launched->id;
+        asPlaylistClip.length = launched->length;
+        std::visit ([&] (auto& content) { asPlaylistClip.content = content; }, launched->content);
+        json = model::clipToJson (asPlaylistClip);
+        auto* o = json.getDynamicObject();
+        for (auto* key : { "lane", "start", "muted" })
+            o->removeProperty (key);
+        o->setProperty ("launcher", true);
+        o->setProperty ("track", (int)launched->track.value);
+        o->setProperty ("scene", (int)launched->scene.value);
+        o->setProperty ("loop", launched->loop);
+    }
+    if (auto* o = json.getDynamicObject(); o != nullptr && o->hasProperty ("tune"))
+        o->setProperty ("tune", "corrected in Spinus Tune (vocal_notes lists its notes)");
+    return json;
 }
 } // namespace
 
@@ -1593,6 +1682,56 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
                 break;
         }
         return reply (text (juce::JSON::toString (found)));
+    }
+    if (name == "read_pattern")
+    {
+        markSeen (*agent);
+        const auto& project = session.getProject();
+        const auto* pattern = project.findPattern (model::PatternId { (uint32_t)(int)arguments["pattern"] });
+        if (pattern == nullptr)
+            return reply (
+                text ("There is no pattern " + arguments["pattern"].toString() + " (song_summary lists the patterns).",
+                      true));
+        return reply (text (juce::JSON::toString (
+            patternToJson (project, *pattern, model::ChannelId { (uint32_t)(int)arguments["channel"] }))));
+    }
+    if (name == "read_clip")
+    {
+        markSeen (*agent);
+        const auto clip = clipDetails (session.getProject(), model::ClipId { (uint32_t)(int)arguments["clip"] });
+        if (! clip.isObject())
+            return reply (
+                text ("There is no clip " + arguments["clip"].toString() + " (song_summary lists the clips).", true));
+        return reply (text (juce::JSON::toString (clip)));
+    }
+    if (name == "device_settings")
+    {
+        const model::DeviceId id { (uint32_t)(int)arguments["device"] };
+        const auto* device = id.isValid() ? session.getProject().findDevice (id) : nullptr;
+        if (device == nullptr)
+            return reply (text ("There is no device " + arguments["device"].toString() +
+                                    " in the song (song_summary shows the devices' ids).",
+                                true));
+        const auto words = juce::StringArray::fromTokens (arguments["find"].toString().toLowerCase(), true);
+        juce::Array<juce::var> settings;
+        int matching = 0;
+        for (auto& p : session.getDeviceParameterTexts (id))
+        {
+            const auto lower = p.name.toLowerCase();
+            if (! std::all_of (words.begin(), words.end(), [&] (auto& w) { return lower.contains (w); }))
+                continue;
+            if (++matching <= 300)
+                settings.add (object (
+                    { { "id", p.id }, { "name", p.name }, { "value", p.text }, { "range", p.low + " to " + p.high } }));
+        }
+        auto answer = object ({ { "device", (int)id.value },
+                                { "name", model::getDeviceDisplayName (*device) },
+                                { "bypassed", device->bypassed },
+                                { "settings", settings } });
+        if (matching > settings.size())
+            answer.getDynamicObject()->setProperty ("more", "the first 300 of " + juce::String (matching) +
+                                                                ": give 'find' words to narrow them");
+        return reply (text (juce::JSON::toString (answer)));
     }
     if (name == "list_presets")
     {

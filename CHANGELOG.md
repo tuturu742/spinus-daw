@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Coding agents see the song in detail, with AI on or off.** New tools read a pattern's notes (`read_pattern`), a
+  clip's settings, such as an audio clip's fades or an automation clip's points (`read_clip`), and an instrument's or
+  effect's settings with their values (`device_settings`). `song_summary` now also shows pan, mute and solo, swing, which
+  channel a mixer insert takes notes from, and the clip launcher.
 - **Spinus Tune follows a melody.** In the note editor, pick a channel in the new **Melody** menu: its notes show
   as ghosts behind the sung notes, and **Match melody** fits the vocal to them, in pitch and (with **Timing too**)
   in time. Coding agents can do the same, and read a vocal's notes, through new tools (`vocal_notes`,
