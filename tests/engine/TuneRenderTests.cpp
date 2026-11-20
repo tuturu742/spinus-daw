@@ -254,9 +254,9 @@ TEST_CASE ("Spinus Tune renders notes moved in time and stretched, the rest in p
                 sum += (double)x[i] * x[i];
             return std::sqrt (sum / 240.0) > 0.03;
         };
-        for (auto t = from; t < 1.95; t += 0.005)
-            if (loud (t) == starts)
-                return t;
+        for (int step = 0; from + step * 0.005 < 1.95; ++step)
+            if (loud (from + step * 0.005) == starts)
+                return from + step * 0.005;
         return 2.0;
     };
     CHECK (edge (rendered, 0.3, true) == Catch::Approx (0.7).margin (0.01));
