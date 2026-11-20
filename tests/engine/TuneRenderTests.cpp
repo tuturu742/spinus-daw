@@ -115,6 +115,11 @@ TEST_CASE ("Spinus Tune renders a clip with its notes moved, in time and the sam
     const auto rendered = readWav (out.getFile());
     REQUIRE (rendered.size() == voice.size());
     CHECK (std::abs (cents (hzAt (rendered, 0.2), 220.0)) < 5.0);
+    // The note moves where it starts and ends, not earlier (the detector looks 33 ms ahead of its moment).
+    CHECK (std::abs (cents (hzAt (rendered, 0.43), 220.0)) < 5.0);
+    CHECK (std::abs (cents (hzAt (rendered, 0.52), 246.94)) < 5.0);
+    CHECK (std::abs (cents (hzAt (rendered, 1.15), 246.94)) < 5.0);
+    CHECK (std::abs (cents (hzAt (rendered, 1.24), 220.0)) < 5.0);
     CHECK (std::abs (cents (hzAt (rendered, 0.9), 246.94)) < 5.0);
 
     // In time: before the note the output follows the input (no delay added).
@@ -182,4 +187,84 @@ TEST_CASE ("Spinus Tune renders a note's volume and formant, leaving its pitch a
     CHECK (brightness (rendered, 0.85, 1.15) > 1.15 * brightness (voice, 0.85, 1.15));
     CHECK (std::abs (cents (hzAt (rendered, 1.0), 220.0)) < 10.0);
     CHECK (brightness (rendered, 0.3, 0.5) == Catch::Approx (brightness (voice, 0.3, 0.5)).epsilon (0.1));
+}
+
+TEST_CASE ("Spinus Tune's time map: a moved or stretched note, its neighbours in place", "[tune][engine]")
+{
+    TuneNote first { 0.5, 1.0, 57.0f }, second { 1.5, 2.0, 60.0f }, third { 2.0, 2.5, 62.0f };
+    CHECK (TimeMap::of ({ first, second, third }, 4.0).isIdentity());
+
+    first.move = 0.2;     // sounds 0.7..1.2
+    second.stretch = 1.5; // sounds 1.5..2.25, though the third note touches it
+    third.move = 0.3;     // sounds 2.3..2.8
+    const auto map = TimeMap::of ({ first, second, third }, 4.0);
+    REQUIRE (! map.isIdentity());
+    CHECK (map.toOutput (0.0) == Catch::Approx (0.0));
+    CHECK (map.toOutput (0.5) == Catch::Approx (0.7));
+    CHECK (map.toOutput (0.75) == Catch::Approx (0.95));
+    CHECK (map.toOutput (1.0) == Catch::Approx (1.2));
+    CHECK (map.toOutput (1.5) == Catch::Approx (1.5));
+    CHECK (map.toOutput (1.75) == Catch::Approx (1.875));
+    CHECK (map.toOutput (2.25) == Catch::Approx (2.55));
+    CHECK (map.toOutput (2.5) == Catch::Approx (2.8));
+    CHECK (map.toOutput (4.0) == Catch::Approx (4.0));
+    // Where the notes touch, a little of each is lent to fill the gap (2.25..2.3 as it sounds).
+    CHECK (map.toOutput (1.98) == Catch::Approx (2.22));
+    CHECK (map.toOutput (2.02) == Catch::Approx (2.32));
+    for (const auto t : { 0.3, 0.8, 1.3, 1.9, 2.0, 2.1, 3.0 })
+        CHECK (map.toSource (map.toOutput (t)) == Catch::Approx (t));
+
+    // Never backwards, and the file keeps its length, even past its end.
+    TuneNote late { 3.5, 3.9, 60.0f };
+    late.move = 0.5;
+    const auto clamped = TimeMap::of ({ late }, 4.0);
+    for (size_t i = 1; i < clamped.points.size(); ++i)
+        CHECK (clamped.points[i].second >= clamped.points[i - 1].second);
+    CHECK (clamped.toOutput (4.0) == Catch::Approx (4.0));
+}
+
+TEST_CASE ("Spinus Tune renders notes moved in time and stretched, the rest in place", "[tune][engine][audio]")
+{
+    // Two sung notes in silence: A3 at 0.5..0.8 s and E4 at 1.2..1.5 s.
+    std::vector<float> voice ((size_t)(2.0 * rate), 0.0f);
+    const auto a = saw (0.3, 220.0), e = saw (0.3, 329.63);
+    std::copy (a.begin(), a.end(), voice.begin() + (int64_t)(0.5 * rate));
+    std::copy (e.begin(), e.end(), voice.begin() + (int64_t)(1.2 * rate));
+    const juce::TemporaryFile in (".wav"), out (".wav");
+    writeWav (in.getFile(), voice);
+
+    TuneNote moved { 0.5, 0.8, 57.0f }, longer { 1.2, 1.5, 64.0f };
+    moved.move = 0.2;     // sounds 0.7..1.0
+    longer.stretch = 1.5; // sounds 1.2..1.65
+    const auto track = trackOf (2.0, [] (double t) { return t < 1.0 ? 57.0 : 64.0; });
+    const auto result = TuneRender::render (in.getFile(), track, { moved, longer }, out.getFile());
+    INFO (result.getErrorMessage());
+    REQUIRE (result.wasOk());
+    const auto rendered = readWav (out.getFile());
+    REQUIRE (rendered.size() == voice.size());
+
+    // Where the sound starts and ends after a moment, in 5 ms steps.
+    auto edge = [] (const std::vector<float>& x, double from, bool starts)
+    {
+        auto loud = [&] (double t)
+        {
+            double sum = 0.0;
+            const auto first = (size_t)(t * rate);
+            for (auto i = first; i < first + 240; ++i)
+                sum += (double)x[i] * x[i];
+            return std::sqrt (sum / 240.0) > 0.03;
+        };
+        for (int step = 0; from + step * 0.005 < 1.95; ++step)
+            if (loud (from + step * 0.005) == starts)
+                return from + step * 0.005;
+        return 2.0;
+    };
+    CHECK (edge (rendered, 0.3, true) == Catch::Approx (0.7).margin (0.01));
+    CHECK (edge (rendered, 0.75, false) == Catch::Approx (1.0).margin (0.01));
+    CHECK (edge (rendered, 1.05, true) == Catch::Approx (1.2).margin (0.01));
+    CHECK (edge (rendered, 1.25, false) == Catch::Approx (1.65).margin (0.01));
+
+    // Each at its own pitch.
+    CHECK (std::abs (cents (hzAt (rendered, 0.85), 220.0)) < 10.0);
+    CHECK (std::abs (cents (hzAt (rendered, 1.45), 329.63)) < 10.0);
 }

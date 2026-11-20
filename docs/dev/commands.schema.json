@@ -1715,7 +1715,7 @@
       }
     },
     "clip.setTune": {
-      "description": "Spinus Tune: replace an audio clip's tuned notes (how each sung note is moved, straightened, its vibrato, volume or formant changed). An empty list plays the clip as recorded.",
+      "description": "Spinus Tune: replace an audio clip's tuned notes (how each sung note is moved, straightened, its vibrato, volume or formant changed, moved in time or stretched). An empty list plays the clip as recorded.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1774,6 +1774,16 @@
                   "minimum": -12,
                   "maximum": 12,
                   "description": "The voice's character (semitones): up smaller and brighter, down bigger; 0 = as sung"
+                },
+                "move": {
+                  "type": "number",
+                  "description": "Seconds it is moved later (earlier when negative), 0 = as sung"
+                },
+                "stretch": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 4,
+                  "description": "Its length: 2 = twice as long, 1 = as sung; its neighbours stay in place"
                 }
               },
               "required": [

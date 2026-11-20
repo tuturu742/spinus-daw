@@ -3111,8 +3111,9 @@ protected:
 
         std::stable_sort (notes.begin(), notes.end(), [] (auto& x, auto& y) { return x.start < y.start; });
         for (size_t i = 1; i < notes.size(); ++i)
-            if (notes[i].start < notes[i - 1].end - 1.0e-6)
-                return juce::Result::fail ("tune notes must not overlap");
+            if (notes[i].start < notes[i - 1].end - 1.0e-6 ||
+                notes[i].outputStart() < notes[i - 1].outputEnd() - 1.0e-6)
+                return juce::Result::fail ("tune notes must not overlap (as sung, or moved and stretched)");
         a->tune = notes;
         return juce::Result::ok();
     }
@@ -4410,34 +4411,37 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
         "vibrato": {"type": "number", "minimum": 0, "maximum": 2, "description": "1 = as sung, 0 = none"},
         "gainDb": {"type": "number", "minimum": -24, "maximum": 12, "description": "Louder or quieter (dB), 0 = as sung"},
         "formant": {"type": "number", "minimum": -12, "maximum": 12,
-                    "description": "The voice's character (semitones): up smaller and brighter, down bigger; 0 = as sung"}},
+                    "description": "The voice's character (semitones): up smaller and brighter, down bigger; 0 = as sung"},
+        "move": {"type": "number", "description": "Seconds it is moved later (earlier when negative), 0 = as sung"},
+        "stretch": {"type": "number", "minimum": 0.25, "maximum": 4,
+                    "description": "Its length: 2 = twice as long, 1 = as sung; its neighbours stay in place"}},
         "required": ["start", "end", "pitch"], "additionalProperties": false}})json");
 
-    list.push_back (
-        info ("clip.setTune",
-              "Spinus Tune: replace an audio clip's tuned notes (how each sung note is moved, "
-              "straightened, its vibrato, volume or formant changed). An empty list plays the clip as recorded.",
-              ParameterSchema()
-                  .id ("clip", "Audio clip ID")
-                  .custom ("notes", "The notes, in time order, not overlapping", true, tuneSchema)
-                  .string ("description", "Undo history text, e.g. \"Move note\""),
-              [] (Params& p) -> std::unique_ptr<Command>
-              {
-                  p.allowOnly ({ "clip", "notes", "description" });
-                  std::vector<TuneNote> notes;
-                  if (auto* items = p.get ("notes", true).getArray())
-                      for (auto& item : *items)
-                      {
-                          TuneNote note;
-                          if (auto e = model::tuneNoteFromJson (item, note); e.isNotEmpty())
-                              p.errors.add ("notes: " + e);
-                          notes.push_back (note);
-                      }
-                  else
-                      p.errors.add ("'notes' must be an array");
-                  return std::make_unique<SetTune> (p.json, p.id<ClipId> ("clip"), std::move (notes),
-                                                    p.string ("description").value_or (""));
-              }));
+    list.push_back (info ("clip.setTune",
+                          "Spinus Tune: replace an audio clip's tuned notes (how each sung note is moved, "
+                          "straightened, its vibrato, volume or formant changed, moved in time or stretched). An empty "
+                          "list plays the clip as recorded.",
+                          ParameterSchema()
+                              .id ("clip", "Audio clip ID")
+                              .custom ("notes", "The notes, in time order, not overlapping", true, tuneSchema)
+                              .string ("description", "Undo history text, e.g. \"Move note\""),
+                          [] (Params& p) -> std::unique_ptr<Command>
+                          {
+                              p.allowOnly ({ "clip", "notes", "description" });
+                              std::vector<TuneNote> notes;
+                              if (auto* items = p.get ("notes", true).getArray())
+                                  for (auto& item : *items)
+                                  {
+                                      TuneNote note;
+                                      if (auto e = model::tuneNoteFromJson (item, note); e.isNotEmpty())
+                                          p.errors.add ("notes: " + e);
+                                      notes.push_back (note);
+                                  }
+                              else
+                                  p.errors.add ("'notes' must be an array");
+                              return std::make_unique<SetTune> (p.json, p.id<ClipId> ("clip"), std::move (notes),
+                                                                p.string ("description").value_or (""));
+                          }));
 
     list.push_back (
         info ("project.relocateAudio",

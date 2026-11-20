@@ -11,6 +11,8 @@ namespace
 constexpr double slowWindowSeconds = 0.2; // averaging over a vibrato cycle or so
 constexpr double edgeSeconds = 0.015;
 constexpr int blockSize = 256;
+constexpr double lentSeconds = 0.02; // lent from each side to a gap between touching notes
+constexpr double fastest = 8.0;      // the time ratio's limits, where a gap has too little sound to fill it
 
 float midiOf (float hz) { return 69.0f + 12.0f * std::log2 (hz / 440.0f); }
 } // namespace
@@ -43,6 +45,63 @@ std::optional<float> PitchTrack::pitchAt (double seconds) const
 }
 
 //==============================================================================
+TimeMap TimeMap::of (const std::vector<model::TuneNote>& notes, double seconds)
+{
+    if (std::none_of (notes.begin(), notes.end(), [] (auto& n) { return n.isMovedInTime(); }))
+        return {};
+
+    std::vector<std::pair<double, double>> raw { { 0.0, 0.0 } };
+    for (size_t i = 0; i < notes.size(); ++i)
+    {
+        const auto& n = notes[i];
+        const auto length = n.end - n.start;
+        // Lend some of the note's edges to a gap too short to stretch (touching notes, or the file's ends).
+        const auto previousEnd = i > 0 ? notes[i - 1].end : 0.0;
+        const auto nextStart = i + 1 < notes.size() ? notes[i + 1].start : seconds;
+        const auto lendStart = juce::jlimit (0.0, length * 0.25, lentSeconds - (n.start - previousEnd));
+        const auto lendEnd = juce::jlimit (0.0, length * 0.25, lentSeconds - (nextStart - n.end));
+        raw.emplace_back (n.start + lendStart, n.outputStart() + lendStart * n.stretch);
+        raw.emplace_back (n.end - lendEnd, n.outputEnd() - lendEnd * n.stretch);
+    }
+    raw.emplace_back (seconds, seconds);
+
+    // Both increasing and inside the file; of two points at one moment, the later one wins.
+    TimeMap map;
+    for (auto [source, output] : raw)
+    {
+        source = juce::jlimit (0.0, seconds, source);
+        output = juce::jlimit (0.0, seconds, output);
+        while (! map.points.empty() && source <= map.points.back().first + 1.0e-9)
+            map.points.pop_back();
+        if (! map.points.empty())
+            output = juce::jmax (output, map.points.back().second);
+        map.points.emplace_back (source, output);
+    }
+    return map;
+}
+
+namespace
+{
+double interpolate (const std::vector<std::pair<double, double>>& points, double x, bool forward)
+{
+    auto from = [forward] (const std::pair<double, double>& p) { return forward ? p.first : p.second; };
+    auto to = [forward] (const std::pair<double, double>& p) { return forward ? p.second : p.first; };
+    if (points.empty() || x <= from (points.front()))
+        return x;
+    const auto after = std::upper_bound (points.begin(), points.end(), x,
+                                         [&] (double value, const auto& p) { return value < from (p); });
+    if (after == points.end())
+        return x - from (points.back()) + to (points.back());
+    const auto& b = *after;
+    const auto& a = *std::prev (after);
+    const auto span = from (b) - from (a);
+    return span > 0.0 ? to (a) + (x - from (a)) / span * (to (b) - to (a)) : to (b);
+}
+} // namespace
+
+double TimeMap::toOutput (double source) const { return interpolate (points, source, true); }
+double TimeMap::toSource (double output) const { return interpolate (points, output, false); }
+
 std::vector<float> TuneRender::corrections (const PitchTrack& track, const std::vector<model::TuneNote>& notes,
                                             double seconds)
 {
@@ -121,6 +180,7 @@ juce::Result TuneRender::render (const juce::File& source, const PitchTrack& tra
     const auto length = (int64_t)reader->lengthInSamples;
     const auto correction = corrections (track, notes, (double)length / rate);
     const auto shape = shaping (notes, track.frameSeconds, (double)length / rate);
+    const auto timing = TimeMap::of (notes, (double)length / rate);
     auto frameAt = [&] (double samples)
     {
         return (size_t)juce::jlimit<int64_t> (0, (int64_t)correction.size() - 1,
@@ -151,6 +211,10 @@ juce::Result TuneRender::render (const juce::File& source, const PitchTrack& tra
 
     juce::AudioBuffer<float> in (channels, blockSize), out (channels, blockSize * 4);
     int64_t toSkip = (int64_t)stretcher.getStartDelay(); // the stretcher's delay, dropped from the output
+    const auto delay = (double)toSkip;
+    // The sound coming out is the start pad and the delay behind what goes in; a new time ratio already applies
+    // to the sound halfway, as it is analysed (measured: tests/engine/TuneRenderTests.cpp).
+    const auto behind = delay + (double)stretcher.getPreferredStartPad();
     int64_t written = 0;
 
     auto drain = [&]
@@ -195,8 +259,16 @@ juce::Result TuneRender::render (const juce::File& source, const PitchTrack& tra
         const auto count = (int)juce::jmin<int64_t> (blockSize, length - position);
         in.clear();
         reader->read (&in, 0, count, position, true, channels > 1);
-        const auto frame = frameAt ((double)position + count / 2.0);
+        // The pitch and formant apply to the sound coming out.
+        const auto frame = frameAt ((double)position + count / 2.0 - behind);
         stretcher.setPitchScale (std::pow (2.0, (double)correction[frame] / 12.0));
+        // Notes moved in time: as much sound out as the map says, for the sound being analysed.
+        if (! timing.isIdentity())
+        {
+            const auto at = (double)position - delay;
+            const auto produced = (timing.toOutput ((at + count) / rate) - timing.toOutput (at / rate)) * rate;
+            stretcher.setTimeRatio (juce::jlimit (1.0 / fastest, fastest, produced / count));
+        }
         // A formant of its own only where a note has one: otherwise Rubber Band keeps the voice's (0 = automatic).
         const auto formant = shape.formant[frame];
         stretcher.setFormantScale (juce::exactlyEqual (formant, 0.0f) ? 0.0 : std::pow (2.0, (double)formant / 12.0));

@@ -290,12 +290,22 @@ struct TuneNote
     float vibrato = 1.0f; // 1 = as sung, 0 = none, up to 2 = twice as wide
     float gainDb = 0.0f;  // louder or quieter, -24..12 dB
     float formant = 0.0f; // the voice's character, semitones -12..12: up is smaller and brighter, down bigger
+    double move = 0.0;    // seconds it is moved later (earlier when negative)
+    double stretch = 1.0; // its length: 2 = twice as long, 0.25..4
+
+    /** Where it sounds, in seconds into the file: moved and stretched (its neighbours stay where they are). */
+    double outputStart() const noexcept { return start + move; }
+    double outputEnd() const noexcept { return start + move + (end - start) * stretch; }
+    bool isMovedInTime() const noexcept
+    {
+        return ! juce::exactlyEqual (move, 0.0) || ! juce::exactlyEqual (stretch, 1.0);
+    }
 
     bool isUnchanged() const noexcept
     {
         return juce::exactlyEqual (shift, 0.0f) && juce::exactlyEqual (drift, 1.0f) &&
                juce::exactlyEqual (vibrato, 1.0f) && juce::exactlyEqual (gainDb, 0.0f) &&
-               juce::exactlyEqual (formant, 0.0f);
+               juce::exactlyEqual (formant, 0.0f) && ! isMovedInTime();
     }
     bool operator== (const TuneNote&) const = default;
 };

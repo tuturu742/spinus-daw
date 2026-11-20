@@ -53,6 +53,8 @@ your computer; turn AI on in Options › AI...), which takes a few seconds per m
 | To | Do |
 |---|---|
 | Move a note | Drag it up or down: it lands on a whole note. Hold **Alt** to move it freely. **Up** and **Down** keys move the selected notes by a semitone. |
+| Move a note in time | Drag it sideways. The notes around it stay where they are: the sound between them is stretched or squeezed to make room. A note can't be dragged past its neighbours or the clip's ends. |
+| Make a note longer or shorter | Drag its left or right edge (the pointer becomes a double arrow). The other edge stays put. A note can be from 4 times shorter to 4 times longer than sung. |
 | Select notes | Click one; **Shift**-click to add more. Drift, Vibrato, Volume, Formant, Snap and Reset work on the selection (or on all notes when none is selected). |
 | Split a note | Double-click it where it should be split. |
 | Join two notes | Select the first and click **Join** (or press **J**): it joins the next one. |
@@ -61,13 +63,13 @@ your computer; turn AI on in Options › AI...), which takes a few seconds per m
 | Make a note louder or quieter | **Volume**: from 24 dB quieter to 12 dB louder; 0 dB is as sung. Good for a word that sticks out or gets lost. |
 | Change the voice's character | **Formant**: up (in semitones) sounds smaller and brighter, down bigger and darker, without changing the note. A little (1 or 2) sounds natural; a lot is an effect. |
 | Put every note in the key | **Snap to key**: each note moves to the nearest note of the song's key (the **Key** button in the top bar), or the nearest semitone without a key. |
-| Start over | **Reset** undoes every correction of the selected notes. Double-click the **Volume** or **Formant** slider to set it back to 0. |
+| Start over | **Reset** undoes every correction of the selected notes, including moves in time and length. Double-click the **Volume** or **Formant** slider to set it back to 0. |
 | Zoom | The **−**, **+** and **Fit** buttons at the top left (Fit shows the whole clip), **Ctrl+=**, **Ctrl+-** and **Ctrl+0**, or **Ctrl**+wheel around the mouse. **Ctrl+Shift**+wheel makes the rows taller or shorter. **Shift**+wheel scrolls in time, the wheel up and down. |
 
 Every change is one undo step (**Ctrl+Z**). Spinus then renders the tuned vocal in the background (the
 bar at the bottom shows how far) with natural-sounding shifting that keeps the voice's character; until
 then you hear the previous version. The recording itself is never changed: Reset all the notes to hear
-it again. Notes cannot be moved in time.
+it again. Moving notes in time keeps the clip as long as it was.
 
 ## Good to know
 

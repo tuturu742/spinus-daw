@@ -886,6 +886,10 @@ juce::var tuneNoteToJson (const TuneNote& n)
         json.set ("gainDb", n.gainDb);
     if (! juce::exactlyEqual (n.formant, 0.0f))
         json.set ("formant", n.formant);
+    if (! juce::exactlyEqual (n.move, 0.0))
+        json.set ("move", n.move);
+    if (! juce::exactlyEqual (n.stretch, 1.0))
+        json.set ("stretch", n.stretch);
     return json;
 }
 
@@ -902,6 +906,8 @@ juce::String tuneNoteFromJson (const juce::var& json, TuneNote& result)
     result.vibrato = r.real (json, "vibrato", 1.0f);
     result.gainDb = r.real (json, "gainDb", 0.0f);
     result.formant = r.real (json, "formant", 0.0f);
+    result.move = json.hasProperty ("move") ? (double)Reader::get (json, "move") : 0.0;
+    result.stretch = json.hasProperty ("stretch") ? (double)Reader::get (json, "stretch") : 1.0;
     if (! (result.start >= 0.0 && result.end > result.start))
         r.errors.add ("a tune note needs 0 <= start < end (seconds)");
     if (result.pitch < 0.0f || result.pitch > 127.0f || std::abs (result.shift) > 24.0f || result.drift < 0.0f ||
@@ -909,6 +915,8 @@ juce::String tuneNoteFromJson (const juce::var& json, TuneNote& result)
         r.errors.add ("a tune note needs pitch 0..127, shift -24..24, drift 0..1 and vibrato 0..2");
     if (result.gainDb < -24.0f || result.gainDb > 12.0f || std::abs (result.formant) > 12.0f)
         r.errors.add ("a tune note needs gainDb -24..12 and formant -12..12");
+    if (! (result.outputStart() >= 0.0 && result.stretch >= 0.25 && result.stretch <= 4.0))
+        r.errors.add ("a tune note needs stretch 0.25..4 and must not be moved before the file's start");
     return r.errors.joinIntoString ("; ");
 }
 

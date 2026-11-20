@@ -231,8 +231,8 @@ juce::String SpinusTuneEditor::getStatusText() const
     case Tuner::State::none:
         break;
     }
-    return "Drag a note up or down to move it (Alt: freely); double-click to split; select notes for Drift, "
-           "Vibrato, Volume and Formant.";
+    return "Drag a note up or down (Alt: freely) or sideways to move it, or by an edge to change its length; "
+           "double-click to split; select notes for Drift, Vibrato, Volume and Formant.";
 }
 
 //==============================================================================
@@ -253,9 +253,10 @@ bool SpinusTuneEditor::commit (const std::vector<model::TuneNote>& changed, cons
     return true;
 }
 
-bool SpinusTuneEditor::moveNotes (const std::vector<int>& indices, float semitones, bool snap)
+std::vector<model::TuneNote> SpinusTuneEditor::withPitchMoved (std::vector<model::TuneNote> changed,
+                                                               const std::vector<int>& indices, float semitones,
+                                                               bool snap) const
 {
-    auto changed = notes;
     for (auto i : indices)
         if (juce::isPositiveAndBelow (i, (int)changed.size()))
         {
@@ -265,7 +266,78 @@ bool SpinusTuneEditor::moveNotes (const std::vector<int>& indices, float semiton
                 target = (float)juce::roundToInt (target);
             n.shift = juce::jlimit (-24.0f, 24.0f, target - n.pitch);
         }
-    return commit (changed, indices.size() > 1 ? "Move notes" : "Move note");
+    return changed;
+}
+
+std::vector<model::TuneNote> SpinusTuneEditor::withTimeMoved (std::vector<model::TuneNote> changed,
+                                                              const std::vector<int>& indices, double seconds) const
+{
+    // As far as the nearest notes left in place, and the clip's ends, allow.
+    const std::set<int> chosen (indices.begin(), indices.end());
+    const auto count = (int)changed.size();
+    auto low = -duration, high = duration;
+    for (auto i : chosen)
+    {
+        if (! juce::isPositiveAndBelow (i, count))
+            continue;
+        const auto& n = changed[(size_t)i];
+        if (! chosen.contains (i - 1))
+            low = juce::jmax (low, (i > 0 ? changed[(size_t)i - 1].outputEnd() : 0.0) - n.outputStart());
+        if (! chosen.contains (i + 1))
+            high = juce::jmin (high, (i + 1 < count ? changed[(size_t)i + 1].outputStart() : duration) - n.outputEnd());
+    }
+    if (low > high)
+        return changed;
+    const auto by = juce::jlimit (juce::jmin (0.0, low), juce::jmax (0.0, high), seconds);
+    for (auto i : chosen)
+        if (juce::isPositiveAndBelow (i, count))
+        {
+            auto& n = changed[(size_t)i];
+            n.move += by;
+            if (std::abs (n.move) < 0.0005) // back where it was sung
+                n.move = 0.0;
+        }
+    return changed;
+}
+
+std::vector<model::TuneNote> SpinusTuneEditor::withResized (std::vector<model::TuneNote> changed, int index,
+                                                            double outputStart, double outputEnd) const
+{
+    if (! juce::isPositiveAndBelow (index, (int)changed.size()))
+        return changed;
+    auto& n = changed[(size_t)index];
+    const auto movesStart = std::abs (outputStart - n.outputStart()) > 1.0e-9;
+    // Within its neighbours and the clip, and 0.25 to 4 times as long as sung.
+    outputStart = juce::jmax (outputStart, index > 0 ? changed[(size_t)index - 1].outputEnd() : 0.0);
+    outputEnd =
+        juce::jmin (outputEnd, index + 1 < (int)changed.size() ? changed[(size_t)index + 1].outputStart() : duration);
+    const auto length = n.end - n.start;
+    auto stretch = juce::jlimit (0.25, 4.0, (outputEnd - outputStart) / length);
+    if (std::abs (stretch - 1.0) < 0.01) // as long as sung
+        stretch = 1.0;
+    if (movesStart)
+        outputStart = outputEnd - length * stretch;
+    n.stretch = stretch;
+    n.move = outputStart - n.start;
+    if (std::abs (n.move) < 0.0005)
+        n.move = 0.0;
+    return changed;
+}
+
+bool SpinusTuneEditor::moveNotes (const std::vector<int>& indices, float semitones, bool snap)
+{
+    return commit (withPitchMoved (notes, indices, semitones, snap), indices.size() > 1 ? "Move notes" : "Move note");
+}
+
+bool SpinusTuneEditor::moveInTime (const std::vector<int>& indices, double seconds)
+{
+    return commit (withTimeMoved (notes, indices, seconds),
+                   indices.size() > 1 ? "Move notes in time" : "Move note in time");
+}
+
+bool SpinusTuneEditor::resizeNote (int index, double outputStart, double outputEnd)
+{
+    return commit (withResized (notes, index, outputStart, outputEnd), "Change note length");
 }
 
 bool SpinusTuneEditor::splitNote (int index, double seconds)
@@ -273,12 +345,15 @@ bool SpinusTuneEditor::splitNote (int index, double seconds)
     if (! juce::isPositiveAndBelow (index, (int)notes.size()))
         return false;
     const auto& n = notes[(size_t)index];
-    if (seconds <= n.start + 0.02 || seconds >= n.end - 0.02)
+    // `seconds` is where it sounds: the moment of the file sung there.
+    const auto at = n.start + (seconds - n.outputStart()) / n.stretch;
+    if (at <= n.start + 0.02 || at >= n.end - 0.02)
         return false;
     auto changed = notes;
     auto second = n;
-    changed[(size_t)index].end = seconds;
-    second.start = seconds;
+    changed[(size_t)index].end = at;
+    second.start = at;
+    second.move = n.outputStart() + (at - n.start) * n.stretch - at;
     changed.insert (changed.begin() + index + 1, second);
     return commit (changed, "Split note");
 }
@@ -296,6 +371,9 @@ bool SpinusTuneEditor::joinNotes (int first, int second)
     const auto target = a.pitch + a.shift;
     a.pitch = (float)((a.pitch * la + b.pitch * lb) / (la + lb));
     a.shift = target - a.pitch;
+    // From where the first starts to where the second ends, as they sound.
+    if (a.isMovedInTime() || b.isMovedInTime())
+        a.stretch = juce::jlimit (0.25, 4.0, (b.outputEnd() - a.outputStart()) / (b.end - a.start));
     a.end = b.end;
     changed.erase (changed.begin() + second);
     selected = { first };
@@ -363,6 +441,8 @@ bool SpinusTuneEditor::reset (const std::vector<int>& indices)
             n.vibrato = 1.0f;
             n.gainDb = 0.0f;
             n.formant = 0.0f;
+            n.move = 0.0;
+            n.stretch = 1.0;
         }
     return commit (changed, "Reset notes");
 }
@@ -408,8 +488,34 @@ float SpinusTuneEditor::pitchToY (float pitch) const
 juce::Rectangle<float> SpinusTuneEditor::noteBounds (const model::TuneNote& n) const
 {
     const auto y = pitchToY (n.pitch + n.shift);
-    return juce::Rectangle<float>::leftTopRightBottom (timeToX (n.start), y - rowHeight * 0.45f, timeToX (n.end),
-                                                       y + rowHeight * 0.45f);
+    return juce::Rectangle<float>::leftTopRightBottom (timeToX (n.outputStart()), y - rowHeight * 0.45f,
+                                                       timeToX (n.outputEnd()), y + rowHeight * 0.45f);
+}
+
+int SpinusTuneEditor::edgeAt (int index, juce::Point<float> p) const
+{
+    if (! juce::isPositiveAndBelow (index, (int)notes.size()))
+        return 0;
+    const auto r = noteBounds (notes[(size_t)index]);
+    const auto grip = juce::jmin (5.0f, r.getWidth() / 4.0f);
+    if (p.x < r.getX() + grip)
+        return -1;
+    if (p.x > r.getRight() - grip)
+        return 1;
+    return 0;
+}
+
+std::vector<model::TuneNote> SpinusTuneEditor::shownNotes() const
+{
+    if (! drag.active)
+        return notes;
+    if (drag.edge != 0 && juce::isPositiveAndBelow (drag.note, (int)notes.size()))
+    {
+        const auto& n = notes[(size_t)drag.note];
+        return withResized (notes, drag.note, n.outputStart() + (drag.edge < 0 ? drag.seconds : 0.0),
+                            n.outputEnd() + (drag.edge > 0 ? drag.seconds : 0.0));
+    }
+    return withPitchMoved (withTimeMoved (notes, getSelection(), drag.seconds), getSelection(), drag.semitones, false);
 }
 
 int SpinusTuneEditor::noteAt (juce::Point<float> p) const
@@ -485,14 +591,15 @@ void SpinusTuneEditor::paint (juce::Graphics& g)
         pitchTrack.frameSeconds = frameSeconds;
         for (auto m : midi)
             pitchTrack.hz.push_back (m > 0.0f ? 440.0f * std::pow (2.0f, (m - 69.0f) / 12.0f) : 0.0f);
-        const auto corrections = engine::TuneRender::corrections (pitchTrack, notes, duration);
+        const auto shown = shownNotes();
+        const auto corrections = engine::TuneRender::corrections (pitchTrack, shown, duration);
+        const auto timing = engine::TimeMap::of (shown, duration);
 
         juce::Path sung, sounds;
         bool inSung = false, inSounds = false;
         for (size_t i = 0; i < midi.size(); ++i)
         {
-            const auto t = (double)i * frameSeconds;
-            const auto x = timeToX (t);
+            const auto x = timeToX (timing.toOutput ((double)i * frameSeconds));
             if (x < (float)grid.getX() - 4.0f || x > (float)grid.getRight() + 4.0f || midi[i] <= 0.0f)
             {
                 inSung = inSounds = false;
@@ -512,9 +619,9 @@ void SpinusTuneEditor::paint (juce::Graphics& g)
         g.setColour (theme.get ("textDim").withAlpha (0.7f));
         g.strokePath (sung, juce::PathStrokeType (1.2f));
 
-        for (int i = 0; i < (int)notes.size(); ++i)
+        for (int i = 0; i < (int)shown.size(); ++i)
         {
-            const auto r = noteBounds (notes[(size_t)i]);
+            const auto r = noteBounds (shown[(size_t)i]);
             g.setColour (theme.get ("accentAlt").withAlpha (selected.contains (i) ? 0.7f : 0.4f));
             g.fillRoundedRectangle (r, rowHeight * 0.4f);
             g.setColour (selected.contains (i) ? theme.get ("text") : theme.get ("accentAlt"));
@@ -541,6 +648,13 @@ void SpinusTuneEditor::timerCallback()
 void SpinusTuneEditor::changeListenerCallback (juce::ChangeBroadcaster*) { timerCallback(); }
 
 //==============================================================================
+void SpinusTuneEditor::mouseMove (const juce::MouseEvent& e)
+{
+    const auto i = noteAt (e.position);
+    setMouseCursor (i >= 0 && edgeAt (i, e.position) != 0 ? juce::MouseCursor::LeftRightResizeCursor
+                                                          : juce::MouseCursor::NormalCursor);
+}
+
 void SpinusTuneEditor::mouseDown (const juce::MouseEvent& e)
 {
     grabKeyboardFocus();
@@ -559,22 +673,47 @@ void SpinusTuneEditor::mouseDown (const juce::MouseEvent& e)
     }
     else if (! selected.contains (i))
         select ({ i });
-    drag = { true, e.position.y, 0.0f };
+    const auto edge = e.mods.isShiftDown() ? 0 : edgeAt (i, e.position);
+    if (edge != 0)
+        select ({ i });
+    drag = { true, e.position, 0.0f, 0.0, i, edge };
 }
 
 void SpinusTuneEditor::mouseDrag (const juce::MouseEvent& e)
 {
     if (! drag.active)
         return;
-    drag.semitones = (drag.startY - e.position.y) / rowHeight;
+    // A few pixels before it moves, so a drag up or down stays in time and one sideways on its note.
+    const auto offset = e.position - drag.start;
+    drag.seconds = drag.edge != 0 || std::abs (offset.x) >= 4.0f ? offset.x / pixelsPerSecond : 0.0;
+    drag.semitones = drag.edge == 0 && std::abs (offset.y) >= 3.0f ? -offset.y / rowHeight : 0.0f;
     repaint();
 }
 
 void SpinusTuneEditor::mouseUp (const juce::MouseEvent& e)
 {
-    if (drag.active && std::abs (drag.semitones) > 0.05f)
-        moveNotes (getSelection(), drag.semitones, ! e.mods.isAltDown());
+    const auto finished = drag;
     drag = {};
+    if (! finished.active)
+        return;
+    if (finished.edge != 0 && juce::isPositiveAndBelow (finished.note, (int)notes.size()))
+    {
+        const auto& n = notes[(size_t)finished.note];
+        if (! juce::exactlyEqual (finished.seconds, 0.0))
+            resizeNote (finished.note, n.outputStart() + (finished.edge < 0 ? finished.seconds : 0.0),
+                        n.outputEnd() + (finished.edge > 0 ? finished.seconds : 0.0));
+        repaint();
+        return;
+    }
+    // Up or down and sideways at once: one undo step.
+    const auto chosen = getSelection();
+    const auto inTime = withTimeMoved (notes, chosen, finished.seconds);
+    const auto upOrDown = std::abs (finished.semitones) > 0.05f;
+    const auto plural = chosen.size() > 1;
+    if (! commit (upOrDown ? withPitchMoved (inTime, chosen, finished.semitones, ! e.mods.isAltDown()) : inTime,
+                  upOrDown ? (plural ? "Move notes" : "Move note")
+                           : (plural ? "Move notes in time" : "Move note in time")))
+        repaint();
 }
 
 void SpinusTuneEditor::mouseDoubleClick (const juce::MouseEvent& e)

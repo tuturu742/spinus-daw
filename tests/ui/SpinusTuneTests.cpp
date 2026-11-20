@@ -130,6 +130,95 @@ TEST_CASE (
     CHECK (editor.getStatusText().isNotEmpty());
 }
 
+TEST_CASE ("Spinus Tune's window: notes moved in time and made longer or shorter, their neighbours in place",
+           "[ui][tune]")
+{
+    Vocal v; // notes at 0..1 s and 1..1.9 s of a 2 s clip
+    ui::SpinusTuneEditor editor (v.session, v.clip, nullptr);
+    editor.setSize (900, 480);
+    REQUIRE (editor.isAnalysed());
+    auto note = [&] (int i) { return editor.getNotes()[(size_t)i]; };
+
+    REQUIRE (editor.moveInTime ({ 1 }, 0.05));
+    CHECK (note (1).move == Catch::Approx (0.05));
+    REQUIRE (editor.moveInTime ({ 1 }, 1.0)); // only as far as the clip's end
+    CHECK (note (1).outputEnd() == Catch::Approx (2.0));
+    REQUIRE (editor.moveInTime ({ 0 }, 0.3)); // only up to the next note
+    CHECK (note (0).outputEnd() == Catch::Approx (note (1).outputStart()));
+    REQUIRE (editor.moveInTime ({ 0 }, -1.0)); // only back to the clip's start
+    CHECK (juce::exactlyEqual (note (0).move, 0.0));
+    CHECK (! editor.moveInTime ({ 0 }, -1.0)); // nothing to change
+
+    REQUIRE (editor.resizeNote (0, 0.0, 0.8)); // shorter
+    CHECK (note (0).stretch == Catch::Approx (0.8));
+    REQUIRE (editor.resizeNote (0, 0.0, 5.0)); // longer, up to the next note
+    CHECK (note (0).outputEnd() == Catch::Approx (note (1).outputStart()));
+    REQUIRE (editor.resizeNote (1, 1.6, 2.0)); // by its start: the end stays
+    CHECK (note (1).outputStart() == Catch::Approx (1.6));
+    CHECK (note (1).outputEnd() == Catch::Approx (2.0));
+    CHECK (note (1).stretch == Catch::Approx (0.4 / 0.9));
+    REQUIRE (editor.resizeNote (1, 1.9, 2.0)); // at most 4 times shorter
+    CHECK (note (1).stretch == Catch::Approx (0.25));
+    CHECK (note (1).outputEnd() == Catch::Approx (2.0));
+    REQUIRE (editor.resizeNote (1, 1.6, 2.0));
+
+    // Split where it sounds; joined again, it sounds where it did.
+    REQUIRE (editor.splitNote (1, 1.8));
+    REQUIRE (editor.getNotes().size() == 3);
+    CHECK (note (2).outputStart() == Catch::Approx (1.8));
+    CHECK (note (1).outputEnd() == Catch::Approx (1.8));
+    CHECK (note (2).outputEnd() == Catch::Approx (2.0));
+    REQUIRE (editor.joinNotes (1, 2));
+    CHECK (note (1).outputStart() == Catch::Approx (1.6));
+    CHECK (note (1).outputEnd() == Catch::Approx (2.0));
+
+    REQUIRE (editor.reset ({ 0, 1 }));
+    CHECK (note (0).isUnchanged());
+    CHECK (note (1).isUnchanged());
+
+    // With the mouse: sideways moves it in time (and not up or down); by its end edge, longer.
+    auto event = [&] (juce::Point<float> p, juce::Point<float> down, bool dragged)
+    {
+        return juce::MouseEvent { juce::Desktop::getInstance().getMainMouseSource(),
+                                  p,
+                                  {},
+                                  juce::MouseInputSource::defaultPressure,
+                                  juce::MouseInputSource::defaultOrientation,
+                                  juce::MouseInputSource::defaultRotation,
+                                  juce::MouseInputSource::defaultTiltX,
+                                  juce::MouseInputSource::defaultTiltY,
+                                  &editor,
+                                  &editor,
+                                  juce::Time::getCurrentTime(),
+                                  down,
+                                  juce::Time::getCurrentTime(),
+                                  1,
+                                  dragged };
+    };
+    auto drag = [&] (juce::Point<float> from, juce::Point<float> to)
+    {
+        editor.mouseDown (event (from, from, false));
+        editor.mouseDrag (event (to, from, true));
+        editor.mouseUp (event (to, from, true));
+    };
+    const auto pixels = (float)editor.getPixelsPerSecond();
+    const auto second = editor.getNoteBounds (1);
+    drag (second.getCentre(), second.getCentre().translated (0.05f * pixels, 1.0f));
+    CHECK (note (1).move == Catch::Approx (0.05).margin (0.01));
+    CHECK (juce::exactlyEqual (note (1).shift, 0.0f));
+    drag (second.getCentre(), second.getCentre().translated (-0.3f * pixels, 0.0f)); // not into the first note
+    CHECK (juce::exactlyEqual (note (1).move, 0.0));
+
+    const auto first = editor.getNoteBounds (0);
+    drag ({ first.getRight() - 2.0f, first.getCentreY() },
+          { first.getRight() - 2.0f - 0.2f * pixels, first.getCentreY() });
+    CHECK (note (0).outputEnd() == Catch::Approx (0.8).margin (0.01));
+    CHECK (juce::exactlyEqual (note (0).move, 0.0));
+
+    CHECK (v.session.getHistory().getUndoDescriptions().joinIntoString ("|").endsWith (
+        "Reset notes|Move note in time|Move note in time|Change note length"));
+}
+
 TEST_CASE ("Spinus Tune's toolbar holds its controls, and the rows stay out of it", "[ui][tune]")
 {
     Vocal v;
