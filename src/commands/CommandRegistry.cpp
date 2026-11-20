@@ -4407,33 +4407,37 @@ void addPlaylistCommands (std::vector<CommandInfo>& list)
         "pitch": {"type": "number", "minimum": 0, "maximum": 127, "description": "The note as sung (MIDI, fractional)"},
         "shift": {"type": "number", "minimum": -24, "maximum": 24, "description": "Semitones to move it"},
         "drift": {"type": "number", "minimum": 0, "maximum": 1, "description": "1 = as sung, 0 = straight"},
-        "vibrato": {"type": "number", "minimum": 0, "maximum": 2, "description": "1 = as sung, 0 = none"}},
+        "vibrato": {"type": "number", "minimum": 0, "maximum": 2, "description": "1 = as sung, 0 = none"},
+        "gainDb": {"type": "number", "minimum": -24, "maximum": 12, "description": "Louder or quieter (dB), 0 = as sung"},
+        "formant": {"type": "number", "minimum": -12, "maximum": 12,
+                    "description": "The voice's character (semitones): up smaller and brighter, down bigger; 0 = as sung"}},
         "required": ["start", "end", "pitch"], "additionalProperties": false}})json");
 
-    list.push_back (info ("clip.setTune",
-                          "Spinus Tune: replace an audio clip's tuned notes (how each sung note is moved, "
-                          "straightened or its vibrato changed). An empty list plays the clip as recorded.",
-                          ParameterSchema()
-                              .id ("clip", "Audio clip ID")
-                              .custom ("notes", "The notes, in time order, not overlapping", true, tuneSchema)
-                              .string ("description", "Undo history text, e.g. \"Move note\""),
-                          [] (Params& p) -> std::unique_ptr<Command>
-                          {
-                              p.allowOnly ({ "clip", "notes", "description" });
-                              std::vector<TuneNote> notes;
-                              if (auto* items = p.get ("notes", true).getArray())
-                                  for (auto& item : *items)
-                                  {
-                                      TuneNote note;
-                                      if (auto e = model::tuneNoteFromJson (item, note); e.isNotEmpty())
-                                          p.errors.add ("notes: " + e);
-                                      notes.push_back (note);
-                                  }
-                              else
-                                  p.errors.add ("'notes' must be an array");
-                              return std::make_unique<SetTune> (p.json, p.id<ClipId> ("clip"), std::move (notes),
-                                                                p.string ("description").value_or (""));
-                          }));
+    list.push_back (
+        info ("clip.setTune",
+              "Spinus Tune: replace an audio clip's tuned notes (how each sung note is moved, "
+              "straightened, its vibrato, volume or formant changed). An empty list plays the clip as recorded.",
+              ParameterSchema()
+                  .id ("clip", "Audio clip ID")
+                  .custom ("notes", "The notes, in time order, not overlapping", true, tuneSchema)
+                  .string ("description", "Undo history text, e.g. \"Move note\""),
+              [] (Params& p) -> std::unique_ptr<Command>
+              {
+                  p.allowOnly ({ "clip", "notes", "description" });
+                  std::vector<TuneNote> notes;
+                  if (auto* items = p.get ("notes", true).getArray())
+                      for (auto& item : *items)
+                      {
+                          TuneNote note;
+                          if (auto e = model::tuneNoteFromJson (item, note); e.isNotEmpty())
+                              p.errors.add ("notes: " + e);
+                          notes.push_back (note);
+                      }
+                  else
+                      p.errors.add ("'notes' must be an array");
+                  return std::make_unique<SetTune> (p.json, p.id<ClipId> ("clip"), std::move (notes),
+                                                    p.string ("description").value_or (""));
+              }));
 
     list.push_back (
         info ("project.relocateAudio",

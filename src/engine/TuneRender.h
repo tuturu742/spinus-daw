@@ -26,12 +26,20 @@ struct PitchTrack
     For a tuned note (model::TuneNote), with "curve" the pitch as sung and "slow" the curve averaged over
     0.2 s (without its vibrato), the correction in semitones is
         shift + (drift - 1) * (slow - pitch) + (vibrato - 1) * (curve - slow)
-    eased in and out over 15 ms at the note's edges. Outside tuned notes nothing moves.
+    eased in and out over 15 ms at the note's edges. Outside tuned notes nothing moves. A note's volume
+    (gainDb) and formant are eased in and out the same way.
 */
 struct TuneRender
 {
     /** The correction (semitones) every `frameSeconds`, from the start of the file. */
     static std::vector<float> corrections (const PitchTrack&, const std::vector<model::TuneNote>&, double seconds);
+
+    /** Each note's volume (dB) and formant (semitones) every `frameSeconds`, from the start of the file. */
+    struct Shaping
+    {
+        std::vector<float> gainDb, formant;
+    };
+    static Shaping shaping (const std::vector<model::TuneNote>&, double frameSeconds, double seconds);
 
     /** Renders `source` with the corrections into `destination` (a 32-bit float WAV): Rubber Band's R3
         engine, formant-preserving, the pitch scale updated every 256 samples. `progress` (0..1) and

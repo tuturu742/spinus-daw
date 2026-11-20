@@ -497,7 +497,7 @@ Rejected, so they are not proposed again: the madmom models, Essentia's MTG mode
 Two modes, two implementations:
 
 - **Real-time mode** (C++ stock plugin, no Python): low-latency pitch detection (YIN family) and pitch shifting (PSOLA) with key/scale, retune speed (hard "robot" to natural), humanize, formant preservation, and MIDI-controlled target notes. Latency target ≤ 10 ms at 48 kHz. **How it works:** `src/dsp/tune/`, 10 ms delay ("Normal" range; a "Low voice" range takes 20 ms); target notes come from a channel chosen per insert (`Insert::notesFrom`), whose MIDI clips the adapter copies onto the insert's track. The range is not automatable, because it changes the reported delay.
-- **Graphical mode** (Melodyne-lite): vocal clip analyzed by spinus-ai into note blobs with pitch curves; user drags notes, adjusts drift and vibrato; rendered offline in C++ with formant-preserving shifting. **How it works:** `AudioClip::tune` (`clip.setTune`), `ai.v1.listen.vocal`, `engine/TuneRender` (Rubber Band R3, formant-preserving, pitch scale per 256 samples), the `Tuner` (renders in the background into `cache/tune/`, like the Freezer) and `ui/SpinusTune` (opened by double-clicking an audio clip).
+- **Graphical mode** (Melodyne-lite): vocal clip analyzed by spinus-ai into note blobs with pitch curves; user drags notes, adjusts drift, vibrato, volume and formant; rendered offline in C++ with formant-preserving shifting. **How it works:** `AudioClip::tune` (`clip.setTune`), `ai.v1.listen.vocal`, `engine/TuneRender` (Rubber Band R3, formant-preserving, pitch scale per 256 samples), the `Tuner` (renders in the background into `cache/tune/`, like the Freezer) and `ui/SpinusTune` (opened by double-clicking an audio clip, or Edit notes in its menu). A note's `gainDb` (-24..12) is a gain ramp on the input per 256-sample block, its `formant` (-12..12 semitones) Rubber Band's `setFormantScale` (2^(formant/12); 0 = automatic, i.e. preserved), both eased over 15 ms at the note's edges like the pitch (`TuneRender::shaping`).
 
 ### 12.7 Feature: Track analyzer (F5)
 
@@ -877,16 +877,16 @@ owner tests on Linux and Windows.
 
 Owner decision 2026-11-14 (distribution, below in Later, waits):
 
-- **Spinus Plugins goes public** with Linux and Windows CI, and **more plugins**: Psaltria finished (its
+- **Not in 0.2.0** (owner, 2026-11-19): **Spinus Plugins goes public** with Linux and Windows CI, and **more plugins**: Psaltria finished (its
   presets, clap-validator, the Windows build), then the next ones in `PLUGINS.md`. Get free plugins offers them.
-- **Spinus Tune moves to Spinus Plugins** (see Later for how), and **its note editor reaches Newtone's
-  level** (owner decision 2026-10-31; §12.6). Editing a recorded clip's notes stays a Spinus feature, not an
+- **Spinus Tune's note editor reaches Newtone's level**, in Spinus: the move to Spinus Plugins waits with it
+  (owner, 2026-11-19: Spinus Plugins stays private and is not part of 0.2.0; see Later; owner decision 2026-10-31; §12.6). Editing a recorded clip's notes stays a Spinus feature, not an
   effect: the edit is non-destructive (the recording is never changed, the tuned clip is rendered in the
   background) and can be readjusted at any time. Added:
   - moving notes in time and changing their length (time-stretching each note, its neighbours kept in
     place);
-  - each note's volume and formant (the voice's character), as Drift and Vibrato are set today;
-  - **Edit notes** in the audio clip's right-click menu, besides the double-click.
+  - each note's volume and formant (the voice's character), as Drift and Vibrato are set today: done;
+  - **Edit notes** in the audio clip's right-click menu, besides the double-click: done.
 - **Instrument learning for the whole DAW.** Learn this instrument (§12.10: an instrument's modes, and per mode
   which keys play, switch articulations or do something else, learned from probing, the plugin's own report, the
   manual and the user; profiles exported and imported as files) shipped in rc.1, but only inside the

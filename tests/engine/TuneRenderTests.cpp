@@ -133,3 +133,53 @@ TEST_CASE ("Spinus Tune renders a clip with its notes moved, in time and the sam
     }
     CHECK (std::abs (bestLag) < 48); // within 1 ms
 }
+
+TEST_CASE ("Spinus Tune renders a note's volume and formant, leaving its pitch and the rest alone",
+           "[tune][engine][audio]")
+{
+    const juce::TemporaryFile in (".wav"), out (".wav");
+    const auto voice = saw (1.4, 220.0);
+    writeWav (in.getFile(), voice);
+
+    TuneNote quieter { 0.1, 0.6, 57.0f };
+    quieter.gainDb = -12.0f;
+    TuneNote smaller { 0.7, 1.3, 57.0f };
+    smaller.formant = 7.0f;
+    const auto track = trackOf (1.4, [] (double) { return 57.0; });
+    const auto result = TuneRender::render (in.getFile(), track, { quieter, smaller }, out.getFile());
+    INFO (result.getErrorMessage());
+    REQUIRE (result.wasOk());
+    const auto rendered = readWav (out.getFile());
+    REQUIRE (rendered.size() == voice.size());
+
+    auto rms = [] (const std::vector<float>& x, double from, double to)
+    {
+        double sum = 0.0;
+        const auto a = (size_t)(from * rate), b = (size_t)(to * rate);
+        for (auto i = a; i < b; ++i)
+            sum += (double)x[i] * x[i];
+        return std::sqrt (sum / (double)(b - a));
+    };
+    // How bright: the level of the sample-to-sample change against the level itself.
+    auto brightness = [] (const std::vector<float>& x, double from, double to)
+    {
+        double change = 0.0, level = 0.0;
+        for (auto i = (size_t)(from * rate); i < (size_t)(to * rate); ++i)
+        {
+            change += (double)(x[i] - x[i - 1]) * (x[i] - x[i - 1]);
+            level += (double)x[i] * x[i];
+        }
+        return std::sqrt (change / level);
+    };
+
+    // 12 dB quieter inside the first note, as loud before it.
+    CHECK (juce::Decibels::gainToDecibels (rms (rendered, 0.25, 0.45) / rms (voice, 0.25, 0.45)) ==
+           Catch::Approx (-12.0).margin (1.0));
+    CHECK (juce::Decibels::gainToDecibels (rms (rendered, 0.02, 0.08) / rms (voice, 0.02, 0.08)) ==
+           Catch::Approx (0.0).margin (1.0));
+
+    // Brighter (the formant up) inside the second note, at the same pitch.
+    CHECK (brightness (rendered, 0.85, 1.15) > 1.15 * brightness (voice, 0.85, 1.15));
+    CHECK (std::abs (cents (hzAt (rendered, 1.0), 220.0)) < 10.0);
+    CHECK (brightness (rendered, 0.3, 0.5) == Catch::Approx (brightness (voice, 0.3, 0.5)).epsilon (0.1));
+}

@@ -831,6 +831,12 @@ private:
                               if (safe != nullptr)
                                   safe->useTake (id);
                           });
+        menu.addItem ("Edit notes (Spinus Tune)...",
+                      [safe, id]
+                      {
+                          if (safe != nullptr && safe->onOpenAudioClip)
+                              safe->onOpenAudioClip (id);
+                      });
         menu.addItem ("Reverse", true, audio.reversed,
                       [set, reversed = audio.reversed] { set ({ { "reversed", ! reversed } }); });
         menu.addItem ("Slice at hits",

@@ -288,11 +288,14 @@ struct TuneNote
     float shift = 0.0f;   // semitones to move it
     float drift = 1.0f;   // 1 = the slow wandering as sung, 0 = straight on the note
     float vibrato = 1.0f; // 1 = as sung, 0 = none, up to 2 = twice as wide
+    float gainDb = 0.0f;  // louder or quieter, -24..12 dB
+    float formant = 0.0f; // the voice's character, semitones -12..12: up is smaller and brighter, down bigger
 
     bool isUnchanged() const noexcept
     {
         return juce::exactlyEqual (shift, 0.0f) && juce::exactlyEqual (drift, 1.0f) &&
-               juce::exactlyEqual (vibrato, 1.0f);
+               juce::exactlyEqual (vibrato, 1.0f) && juce::exactlyEqual (gainDb, 0.0f) &&
+               juce::exactlyEqual (formant, 0.0f);
     }
     bool operator== (const TuneNote&) const = default;
 };

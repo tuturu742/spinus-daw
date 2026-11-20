@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Spinus Tune: each note's volume and formant.** In the note editor, **Volume** makes the selected notes louder or
+  quieter and **Formant** changes the voice's character (smaller and brighter, or bigger and darker) without changing the
+  note. **Edit notes (Spinus Tune)...** in an audio clip's right-click menu opens the editor, as a double-click does.
 - **For developers: Surge XT is downloaded, not compiled.** Builds and tests use the same Surge XT release users get
   (checked the same way), and the Surge XT source code is no longer part of the repository, so cloning and clean builds
   are lighter.
