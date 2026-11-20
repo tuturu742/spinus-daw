@@ -13,6 +13,7 @@
 #include "project/ProjectFiles.h"
 #include "session/SongPreparation.h"
 #include "session/SongSections.h"
+#include "model/Tempo.h"
 #include "session/SongTempo.h"
 #include "session/StemParts.h"
 #include "model/ModelJson.h"
@@ -118,6 +119,9 @@ public:
 
     /** The first command that could not be made, and why. */
     juce::String getError() const { return error; }
+
+    /** The project as it will be once the steps so far are done. */
+    const model::Project& project() const noexcept { return trial.getProject(); }
 
     juce::Result performOn (commands::CommandHistory& history)
     {
@@ -801,11 +805,53 @@ void Analyzer::findTempo()
             });
 }
 
-double Analyzer::getSongTempo() const { return rhythm ? songtempo::average (beatTimes, rhythm->tempo) : 0.0; }
+std::vector<songtempo::Section> Analyzer::getTempoSections() const
+{
+    return rhythm ? songtempo::sections (beatTimes, rhythm->firstDownbeat, rhythm->beatsPerBar)
+                  : std::vector<songtempo::Section>();
+}
+
+double Analyzer::getSongTempo() const
+{
+    const auto sections = getTempoSections();
+    return sections.empty() ? 0.0 : sections.front().bpm;
+}
 
 std::vector<double> Analyzer::placementBeats() const
 {
-    return rhythm ? songtempo::steadyBeats (beatTimes, rhythm->firstDownbeat, getSongTempo()) : beatTimes;
+    return rhythm ? songtempo::sectionBeats (getTempoSections(), beatTimes) : beatTimes;
+}
+
+bool Analyzer::addTempoSteps (Steps& steps, bool& changed) const
+{
+    // The song's first tempo, and a tempo change where each of its other sections starts, in place of the
+    // project's own changes (tick 0 is the song's first downbeat).
+    const auto sections = getTempoSections();
+    changed = false;
+    if (sections.empty())
+        return true;
+    for (auto& change : steps.project().settings.tempoChanges)
+    {
+        if (steps.add ("project.removeTempoChange", object ({ { "at", (juce::int64)change.at } })).isVoid())
+            return false;
+        changed = true;
+    }
+    if (std::abs (sections.front().bpm - steps.project().settings.tempoBpm) > 0.005)
+    {
+        if (steps.add ("project.setTempo", object ({ { "bpm", sections.front().bpm } })).isVoid())
+            return false;
+        changed = true;
+    }
+    model::Ticks at = 0;
+    for (size_t i = 1; i < sections.size(); ++i)
+    {
+        at += (model::Ticks)sections[i - 1].beats * model::ticksPerQuarterNote;
+        if (steps.add ("project.setTempoChange", object ({ { "at", (juce::int64)at }, { "bpm", sections[i].bpm } }))
+                .isVoid())
+            return false;
+        changed = true;
+    }
+    return true;
 }
 
 void Analyzer::applyTempo (const juce::var& result)
@@ -818,8 +864,17 @@ void Analyzer::applyTempo (const juce::var& result)
     {
         rhythm = Rhythm { (double)result["tempo"], (double)result["firstDownbeat"],
                           juce::jmax (1, (int)result["beatsPerBar"]) };
-        tempoText.setText (juce::String (getSongTempo(), 1) + " BPM, " + juce::String (rhythm->beatsPerBar) +
-                               " beats per bar",
+        // A song that changes tempo: each tempo from where it starts ("158.0 BPM, then 145.3 from 1:19").
+        juce::String text (getSongTempo(), 1);
+        text << " BPM";
+        const auto sections = getTempoSections();
+        for (size_t i = 1; i < sections.size(); ++i)
+        {
+            const auto at = (int)std::lround (sections[i].from);
+            text << ", then " << juce::String (sections[i].bpm, 1) << " from " << at / 60 << ":"
+                 << juce::String (at % 60).paddedLeft ('0', 2);
+        }
+        tempoText.setText (text + ", " + juce::String (rhythm->beatsPerBar) + " beats per bar",
                            juce::dontSendNotification);
     }
     else
@@ -2069,19 +2124,15 @@ bool Analyzer::addNotesToProject()
         cannotAdd (steps.getError().isNotEmpty() ? steps.getError() : juce::String ("a stem's file is missing."));
         return false;
     };
-    // The notes follow the song's beats: the project takes the song's average tempo, so they and the stems
-    // played as audio line up at both ends (one undo step with the rest).
-    auto tempo = session.getProject().settings.tempoBpm;
-    const auto songTempo = rhythm ? getSongTempo() : 0.0;
-    const bool tempoSet = songTempo > 0.0 && std::abs (songTempo - tempo) > 0.005;
-    if (tempoSet)
-    {
-        if (steps.add ("project.setTempo", object ({ { "bpm", songTempo } })).isVoid())
-            return failed();
-        tempo = songTempo;
-    }
+    // The notes follow the song's beats: the project takes the song's tempo (and its tempo changes, for a song
+    // whose tempo changes), so they and the stems played as audio line up throughout (one undo step with the rest).
+    bool tempoSet = false;
+    if (! addTempoSteps (steps, tempoSet))
+        return failed();
+    const auto tempo = steps.project().settings.tempoBpm;
+    const auto tempoChanges = steps.project().settings.tempoChanges.size();
     int audioCount = 0;
-    if (! addAudioSteps (steps, audioStems, audioCount, tempo))
+    if (! addAudioSteps (steps, audioStems, audioCount))
         return failed();
     audioStems.clear();
     // The song's sections (markers on the ruler) and each stem's notes as patterns by section: loops placed
@@ -2284,12 +2335,17 @@ bool Analyzer::addNotesToProject()
                   (splitStems.isEmpty() ? juce::String()
                                         : ". Split by how they are played: " + splitStems.joinIntoString ("; ") +
                                               " (roughly where they play at the same moment)") +
-                  (tempoSet ? ". The project's tempo is now the song's, " + juce::String (tempo, 2) + " BPM"
+                  (tempoSet ? ". The project's tempo is now the song's, " + juce::String (tempo, 2) + " BPM" +
+                                  (tempoChanges == 0 ? juce::String()
+                                                     : juce::String (" with ") + juce::String ((int)tempoChanges) +
+                                                           (tempoChanges == 1 ? " tempo change" : " tempo changes") +
+                                                           " where the song's tempo changes")
                             : juce::String()) +
-                  (songtempo::drift (beatTimes) > 0.08
+                  // The beat finder's own wobble is up to about 0.2 s on songs made to a click.
+                  (songtempo::driftFrom (beatTimes, placementBeats()) > 0.25
                        ? ". This song speeds up and slows down (played live, not to a click): the notes keep the "
                          "recording's timing, so in places they are up to " +
-                             juce::String (songtempo::drift (beatTimes), 1) + " s off the grid"
+                             juce::String (songtempo::driftFrom (beatTimes, placementBeats()), 1) + " s off the grid"
                        : juce::String()) +
                   ". Ctrl+Z takes them away." +
                   (tuneNotes.isEmpty() ? juce::String() : " " + tuneNotes.joinIntoString (" "))
@@ -2330,22 +2386,22 @@ bool Analyzer::useTempo()
 {
     if (! rhythm)
         return false;
-    auto& registry = commands::CommandRegistry::get();
-    auto transaction =
-        std::make_unique<commands::Transaction> ("Use the tempo of " + song.getFileNameWithoutExtension());
-    juce::String error;
-    auto tempo = registry.create ("project.setTempo", object ({ { "bpm", getSongTempo() } }), error);
-    if (tempo == nullptr)
+    Steps steps (session.getProject(), "Use the tempo of " + song.getFileNameWithoutExtension());
+    bool changed = false;
+    if (! addTempoSteps (steps, changed))
         return false;
-    transaction->add (std::move (tempo));
     // A bar of 2-12 beats: the song's time signature in quarter notes, unless it is already that long.
     const auto& sig = session.getProject().settings.timeSignature;
     if (sig.numerator * 4 / juce::jmax (1, sig.denominator) != rhythm->beatsPerBar)
-        if (auto signature =
-                registry.create ("project.setTimeSignature",
-                                 object ({ { "numerator", rhythm->beatsPerBar }, { "denominator", 4 } }), error))
-            transaction->add (std::move (signature));
-    return session.getHistory().perform (std::move (transaction)).wasOk();
+    {
+        if (steps
+                .add ("project.setTimeSignature",
+                      object ({ { "numerator", rhythm->beatsPerBar }, { "denominator", 4 } }))
+                .isVoid())
+            return false;
+        changed = true;
+    }
+    return ! changed || steps.performOn (session.getHistory()).wasOk();
 }
 
 bool Analyzer::useKey()
@@ -2365,7 +2421,7 @@ bool Analyzer::addStemsAsAudio (const juce::StringArray& names)
         return false;
     Steps steps (session.getProject(), "Add the stems of " + song.getFileNameWithoutExtension());
     int added = 0;
-    if (! addAudioSteps (steps, names, added, session.getProject().settings.tempoBpm))
+    if (! addAudioSteps (steps, names, added))
     {
         cannotAdd (steps.getError().isNotEmpty() ? steps.getError() : juce::String ("a stem's file is missing."));
         return false;
@@ -2380,14 +2436,15 @@ bool Analyzer::addStemsAsAudio (const juce::StringArray& names)
     return result.wasOk();
 }
 
-bool Analyzer::addAudioSteps (Steps& steps, const juce::StringArray& names, int& added, double tempo)
+bool Analyzer::addAudioSteps (Steps& steps, const juce::StringArray& names, int& added)
 {
-    // Each on a track of its own, the song's first downbeat on bar 1, at `tempo` (the project's once the steps
-    // are done).
+    // Each on a track of its own, the song's first downbeat on bar 1, at the project's tempo (and through its
+    // tempo changes) once the steps so far are done.
     const auto title = song.getFileNameWithoutExtension();
+    const model::TempoMap tempoMap (steps.project().settings);
+    const auto first = rhythm ? rhythm->firstDownbeat : 0.0;
     const auto offset =
-        rhythm ? (model::Ticks)std::llround (rhythm->firstDownbeat * tempo / 60.0 * (double)model::ticksPerQuarterNote)
-               : (model::Ticks)0;
+        (model::Ticks)std::llround (first / model::TempoMap::secondsPerTick (steps.project().settings.tempoBpm));
     for (auto& name : names)
     {
         const auto found = stems.find (name);
@@ -2398,8 +2455,8 @@ bool Analyzer::addAudioSteps (Steps& steps, const juce::StringArray& names, int&
         if (reader == nullptr || reader->sampleRate <= 0.0)
             return steps.fail ("Spinus cannot read the " + stemDisplayName (name) + " stem (" + file.getFullPathName() +
                                "); separate the song again.");
-        const auto length = (model::Ticks)std::llround ((double)reader->lengthInSamples / reader->sampleRate * tempo /
-                                                        60.0 * (double)model::ticksPerQuarterNote);
+        const auto length =
+            (model::Ticks)std::llround (tempoMap.ticks ((double)reader->lengthInSamples / reader->sampleRate - first));
         juce::String path = file.getFullPathName();
         if (const auto folder = session.getProjectFolder(); folder != juce::File())
         {
@@ -2411,13 +2468,12 @@ bool Analyzer::addAudioSteps (Steps& steps, const juce::StringArray& names, int&
         if (lane.isVoid())
             return false;
         if (steps
-                .add ("clip.addAudio",
-                      object ({ { "lane", lane },
-                                { "file", path },
-                                { "start", 0 },
-                                { "offset", (juce::int64)offset },
-                                { "length", (juce::int64)juce::jmax<model::Ticks> (1, length - offset) },
-                                { "name", stemLabel (name + " stem", title) } }))
+                .add ("clip.addAudio", object ({ { "lane", lane },
+                                                 { "file", path },
+                                                 { "start", 0 },
+                                                 { "offset", (juce::int64)offset },
+                                                 { "length", (juce::int64)juce::jmax<model::Ticks> (1, length) },
+                                                 { "name", stemLabel (name + " stem", title) } }))
                 .isVoid())
             return false;
         ++added;

@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: songs whose tempo changes.** A band's song that slows down for its second half, or speeds up for a
+  chorus, now gets tempo changes in the project where its tempo changes, so the replicated notes stay on the bars.
+  The tempo is also steadier for every song: a beat the Analyzer missed or found twice no longer shifts the bars
+  (they could end up seconds off on live recordings, about a second on generated songs).
 - **Coding agents load Drum Machine kits and samples** with the new `load_sounds` tool, as the device's window does:
   a kit by name, or audio files from your sample folders into a Sampler or onto a Drum Machine's pads.
 - **Coding agents see the song in detail, with AI on or off.** New tools read a pattern's notes (`read_pattern`), a

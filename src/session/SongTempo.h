@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 namespace spinus::songtempo
@@ -46,6 +47,162 @@ inline std::vector<double> steadyBeats (const std::vector<double>& beats, double
     for (int i = 0; i < count; ++i)
         steady.push_back (first + i * period);
     return steady;
+}
+
+/** A stretch of the song at one tempo, from a bar where it starts. */
+struct Section
+{
+    double from = 0.0; // seconds into the song: the bar's downbeat
+    double bpm = 0.0;
+    int beats = 0; // whole bars of beats to the next section's start (0 for the last: to the end)
+};
+
+/** The song's tempos, section by section, for a band that changes tempo (a slower second half, a faster chorus):
+    a new section where at least 4 bars in a row keep a tempo of their own, more than 4% from the section before.
+    Bars that keep no tempo (a fill, a break) or twice, half, 3/2 or 2/3 of it (beats found twice as often in a
+    blast beat, half time) stay in the section they are in, and are counted at its tempo, so the bars after them land
+   where the song's are. A band that only drifts (within 4%) is one section at its average, as average() gives it. Each
+   section's tempo puts its first and last downbeats where they are in the recording. */
+inline std::vector<Section> sections (const std::vector<double>& beats, double firstDownbeat, int beatsPerBar)
+{
+    const auto bar = std::max (1, beatsPerBar);
+    // The downbeats: the beat nearest the first downbeat, then every `bar` beats.
+    size_t first = 0;
+    for (size_t i = 0; i < beats.size(); ++i)
+        if (std::abs (beats[i] - firstDownbeat) < std::abs (beats[first] - firstDownbeat))
+            first = i;
+    std::vector<double> downbeats;
+    for (auto i = first; i < beats.size(); i += (size_t)bar)
+        downbeats.push_back (beats[i]);
+    if (downbeats.size() < 9)
+        return { { firstDownbeat, average (beats, 0.0), 0 } };
+
+    // Each bar's tempo, and runs of bars that keep one.
+    std::vector<double> barBpm;
+    for (size_t k = 0; k + 1 < downbeats.size(); ++k)
+        barBpm.push_back (60.0 * bar / std::max (1.0e-6, downbeats[k + 1] - downbeats[k]));
+    const auto median = [] (std::vector<double> v)
+    {
+        std::nth_element (v.begin(), v.begin() + (long)(v.size() / 2), v.end());
+        return v[v.size() / 2];
+    };
+    const auto near = [] (double a, double b) { return std::abs (a / b - 1.0) <= 0.04; };
+    constexpr size_t run = 4;
+    const auto steadyFrom = [&] (size_t k) -> std::optional<double>
+    {
+        if (k + run > barBpm.size())
+            return std::nullopt;
+        const auto m = median ({ barBpm.begin() + (long)k, barBpm.begin() + (long)(k + run) });
+        for (auto i = k; i < k + run; ++i)
+            if (! near (barBpm[i], m))
+                return std::nullopt;
+        return m;
+    };
+
+    // Section starts (bar numbers) and the tempo each keeps.
+    std::vector<std::pair<size_t, double>> starts;
+    size_t k = 0;
+    std::optional<double> opening;
+    while (k < barBpm.size() && ! (opening = steadyFrom (k)))
+        ++k;
+    if (! opening)
+        return { { firstDownbeat, average (beats, 0.0), 0 } };
+    starts.push_back ({ 0, opening.value_or (0.0) });
+    std::vector<double> kept;
+    for (; k < barBpm.size(); ++k)
+    {
+        const auto tempo = kept.empty() ? starts.back().second : median (kept);
+        if (near (barBpm[k], tempo))
+        {
+            kept.push_back (barBpm[k]);
+            continue;
+        }
+        // Twice, half, 3/2 or 2/3 the tempo: the beats counted another way (a blast beat, half time), not the band
+        // changing tempo.
+        const auto recounted = [&] (double other)
+        {
+            for (auto ratio : { 2.0, 0.5, 1.5, 2.0 / 3.0 })
+                if (std::abs (other / tempo / ratio - 1.0) <= 0.06)
+                    return true;
+            return false;
+        };
+        if (const auto other = steadyFrom (k); other && ! near (*other, tempo) && ! recounted (*other))
+        {
+            starts.back().second = tempo;
+            starts.push_back ({ k, *other });
+            kept = { barBpm[k] };
+        }
+    }
+    if (! kept.empty())
+        starts.back().second = median (kept);
+
+    // Next to one that keeps nearly the same tempo (within 2%): one section.
+    for (size_t s = 1; s < starts.size();)
+        if (std::abs (starts[s].second / starts[s - 1].second - 1.0) < 0.02)
+            starts.erase (starts.begin() + (long)s);
+        else
+            ++s;
+
+    // Each section a whole number of bars at its tempo, up to the next one's downbeat; the last to the end.
+    std::vector<Section> found;
+    for (size_t s = 0; s < starts.size(); ++s)
+    {
+        const auto from = downbeats[starts[s].first];
+        const auto to = s + 1 < starts.size() ? starts[s + 1].first : downbeats.size() - 1;
+        Section section { from, starts[s].second, 0 };
+        if (to > starts[s].first)
+        {
+            const auto span = downbeats[to] - from;
+            const auto bars = std::max (1.0, std::round (span * section.bpm / 60.0 / bar));
+            section.bpm = 60.0 * bars * bar / span;
+            if (s + 1 < starts.size())
+                section.beats = (int)bars * bar;
+        }
+        found.push_back (section);
+    }
+    return found;
+}
+
+/** The beats notes are placed on for a song in sections(): each section's steady beat from its downbeat, the first
+    reaching back a beat before the song's first beat and the last a beat past its last, so notes keep their
+    moments in the recording and the bars follow its tempo. */
+inline std::vector<double> sectionBeats (const std::vector<Section>& sections, const std::vector<double>& beats)
+{
+    if (sections.empty() || beats.empty())
+        return beats;
+    std::vector<double> grid;
+    const auto firstPeriod = 60.0 / sections.front().bpm;
+    const auto before = std::ceil ((sections.front().from - beats.front()) / firstPeriod) + 1.0;
+    for (int i = (int)before; i > 0; --i)
+        grid.push_back (sections.front().from - i * firstPeriod);
+    for (size_t s = 0; s < sections.size(); ++s)
+    {
+        const auto period = 60.0 / sections[s].bpm;
+        if (s + 1 < sections.size())
+            for (int i = 0; i < sections[s].beats; ++i)
+                grid.push_back (sections[s].from + i * period);
+        else
+            for (int i = 0; sections[s].from + (i - 1) * period <= beats.back(); ++i)
+                grid.push_back (sections[s].from + i * period);
+    }
+    return grid;
+}
+
+/** How far, in seconds, the song's beats stray from the nearest beat of `grid`. */
+inline double driftFrom (const std::vector<double>& beats, const std::vector<double>& grid)
+{
+    double most = 0.0;
+    for (auto b : beats)
+    {
+        const auto it = std::lower_bound (grid.begin(), grid.end(), b);
+        auto nearest = 1.0e9;
+        if (it != grid.end())
+            nearest = std::min (nearest, std::abs (*it - b));
+        if (it != grid.begin())
+            nearest = std::min (nearest, std::abs (*(it - 1) - b));
+        most = std::max (most, nearest);
+    }
+    return most;
 }
 
 } // namespace spinus::songtempo

@@ -41,3 +41,50 @@ TEST_CASE ("A song's tempo is the average over all its beats, and its drift how 
     CHECK (std::any_of (grid.begin(), grid.end(), [&] (double b) { return std::abs (b - live[4]) < 1e-9; }));
     CHECK (grid[1] - grid[0] == Catch::Approx (0.5));
 }
+
+TEST_CASE ("A song that changes tempo: its sections, each at its own tempo, and the beats notes are placed on",
+           "[analyzer][tempo]")
+{
+    // 40 bars at 158 BPM; 4 bars where the beat finder finds twice as many beats (a blast beat, a fill); then
+    // 30 bars at 145 BPM, as in a band's song that slows down for its second half.
+    std::vector<double> beats;
+    double t = 0.3;
+    for (int i = 0; i < 160; ++i, t += 60.0 / 158.0)
+        beats.push_back (t);
+    for (int i = 0; i < 32; ++i, t += 30.0 / 158.0)
+        beats.push_back (t);
+    const auto slower = t;
+    for (int i = 0; i <= 120; ++i, t += 60.0 / 145.0)
+        beats.push_back (t);
+
+    const auto found = songtempo::sections (beats, 0.3, 4);
+    REQUIRE (found.size() == 2);
+    CHECK (found[0].from == Catch::Approx (0.3));
+    CHECK (found[0].bpm == Catch::Approx (158.0).epsilon (0.001));
+    CHECK (found[0].beats == 176); // the unclear bars counted at its tempo
+    CHECK (found[1].from == Catch::Approx (slower));
+    CHECK (found[1].bpm == Catch::Approx (145.0).epsilon (0.001));
+    CHECK (found[1].beats == 0);
+
+    // Notes placed on these beats keep their moments: the grid goes through each section's downbeats, a beat past
+    // both ends, and strays from the clear beats by nothing.
+    const auto grid = songtempo::sectionBeats (found, beats);
+    CHECK (grid.front() < beats.front());
+    CHECK (grid.back() > beats.back());
+    CHECK (std::any_of (grid.begin(), grid.end(), [&] (double b) { return std::abs (b - slower) < 1e-6; }));
+    std::vector<double> clear (beats.begin(), beats.begin() + 160);
+    clear.insert (clear.end(), beats.begin() + 192, beats.end());
+    CHECK (songtempo::driftFrom (clear, grid) < 0.01);
+    // The average over the beats found would be far off both tempos.
+    CHECK (songtempo::average (beats, 0.0) > 160.0);
+
+    // A song at one tempo, or a band that only drifts a little: one section, at the average.
+    std::vector<double> live;
+    t = 0.0;
+    for (int i = 0; i < 128; ++i, t += i < 64 ? 0.495 : 0.505)
+        live.push_back (t);
+    const auto one = songtempo::sections (live, 0.0, 4);
+    REQUIRE (one.size() == 1);
+    CHECK (one[0].bpm == Catch::Approx (songtempo::average (live, 0.0)).epsilon (0.01));
+    CHECK (songtempo::sections ({ 0.0, 0.5, 1.0 }, 0.0, 4).size() == 1);
+}

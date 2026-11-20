@@ -5,6 +5,7 @@
 #include "ai/AiService.h"
 #include "session/AnalysisLibrary.h"
 #include "session/Session.h"
+#include "session/SongTempo.h"
 #include "session/PresetPreviews.h"
 #include "session/StemAutomation.h"
 #include "session/StemSamples.h"
@@ -242,9 +243,13 @@ public:
         int beatsPerBar = 4;
     };
     std::optional<Rhythm> getRhythm() const { return rhythm; }
-    /** The tempo the project takes on Add to the project: the song's average (songtempo::average). */
+    /** The song's tempo section by section (songtempo::sections): one for a song that keeps one tempo, more for one
+        whose tempo changes (Use for the song and Add to the project put tempo changes where they start). */
+    std::vector<songtempo::Section> getTempoSections() const;
+    /** The tempo the project takes on Add to the project: the song's first (its average for a song at one
+        tempo). */
     double getSongTempo() const;
-    /** The beats notes, hits and curves are placed on: a steady beat at getSongTempo() through the first downbeat,
+    /** The beats notes, hits and curves are placed on: each tempo section's steady beat, through the first downbeat,
         so everything keeps its moment in the recording and lines up with the stems played as audio. */
     std::vector<double> placementBeats() const;
     std::optional<model::Key> getKey() const { return key; }
@@ -308,7 +313,9 @@ private:
     void measureDynamics (const std::function<void()>& then);
     bool addNotesToProject();
     void cannotAdd (const juce::String& why); // says so in the status line
-    bool addAudioSteps (Steps&, const juce::StringArray& names, int& added, double tempo);
+    bool addAudioSteps (Steps&, const juce::StringArray& names, int& added);
+    /** The song's tempo and tempo changes (getTempoSections) as steps; `changed` says whether any were needed. */
+    bool addTempoSteps (Steps&, bool& changed) const;
     void updateNoteChoices();
 
     /** A sound source in a stem's first list. */
