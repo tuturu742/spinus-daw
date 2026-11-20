@@ -5,6 +5,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Coding agents load Drum Machine kits and samples** with the new `load_sounds` tool, as the device's window does:
+  a kit by name, or audio files from your sample folders into a Sampler or onto a Drum Machine's pads.
 - **Coding agents see the song in detail, with AI on or off.** New tools read a pattern's notes (`read_pattern`), a
   clip's settings, such as an audio clip's fades or an automation clip's points (`read_clip`), and an instrument's or
   effect's settings with their values (`device_settings`). `song_summary` now also shows pan, mute and solo, swing, which
