@@ -15,6 +15,7 @@ namespace
 struct FakeGuitar
 {
     int enterKey = -1;
+    int octaves = 0; // how many octaves from its keys it sounds (a bass written an octave up: -1)
     bool switched = false;
     int resets = 0;
 
@@ -50,7 +51,7 @@ struct FakeGuitar
             if (n.note == 24)
                 switched = true;
             else if (n.note >= 40 && n.note <= 88)
-                addSine (b, keyprobe::frequencyOf (n.note), n.start, n.length, gain);
+                addSine (b, keyprobe::frequencyOf (n.note + 12 * octaves), n.start, n.length, gain);
             else if (n.note == 30)
                 for (const auto chordNote : { 48, 52, 55, 60 })
                     addSine (b, keyprobe::frequencyOf (chordNote), n.start, n.length, gain * 0.5f);
@@ -128,4 +129,17 @@ TEST_CASE ("Listen to every key: a mode entered by a key, and stopping", "[profi
     const auto rest = keyprobe::probe (play, {}, options);
     CHECK (rest.keys[97].job == Job::switches);
     CHECK (rest.keys[97].what == "enters this mode");
+}
+
+TEST_CASE ("Listen to every key: an instrument that sounds an octave under its keys says so", "[profiles]")
+{
+    for (const auto octaves : { 0, -1, 1 })
+    {
+        FakeGuitar guitar;
+        guitar.octaves = octaves;
+        const auto result = keyprobe::probe ([&] (const auto& notes, double tail) { return guitar.play (notes, tail); },
+                                             [&] { guitar.switched = false; });
+        CHECK (result.octaves == octaves);
+        CHECK (result.keys[52].job == Job::plays); // an octave off still plays
+    }
 }

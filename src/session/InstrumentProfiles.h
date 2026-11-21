@@ -86,6 +86,13 @@ public:
         juce::String goodFor; // which parts it suits ("strummed rhythm, country and folk")
         Voices voices = Voices::unknown;
         std::array<Key, 128> keys {};
+        // How many octaves from its keys it sounds, as listening heard (-1: a bass whose key 52 sounds E3, as 40
+        // would on most instruments). Its keys stay what they are; a note meant to sound at a pitch goes on the key
+        // 12 x octaves above it (keyFor).
+        int octaves = 0;
+
+        /** The key that sounds `pitch` (a MIDI number as heard). */
+        int keyFor (int pitch) const noexcept { return pitch - 12 * octaves; }
 
         /** The keys that play, if any is known to. */
         std::optional<PlayableKeys> playable() const;

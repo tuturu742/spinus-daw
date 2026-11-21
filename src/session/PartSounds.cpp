@@ -1552,7 +1552,7 @@ std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options& optio
 std::optional<std::array<InstrumentProfiles::Key, 128>>
 probeInHelper (const SoundIndexer::Options& options, const SoundSource& source, const juce::String& preset,
                const juce::File& presetState, int enterKey, const std::function<bool()>& shouldStop,
-               const std::function<void (int, int)>& progress, juce::String& problem)
+               const std::function<void (int, int)>& progress, juce::String& problem, int* octaves)
 {
     auto request = instrumentRequest (source);
     auto* o = request.getDynamicObject();
@@ -1572,6 +1572,8 @@ probeInHelper (const SoundIndexer::Options& options, const SoundSource& source, 
                 problem = line["error"].toString();
             if (const auto& r = line["probed"]; r.isObject())
             {
+                if (octaves != nullptr)
+                    *octaves = juce::jlimit (-3, 3, (int)r["octaves"]);
                 if (r.hasProperty ("problem"))
                     problem = r["problem"].toString();
                 else if (const auto heard = InstrumentProfiles::fromVar (

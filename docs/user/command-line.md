@@ -5,7 +5,8 @@ AI coding agents: they write a song as a list of steps, and Spinus carries the s
 commands its own buttons use, then saves an ordinary project you open as usual.
 
 None of these use a sound card or open a window, and none of them change your settings, your recent
-projects or your logs.
+projects or your logs. The one exception is `--learn`, which keeps what it learns of an instrument, as
+**Learn this instrument** does.
 
 | Option | What it does |
 |---|---|
@@ -13,6 +14,7 @@ projects or your logs.
 | `spinus --check <project>` | Opens a project and prints what it holds, and what is missing on this computer. |
 | `spinus --render <project> --out <file>` | Renders the song, as File › Export does, and prints how loud it is. |
 | `spinus --describe <device>` | Prints a device's settings, presets, pads and kits. `--describe all` covers every one. |
+| `spinus --learn <project> --device <id>` | Learns the instrument of one of the project's devices by ear ([below](#learning-an-instrument)) and keeps what it learns. |
 | `spinus --presets <project>` | Prints the presets `device.loadPreset` can load on each of the project's devices, plugins too. `--device <id>` for one, `--find <words>` to narrow them. |
 | `spinus --commands` | Prints every command and its parameters (JSON Schema). |
 | `spinus --help` | Lists these options. |
@@ -259,3 +261,20 @@ Markdown files (an `AGENTS.md`, for example).
   only change their sound in their own window (BFD, Ample's): save a sound for them first, then load it by name.
 - `--run` and `--render` load Spinus's instruments and effects, and Windows plugins through Wine, as
   Spinus does. A slow plugin makes them slow too.
+
+## Learning an instrument
+
+`spinus --learn <project> --device <id>` does what **Ask the plugin** and **Listen to every key** do in
+[Learn this instrument](channel-rack.md#learn-this-instrument), without the window. It loads the instrument with
+the sound that device has in the project, asks it for its keys' names, plays every key one at a time and
+listens, then keeps what it found for that instrument, on every channel and in every project that uses it. Keys
+you marked yourself stay as you set them. `spinus --check` lists the devices' ids.
+
+It prints a `progress` line now and then, and at the end what it learned: `named` (keys the plugin named),
+`heard` (keys that did something), `changed`, and `keys` as `--check` shows them. That includes
+`soundsOctaves` when the keys sound in another octave: -1 for a bass whose key 40 plays the low E (E1, MIDI
+28). It takes a minute or two. It doesn't read the manual, which needs the AI: use the window for that.
+
+```sh
+spinus --learn ~/Music/Song --device 6
+```

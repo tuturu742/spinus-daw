@@ -282,6 +282,8 @@ add_library (spinus_core STATIC
     session/MissingAudio.h
     session/DrumKeys.cpp
     session/DrumKeys.h
+    session/InstrumentLearning.cpp
+    session/InstrumentLearning.h
     session/UserRoles.cpp
     session/UserRoles.h
     session/SongWriter.h

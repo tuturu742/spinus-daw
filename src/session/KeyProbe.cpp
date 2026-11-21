@@ -1,6 +1,8 @@
 #include "KeyProbe.h"
 
 #include <cmath>
+#include <limits>
+#include <map>
 #include <numeric>
 
 namespace spinus::keyprobe
@@ -72,8 +74,9 @@ std::vector<sounds::Note> notesFor (int key, const Options& options)
     return notes;
 }
 
-/** A key that sounds: does it play at its pitch? */
-InstrumentProfiles::Key heardAs (int key, const std::vector<float>& x, const Options& options)
+/** A key that sounds: does it play at its pitch? `octave`: how many octaves from it it sounds, when its pitch was
+    heard clearly enough to say (left as it is otherwise). */
+InstrumentProfiles::Key heardAs (int key, const std::vector<float>& x, const Options& options, int* octave = nullptr)
 {
     const auto rate = Print::OfflineRate;
     const auto from = entry + 0.03, to = entry + options.hold;
@@ -95,7 +98,11 @@ InstrumentProfiles::Key heardAs (int key, const std::vector<float>& x, const Opt
     {
         heardHz = sounds::detectPitch (x.data(), (int)x.size(), rate, from, to).frequency;
         if (heardHz > 0.0 && matches (heardHz, expected < 30.0 ? 4.0 : 2.0))
+        {
+            if (octave != nullptr)
+                *octave = (int)std::round (std::log2 (heardHz / expected));
             return plays;
+        }
     }
     if (expected > 1500.0) // too high for the pitch detector: its zero crossings, two a period for a plain tone
     {
@@ -167,6 +174,9 @@ Result probe (const Player& play, const std::function<void()>& reset, const Opti
             ->peak;
     const auto silent = juce::jmax (silentPeak, loudest * 0.003f); // 50 dB under the reference
 
+    // The octave the keys sound in: most of those in the middle (70 Hz to 1 kHz expected), whose pitch is heard
+    // surely (the lowest keys are heard by their harmonics, which can read an octave up).
+    std::map<int, int> octaveVotes;
     const auto from = juce::jlimit (0, 127, juce::jmin (options.from, options.to));
     const auto to = juce::jlimit (0, 127, juce::jmax (options.from, options.to));
     for (int key = from; key <= to; ++key)
@@ -182,7 +192,11 @@ Result probe (const Player& play, const std::function<void()>& reset, const Opti
         const auto x = render (key);
         if (Print::of (x, heardFrom, heardTo).peak > silent)
         {
-            found = heardAs (key, x, options);
+            auto octave = std::numeric_limits<int>::min();
+            found = heardAs (key, x, options, &octave);
+            if (const auto hz = frequencyOf (key);
+                found.job == Job::plays && octave != std::numeric_limits<int>::min() && hz >= 70.0 && hz <= 1000.0)
+                ++octaveVotes[octave];
             continue;
         }
         // Silent: did it change how the reference sounds?
@@ -197,6 +211,10 @@ Result probe (const Player& play, const std::function<void()>& reset, const Opti
     }
     if (progress)
         progress (to - from + 1, to - from + 1);
+    if (! octaveVotes.empty())
+        result.octaves = std::max_element (octaveVotes.begin(), octaveVotes.end(),
+                                           [] (const auto& a, const auto& b) { return a.second < b.second; })
+                             ->first;
     return result;
 }
 

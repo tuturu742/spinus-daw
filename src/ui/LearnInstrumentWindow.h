@@ -73,6 +73,7 @@ public:
     void setHeard (std::optional<std::array<InstrumentProfiles::Key, 128>>, const juce::String& problem = {},
                    From = From::listening);
     bool hasHeard() const noexcept { return heard.has_value(); }
+    int heardOctaves = 0; // how many octaves from their keys the keys heard sound (Mode::octaves), set before setHeard
     /** Apply: the keys heard into the mode (the ones you set stay yours). Discard: dropped. */
     void applyHeard();
     void discardHeard();

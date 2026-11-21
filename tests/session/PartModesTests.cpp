@@ -423,3 +423,27 @@ TEST_CASE ("Instrument profiles: what agents are told of an instrument's keys", 
         "chords, not single notes: hold each chord on the chord keys C3 to B4 (its root at or above C3"));
     CHECK (strum["howToPlay"].toString().contains ("press a pattern key with each chord"));
 }
+
+TEST_CASE ("Instrument profiles: a bass that sounds an octave under its keys keeps it, and agents are told",
+           "[instruments][profiles]")
+{
+    using J = InstrumentProfiles::Job;
+    InstrumentProfiles::Mode bass;
+    bass.setKeys (40, 77, { J::plays, {}, InstrumentProfiles::Source::probing });
+    bass.octaves = -1;
+    CHECK (bass.keyFor (28) == 40); // the low E sounds from key 40
+
+    const InstrumentProfiles::Profile profile { { bass }, {} };
+    CHECK (InstrumentProfiles::fromVar (InstrumentProfiles::toVar (profile)) == profile);
+    const auto told = InstrumentProfiles::describeForAgents (profile)["modes"][0];
+    CHECK ((int)told["soundsOctaves"] == -1);
+    CHECK (told["soundsInWords"].toString().contains ("an octave lower"));
+
+    // Every key playing, but an octave off: still worth telling.
+    InstrumentProfiles::Mode all;
+    all.setKeys (0, 127, { J::plays, {}, InstrumentProfiles::Source::probing });
+    all.octaves = 1;
+    CHECK_FALSE (InstrumentProfiles::describeForAgents ({ { all }, {} }).isVoid());
+    all.octaves = 0;
+    CHECK (InstrumentProfiles::describeForAgents ({ { all }, {} }).isVoid());
+}
