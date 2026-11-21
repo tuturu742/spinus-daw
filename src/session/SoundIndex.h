@@ -245,8 +245,10 @@ public:
     /** A preset's name for people, from its id (the helper names a preset that crashed it only by its id). */
     static juce::String presetNameFromId (const juce::String& id);
 
-private:
+    /** The file of one instrument's sounds (`instruments/<key>.json`). */
     juce::File instrumentFile (const juce::String& key) const;
+
+private:
     juce::File root;
 };
 

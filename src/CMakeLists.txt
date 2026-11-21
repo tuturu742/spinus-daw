@@ -280,6 +280,8 @@ add_library (spinus_core STATIC
     session/LeftOutSounds.cpp
     session/MissingAudio.cpp
     session/MissingAudio.h
+    session/DrumKeys.cpp
+    session/DrumKeys.h
     session/UserRoles.cpp
     session/UserRoles.h
     session/SongWriter.h

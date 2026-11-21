@@ -2,8 +2,11 @@
 #include "session/AnalysisForAgents.h"
 #include "AskForName.h"
 #include "AnalysisLibraryView.h"
+#include "session/DrumKeys.h"
+#include "session/PartSounds.h"
 #include "session/PresetFolders.h"
 #include "session/SoundIndex.h"
+#include "session/UserRoles.h"
 #include "ai/AnalysisJobs.h"
 #include "project/AudioImport.h"
 
@@ -984,6 +987,7 @@ void Analyzer::setStemChoice (int count) { stemCount.setSelectedId (count, juce:
 std::vector<Analyzer::Source> Analyzer::makeSources (bool forDrums) const
 {
     using Kind = Source::Kind;
+    using Origin = plugins::DeviceList::Origin;
     std::vector<Source> sources;
     if (forDrums)
     {
@@ -991,6 +995,44 @@ std::vector<Analyzer::Source> Analyzer::makeSources (bool forDrums) const
         sources.push_back (
             { "Drum Machine", "drum-machine", Kind::drumMachine, {}, { Way::asIs, Way::closestPreset }, false });
         sources.push_back ({ "Its own hits (Drum Machine)", "own", Kind::own, {}, { Way::asIs }, false });
+        // Or a plugin's kit, the hits on its keys (drumkeys::fromMap): each kit the sound index measured on an
+        // instrument's keys (a preset, or a sound the user saved), and an instrument the user marked as drums
+        // (General MIDI's keys). Only those: any other instrument would play the hits as notes.
+        const auto folder = SoundIndex::getDefaultFolder();
+        UserRoles marked (folder);
+        marked.load();
+        std::set<juce::String> seen;
+        for (auto origin : { Origin::bundled, Origin::installed })
+            for (const auto& entry : session.getDeviceList().getEntries())
+            {
+                if (entry.origin != origin || ! entry.instrument || ! entry.available)
+                    continue;
+                const auto library = InstrumentPresets::libraryOf (entry.device);
+                if (! seen.insert (library).second)
+                    continue;
+                auto name = entry.name;
+                if (entry.badge.isNotEmpty())
+                    name << " (" << entry.badge << ")";
+                auto kit = [&] (const juce::String& id, const juce::String& soundName, const juce::var& map)
+                {
+                    Source source;
+                    source.device = entry.device;
+                    source.kind = Kind::device;
+                    source.key = instrumentKey (entry.device) + (id.isNotEmpty() ? "|" + id : juce::String());
+                    source.name = id.isEmpty() ? name : name + ": " + soundName;
+                    source.kitSound = id;
+                    source.kitName = soundName;
+                    source.drumKeys = drumkeys::fromMap (map);
+                    return source;
+                };
+                const auto kits = drumkeys::measuredKits (folder, library);
+                for (const auto& k : kits)
+                    sources.push_back (kit (k["id"].toString(), k["name"].toString(), k["drumMap"]));
+                if (const auto role = marked.get (library); kits.isEmpty() && (role == "drums" || role == "percussion"))
+                    sources.push_back (kit ({}, {}, {}));
+            }
+        std::stable_sort (sources.begin() + 2, sources.end(),
+                          [] (const Source& a, const Source& b) { return a.name.compareNatural (b.name) < 0; });
         return sources;
     }
     sources.push_back ({ "Its own phrases (Sampler)", "own", Kind::own, {}, { Way::asIs }, false });
@@ -998,7 +1040,6 @@ std::vector<Analyzer::Source> Analyzer::makeSources (bool forDrums) const
     // are downloaded, then the installed plugins (one listed already, e.g. Surge XT installed by the system
     // too, is not listed again).
     std::set<juce::String> names;
-    using Origin = plugins::DeviceList::Origin;
     for (auto origin : { Origin::spinus, Origin::bundled, Origin::installed })
         for (const auto& entry : session.getDeviceList().getEntries())
         {
@@ -1267,7 +1308,8 @@ std::map<juce::String, model::Device> Analyzer::getChosenInstruments() const
 {
     std::map<juce::String, model::Device> chosen;
     for (auto& [name, row] : rows)
-        if (const auto* source = row.chosen(); source != nullptr && name != "drums")
+        if (const auto* source = row.chosen();
+            source != nullptr && (name != "drums" || source->kind == Source::Kind::device))
             if (const auto sound = soundFor (*source, row.chosenWay());
                 sound == Sounds::instrument || sound == Sounds::tunedInstrument || sound == Sounds::presets)
                 chosen[name] = source->device;
@@ -1425,8 +1467,7 @@ bool Analyzer::makeNotesWith (const std::map<juce::String, Sounds>& soundPerStem
             cannotAdd ("this song has no " + stemDisplayName (name) + " stem; separate it again.");
             return false;
         }
-        if ((sound == Sounds::instrument || sound == Sounds::tunedInstrument) &&
-            (name == "drums" || ! instrumentPerStem.contains (name)))
+        if ((sound == Sounds::instrument || sound == Sounds::tunedInstrument) && ! instrumentPerStem.contains (name))
         {
             cannotAdd ("no instrument is chosen for the " + stemDisplayName (name) + ".");
             return false;
@@ -1445,6 +1486,26 @@ bool Analyzer::makeNotesWith (const std::map<juce::String, Sounds>& soundPerStem
     updatePresetChoices();
     stemSounds = soundPerStem;
     stemInstruments = instrumentPerStem;
+    // The plugin kit the drums play on: the one chosen in their row (an agent chooses there too).
+    drumKit.reset();
+    if (const auto drums = instrumentPerStem.find ("drums"); drums != instrumentPerStem.end())
+    {
+        const auto row = rows.find ("drums");
+        const auto* chosen = row != rows.end() ? row->second.chosen() : nullptr;
+        if (chosen != nullptr && chosen->kind == Source::Kind::device && chosen->device == drums->second)
+            drumKit = *chosen;
+        else // not in the row: the kit as it is, on General MIDI's keys
+            drumKit = Source { instrumentName (drums->second),
+                               instrumentKey (drums->second),
+                               Source::Kind::device,
+                               drums->second,
+                               { Way::asIs },
+                               false,
+                               false,
+                               {},
+                               {},
+                               drumkeys::fromMap ({}) };
+    }
     setStep (Step::transcribing, "Listening for notes...");
     drumGroups.clear();
     drumSuggestions.clear();
@@ -2222,19 +2283,32 @@ bool Analyzer::addNotesToProject()
     };
     std::map<juce::String, std::vector<model::ChannelId>> channels;
     juce::StringArray splitStems; // "the guitar into rhythm and lead"
-    for (auto& [name, notes] : transcribed)
+    for (const auto& [name, found] : transcribed)
     {
-        // Drums play on a Drum Machine (its pads match the hits); the rest on 3x Osc (tuned or not), on a
-        // Sampler with the stem's phrases, or on Surge XT with the closest preset (tuned or not).
+        auto notes = found; // as heard, kept for adding again
+        // Drums play on a Drum Machine (its pads match the hits) or a plugin's kit; the rest on 3x Osc (tuned or
+        // not), on a Sampler with the stem's phrases, or on Surge XT with the closest preset (tuned or not).
         // Or on the instrument chosen for it (with its closest preset, tuned or not).
         const auto sound = soundOf (name);
         const auto chosen = stemInstruments.find (name);
         const auto device =
-            name == "drums" ? object ({ { "kind", "stock" }, { "stockType", "spinus.drum-machine" } })
+            name == "drums" && drumKit ? model::deviceToJson (drumKit->device)
+            : name == "drums"          ? object ({ { "kind", "stock" }, { "stockType", "spinus.drum-machine" } })
             : (sound == Sounds::instrument || sound == Sounds::tunedInstrument || sound == Sounds::presets) &&
                     chosen != stemInstruments.end()
                 ? model::deviceToJson (chosen->second)
                 : object ({ { "kind", "stock" }, { "stockType", instrumentOf (name).stockType } });
+        // On a plugin's kit, each hit moves from its Drum Machine pad to the key the kit plays that drum on.
+        if (name == "drums" && drumKit)
+        {
+            std::map<int, juce::String> second; // the pads of a drum's second sound
+            for (const auto& group : drumGroups)
+                second[group.pad] = group.kind;
+            for (auto& n : notes)
+                if (const auto kitKey = drumKit->drumKeys.find (drumkeys::drumOfPad (n.pitch, second));
+                    kitKey != drumKit->drumKeys.end())
+                    n.pitch = kitKey->second;
+        }
         // A stem that holds several parts (two guitars) gets a channel and a track per part, on the same sound.
         const auto parts = stemparts::splits (name)
                                ? stemparts::split (notes, sections, barLength)
@@ -2309,6 +2383,21 @@ bool Analyzer::addNotesToProject()
             if (result.wasOk())
                 result = name == "drums" ? loadDrumPieces (session, channel, stems[name], cut)
                                          : loadSamplerPieces (session, channel, stems[name], cut);
+    // A plugin's kit: its measured preset, or the sound the user saved (the plugin's state as they set it up).
+    if (result.wasOk() && drumKit && drumKit->kitSound.isNotEmpty())
+        for (const auto channel : channels["drums"])
+        {
+            parts::Choice kit;
+            kit.kind = parts::Choice::Kind::kit;
+            kit.source.name = drumKit->name;
+            kit.preset = drumKit->kitSound;
+            kit.name = drumKit->kitName;
+            if (SavedSounds::isSaved (kit.preset))
+                kit.state = SavedSounds::stateFileIn (SoundIndex::getDefaultFolder(), kit.preset);
+            if (const auto loaded = parts::loadChoice (session, channel, kit); loaded.failed())
+                tuneNotes.add ("The drums play " + instrumentName (drumKit->device) +
+                               " as it is: " + loaded.getErrorMessage());
+        }
     madeChannels = channels;
     // The closest presets: the best one now, the others offered beside the stem's name.
     for (auto& [name, presets] : closest)
@@ -2324,7 +2413,7 @@ bool Analyzer::addNotesToProject()
         it =
             soundOf (it->first) == Sounds::presets ? std::next (it) : closest.erase (it); // tuned: a list would undo it
     // Drums: each group's closest sample on its pad; a second group without one starts from its kind's sound.
-    if (result.wasOk() && ! channels["drums"].empty())
+    if (result.wasOk() && ! channels["drums"].empty() && ! drumKit)
         for (auto& group : drumGroups)
         {
             if (auto found = drumSuggestions.find (group.pad);
