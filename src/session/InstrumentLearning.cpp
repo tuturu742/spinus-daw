@@ -72,7 +72,9 @@ Outcome run (const Job& job, const std::function<bool()>& shouldStop,
 
     InstrumentProfiles profiles (job.indexFolder);
     profiles.load();
-    auto profile = profiles.hasOwn (job.key) ? *profiles.get (job.key) : InstrumentProfiles::Profile {};
+    InstrumentProfiles::Profile profile;
+    if (const auto own = profiles.get (job.key); own.has_value() && profiles.hasOwn (job.key))
+        profile = *own;
     if (profile.modes.empty())
         profile.modes.emplace_back();
 
@@ -122,14 +124,15 @@ Outcome run (const Job& job, const std::function<bool()>& shouldStop,
     }
     if (outcome.named == 0 && outcome.heard == 0)
     {
-        outcome.problem = listenProblem.isNotEmpty() ? listenProblem : juce::String ("nothing could be heard.");
+        outcome.problem =
+            listenProblem.isNotEmpty() ? std::move (listenProblem) : juce::String ("nothing could be heard.");
         return outcome;
     }
-    outcome.note = listenProblem; // the keys it named are kept even when listening failed
+    outcome.note = std::move (listenProblem); // the keys it named are kept even when listening failed
     profiles.set (job.key, profile);
     if (! profiles.save())
         outcome.problem = "the learned keys could not be saved.";
-    outcome.profile = profile;
+    outcome.profile = std::move (profile);
     return outcome;
 }
 
