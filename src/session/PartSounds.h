@@ -321,6 +321,8 @@ juce::var makeProposal (const Plan&);
     preset through the plugin's own way of loading presets, samples onto the Drum Machine's pads or into the
     Sampler; then the tuned settings on top. Undoing the proposal takes the channels away with them. */
 juce::Result loadSounds (Session&, const Plan&, const std::vector<model::ChannelId>& channels);
+/** One choice's preset or samples into a channel's instrument, as loadSounds does (no tuned settings). */
+juce::Result loadChoice (Session&, model::ChannelId, const Choice&);
 
 /** The steps (appended to `steps`) for one mixplan item on the insert that `insert` names (an insert ID or a
     "$n.insert" reference): Spinus's own EQ, Compressor, Limiter and Gate with their settings as text. */

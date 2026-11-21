@@ -335,8 +335,13 @@ private:
         std::vector<Way> ways { Way::asIs };
         bool experimental = false;     // tuning it (and playing its presets) is experimental: no tested profile
         bool startsFromPreset = false; // tuned from its closest preset (its profile's start)
+        // A plugin's drum kit (the drums): its sound in the sound index (a preset's id, or a sound the user saved;
+        // empty: as it is), that sound's name, and the keys it plays each drum on.
+        juce::String kitSound, kitName;
+        std::map<juce::String, int> drumKeys;
     };
     std::vector<Source> makeSources (bool forDrums) const;
+    std::optional<Source> drumKit; // the plugin kit the drums play on (makeNotesWith), if not the Drum Machine
     struct StemRow
     {
         std::unique_ptr<juce::ComboBox> use, source, way;

@@ -1623,6 +1623,54 @@ keyNamesInHelper (const SoundIndexer::Options& options, const SoundSource& sourc
     return found;
 }
 
+juce::Result loadChoice (Session& session, model::ChannelId channel, const Choice& c)
+{
+    juce::Result result = juce::Result::ok();
+    if (c.kind == Choice::Kind::sample)
+        result = loadSamplerFile (session, channel, juce::File (c.file), c.rootNote());
+    else if (c.kind == Choice::Kind::drumSamples)
+    {
+        static const std::map<juce::String, int> pads { { "kick", 60 }, { "snare", 61 }, { "hat", 63 } };
+        for (const auto& [drum, file] : c.drums)
+            if (const auto pad = pads.find (drum); pad != pads.end() && result.wasOk())
+                result = loadDrumPadFile (session, channel, pad->second, juce::File (file));
+    }
+    else if ((c.kind == Choice::Kind::preset || c.kind == Choice::Kind::kit) && c.state != juce::File())
+    {
+        // A sound the user saved: the plugin's state as they set it up, put in place as a state preset.
+        InstrumentPreset saved;
+        saved.kind = InstrumentPreset::Kind::state;
+        saved.file = c.state;
+        saved.id = c.preset;
+        saved.name = c.name;
+        result = ! c.state.loadFileAsData (saved.state) || saved.state.isEmpty()
+                     ? juce::Result::fail ("your saved sound " + c.name + " is gone.")
+                     : loadInstrumentPreset (session, channel, saved);
+    }
+    else if ((c.kind == Choice::Kind::preset || c.kind == Choice::Kind::kit) && c.preset.isNotEmpty() &&
+             ! (c.source.stockType == "spinus.3x-osc" && c.preset.startsWith ("program:")))
+    {
+        // As closest preset loads one: through the plugin's own way of loading presets.
+        const auto* project = session.getProject().findChannel (channel);
+        const auto device = project != nullptr ? project->instrument : std::nullopt;
+        auto* plugin =
+            device ? dynamic_cast<tracktion::ExternalPlugin*> (session.getAdapter().getDevicePlugin (device->id))
+                   : nullptr;
+        auto* instance = plugin != nullptr ? plugin->getAudioPluginInstance() : nullptr;
+        if (instance == nullptr || ! device)
+            result = juce::Result::fail (c.source.name + " is not loaded.");
+        else
+        {
+            const auto presets = InstrumentPresets::find (*instance, *device);
+            const auto found = std::find_if (presets.begin(), presets.end(),
+                                             [&] (const InstrumentPreset& p) { return p.id == c.preset; });
+            result = found == presets.end() ? juce::Result::fail (c.source.name + " no longer has " + c.name + ".")
+                                            : loadInstrumentPreset (session, channel, *found);
+        }
+    }
+    return result;
+}
+
 juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<model::ChannelId>& channels)
 {
     juce::StringArray problems;
@@ -1633,49 +1681,7 @@ juce::Result loadSounds (Session& session, const Plan& plan, const std::vector<m
         const auto channel = channels[i];
         if (channel == model::ChannelId {})
             continue;
-        juce::Result result = juce::Result::ok();
-        if (c.kind == Choice::Kind::sample)
-            result = loadSamplerFile (session, channel, juce::File (c.file), c.rootNote());
-        else if (c.kind == Choice::Kind::drumSamples)
-        {
-            static const std::map<juce::String, int> pads { { "kick", 60 }, { "snare", 61 }, { "hat", 63 } };
-            for (const auto& [drum, file] : c.drums)
-                if (const auto pad = pads.find (drum); pad != pads.end() && result.wasOk())
-                    result = loadDrumPadFile (session, channel, pad->second, juce::File (file));
-        }
-        else if ((c.kind == Choice::Kind::preset || c.kind == Choice::Kind::kit) && c.state != juce::File())
-        {
-            // A sound the user saved: the plugin's state as they set it up, put in place as a state preset.
-            InstrumentPreset saved;
-            saved.kind = InstrumentPreset::Kind::state;
-            saved.file = c.state;
-            saved.id = c.preset;
-            saved.name = c.name;
-            result = ! c.state.loadFileAsData (saved.state) || saved.state.isEmpty()
-                         ? juce::Result::fail ("your saved sound " + c.name + " is gone.")
-                         : loadInstrumentPreset (session, channel, saved);
-        }
-        else if ((c.kind == Choice::Kind::preset || c.kind == Choice::Kind::kit) && c.preset.isNotEmpty() &&
-                 ! (c.source.stockType == "spinus.3x-osc" && c.preset.startsWith ("program:")))
-        {
-            // As closest preset loads one: through the plugin's own way of loading presets.
-            const auto* project = session.getProject().findChannel (channel);
-            const auto device = project != nullptr ? project->instrument : std::nullopt;
-            auto* plugin =
-                device ? dynamic_cast<tracktion::ExternalPlugin*> (session.getAdapter().getDevicePlugin (device->id))
-                       : nullptr;
-            auto* instance = plugin != nullptr ? plugin->getAudioPluginInstance() : nullptr;
-            if (instance == nullptr || ! device)
-                result = juce::Result::fail (c.source.name + " is not loaded.");
-            else
-            {
-                const auto presets = InstrumentPresets::find (*instance, *device);
-                const auto found = std::find_if (presets.begin(), presets.end(),
-                                                 [&] (const InstrumentPreset& p) { return p.id == c.preset; });
-                result = found == presets.end() ? juce::Result::fail (c.source.name + " no longer has " + c.name + ".")
-                                                : loadInstrumentPreset (session, channel, *found);
-            }
-        }
+        auto result = loadChoice (session, channel, c);
         // The tuned settings on top of the preset (they are also in the project, set by the proposal).
         if (result.wasOk() && part.tuned)
             SynthMatcher::apply (session, channel, *part.tuned);

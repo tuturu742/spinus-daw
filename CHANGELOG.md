@@ -9,6 +9,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   and the agents' `learn_instrument` tool do what Learn this instrument's Ask the plugin and Listen to every key do,
   without the window, and keep what they learn. Listening now also notes the octave an instrument's keys sound in:
   some basses sound an octave under their keys, and agents are told so (`soundsOctaves`).
+- **Analyzer: drums on your drum plugins.** The drums could only become steps on the Drum Machine. The drums' row now
+  also lists your drum kits the sound index has measured (BFD Player with a kit you saved as a sound, for example) and
+  plugins you marked as drums. Each hit goes to the key that plays that drum in the kit, and the kit is loaded.
 - **Analyzer: tempo where the beat is hard to follow.** In fast, noisy parts (blast beats, lo-fi metal) the beat
   finder lost the beat, so a part at a tempo of its own was missed: "359" by Ani Odio now gets its 210 BPM part
   between the 160 and the 145. Spinus works out the tempo of such a part from the hits themselves. Songs you analyzed
