@@ -59,8 +59,8 @@ struct Section
 
 /** The song's tempos, section by section, for a band that changes tempo (a slower second half, a faster chorus):
     a new section where at least 4 bars in a row keep a tempo of their own, more than 4% from the section before.
-    Bars that keep no tempo (a fill, a break) or twice, half, 3/2 or 2/3 of it (beats found twice as often in a
-    blast beat, half time) stay in the section they are in, and are counted at its tempo, so the bars after them land
+    Bars that keep no tempo (a fill, a break) or twice or half of it (beats found twice as often in a blast beat,
+    half time) stay in the section they are in, and are counted at its tempo, so the bars after them land
    where the song's are. A band that only drifts (within 4%) is one section at its average, as average() gives it. Each
    section's tempo puts its first and last downbeats where they are in the recording. */
 inline std::vector<Section> sections (const std::vector<double>& beats, double firstDownbeat, int beatsPerBar)
@@ -117,11 +117,12 @@ inline std::vector<Section> sections (const std::vector<double>& beats, double f
             kept.push_back (barBpm[k]);
             continue;
         }
-        // Twice, half, 3/2 or 2/3 the tempo: the beats counted another way (a blast beat, half time), not the band
-        // changing tempo.
+        // Twice or half the tempo: the beats counted another way (a blast beat, half time), not the band changing
+        // tempo. (A band does go from 210 to 145, about 2/3: the AI service mends the stretches where the beat
+        // finder loses the beat, so a new tempo there is the band's.)
         const auto recounted = [&] (double other)
         {
-            for (auto ratio : { 2.0, 0.5, 1.5, 2.0 / 3.0 })
+            for (auto ratio : { 2.0, 0.5 })
                 if (std::abs (other / tempo / ratio - 1.0) <= 0.06)
                     return true;
             return false;

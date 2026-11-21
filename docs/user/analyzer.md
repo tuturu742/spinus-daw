@@ -49,7 +49,8 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
 3. **Tempo**: for example "98.0 BPM, 4 beats per bar". A song whose tempo changes shows each tempo from where
    it starts: "159.4 BPM, then 148.5 from 1:21". A tempo change counts when the band keeps the new tempo for at
    least 4 bars and it is more than 4% away from the old one. A fill, a break or a blast beat (where the beat
-   seems twice as fast) doesn't count. **Use for the song** sets your song's tempo, with
+   seems twice as fast) doesn't count. Where the beat is hard to follow (fast, noisy stretches in metal), Spinus
+   works the tempo out from the hits themselves. **Use for the song** sets your song's tempo, with
    [tempo changes](playlist.md) where the song's tempo changes (and the time signature, if the bars are not four
    beats), in one undo step. **Add to the project** sets them too.
 4. **Key**: for example "A minor". When it is not sure, it says what else it might be. **Use for the song**

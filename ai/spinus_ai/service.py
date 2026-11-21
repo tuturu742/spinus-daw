@@ -557,9 +557,10 @@ class Service:
         raise RpcError(-32000, f"{wanted.name} is not downloaded yet ({wanted.size / 1e6:.0f} MB).")
 
     async def analyze_tempo(self, params: dict[str, Any], notify: Notify) -> Any:
-        """Beats, downbeats, tempo and beats per bar of a song (a WAV file): {file, cacheFolder}. Cached
-        by the song's contents."""
-        from .analysis import rhythm
+        """Beats, downbeats, tempo and beats per bar of a song (a WAV file): {file, cacheFolder}; mended, the
+        stretches where the model lost the beat and the tempo they got from the song's hits (analysis.mend_beats).
+        The model's beats are cached by the song's contents."""
+        from .analysis import mend_beats, rhythm
 
         song = Path(str(params.get("file", "")))
         if not song.is_file():
@@ -567,13 +568,25 @@ class Service:
         model = self.beat_model()
         cache_root = Path(str(params.get("cacheFolder", ""))) if params.get("cacheFolder") else self.config / "cache"
 
+        def worked_out(beats: list[float], downbeats: list[float]) -> dict[str, Any]:
+            """Tempo and bars from the model's beats, mended where it lost the beat (from the song's hits)."""
+            from .compute.worker import read_wav
+
+            try:
+                audio, rate = read_wav(str(song))
+            except (OSError, ValueError):
+                return {**rhythm(beats, downbeats), "mended": []}
+            mended = mend_beats(beats, downbeats, audio, rate)
+            return {**rhythm(mended["beats"], mended["downbeats"]), "mended": mended["mended"]}
+
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
             digest = await run_blocking(lambda: file_digest(song))
             cached = cache_root / "analysis" / f"{digest[:20]}-{model.id}.json"
             if cached.exists():
-                # The beats are what was kept; the tempo and bars are worked out again (as this version does).
+                # The model's beats are what was kept; the rest is worked out again (as this version does).
                 kept = json.loads(cached.read_text(encoding="utf-8"))
-                return {**rhythm(list(kept.get("beats") or []), list(kept.get("downbeats") or [])), "cached": True}
+                beats, downbeats = list(kept.get("beats") or []), list(kept.get("downbeats") or [])
+                return {**await run_blocking(lambda: worked_out(beats, downbeats)), "cached": True}
 
             async def progress(update: dict[str, Any]) -> None:
                 await say({"kind": "progress", "done": float(update.get("done", 0.0)), "total": 1.0,
@@ -587,10 +600,10 @@ class Service:
                 )
             except EngineError as error:
                 raise RuntimeError(str(error)) from error
-            result = rhythm(list(found["beats"]), list(found["downbeats"]))
+            kept = {"beats": list(found["beats"]), "downbeats": list(found["downbeats"])}
             cached.parent.mkdir(parents=True, exist_ok=True)
-            cached.write_text(json.dumps(result) + "\n", encoding="utf-8")
-            return {**result, "cached": False}
+            cached.write_text(json.dumps(kept) + "\n", encoding="utf-8")
+            return {**await run_blocking(lambda: worked_out(kept["beats"], kept["downbeats"])), "cached": False}
 
         return {"job": self.job(notify, work)}
 

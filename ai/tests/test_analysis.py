@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from spinus_ai.analysis import chroma, key_of, rhythm
+from spinus_ai.analysis import chroma, key_of, mend_beats, rhythm
 
 RATE = 22050
 
@@ -58,3 +58,48 @@ def test_the_tempo_is_not_stuck_on_the_models_frames() -> None:
     # A gap (a break with no beat found) does not pull it down.
     with_gap = beats[:100] + [b + 2.0 for b in beats[100:]]
     assert rhythm(with_gap, with_gap[::4])["tempo"] == pytest.approx(135.0, abs=0.1)
+
+
+def clicks(times: list[float], seconds: float) -> np.ndarray:
+    """Short bursts of noise at `times`, like drum hits."""
+    audio = np.zeros(int(seconds * RATE), dtype=np.float32)
+    burst = (np.random.default_rng(1).standard_normal(400) * np.exp(-np.arange(400) / 60.0)).astype(np.float32)
+    for t in times:
+        at = int(t * RATE)
+        audio[at : at + 400] += burst[: len(audio) - at]
+    return audio
+
+
+def test_a_stretch_where_the_beat_is_lost_gets_the_tempo_of_its_hits() -> None:
+    # A band's song: 160 BPM, a part at 210 where Beat This! gives beats at random (lo-fi blast beats), then 145.
+    first = [0.5 + i * 60.0 / 160.0 for i in range(64)]
+    fast_from = first[-1] + 60.0 / 160.0
+    fast = [fast_from + i * 60.0 / 210.0 for i in range(42)]
+    slow_from = fast[-1] + 60.0 / 210.0
+    slow = [slow_from + i * 60.0 / 145.0 for i in range(56)]
+    audio = clicks(first + fast + slow, slow[-1] + 2.0)
+    rng = np.random.default_rng(7)
+    lost = sorted(rng.uniform(fast_from + 0.2, slow_from - 0.2, 40).tolist())
+    beats = first + lost + slow
+    found = mend_beats(beats, beats[::4], audio, RATE)
+    assert len(found["mended"]) == 1
+    assert found["mended"][0]["bpm"] == pytest.approx(210.0, abs=1.5)
+    # The beats in it now keep that tempo, on the hits.
+    inside = [b for b in found["beats"] if fast_from + 0.5 < b < slow_from - 0.5]
+    assert np.allclose(np.diff(inside), 60.0 / found["mended"][0]["bpm"], atol=0.01)
+    assert all(min(abs(b - h) for h in fast) < 0.03 for b in inside)
+    # The steady beats around it are kept as they were, and no downbeat is left inside it.
+    assert found["beats"][:64] == first and found["beats"][-56:] == slow
+    assert not any(found["mended"][0]["from"] < d < found["mended"][0]["to"] for d in found["downbeats"])
+
+
+def test_steady_beats_and_a_stretch_at_the_songs_own_tempo_keep_it() -> None:
+    hits = [0.5 + i * 60.0 / 168.0 for i in range(160)]
+    audio = clicks(hits, hits[-1] + 2.0)
+    unchanged = mend_beats(hits, hits[::4], audio, RATE)
+    assert unchanged["mended"] == [] and unchanged["beats"] == hits
+    # Beats lost for a while in a song that keeps its tempo: the stretch gets the song's own tempo back.
+    rng = np.random.default_rng(3)
+    lost = hits[:60] + sorted(rng.uniform(hits[60], hits[100], 30).tolist()) + hits[100:]
+    found = mend_beats(lost, lost[::4], audio, RATE)
+    assert len(found["mended"]) == 1 and found["mended"][0]["bpm"] == pytest.approx(168.0, abs=1.0)
