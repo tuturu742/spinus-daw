@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: tempo where the beat is hard to follow.** In fast, noisy parts (blast beats, lo-fi metal) the beat
+  finder lost the beat, so a part at a tempo of its own was missed: "359" by Ani Odio now gets its 210 BPM part
+  between the 160 and the 145. Spinus works out the tempo of such a part from the hits themselves. Songs you analyzed
+  before get this when you continue from the earlier analysis.
 - **Analyzer: Closest preset for plugins that keep their presets in a folder.** A plugin where Spinus found no
   presets stopped offering Closest preset for good, even after you gave Spinus a folder of its preset files (right-click
   its channel › Preset files). It now offers it again, and when it finds none it says how to add such a folder.

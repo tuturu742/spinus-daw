@@ -88,3 +88,26 @@ TEST_CASE ("A song that changes tempo: its sections, each at its own tempo, and 
     CHECK (one[0].bpm == Catch::Approx (songtempo::average (live, 0.0)).epsilon (0.01));
     CHECK (songtempo::sections ({ 0.0, 0.5, 1.0 }, 0.0, 4).size() == 1);
 }
+
+TEST_CASE ("A song that speeds up for a part and slows down after it: three sections", "[analyzer][tempo]")
+{
+    // 160 BPM, 12 bars at 210 (about 2/3 of it back to the 145 after: a tempo change, not beats counted another way),
+    // then 145.
+    std::vector<double> beats;
+    double t = 0.2;
+    for (int i = 0; i < 128; ++i, t += 60.0 / 160.0)
+        beats.push_back (t);
+    const auto faster = t;
+    for (int i = 0; i < 48; ++i, t += 60.0 / 210.0)
+        beats.push_back (t);
+    const auto slower = t;
+    for (int i = 0; i <= 80; ++i, t += 60.0 / 145.0)
+        beats.push_back (t);
+    const auto found = songtempo::sections (beats, 0.2, 4);
+    REQUIRE (found.size() == 3);
+    CHECK (found[0].bpm == Catch::Approx (160.0).epsilon (0.001));
+    CHECK (found[1].from == Catch::Approx (faster));
+    CHECK (found[1].bpm == Catch::Approx (210.0).epsilon (0.001));
+    CHECK (found[2].from == Catch::Approx (slower));
+    CHECK (found[2].bpm == Catch::Approx (145.0).epsilon (0.001));
+}

@@ -403,14 +403,18 @@ bool Analyzer::continueFromEarlier()
     if (! hasEarlierAnalysis() || isBusy())
         return false;
     choosing = false;
-    if (earlier["rhythm"].isObject())
+    // Beats kept from before they were mended where the beat finder lost the beat (no "mended" from
+    // ai.v1.analyze.tempo) are found again: quick, since the AI service keeps the beat finder's own.
+    const auto* kept = earlier["rhythm"].getDynamicObject();
+    const bool current = kept != nullptr && kept->hasProperty ("mended");
+    if (current)
         applyTempo (earlier["rhythm"]);
     if (earlier["key"].isObject())
         applyKey (earlier["key"]);
     // What is still missing is found as usual (it needs the AI service).
-    auto rest = [this]
+    auto rest = [this, current]
     {
-        if (! rhythm && beatTimes.empty() && ! earlier["rhythm"].isObject())
+        if (! rhythm && beatTimes.empty() && ! current)
             return checkReady ([this] { findTempo(); });
         if (! key)
             return checkReady ([this] { findKey(); });
