@@ -34,7 +34,8 @@ struct Result
 {
     std::array<InstrumentProfiles::Key, 128> keys {}; // the keys heard (Source::probing); the others unknown
     int reference = -1;                               // the reference note (-1: nothing sounded)
-    juce::String problem;                             // why nothing was found ("it makes no sound")
+    int octaves = 0;      // how many octaves from their keys the keys that play sound (Mode::octaves), most of them
+    juce::String problem; // why nothing was found ("it makes no sound")
 };
 
 /** Hears keys `from` to `to`. `progress` (keys done, keys in all) returns false to stop: what was heard so far is

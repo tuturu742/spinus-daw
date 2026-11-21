@@ -243,9 +243,10 @@ TEST_CASE ("An agent connects, changes the song at once, and its changes are und
     for (auto& t : *listed.getArray())
         names.add (t["name"].toString());
     for (auto* name : { "song_summary", "run_commands", "command_help", "list_devices", "list_presets", "render",
-                        "undo_last", "fake_tempo" })
+                        "undo_last", "learn_instrument", "fake_tempo" })
         CHECK (names.contains (name));
     CHECK ((bool)f.call (sessionId, "list_presets", object ({ { "device", 999 } }))["isError"]); // no such device
+    CHECK ((bool)f.call (sessionId, "learn_instrument", object ({ { "device", 999 } }))["isError"]);
 
     // A command, done at once as one undo step.
     juce::Array<juce::var> steps;

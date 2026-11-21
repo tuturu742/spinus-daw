@@ -126,8 +126,8 @@ juce::var InstrumentProfiles::describeForAgents (const Profile& profile)
     if (profile.modes.empty())
         return {};
     if (const auto& only = profile.modes.front(); profile.modes.size() == 1)
-        if (const auto keys = only.playable();
-            keys && keys->keys.all() && ! hasJob (only, Job::switches) && ! hasJob (only, Job::special))
+        if (const auto keys = only.playable(); keys && keys->keys.all() && only.octaves == 0 &&
+                                               ! hasJob (only, Job::switches) && ! hasJob (only, Job::special))
             return {};
 
     juce::Array<juce::var> modes;
@@ -157,6 +157,16 @@ juce::var InstrumentProfiles::describeForAgents (const Profile& profile)
                 }
             m->setProperty ("plays", runs);
             m->setProperty ("playsInWords", keys->describe());
+        }
+        if (mode.octaves != 0)
+        {
+            m->setProperty ("soundsOctaves", mode.octaves);
+            const auto apart = std::abs (mode.octaves) == 1 ? juce::String ("an octave")
+                                                            : juce::String (std::abs (mode.octaves)) + " octaves";
+            m->setProperty ("soundsInWords", "each key sounds " + apart + (mode.octaves < 0 ? " lower" : " higher") +
+                                                 " than its number: for a note to sound as MIDI n, write key n " +
+                                                 (mode.octaves < 0 ? "+ " : "- ") +
+                                                 juce::String (12 * std::abs (mode.octaves)));
         }
         else if (partmodes::isChordMode (mode))
         {
@@ -221,6 +231,8 @@ juce::var InstrumentProfiles::toVar (const Profile& profile)
         if (mode.goodFor.isNotEmpty())
             m->setProperty ("goodFor", mode.goodFor);
         m->setProperty ("voices", voicesNames[(int)mode.voices]);
+        if (mode.octaves != 0)
+            m->setProperty ("octaves", mode.octaves);
         // Runs of keys alike, the unknown ones left out.
         juce::Array<juce::var> runs;
         for (int n = 0; n < 128;)
@@ -277,6 +289,7 @@ std::optional<InstrumentProfiles::Profile> InstrumentProfiles::fromVar (const ju
             mode.enterKey = m.hasProperty ("enterKey") ? juce::jlimit (-1, 127, (int)m["enterKey"]) : -1;
             mode.goodFor = m["goodFor"].toString();
             mode.voices = fromName (voicesNames, m["voices"], Voices::unknown);
+            mode.octaves = juce::jlimit (-3, 3, (int)m["octaves"]);
             if (const auto* runs = m["keys"].getArray())
                 for (const auto& r : *runs)
                     if (r.hasProperty ("from") && r.hasProperty ("to"))

@@ -381,7 +381,9 @@ and drums": those three), or empty. Then:
   it** first: Spinus plays it before every key. What it heard is shown as a proposal: the keys that would change
   get a dot of their new colour, and nothing changes until **Apply** (**Discard** drops it). Keys you marked
   yourself stay as you set them. It listens to the sound the part has (or the instrument as it opens, from the
-  instrument menu); **Stop listening** keeps nothing. Then **Save**.
+  instrument menu); **Stop listening** keeps nothing. Then **Save**. It also notes the octave the keys sound in:
+  some basses sound an octave under their keys (key 40 plays the low E that sounds as E1), and the Track
+  creator, the Analyzer and coding agents then write notes on the keys that sound the pitches meant.
 
   **Ask the plugin** reads the names the instrument gives its keys itself, in a few seconds: a drum machine's
   "Kick" and "Snare", a sampled instrument's key switches ("Palm mute"). A key the instrument calls a key switch
