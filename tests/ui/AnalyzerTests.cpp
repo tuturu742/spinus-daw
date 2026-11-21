@@ -225,13 +225,15 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
         CHECK (session.getProject().playlist.lanes.empty());
         CHECK (session.getProject().channels.empty());
     }
-    // An instrument of the user's choice is not for the drums (their notes are the Drum Machine's pads),
-    // and a stem to play on one needs it named.
+    // The drums can play on an instrument of the user's choice (a drum plugin: its kit's keys, else General
+    // MIDI's), and a stem to play on one needs it named.
     {
-        model::Device guitar;
-        guitar.kind = model::Device::Kind::plugin;
-        CHECK (! analyzer.addStems ({ { "drums", Analyzer::StemUse::replicate } },
-                                    { { "drums", Analyzer::Sounds::instrument } }, { { "drums", guitar } }));
+        model::Device kit;
+        kit.kind = model::Device::Kind::plugin;
+        CHECK (analyzer.addStems ({ { "drums", Analyzer::StemUse::replicate } },
+                                  { { "drums", Analyzer::Sounds::instrument } }, { { "drums", kit } }));
+        REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 180000));
+        session.getHistory().reset (model::Project());
         CHECK (! analyzer.addStems ({ { "bass", Analyzer::StemUse::replicate } },
                                     { { "bass", Analyzer::Sounds::instrument } }));
     }

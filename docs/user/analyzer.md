@@ -202,6 +202,12 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
        first time, Spinus listens to the samples once and keeps what it measured (it needs CLAP).
    - **Its own hits (Drum Machine)**: each pad gets the song's clearest hit of that drum (its kick, its
      snare...).
+   - **A drum plugin's kit** (BFD Player, a drum sampler...): your drum kits the
+     [sound index](sound-index.md) has measured (a kit you saved as a sound with **Save this sound** counts)
+     and plugins whose role you set to drums. Each drum goes to the key that plays it in that kit, as the index
+     heard it; for a plugin it hasn't measured, the General MIDI drum keys (kick 36, snare 38, closed hat 42...).
+     The kit you saved is loaded on the new channel. A drum plugin that plays nothing until a kit is loaded
+     needs such a saved sound.
 
 Everything is kept in the project's `cache` folder: analyzing the same song again is instant.
 
