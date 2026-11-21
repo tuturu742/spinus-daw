@@ -456,6 +456,8 @@ void LearnInstrumentPanel::applyHeard()
         return;
     showMode (heardMode);
     keyprobe::merge (current(), heard.value());
+    if (heardFrom == From::listening)
+        current().octaves = heardOctaves;
     forgotten = false;
     discardHeard();
     heardLabel.setText (heardFrom == From::plugin ? "Applied what the instrument says. Save keeps it."
@@ -951,9 +953,10 @@ void LearnInstrumentWindow::listen (int enterKey)
     panel->setListening ("Listening: loading the instrument...");
     auto found = std::make_shared<std::optional<std::array<InstrumentProfiles::Key, 128>>>();
     auto problem = std::make_shared<juce::String>();
+    auto octaves = std::make_shared<int> (0);
     task = std::make_unique<BackgroundTask> (
         "Spinus listens to every key",
-        [l = *listening, enterKey, found, problem, token = stopping,
+        [l = *listening, enterKey, found, problem, octaves, token = stopping,
          safe = juce::Component::SafePointer<LearnInstrumentPanel> (panel)] (const std::function<bool()>& shouldStop)
         {
             *found = parts::probeInHelper (
@@ -968,19 +971,22 @@ void LearnInstrumentWindow::listen (int enterKey)
                                                     juce::String (total) + " keys...");
                         });
                 },
-                *problem);
+                *problem, octaves.get());
             return juce::Result::ok();
         },
-        [this, a = alive, found, problem] (const juce::Result&)
+        [this, a = alive, found, problem, octaves] (const juce::Result&)
         {
             juce::MessageManager::callAsync (
-                [this, a, found, problem]
+                [this, a, found, problem, octaves]
                 {
                     if (! *a)
                         return;
                     task = nullptr;
                     if (auto* p = dynamic_cast<LearnInstrumentPanel*> (getContentComponent()))
+                    {
+                        p->heardOctaves = *octaves;
                         p->setHeard (*found, *problem);
+                    }
                 });
         });
 }

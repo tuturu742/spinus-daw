@@ -11,6 +11,8 @@
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
 #include "session/AgentCommandLine.h"
+#include "session/InstrumentLearning.h"
+#include "session/SoundIndex.h"
 #include "session/MelodyMatch.h"
 #include "session/Session.h"
 
@@ -1119,6 +1121,16 @@ juce::var AgentInterface::nativeTools() const
                         { "find", property ("string", "Words the preset's name or category must have") } },
                       { "device" }),
               Does::reads));
+    tools.add (tool (
+        "learn_instrument",
+        "Learn an instrument's keys by ear, as its channel's Learn this instrument does with Ask the instrument and "
+        "Listen to every key: which keys play notes, which switch articulations or do something else, and the "
+        "octave its keys sound in (some basses sound an octave under their keys). Spinus keeps what it learns for "
+        "this instrument (the keys the user set stay theirs), and song_summary then shows it under the channel's "
+        "'keys'. It takes a minute or two (every key is played in a helper program); it doesn't change the song.",
+        schema ({ { "device", property ("integer", "The instrument's device id, as song_summary shows it") } },
+                { "device" }),
+        Does::adds));
     tools.add (tool ("undo_last", "Undo your last change (only if it is still the newest undo step).", noInput,
                      Does::replaces));
     tools.add (tool ("what_changed",
@@ -1780,6 +1792,23 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
         if (done.failed())
             return reply (text ("Not done: " + done.getErrorMessage() + ".", true));
         return reply (text (kit ? "Loaded the kit." : "Loaded the samples."));
+    }
+    if (name == "learn_instrument")
+    {
+        auto job = std::make_shared<learning::Job> (learning::prepare (
+            session, model::DeviceId { (uint32_t)(int)arguments["device"] }, SoundIndex::getDefaultFolder()));
+        if (job->problem.isNotEmpty())
+            return reply (text ("Not learned: " + job->problem, true));
+        // The helper plays every key: on a thread of its own, the answer when it is done.
+        juce::Thread::launch (
+            [job, reply]
+            {
+                const auto outcome = learning::run (*job, {}, [] (const juce::String&) {});
+                const auto result = learning::toVar (outcome, job->name);
+                juce::MessageManager::callAsync ([reply, result, ok = outcome.ok()]
+                                                 { reply (text (juce::JSON::toString (result), ! ok)); });
+            });
+        return;
     }
     if (name == "list_presets")
     {

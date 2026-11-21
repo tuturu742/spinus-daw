@@ -632,8 +632,8 @@ int runTune (const juce::var& request, Lines& out)
 }
 /** Listen to every key (keyprobe): `{"mode": "probe", <the instrument>, "preset" (its id, optional; with "state" for
     a saved sound), "enterKey" (the mode's entry key, optional), "from", "to"}`. Writes `{"probing": {done, total}}`
-    as it goes and `{"probed": {keys: [{from, to, job, what, source}], reference, problem}}` at the end (the keys as
-    a profile's mode lists them). After a switch key the instrument is put back as it was (its state again). */
+    as it goes and `{"probed": {keys: [{from, to, job, what, source}], reference, octaves, problem}}` at the end (the
+   keys as a profile's mode lists them). After a switch key the instrument is put back as it was (its state again). */
 int runProbe (const juce::var& request, Lines& out)
 {
     juce::String error;
@@ -685,6 +685,7 @@ int runProbe (const juce::var& request, Lines& out)
     auto* o = new juce::DynamicObject();
     o->setProperty ("keys", InstrumentProfiles::toVar ({ { heard } })["modes"][0]["keys"]);
     o->setProperty ("reference", result.reference);
+    o->setProperty ("octaves", result.octaves);
     if (result.problem.isNotEmpty())
         o->setProperty ("problem", result.problem);
     out.write ("probed", juce::var (o));

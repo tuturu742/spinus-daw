@@ -75,6 +75,10 @@ off or making a new token. Several agents can be connected at once, each in its 
   markers), and with `stems: true` each insert's LUFS and how long it sounds. It takes as long as the song.
 - `list_presets`: the presets `device.loadPreset` can load on a device of the song, plugins too. Spinus's own
   devices other than 3x Osc have none: change their settings with `device.setParameters`.
+- `learn_instrument`: learns an instrument's keys by ear (`{"device": 6}`), as Learn this instrument does:
+  which keys play, which switch, and `soundsOctaves` when its keys sound in another octave. It takes a minute
+  or two; afterwards `song_summary` shows the channel's `keys`. Learn an instrument whose `keys` are missing
+  before writing notes for it.
 - `undo_last`: undoes your last change, if nothing newer came after it.
 - `what_changed`: what the user (or another agent) changed or undid since you last looked, and whether they
   opened another project.

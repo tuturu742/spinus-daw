@@ -257,11 +257,12 @@ std::optional<SynthMatchResult> tuneInHelper (const SoundIndexer::Options&, cons
 /** Listen to every key in the helper (KeyProbe): the instrument with the preset (an id; empty for its own sound; for
     a saved sound, `presetState` is the file with its state), in the mode `enterKey` enters (-1: as it opens).
     `progress` gets (keys done, keys in all). The keys heard, as a mode's (Source::probing; the others unknown); none
-    when nothing could be heard (`problem` says why: it made no sound in tune, a crash, a hang, a stop). */
+    when nothing could be heard (`problem` says why: it made no sound in tune, a crash, a hang, a stop). `octaves`
+    gets how many octaves from their keys the keys sound (Mode::octaves). */
 std::optional<std::array<InstrumentProfiles::Key, 128>>
 probeInHelper (const SoundIndexer::Options&, const SoundSource&, const juce::String& preset,
                const juce::File& presetState, int enterKey, const std::function<bool()>& shouldStop,
-               const std::function<void (int, int)>& progress, juce::String& problem);
+               const std::function<void (int, int)>& progress, juce::String& problem, int* octaves = nullptr);
 
 /** Ask the plugin (pluginkeys), in the helper: the names the instrument (with the preset, as for probeInHelper)
     gives its keys, as a mode's keys (Source::plugin; the others unknown). All unknown when it names none; none when

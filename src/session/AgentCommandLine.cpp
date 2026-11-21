@@ -994,7 +994,7 @@ const std::map<juce::String, bool>& knownOptions()
         { "--render", true },    { "--out", true },       { "--stems", true },       { "--tail", true },
         { "--describe", true },  { "--commands", false }, { "--self-test", false },  { "--scan-plugins", false },
         { "--no-audio", false }, { "--snapshot", true },  { "--choose-file", true }, { "--presets", true },
-        { "--device", true },    { "--find", true },
+        { "--device", true },    { "--find", true },      { "--learn", true },
     };
     return options;
 }
@@ -1012,6 +1012,7 @@ juce::String usage()
            "  spinus --describe <device>|all             A device's settings, choices, presets, pads and kits\n"
            "  spinus --presets <project> [--device <id>] [--find <words>]\n"
            "                                              The presets device.loadPreset can load on its devices\n"
+           "  spinus --learn <project> --device <id>     Learn an instrument's keys by ear, and keep what it learns\n"
            "  spinus --commands                          Every command and its parameters (JSON Schema)\n"
            "  spinus --self-test [<folder>]              Check that Spinus works on this computer\n"
            "  spinus --version                           The version\n"

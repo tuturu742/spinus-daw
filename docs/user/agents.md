@@ -173,11 +173,20 @@ or onto a Drum Machine's pads with `load_sounds`, as the device's window does. L
 isn't an undo step: load another kit to go back. It only takes files from your sample folders and the project's
 folder.
 
+## Learning an instrument
+
+An agent can learn an instrument's keys with `learn_instrument`, as **Learn this instrument** does with **Ask
+the plugin** and **Listen to every key** ([Learn this instrument](channel-rack.md#learn-this-instrument)): which
+keys play, which switch what it plays, and the octave its keys sound in. It takes a minute or two, and Spinus
+keeps what it learns for that instrument, as when you learn it yourself; keys you marked stay as you set them.
+It doesn't change the song.
+
 ## What an agent can't do
 
 - **Load presets on Spinus's own devices other than 3x Osc.** They have none: the agent changes their settings
   one by one instead.
-- **Change Spinus's settings** or use files outside the places listed under Safety.
+- **Change Spinus's settings** (other than what it learns of an instrument) or use files outside the places
+  listed under Safety.
 
 ## Safety
 

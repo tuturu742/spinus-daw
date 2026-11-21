@@ -18,6 +18,8 @@
 #include "engine/PluginCrashGuard.h"
 #include "session/ProgramFolder.h"
 #include "session/AgentCommandLine.h"
+#include "session/InstrumentLearning.h"
+#include "session/SoundIndex.h"
 #include "session/AudioDeviceLog.h"
 #include "session/SelfTest.h"
 #include "session/SystemInfo.h"
@@ -419,7 +421,8 @@ private:
     {
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         return args.contains ("--run") || args.contains ("--check") || args.contains ("--render") ||
-               args.contains ("--describe") || args.contains ("--commands") || args.contains ("--presets");
+               args.contains ("--describe") || args.contains ("--commands") || args.contains ("--presets") ||
+               args.contains ("--learn");
     }
 
     /** --run, --check, --render, --describe (session::AgentCommandLine): JSON lines on the terminal. */
@@ -496,6 +499,29 @@ private:
                 return failed (args.contains ("--device") ? "no device " + valueOf ("--device") + " in the project"
                                                           : "no device in the project has presets");
             return 0;
+        }
+
+        // Learn this instrument without its window: its keys (and the octave they sound in) into its profile.
+        if (const auto project = fileOf ("--learn"); args.contains ("--learn"))
+        {
+            if (! args.contains ("--device"))
+                return failed ("--learn needs --device <id> (spinus --check lists the project's devices)");
+            if (const auto opened = scratchDocument.open (project); opened.failed())
+                return failed (opened.getErrorMessage());
+            session->getEdit().dispatchPendingUpdatesSynchronously();
+            const model::DeviceId id { (uint32_t)valueOf ("--device").getIntValue() };
+            const auto* device = session->getProject().findDevice (id);
+            const auto outcome = learning::learn (*session, id, SoundIndex::getDefaultFolder(), {},
+                                                  [&] (const juce::String& progress)
+                                                  {
+                                                      auto* o = new juce::DynamicObject();
+                                                      o->setProperty ("progress", progress);
+                                                      say (juce::JSON::toString (juce::var (o), true));
+                                                  });
+            say (juce::JSON::toString (
+                learning::toVar (outcome, device != nullptr ? model::getDeviceDisplayName (*device) : juce::String()),
+                true));
+            return outcome.ok() ? 0 : 1;
         }
 
         if (const auto project = fileOf ("--render"); args.contains ("--render"))

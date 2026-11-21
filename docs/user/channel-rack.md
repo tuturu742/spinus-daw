@@ -36,7 +36,10 @@ guitar to palm mutes instead of playing a note, and a strummer mode plays chords
 a channel's name › **Learn this instrument...** to tell Spinus what each key of its instrument does: which keys
 play, which switch what it plays, and its modes. Spinus can also listen to every key itself (with the sound the
 channel has now), ask the plugin, or read its manual with the AI. What you set is kept for that instrument, on
-every channel and in every project that uses it, and you can export it as a file to share. The window is the same
+every channel and in every project that uses it, and you can export it as a file to share. Scripts and coding
+agents can learn an instrument too, without the window: `spinus --learn` on the
+[command line](command-line.md#learning-an-instrument), and the `learn_instrument` tool for
+[agents](agents.md). The window is the same
 as in the Track creator; [Learn this instrument](track-creator.md#sounds-for-each-part) there explains it in
 full. Spinus's own instruments that play every key (3x Osc, the Sampler) and the free synths it gets (Surge XT,
 OB-Xf, Odin 2, Six Sines) come with what it knows of them: every key plays, with a few words on what they suit.
