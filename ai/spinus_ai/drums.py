@@ -23,6 +23,7 @@ import numpy as np
 RATE = 22050
 KINDS = ("kick", "snare", "clap", "closed_hat", "open_hat", "tom", "rim", "crash", "ride")
 VERSION = 3  # change when the training sounds, features or network change
+FINDING = 2  # change when finding hits changes (the cached hits are found again; the recogniser stays)
 
 # The Drum Machine's pads (the Spinus Synth Kit's order, from C5 = MIDI 60).
 PADS = {
@@ -317,6 +318,36 @@ def refine_onset(signal: np.ndarray, time: float) -> int:
     return begin + best * hop + size // 2 - int(0.002 * RATE)
 
 
+KICK_LOW = 0.1  # the least share of a kick's first 60 ms below 150 Hz
+
+
+def low_share(hit: np.ndarray) -> float:
+    """How much of a hit's first 60 ms (at 22.05 kHz) is below 150 Hz. A kick's is most of it (0.46 to 0.98 on
+    test songs, lo-fi metal included; over 0.58 for the kicks the recogniser is trained on, whose pitch falls
+    from up to 230 Hz); a snare's alone, almost none (under 0.04), though the recogniser often hears a snare's
+    body as a kick too."""
+    segment = hit[: int(0.06 * RATE)]
+    if len(segment) < 64:
+        return 1.0
+    power = np.abs(np.fft.rfft(segment * np.hanning(len(segment)), 4096)) ** 2
+    f = np.fft.rfftfreq(4096, 1.0 / RATE)
+    return float(power[(f > 30) & (f < 150)].sum() / (power.sum() + 1e-12))
+
+
+def check_kicks(audio: np.ndarray, rate: int, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hits found before (kept in the analysis library) without the kicks that have no low end."""
+    from .transcribe import resample
+
+    mono = audio.mean(axis=0) if audio.ndim == 2 else audio
+    signal = resample(mono, rate, RATE)
+
+    def kept(h: dict[str, Any]) -> bool:
+        start = int(float(h["time"]) * RATE)
+        return h.get("kind") != "kick" or low_share(signal[start : start + int(0.2 * RATE)]) >= KICK_LOW
+
+    return [h for h in hits if kept(h)]
+
+
 def find_hits(audio: np.ndarray, rate: int, model: Recogniser, threshold: float = 0.5) -> list[dict[str, Any]]:
     """Every hit of a drum stem: {time (s), kind, pad, velocity}, several kinds at the same time allowed."""
     from .listening import detect_onsets
@@ -341,6 +372,8 @@ def find_hits(audio: np.ndarray, rate: int, model: Recogniser, threshold: float 
         if level < 0.003 * peak:
             continue
         probabilities = model.probabilities(describe(hit))
+        if low_share(hit) < KICK_LOW:
+            probabilities[KINDS.index("kick")] = 0.0
         found = [KINDS[i] for i in np.nonzero(probabilities >= threshold)[0]]
         if not found:
             found = [KINDS[int(np.argmax(probabilities))]]
