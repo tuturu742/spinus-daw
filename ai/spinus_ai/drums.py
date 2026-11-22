@@ -19,6 +19,7 @@ when the model or the analysis engine is missing.
 
 from __future__ import annotations
 
+import itertools
 import json
 from pathlib import Path
 from typing import Any
@@ -467,6 +468,10 @@ def find_hits(audio: np.ndarray, rate: int, model: Recogniser, threshold: float 
 
 # Pads the Synth Kit leaves free, for a second sound of the same kind.
 FREE_PADS = (69, 71, 72, 73, 75)
+# Where each drum's own sound is (Hz), for telling two sounds of one drum apart while other drums play with it.
+OWN_RANGE = {"kick": (40.0, 120.0), "low_tom": (60.0, 1500.0), "mid_tom": (60.0, 1500.0), "high_tom": (60.0, 1500.0),
+             "snare": (180.0, 5000.0), "clap": (300.0, 5000.0), "rim": (300.0, 5000.0), "closed_hat": (5000.0, 16000.0),
+             "open_hat": (5000.0, 16000.0), "crash": (4000.0, 16000.0), "ride": (3000.0, 16000.0)}  # fmt: skip
 NAMES = {"kick": "kick", "snare": "snare", "clap": "clap", "closed_hat": "closed hat", "open_hat": "open hat",
          "low_tom": "low tom", "mid_tom": "mid tom", "high_tom": "high tom", "rim": "rim", "crash": "crash",
          "ride": "ride"}  # fmt: skip
@@ -479,22 +484,70 @@ def group_hits(
     the second on a pad the Synth Kit leaves free; each group's loudest hit is full velocity and the others
     are accents relative to it. Returns (hits with "group" and their pad, groups [{pad, kind, name, count,
     start, end}], where start and end are the group's clearest hit, as for the song's own sounds)."""
-    from .presets import describe_sound
     from .samples import choose_drum_samples
 
     mono = audio.mean(axis=0) if audio.ndim == 2 else audio
     duration = len(mono) / rate
-    times = sorted(h["time"] for h in hits)
     hits = [dict(h) for h in hits]
 
-    def measure(h: dict[str, Any]) -> np.ndarray:
-        later = [t for t in times if t > h["time"] + 0.03]
-        end = min(h["time"] + 0.25, later[0] if later else duration)
-        piece = mono[int(h["time"] * rate) : int(end * rate)]
-        return np.asarray(describe_sound(piece, rate)[:-1], dtype=float)  # without the attack: too short here
+    edges = 40.0 * (16000.0 / 40.0) ** (np.arange(33) / 32)  # 32 bands, as describe_sound's
+    size = 2048 if rate > 30000 else 1024  # about 46 ms
+    freqs = np.fft.rfftfreq(size, 1.0 / rate)
+    window = np.hanning(size)
 
-    measured = {id(h): measure(h) for h in hits}
-    spread = np.maximum(np.std(np.array(list(measured.values())), axis=0), 1.0) if hits else np.ones(1)
+    def power(a: int) -> np.ndarray:
+        piece = mono[max(0, a) : max(0, a) + size]
+        result: np.ndarray = np.abs(np.fft.rfft(np.pad(piece, (0, size - len(piece))) * window)) ** 2
+        return result
+
+    def measure(h: dict[str, Any], before: bool) -> np.ndarray:
+        """The hit's spectrum shape in its own drum's range (`before`: less what was already sounding just before
+        it). A hi-hat struck with a kick, or ringing after a snare, otherwise sounds like another hi-hat, and the
+        hits played alone went to a second pad."""
+        start = int(h["time"] * rate)
+        added = np.maximum(power(start) - power(start - size), 0.0) if before else power(start)
+        low, high = OWN_RANGE.get(h["kind"], (40.0, 16000.0))
+        own = (edges[1:] > low) & (edges[:-1] < high)
+        bands = np.array([added[(freqs >= lo) & (freqs < hi)].sum() for lo, hi in itertools.pairwise(edges)])
+        db = 10 * np.log10(bands[own] + 1e-12)
+        result: np.ndarray = np.maximum(db - db.max(), -60.0)
+        return result
+
+    onsets = [(h["time"], h["kind"]) for h in hits]
+
+    def follows_company(same: list[dict[str, Any]], labels: np.ndarray) -> bool:
+        """Whether the two groups differ mostly in another drum played with them: most of one group has it
+        (struck within 30 ms; toms counted with the kick) and few of the other (metal160's kicks struck with the
+        snare)."""
+        family = {"low_tom": "kick", "mid_tom": "kick", "high_tom": "kick", "clap": "snare", "rim": "snare"}
+        company = [{family.get(k, k) for t, k in onsets if k != h["kind"] and abs(t - h["time"]) < 0.03} for h in same]
+        for other in set().union(*company):
+            shares = [
+                np.mean([other in c for c, label in zip(company, labels, strict=True) if label == g]) for g in (0, 1)
+            ]
+            if abs(shares[0] - shares[1]) > 0.5:
+                return True
+        return False
+
+    def two_sounds(points: np.ndarray) -> np.ndarray | None:
+        """Two groups of clearly different sounds (labels 0 and 1), or None: start from the two hits furthest
+        apart, then settle (a few rounds of 2-means); the groups' centres must be far apart for how spread each is."""
+        points = points / np.maximum(np.std(points, axis=0), 1.0)
+        distances = np.linalg.norm(points[:, None, :] - points[None, :, :], axis=2)
+        a, b = np.unravel_index(np.argmax(distances), distances.shape)
+        centres = np.array([points[a], points[b]])
+        labels = np.zeros(len(points), dtype=int)
+        for _ in range(10):
+            labels = np.argmin(np.linalg.norm(points[:, None, :] - centres[None, :, :], axis=2), axis=1)
+            if labels.min() == labels.max():
+                return None
+            centres = np.array([points[labels == k].mean(axis=0) for k in (0, 1)])
+        if min(np.sum(labels == 0), np.sum(labels == 1)) < 2:
+            return None
+        within = np.mean(np.linalg.norm(points - centres[labels], axis=1))
+        apart = float(np.linalg.norm(centres[0] - centres[1]))
+        return labels if apart >= 2.5 * max(within, 1e-6) else None  # else the same sound played differently
+
     free = list(FREE_PADS)
     for kind in sorted({h["kind"] for h in hits}):
         same = [h for h in hits if h["kind"] == kind]
@@ -502,22 +555,13 @@ def group_hits(
             h["group"] = 0
         if len(same) < 4 or not free:
             continue
-        points = np.array([measured[id(h)] / spread for h in same])
-        # Two groups: start from the two hits furthest apart, then settle (a few rounds of 2-means).
-        distances = np.linalg.norm(points[:, None, :] - points[None, :, :], axis=2)
-        a, b = np.unravel_index(np.argmax(distances), distances.shape)
-        centres = np.array([points[a], points[b]])
-        for _ in range(10):
-            labels = np.argmin(np.linalg.norm(points[:, None, :] - centres[None, :, :], axis=2), axis=1)
-            if labels.min() == labels.max():
-                break
-            centres = np.array([points[labels == k].mean(axis=0) for k in (0, 1)])
-        if labels.min() == labels.max() or min(np.sum(labels == 0), np.sum(labels == 1)) < 2:
+        # Two sounds both as heard and less what rang before them, the same hits apart either way.
+        labels = two_sounds(np.array([measure(h, before=True) for h in same]))
+        plain = two_sounds(np.array([measure(h, before=False) for h in same])) if labels is not None else None
+        if labels is None or plain is None or max(np.mean(labels == plain), np.mean(labels != plain)) < 0.8:
             continue
-        within = np.mean(np.linalg.norm(points - centres[labels], axis=1))
-        apart = float(np.linalg.norm(centres[0] - centres[1]))
-        if apart < 2.5 * max(within, 1e-6):
-            continue  # the same sound played differently
+        if follows_company(same, labels):
+            continue  # one sound, heard with and without another drum
         # The bigger group keeps the kind's pad.
         bigger = 0 if np.sum(labels == 0) >= np.sum(labels == 1) else 1
         pad = free.pop(0)
