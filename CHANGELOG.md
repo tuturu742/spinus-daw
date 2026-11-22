@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: a more exact tempo at the end of a song.** The tempo of a song's last part came from its first and
+  last bar only, and the beat finder can place a bar a few hundredths of a second off: a 160 BPM song came out at
+  159.7, and its notes slowly drifted off the recording. That tempo now fits all the part's beats (159.9).
 - **Analyzer: much better drums.** A new small model, the Inverse Drum Machine (2.5 MB, downloaded with the
   Analyzer's other models), now finds the drum hits and tells kick, snare and hi-hats apart. On Spinus's test
   songs it finds 93 to 100% of kicks and snares and 80 to 98% of hi-hats, where the old drum finder missed most
