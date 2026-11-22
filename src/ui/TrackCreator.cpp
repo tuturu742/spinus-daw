@@ -972,6 +972,7 @@ void TrackCreator::transcribeNext()
     }
     auto params = object (
         { { "file", work->stems[name].getFullPathName() },
+          { "bass", name == "bass" },
           { "beats", work->rhythm["beats"] },
           { "firstDownbeat", work->rhythm["firstDownbeat"].isVoid() ? juce::var (0.0) : work->rhythm["firstDownbeat"] },
           { "cacheFolder", work->folder.getFullPathName() } });

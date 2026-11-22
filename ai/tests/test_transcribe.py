@@ -14,11 +14,13 @@ import pytest
 from spinus_ai.transcribe import (
     MIN_NOTE_FRAMES,
     Model,
+    bass_line,
     frames_to_time,
     local_maxima,
     notes_from_output,
     place_on_beats,
     resample,
+    shortest_note,
     transcribe,
 )
 
@@ -85,3 +87,50 @@ def test_basic_pitch_hears_a_melody() -> None:
     notes = transcribe(Model(Path(os.environ["SPINUS_TEST_BASIC_PITCH"])), audio[None, :], rate)
     assert [n["pitch"] for n in notes] == [p for _, _, p in melody]
     assert all(abs(n["start"] - s) < 0.03 for n, (s, _, _) in zip(notes, melody, strict=True))
+
+
+def test_short_notes_follow_the_tempo() -> None:
+    assert shortest_note([]) == MIN_NOTE_FRAMES
+    assert shortest_note([i * 0.5 for i in range(9)]) == 7  # 120 BPM: 16ths of 125 ms
+    assert shortest_note([i * 0.375 for i in range(9)]) == 5  # 160 BPM: 16ths of 94 ms
+    assert shortest_note([i * 1.0 for i in range(9)]) == MIN_NOTE_FRAMES  # 60 BPM: Basic Pitch's own
+
+    # A note with an onset, shorter than Basic Pitch's minimum, is kept when the song is fast.
+    frames = np.zeros((120, 88))
+    onsets = np.zeros((120, 88))
+    frames[10:18, 39] = 0.8
+    onsets[10, 39] = 0.9
+    assert notes_from_output(frames, onsets) == []
+    assert [n[2] for n in notes_from_output(frames, onsets, shortest=5)] == [60]
+
+
+def _bass(notes: list[tuple[float, float, float]], rate: int, fundamental: float) -> np.ndarray:
+    """Plucked notes (start, end, frequency) with overtones; the fundamental at `fundamental` strength."""
+    t = np.arange(int(rate * 3)) / rate
+    audio = np.zeros_like(t)
+    for start, end, f in notes:
+        inside = (t >= start) & (t < end)
+        tt = t[inside] - start
+        tone = fundamental * np.sin(2 * np.pi * f * tt) + sum(np.sin(2 * np.pi * f * h * tt) / h for h in (2, 3, 4, 5))
+        audio[inside] += 0.2 * tone * np.exp(-tt * 3)
+    return audio
+
+
+def test_a_bass_line_is_cleaned_up() -> None:
+    rate = 22050
+    hz = lambda p: 440 * 2 ** ((p - 69) / 12)  # noqa: E731
+    # Low E (28) with a weak fundamental, then A (33) with a full one.
+    audio = _bass([(0.0, 1.0, hz(28)), (1.0, 2.0, hz(33))], rate, fundamental=0.15)
+    heard = [
+        {"start": 0.0, "end": 0.95, "pitch": 40, "velocity": 0.6},  # the octave above
+        {"start": 1.0, "end": 1.95, "pitch": 33, "velocity": 0.6},
+        {"start": 1.01, "end": 1.6, "pitch": 45, "velocity": 0.3},  # its overtone, an octave up
+        {"start": 1.02, "end": 1.5, "pitch": 52, "velocity": 0.3},  # an octave and a fifth up
+    ]
+    cleaned = bass_line(heard, audio[None, :], rate)
+    assert [(n["start"], n["pitch"]) for n in cleaned] == [(0.0, 28), (1.0, 33)]
+    assert bass_line(cleaned, audio, rate) == cleaned  # again: the same
+
+    # A note at its pitch, nothing below it: kept.
+    audio = _bass([(0.0, 1.0, hz(40))], rate, fundamental=1.0)
+    assert bass_line([{"start": 0.0, "end": 0.95, "pitch": 40, "velocity": 0.6}], audio, rate)[0]["pitch"] == 40

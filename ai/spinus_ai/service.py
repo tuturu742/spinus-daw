@@ -632,7 +632,8 @@ class Service:
         """Notes of a melodic stem with Basic Pitch: {file, beats, firstDownbeat, cacheFolder}.
         The result: {notes: [{start, length (ticks from the first downbeat), pitch, velocity}], seconds:
         [{start, end, pitch, velocity}]}, cached by the stem's contents. With `known` (the seconds Spinus kept
-        in its analysis library from an earlier time) Basic Pitch is not run: they are only placed on the beats."""
+        in its analysis library from an earlier time) Basic Pitch is not run: they are only placed on the beats.
+        With `bass` the notes are a bass line's (transcribe.bass_line: overtones dropped, octaves checked)."""
         known = params.get("known")
         if isinstance(known, list):
             if importlib.util.find_spec("numpy") is None:
@@ -640,10 +641,22 @@ class Service:
             known_beats = [float(b) for b in params.get("beats", [])]
             known_first = float(params.get("firstDownbeat", known_beats[0] if known_beats else 0.0))
 
+            known_stem = Path(str(params.get("file", "")))
+            known_bass = bool(params.get("bass")) and known_stem.is_file()
+
             async def place(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
-                from .transcribe import place_on_beats
+                from .transcribe import bass_line, place_on_beats
 
                 found = [dict(n) for n in known]
+                if known_bass:  # kept before bass lines were cleaned up: cleaning them again changes nothing
+
+                    def clean() -> list[dict[str, Any]]:
+                        from .compute.worker import read_wav
+
+                        audio, rate = read_wav(str(known_stem))
+                        return bass_line(found, audio, rate)
+
+                    found = await run_blocking(clean)
                 return {"notes": place_on_beats(found, known_beats, known_first), "seconds": found}
 
             return {"job": self.job(notify, place)}
@@ -663,22 +676,31 @@ class Service:
 
         async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
             from .compute.worker import read_wav
-            from .transcribe import Model, place_on_beats, transcribe
+            from .transcribe import MIN_NOTE_FRAMES, Model, bass_line, place_on_beats, shortest_note, transcribe
 
             await say({"kind": "progress", "done": 0.0, "total": 1.0, "step": "Listening for notes"})
             digest = await run_blocking(lambda: file_digest(stem))
-            cached = cache_root / "analysis" / f"{digest[:20]}-basic_pitch.json"
+            shortest = shortest_note(beats)
+            settings = "" if shortest == MIN_NOTE_FRAMES else f"-{shortest}"
+            cached = cache_root / "analysis" / f"{digest[:20]}-basic_pitch{settings}.json"
             if cached.exists():
                 found = json.loads(cached.read_text(encoding="utf-8"))
             else:
 
                 def run() -> list[dict[str, Any]]:
                     audio, rate = read_wav(str(stem))
-                    return transcribe(Model(self.weights.folder(model) / "nmp.onnx"), audio, rate)
+                    return transcribe(Model(self.weights.folder(model) / "nmp.onnx"), audio, rate, shortest)
 
                 found = await run_blocking(run)
                 cached.parent.mkdir(parents=True, exist_ok=True)
                 cached.write_text(json.dumps(found) + "\n", encoding="utf-8")
+            if params.get("bass"):
+
+                def clean() -> list[dict[str, Any]]:
+                    audio, rate = read_wav(str(stem))
+                    return bass_line(found, audio, rate)
+
+                found = await run_blocking(clean)
             return {"notes": place_on_beats(found, beats, first_downbeat), "seconds": found}
 
         return {"job": self.job(notify, work)}

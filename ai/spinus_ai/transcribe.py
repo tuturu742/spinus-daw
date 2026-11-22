@@ -124,9 +124,13 @@ def local_maxima(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return rows + 1, cols
 
 
-def notes_from_output(frames: np.ndarray, onsets: np.ndarray) -> list[tuple[int, int, int, float]]:
+def notes_from_output(
+    frames: np.ndarray, onsets: np.ndarray, shortest: int = MIN_NOTE_FRAMES
+) -> list[tuple[int, int, int, float]]:
     """basic_pitch.note_creation.output_to_notes_polyphonic with its defaults (inferred onsets, the
-    melodia trick): (start frame, end frame, MIDI pitch, amplitude)."""
+    melodia trick): (start frame, end frame, MIDI pitch, amplitude). A note with a clear onset may be as short
+    as `shortest` frames (Spinus: fast songs play notes shorter than Basic Pitch's 128 ms); one found without an
+    onset keeps Basic Pitch's minimum."""
     n_frames = frames.shape[0]
     onsets = inferred_onsets(onsets, frames)
     peaks = np.zeros(onsets.shape)
@@ -151,7 +155,7 @@ def notes_from_output(frames: np.ndarray, onsets: np.ndarray) -> list[tuple[int,
             k = k + 1 if remaining[i, freq] < FRAME_THRESHOLD else 0
             i += 1
         i -= k
-        if i - start <= MIN_NOTE_FRAMES:
+        if i - start <= shortest:
             continue
         clear_neighbours(start, i, freq)
         notes.append((int(start), int(i), int(freq) + MIDI_OFFSET, float(np.mean(frames[start:i, freq]))))
@@ -178,19 +182,91 @@ def notes_from_output(frames: np.ndarray, onsets: np.ndarray) -> list[tuple[int,
     return notes
 
 
-def transcribe(model: Model, audio: np.ndarray, rate: int) -> list[dict[str, Any]]:
+def shortest_note(beats: list[float]) -> int:
+    """The fewest frames a note with an onset may last: Basic Pitch's 128 ms, or less in a song whose 16th
+    notes are shorter than that (a 16th is 94 ms at 160 BPM), so that fast notes played again and again are
+    not all dropped."""
+    if len(beats) < 2:
+        return MIN_NOTE_FRAMES
+    sixteenth = float(np.median(np.diff(np.asarray(beats, dtype=float)))) / 4
+    return max(4, min(MIN_NOTE_FRAMES, int(0.7 * sixteenth * ANNOTATIONS_FPS)))
+
+
+def transcribe(model: Model, audio: np.ndarray, rate: int, shortest: int = MIN_NOTE_FRAMES) -> list[dict[str, Any]]:
     """Notes of a (mono or stereo [channels, samples]) recording: [{start, end (seconds), pitch, velocity}],
     in time order."""
     mono = audio.mean(axis=0) if audio.ndim == 2 else audio
     output = run_inference(model, resample(mono, rate))
     times = frames_to_time(output["note"].shape[0])
-    found = notes_from_output(output["note"], output["onset"])
+    found = notes_from_output(output["note"], output["onset"], shortest)
     notes = [
         {"start": float(times[s]), "end": float(times[min(e, len(times) - 1)]), "pitch": p,
          "velocity": round(min(1.0, max(0.1, a)), 3)}
         for s, e, p, a in found
     ]  # fmt: skip
     return sorted(notes, key=lambda n: (n["start"], n["pitch"]))
+
+
+LOWEST_BASS = 23  # B0, a five-string bass's lowest string
+OCTAVE_BELOW = 0.1  # how strong the octave below must sound (see bass_line)
+
+
+def _hz(pitch: float) -> float:
+    return float(440 * 2 ** ((pitch - 69) / 12))
+
+
+def _sounds_lower(mono: np.ndarray, rate: int, note: dict[str, Any]) -> bool:
+    """Whether a note is really an octave lower: its overtones at half and one and a half times its pitch
+    (the octave below's 1st and 3rd) sound against those at its pitch and twice it. A bass's low notes have a
+    weak fundamental, so a note finder often hears their octave above; a note really at its pitch has nothing
+    between its overtones."""
+    a = int((note["start"] + 0.02) * rate)
+    b = max(int(min(note["end"], note["start"] + 0.4) * rate), a + int(0.04 * rate))
+    segment = mono[a:b]
+    if len(segment) < 16:
+        return False
+    size = 1 << 15
+    spectrum = np.abs(np.fft.rfft(segment * np.hanning(len(segment)), size))
+    freqs = np.fft.rfftfreq(size, 1 / rate)
+
+    def peak(f: float) -> float:
+        inside = (freqs > f * 0.97) & (freqs < f * 1.03)
+        return float(spectrum[inside].max()) if inside.any() else 0.0
+
+    f = _hz(note["pitch"])
+    lower = peak(f / 2) + peak(1.5 * f)
+    upper = peak(f) + peak(2 * f)
+    return upper > 0 and lower / upper > OCTAVE_BELOW
+
+
+def bass_line(notes: list[dict[str, Any]], audio: np.ndarray, rate: int) -> list[dict[str, Any]]:
+    """A bass stem's notes cleaned up: overtones heard as notes of their own (an octave, an octave and a
+    fifth, or two octaves above a note sounding then) are dropped, notes heard an octave too high are moved
+    down (see _sounds_lower), and what that makes one note twice becomes one. Safe to run again on its own
+    result."""
+    mono = audio.mean(axis=0) if audio.ndim == 2 else audio
+    kept = []
+    for n in notes:
+        overtone = any(
+            n["pitch"] - m["pitch"] in (12, 19, 24)
+            and m["start"] <= n["start"] + 0.05
+            and m["end"] >= n["start"] + 0.03
+            for m in notes
+        )
+        if not overtone:
+            kept.append(dict(n))
+    for n in kept:
+        while n["pitch"] - 12 >= LOWEST_BASS and _sounds_lower(mono, rate, n):
+            n["pitch"] -= 12
+    kept.sort(key=lambda n: (n["start"], n["pitch"]))
+    result: list[dict[str, Any]] = []
+    for n in kept:
+        sounding = [o for o in result[-4:] if o["pitch"] == n["pitch"] and n["start"] < o["end"] - 0.02]
+        for o in sounding:
+            o["end"] = max(o["end"], n["end"])
+        if not sounding:
+            result.append(n)
+    return result
 
 
 def place_on_beats(

@@ -212,7 +212,9 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
 Everything is kept in the project's `cache` folder: analyzing the same song again is instant.
 
 Notes are found best on a clean single part (a bass line, a lead vocal). Chords and busy mixes give more
-wrong notes: treat the result as a sketch to correct in the Piano Roll. Drums work best on a clear drum
+wrong notes: treat the result as a sketch to correct in the Piano Roll. On the bass stem, Spinus checks each
+note's octave (a bass's low notes are easily heard an octave too high) and leaves out the overtones heard as
+notes of their own. In a fast song, notes as short as a 16th are kept. Drums work best on a clear drum
 stem; heavily processed drums or sounds unlike a drum kit may land on the wrong pad.
 
 If something goes wrong, the line under the buttons says what. Hover over it to read a long message in
