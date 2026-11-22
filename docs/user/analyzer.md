@@ -20,7 +20,7 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
 2. **The analysis engine** (PyTorch), installed once: the Analyzer offers a **Set up the analysis engine...**
    button that opens [the analysis engine page](analysis-engine.md).
 3. **Model files**, downloaded once the first time: Beat This! (8 MB on the CPU, 81 MB with a graphics
-   card), Basic Pitch (230 KB) and the separation model for the **Stems** choice: Demucs for 4 stems
+   card), Basic Pitch (230 KB), the Inverse Drum Machine (2.5 MB, for the drums) and the separation model for the **Stems** choice: Demucs for 4 stems
    (84 MB) or 6 stems (55 MB), or MVSep for many instruments (1.4 GB). Basic Pitch also needs the
    `python-onnxruntime-cpu` package. The Analyzer says what it needs and how big it is; click
    **Download** to agree. What it lists always follows your choices: change the **Stems** choice and the
@@ -114,8 +114,10 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    a little off the grid (the status line says how much), and fewer of its bars repeat exactly. Swap the instrument for the sound
    you want.
 
-   The first time you turn drums into steps, Spinus spends a few seconds learning its own drum sounds
-   (nothing is downloaded for this).
+   The drums' hits, and which drum each one is, come from the **Inverse Drum Machine**, a small model
+   trained on real drum kits. If you analyzed songs before downloading it, their drums are found again
+   with it when you continue. Without it, Spinus uses its own drum finder, which needs no download (it spends
+   a few seconds learning Spinus's drum sounds the first time) but hears hi-hats and snares less well.
 
    When the song has two clearly different sounds of one kind (a tight snare and a big one, say), each
    gets a pad of its own ("snare" and "snare 2"), so you can give them different samples. Each pad's
@@ -215,7 +217,8 @@ Notes are found best on a clean single part (a bass line, a lead vocal). Chords 
 wrong notes: treat the result as a sketch to correct in the Piano Roll. On the bass stem, Spinus checks each
 note's octave (a bass's low notes are easily heard an octave too high) and leaves out the overtones heard as
 notes of their own. In a fast song, notes as short as a 16th are kept. Drums work best on a clear drum
-stem; heavily processed drums or sounds unlike a drum kit may land on the wrong pad.
+stem: kick, snare and hi-hats are found well, crash and ride cymbals poorly. Very fast double bass drum
+playing, heavily processed drums or sounds unlike a drum kit may be missed or land on the wrong pad.
 
 If something goes wrong, the line under the buttons says what. Hover over it to read a long message in
 full, and right-click it and choose **Copy message** to paste it into a bug report. The same works in the

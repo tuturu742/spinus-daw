@@ -43,7 +43,7 @@ exclude = ["tests/fakes/"]
 
 [[tool.mypy.overrides]]
 # Runs only in the analysis engine's environment (PyTorch), which the AI service's has not.
-module = ["spinus_ai.compute.bs_roformer"]
+module = ["spinus_ai.compute.bs_roformer", "spinus_ai.compute.drum_model"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]

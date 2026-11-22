@@ -39,7 +39,7 @@ class AnalysisModel:
     revision: str
     files: tuple[WeightFile, ...]
     stems: tuple[str, ...] = field(default_factory=tuple)
-    kind: str = "stems"  # "stems", "beats", "notes" or "similarity"
+    kind: str = "stems"  # "stems", "beats", "notes", "drums" or "similarity"
     url: str = ""  # where the files are, when not on Hugging Face
     architecture: str = "demucs"  # for stems: how the analysis engine runs it ("demucs" or "bs_roformer")
     homepage: str = ""  # where people can read about it and check its license (default: its Hugging Face page)
@@ -195,6 +195,30 @@ MODELS: tuple[AnalysisModel, ...] = (
         url="https://raw.githubusercontent.com/spotify/basic-pitch/9991303bba609a3b93089d13ec80d1d495083596"
         "/basic_pitch/saved_models/icassp_2022",
         homepage="https://github.com/spotify/basic-pitch",
+    ),
+    # The Inverse Drum Machine's transcription (Torres, Peeters and Richard, IEEE TASLP 2025; code and weights
+    # Apache-2.0, trained on StemGMD, CC BY 4.0), from the authors' repository at a fixed commit. A Lightning
+    # pickle: loaded with torch.load(weights_only=True) after the hash check; only its encoder is used
+    # (compute/drum_model.py).
+    AnalysisModel(
+        "drum_transcriber",
+        "Inverse Drum Machine",
+        "Tells a drum part's kick, snare, hi-hats, cymbals and toms apart.",
+        "Apache-2.0",
+        "bernardo-torres/inverse-drum-machine",
+        "456656868538205ef756912c7cf5b0fd936de8af",
+        (
+            WeightFile(
+                "drums.ckpt",
+                2544694,
+                "5856a9bee7c6d503842795756d238dc8470f6f3e010e9e4f33ede0362850cb4c",
+                "val-epoch%3D518-global_step%3D0.ckpt",
+            ),
+        ),
+        kind="drums",
+        url="https://raw.githubusercontent.com/bernardo-torres/inverse-drum-machine/"
+        "456656868538205ef756912c7cf5b0fd936de8af/pretrained/idm-44-train-kits/checkpoints",
+        homepage="https://github.com/bernardo-torres/inverse-drum-machine",
     ),
     # LAION-CLAP's music model in the transformers format (Apache-2.0). Only its audio tower is used, to
     # tell how alike two sounds are (closest preset). The weights are a PyTorch pickle (no

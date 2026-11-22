@@ -707,7 +707,10 @@ void TrackCreator::handleAsyncUpdate()
     checkReady ([this] { findTempo(); });
 }
 
-juce::StringArray TrackCreator::neededModels() const { return { beatModel, separationModel, "basic_pitch" }; }
+juce::StringArray TrackCreator::neededModels() const
+{
+    return { beatModel, separationModel, "basic_pitch", "drum_transcriber" };
+}
 
 /** AI on, the analysis engine installed and the models downloaded; otherwise says what is missing. */
 void TrackCreator::checkReady (const std::function<void()>& then)

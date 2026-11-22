@@ -111,6 +111,75 @@ async def test_the_service_turns_a_drum_stem_into_steps(tmp_path: Path, model: R
     await service.close()
 
 
+async def test_the_drum_transcription_model_finds_the_hits_when_downloaded(tmp_path: Path, model: Recogniser) -> None:
+    from typing import Any
+
+    from test_stems import collect, fake_download, service_with_fake_engine
+
+    calls: list[dict[str, Any]] = []
+    service = service_with_fake_engine(tmp_path, calls)
+    model.save(tmp_path / "config" / "cache" / f"drum-recogniser-{drums.VERSION}.json")
+    heard = [
+        {"time": 0.0, "kind": "kick", "pad": PADS["kick"], "velocity": 1.0, "finder": drums.MODEL_FINDER},
+        {"time": 0.5, "kind": "snare", "pad": PADS["snare"], "velocity": 1.0, "finder": drums.MODEL_FINDER},
+    ]
+
+    async def engine(method: str, params: dict[str, Any], progress: Any = None) -> Any:
+        calls.append({"method": method, **params})
+        return {"hits": heard}
+
+    service.engine.call = engine  # type: ignore[method-assign]
+    service.engine.plan = lambda: object()  # type: ignore[assignment,method-assign,return-value]
+    fake_download(service, "drum_transcriber")
+    stem = tmp_path / "drums.wav"
+    write_mono_wav(stem, np.zeros(RATE))
+    old = [{"time": 0.25, "kind": "snare", "pad": PADS["snare"], "velocity": 1.0}]  # an earlier finder's
+    params = {"file": str(stem), "beats": [i * 0.5 for i in range(5)], "firstDownbeat": 0.0,
+              "cacheFolder": str(tmp_path / "c"), "hits": old}  # fmt: skip
+    done, _ = await collect(service, "ai.v1.transcribe.drums", params)
+    assert done["kind"] == "done", done
+    assert [c["method"] for c in calls] == ["drum_hits"]  # found again, with the model
+    assert [(n["start"], n["pitch"]) for n in done["result"]["notes"]] == [(0, PADS["kick"]), (960, PADS["snare"])]
+    # Its hits, kept in the library, are used as they are; so is the cache.
+    params["hits"] = done["result"]["hits"]
+    done, _ = await collect(service, "ai.v1.transcribe.drums", params)
+    assert done["kind"] == "done" and len(calls) == 1
+    del params["hits"]
+    done, _ = await collect(service, "ai.v1.transcribe.drums", params)
+    assert done["kind"] == "done" and len(calls) == 1
+    await service.close()
+
+
+def test_the_models_onsets_become_hits() -> None:
+    from spinus_ai.drums import MODEL_LATE, model_hits, pick_peaks
+
+    rate = 44100 / 256
+    frames = int(2 * rate)
+    onsets = np.zeros((3, frames))
+    velocities = np.ones((3, frames))
+    kicks = [int(0.5 * rate), int(0.547 * rate), int(1.5 * rate)]  # two of a fast double bass drum, 47 ms apart
+    for f in kicks:
+        onsets[0, f - 1 : f + 2] = [0.4, 0.9, 0.4]
+    velocities[0, kicks[2]] = 0.5
+    onsets[1, int(1.0 * rate)] = 0.05  # too faint
+    onsets[2] += 0.95  # never above its neighbourhood: no hits
+    assert list(pick_peaks(onsets[0], rate)) == kicks
+    hits = model_hits(onsets, velocities, ["KD", "SD", "TT_HFT"], rate)
+    assert [h["kind"] for h in hits] == ["kick"] * 3
+    assert hits[0]["time"] == pytest.approx(kicks[0] / rate - MODEL_LATE, abs=1e-4)
+    assert [h["velocity"] for h in hits] == [1.0, 1.0, 0.5]
+    assert all(h["pad"] == PADS["kick"] and h["finder"] == drums.MODEL_FINDER for h in hits)
+    assert drums.MODEL_KINDS["TT_HFT"] == "low_tom" and drums.MODEL_KINDS["TT_HMT"] == "high_tom"
+
+
+def test_the_drum_transcription_model_is_pinned() -> None:
+    from spinus_ai.compute import weights
+
+    model = weights.find_model("drum_transcriber")
+    assert model is not None and model.license == "Apache-2.0" and model.kind == "drums"
+    assert model.size == 2544694 and model.revision in model.url
+
+
 def write_mono_wav(path: Path, audio: np.ndarray) -> None:
     import wave
 

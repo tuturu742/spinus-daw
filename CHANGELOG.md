@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: much better drums.** A new small model, the Inverse Drum Machine (2.5 MB, downloaded with the
+  Analyzer's other models), now finds the drum hits and tells kick, snare and hi-hats apart. On Spinus's test
+  songs it finds 93 to 100% of kicks and snares and 80 to 98% of hi-hats, where the old drum finder missed most
+  hi-hats and heard many snares twice. Crash and ride cymbals are still mostly missed. Songs analyzed before get
+  their drums found again when you continue. Without the model, the old drum finder is used.
 - **Analyzer: fewer snares taken for kicks.** The drum finder often heard a snare as a kick too, so kicks
   appeared on the snare's beats and the real kicks went to a second kick pad. A hit now counts as a kick only
   if it has a kick's low end.
