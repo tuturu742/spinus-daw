@@ -69,6 +69,7 @@ struct Analysis
         placeModel (models, "htdemucs_6s", { { "htdemucs_6s.yaml", 21 }, { "5c90dfd2.safetensors", 54885744 } },
                     "models: ['5c90dfd2']\n");
         placeBasicPitch (models);
+        placeDrumModel (models);
     }
 };
 
@@ -223,7 +224,8 @@ TEST_CASE ("Track creator: says what is missing, analyzes a song, keeps it, sums
     creator.analyzeAgain();
     REQUIRE (waitFor ([&] { return allSettled (creator); }));
     CHECK (creator.getNeedsText().contains ("MB"));
-    CHECK (creator.getDownloadSize() == 54885744 + 21 + 8451101 + 230444); // Demucs (6 stems), Beat This!, Basic Pitch
+    // Demucs (6 stems), Beat This!, Basic Pitch, Inverse Drum Machine
+    CHECK (creator.getDownloadSize() == 54885744 + 21 + 8451101 + 230444 + 2544694);
     CHECK (statusOf (creator, 0) == TrackCreator::Status::waiting);
 
     // With the model files there, and what Demucs and Basic Pitch found as if from before.

@@ -76,6 +76,20 @@ public:
     /** Chooses 4, 6 or manyInstruments in the Stems box, as the user does: what the window says it needs
         to download follows at once. */
     void setStemChoice (int stems);
+    /** How a song played without a click (playedLive()) is timed: the project's tempo following the band, a tempo
+        change each bar (notes on the right sixteenths and with the recording), or one steady tempo per section
+        with the notes counted on the band's beats (right musically, drifting from the recording). Asked each
+        time (owner 2026-11-22): Add to the project waits for the choice. Kept in the library with the song. */
+    enum class Timing
+    {
+        unchosen,
+        followBand,
+        steady
+    };
+    void setTiming (Timing);
+    Timing getTiming() const { return timing; }
+    /** The song's beats stray from a steady tempo by more than the beat finder's own wobble (0.25 s). */
+    bool playedLive() const;
     int getStemChoice() const { return stemCount.getSelectedId(); }
     /** The model file a choice of the Stems box separates with ("htdemucs", "htdemucs_6s", "mvsep_mega_53"). */
     static juce::String separationModel (int stems);
@@ -395,6 +409,8 @@ private:
     juce::TimedCallback engineWatch { [this] { lookForEngine(); } };
     bool clapWanted = false;   // the notes being made compare sounds by ear (CLAP)
     bool countChecked = false; // checkCount() has run for this song
+    Timing timing = Timing::unchosen;
+    std::vector<songtempo::Section> steadySections() const; // songtempo::sections, whatever the timing
     juce::int64 downloadSize = 0;
     juce::StringArray downloadProblems; // this round's models that could not be downloaded, and why
     double progress = -1.0;
@@ -444,6 +460,8 @@ private:
     juce::ToggleButton fullDataToggle { "Provide full data through MCP" };
     void setFullData (bool on);
     juce::ComboBox stemCount;
+    juce::Label timingLabel { {}, "Timing" };
+    juce::ComboBox timingChoice; // shown for a song played live
     juce::Viewport stemsView;
     juce::Component stemRows; // the stems' rows, scrolled by stemsView
     juce::ProgressBar bar { progress };

@@ -115,9 +115,19 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    Melodic stems play on **3x Osc**; the
    drums become steps on a **Drum Machine** (kick, snare, clap, hats, toms, rim, crash and ride on their
    own pads). Every note, hit and curve keeps its moment in the recording, at the song's tempo (and through its
-   tempo changes), and snaps to sixteenths, so the notes line up with the stems added as audio. A song played
-   live, not to a click, also drifts a little within a tempo: there the notes stay with the recording and fall
-   a little off the grid (the status line says how much), and fewer of its bars repeat exactly. Swap the instrument for the sound
+   tempo changes), and snaps to sixteenths, so the notes line up with the stems added as audio.
+
+   **A song played without a click** (a band playing live, most records before the 1990s) speeds up and slows
+   down a little all the time. The tempo line then says "(played without a click: choose the timing)", and a
+   **Timing** choice appears under it. **Add to the project** waits until you pick one:
+   - **Follow the band**: the project's tempo changes a little at every bar, following the band. The notes land
+     on the right sixteenths and stay in time with the stems added as audio. The Playlist shows many small tempo
+     changes.
+   - **One steady tempo**: one tempo (per section, if the song changes tempo). Each note keeps its place in the
+     bar, counted on the band's own beats, so the notes are right musically, but the stems added as audio drift
+     away from them, up to about a quarter of a second in places.
+
+   The choice is kept with the song for the next time. Swap the instrument for the sound
    you want.
 
    The drums' hits, and which drum each one is, come from the **Inverse Drum Machine**, a small model

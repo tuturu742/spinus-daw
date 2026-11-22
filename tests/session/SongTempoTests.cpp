@@ -138,3 +138,30 @@ TEST_CASE ("The last section's tempo fits all its bars, not only its last downbe
     REQUIRE (found.size() == 1);
     CHECK (found[0].bpm == Catch::Approx (160.0).epsilon (0.0015));
 }
+
+TEST_CASE ("Following a band bar by bar puts every downbeat where the band played it", "[analyzer][tempo]")
+{
+    // 32 bars of a band drifting between 91 and 95 BPM (within 4%: one steady section), no click.
+    std::vector<double> beats;
+    double t = 0.5;
+    for (int i = 0; i <= 128; ++i)
+    {
+        beats.push_back (t);
+        t += 60.0 / (93.0 + 1.8 * std::sin (i / 16.0));
+    }
+    REQUIRE (songtempo::sections (beats, 0.5, 4).size() == 1);
+    const auto steady = songtempo::sectionBeats (songtempo::sections (beats, 0.5, 4), beats);
+    CHECK (songtempo::driftFrom (beats, steady) > 0.25); // a steady grid wanders a quarter beat or more off
+
+    const auto bars = songtempo::barSections (beats, 0.5, 4);
+    REQUIRE (bars.size() == 32);
+    CHECK (bars.back().beats == 0);
+    const auto grid = songtempo::sectionBeats (bars, beats);
+    for (size_t bar = 0; bar < 32; ++bar)
+    {
+        const auto it = std::min_element (grid.begin(), grid.end(), [&] (double a, double b)
+                                          { return std::abs (a - beats[bar * 4]) < std::abs (b - beats[bar * 4]); });
+        CHECK (*it == Catch::Approx (beats[bar * 4]).margin (1.0e-9));
+    }
+    CHECK (songtempo::driftFrom (beats, grid) < 0.02);
+}

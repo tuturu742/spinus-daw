@@ -8,6 +8,7 @@
 #include "plugins/clap/ClapPluginFormat.h"
 #include "AnalysisFakes.h"
 #include "ProgramsTestPlugin.h"
+#include "commands/CommandRegistry.h"
 #include "ui/Analyzer.h"
 #include "ui/Theme.h"
 
@@ -71,9 +72,10 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
     REQUIRE (waitFor (
         [&] { return models.getSiblingFile ("python").getChildFile ("cpu/spinus-build.json").existsAsFile(); }, 60000));
     REQUIRE (waitFor ([&] { return analyzer.getNeedsText().contains ("MB") && ! analyzer.isBusy(); }, 15000));
-    CHECK (analyzer.getDownloadSize() == 84025440 + 21 + 8451101 + 230444); // Demucs, Beat This!, Basic Pitch
+    CHECK (analyzer.getDownloadSize() ==
+           84025440 + 21 + 8451101 + 230444 + 2544694); // Demucs, Beat This!, Basic Pitch, Inverse Drum Machine
     // Each says its licence and where to read about it.
-    REQUIRE (analyzer.getMissingSources().size() == 3);
+    REQUIRE (analyzer.getMissingSources().size() == 4);
     for (const auto& source : analyzer.getMissingSources())
     {
         CHECK ((source.license == "MIT" || source.license == "Apache-2.0"));
@@ -85,6 +87,7 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
     placeModel (models, "htdemucs", { { "htdemucs.yaml", 21 }, { "955717e8.safetensors", 84025440 } },
                 "models: ['955717e8']\n");
     placeBasicPitch (models);
+    placeDrumModel (models);
     REQUIRE (analyzer.analyze (song));
     REQUIRE (waitFor ([&] { return analyzer.getStep() == Analyzer::Step::done || ! analyzer.isBusy(); }, 60000));
     INFO (analyzer.getStatusText());
@@ -100,8 +103,20 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
 
     // Use them for the song: one undo step each.
     session.getHistory().reset (model::Project());
+    // The project's own tempo changes give way to the song's, however many there are.
+    for (auto at : { 3840, 7680, 11520 })
+    {
+        juce::String error;
+        auto change = commands::CommandRegistry::get().create (
+            "project.setTempoChange", juce::JSON::parse ("{\"at\": " + juce::String (at) + ", \"bpm\": 90}"), error);
+        REQUIRE (change != nullptr);
+        REQUIRE (session.getHistory().perform (std::move (change)).wasOk());
+    }
+    REQUIRE (session.getProject().settings.tempoChanges.size() == 3);
     REQUIRE (analyzer.useTempo());
+    CHECK (session.getProject().settings.tempoChanges.empty());
     CHECK (juce::approximatelyEqual (session.getProject().settings.tempoBpm, 120.0));
+    CHECK (! analyzer.playedLive()); // made to a click: no timing to choose
     REQUIRE (analyzer.useKey());
     CHECK (session.getProject().settings.key == model::Key { 9, "minor" });
 
@@ -374,6 +389,7 @@ TEST_CASE ("Analyzer screenshot for the manual", "[.screenshot][analyzer]")
     placeModel (models, "htdemucs", { { "htdemucs.yaml", 21 }, { "955717e8.safetensors", 84025440 } },
                 "models: ['955717e8']\n");
     placeBasicPitch (models);
+    placeDrumModel (models);
     SpinusLookAndFeel lookAndFeel { Theme::dark() };
     Analyzer analyzer (session, &service);
     analyzer.setLookAndFeel (&lookAndFeel);
@@ -471,14 +487,14 @@ TEST_CASE ("Analyzer: what it needs to download follows the Stems choice", "[ui]
     REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
     CHECK (analyzer.getNeedsText().contains ("Demucs, 4 stems"));
     CHECK (! analyzer.getNeedsText().contains ("MVSep"));
-    constexpr juce::int64 beats = 8451101, notes = 230444, many = 1368919887 + 4184;
-    CHECK (analyzer.getDownloadSize() == beats + notes + 84025440 + 21);
+    constexpr juce::int64 beats = 8451101, notes = 230444, drums = 2544694, many = 1368919887 + 4184;
+    CHECK (analyzer.getDownloadSize() == beats + notes + drums + 84025440 + 21);
 
     // Many instruments chosen: at once the MVSep model instead, and back again.
     analyzer.setStemChoice (Analyzer::manyInstruments);
     CHECK (analyzer.getNeedsText().contains ("MVSep"));
     CHECK (! analyzer.getNeedsText().contains ("Demucs"));
-    CHECK (analyzer.getDownloadSize() == beats + notes + many);
+    CHECK (analyzer.getDownloadSize() == beats + notes + drums + many);
     analyzer.setStemChoice (6);
     CHECK (analyzer.getNeedsText().contains ("Demucs, 6 stems"));
     analyzer.setStemChoice (4);
@@ -488,6 +504,7 @@ TEST_CASE ("Analyzer: what it needs to download follows the Stems choice", "[ui]
     // With what many instruments needs downloaded (and not Demucs), the song is analyzed on that choice...
     placeModel (models, "beat_this_small0", { { "small0.ckpt", beats } });
     placeModel (models, "basic_pitch", { { "nmp.onnx", notes } });
+    placeDrumModel (models);
     placeManyInstruments (models);
     analyzer.setStemChoice (Analyzer::manyInstruments);
     REQUIRE (analyzer.analyze (song));
@@ -522,7 +539,8 @@ TEST_CASE ("Analyzer: many instruments, replicated and tuned, added in one undo 
     REQUIRE (waitFor (
         [&] { return models.getSiblingFile ("python").getChildFile ("cpu/spinus-build.json").existsAsFile(); }, 60000));
     placeModel (models, "beat_this_small0", { { "small0.ckpt", 8451101 } });
-    placeModel (models, "basic_pitch", { { "nmp.onnx", 230444 } });
+    placeBasicPitch (models);
+    placeDrumModel (models);
     placeManyInstruments (models);
 
     Analyzer analyzer (session, &service);
@@ -672,7 +690,8 @@ TEST_CASE ("Analyzer: an installed instrument tuned (experimental), and one with
     REQUIRE (waitFor (
         [&] { return models.getSiblingFile ("python").getChildFile ("cpu/spinus-build.json").existsAsFile(); }, 60000));
     placeModel (models, "beat_this_small0", { { "small0.ckpt", 8451101 } });
-    placeModel (models, "basic_pitch", { { "nmp.onnx", 230444 } });
+    placeBasicPitch (models);
+    placeDrumModel (models);
     placeManyInstruments (models);
 
     Analyzer analyzer (session, &service);
@@ -795,7 +814,8 @@ TEST_CASE ("Analyzer: closest presets of installed instruments (a CLAP plugin's 
     REQUIRE (waitFor (
         [&] { return models.getSiblingFile ("python").getChildFile ("cpu/spinus-build.json").existsAsFile(); }, 60000));
     placeModel (models, "beat_this_small0", { { "small0.ckpt", 8451101 } });
-    placeModel (models, "basic_pitch", { { "nmp.onnx", 230444 } });
+    placeBasicPitch (models);
+    placeDrumModel (models);
     placeModel (models, "clap_music",
                 { { "config.json", 628 }, { "preprocessor_config.json", 541 }, { "pytorch_model.bin", 776444665 } });
     placeManyInstruments (models);
