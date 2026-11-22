@@ -8,7 +8,19 @@ import numpy as np
 import pytest
 
 from spinus_ai import drums
-from spinus_ai.drums import KINDS, PADS, RATE, Recogniser, describe, find_hits, make_hit, place_hits
+from spinus_ai.drums import (
+    KICK_LOW,
+    KINDS,
+    PADS,
+    RATE,
+    Recogniser,
+    check_kicks,
+    describe,
+    find_hits,
+    low_share,
+    make_hit,
+    place_hits,
+)
 
 
 @pytest.fixture
@@ -136,3 +148,21 @@ def test_two_different_snares_become_two_pads_and_one_kick_stays_one() -> None:
     assert [h["velocity"] for h in kicks[:2]] == [1.0, 0.5]  # accents, the loudest at full
     assert [g["name"] for g in groups] == ["kick", "snare", "snare 2"]
     assert all(g["end"] > g["start"] for g in groups) and groups[0]["count"] == 8
+
+
+def test_a_hit_without_low_end_is_no_kick() -> None:
+    rng = np.random.default_rng(3)
+    kick, snare = make_hit("kick", rng), make_hit("snare", rng)
+    assert low_share(kick) > 0.3
+    assert low_share(snare) < KICK_LOW
+
+    # Kept from before: a "kick" heard on a snare goes, a real kick and the snare stay.
+    audio = np.zeros(RATE)
+    audio[: len(kick)] += kick
+    audio[RATE // 2 : RATE // 2 + len(snare)] += snare
+    hits = [
+        {"time": 0.0, "kind": "kick", "pad": 60, "velocity": 1.0},
+        {"time": 0.5, "kind": "kick", "pad": 60, "velocity": 0.8},
+        {"time": 0.5, "kind": "snare", "pad": 61, "velocity": 0.8},
+    ]
+    assert [(h["time"], h["kind"]) for h in check_kicks(audio, RATE, hits)] == [(0.0, "kick"), (0.5, "snare")]
