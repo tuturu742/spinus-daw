@@ -62,7 +62,8 @@ struct Section
     Bars that keep no tempo (a fill, a break) or twice or half of it (beats found twice as often in a blast beat,
     half time) stay in the section they are in, and are counted at its tempo, so the bars after them land
    where the song's are. A band that only drifts (within 4%) is one section at its average, as average() gives it. Each
-   section's tempo puts its first and last downbeats where they are in the recording. */
+   section's tempo puts its first and last downbeats where they are in the recording (the last section's last
+   downbeat: that of its last bar at its tempo). */
 inline std::vector<Section> sections (const std::vector<double>& beats, double firstDownbeat, int beatsPerBar)
 {
     const auto bar = std::max (1, beatsPerBar);
@@ -149,7 +150,12 @@ inline std::vector<Section> sections (const std::vector<double>& beats, double f
     for (size_t s = 0; s < starts.size(); ++s)
     {
         const auto from = downbeats[starts[s].first];
-        const auto to = s + 1 < starts.size() ? starts[s + 1].first : downbeats.size() - 1;
+        auto to = s + 1 < starts.size() ? starts[s + 1].first : downbeats.size() - 1;
+        // The last section ends at its last bar that keeps its tempo: beats found in the ring after the song
+        // ends (or a closing slow-down) would otherwise stretch every bar (a 160 BPM song came out at 156).
+        if (s + 1 == starts.size())
+            while (to > starts[s].first + 1 && ! near (barBpm[to - 1], starts[s].second))
+                --to;
         Section section { from, starts[s].second, 0 };
         if (to > starts[s].first)
         {

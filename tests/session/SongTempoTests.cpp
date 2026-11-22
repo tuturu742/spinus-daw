@@ -111,3 +111,16 @@ TEST_CASE ("A song that speeds up for a part and slows down after it: three sect
     CHECK (found[2].from == Catch::Approx (slower));
     CHECK (found[2].bpm == Catch::Approx (145.0).epsilon (0.001));
 }
+
+TEST_CASE ("Beats found after a song ends don't change its tempo", "[analyzer][tempo]")
+{
+    // 16 bars at 160 BPM, then the ring after the last chord, where the beat finder still finds a few beats, late.
+    std::vector<double> beats;
+    for (int i = 0; i < 64; ++i)
+        beats.push_back (i * 0.375);
+    for (auto late : { 24.58, 24.96, 25.34 })
+        beats.push_back (late);
+    const auto found = songtempo::sections (beats, 0.0, 4);
+    REQUIRE (found.size() == 1);
+    CHECK (found[0].bpm == Catch::Approx (160.0).epsilon (0.001));
+}
