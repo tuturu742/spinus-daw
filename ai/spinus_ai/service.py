@@ -728,6 +728,8 @@ class Service:
 
             found = [dict(h) for h in known] if isinstance(known, list) else await self.drum_hits(stem, cache_root, say)
             audio, rate = await run_blocking(lambda: read_wav(str(stem)))
+            if isinstance(known, list):  # kept from before the kicks were checked: checking again changes nothing
+                found = await run_blocking(lambda: drums.check_kicks(audio, rate, found))
             hits, groups = await run_blocking(lambda: drums.group_hits(audio, rate, found))
             return {"notes": drums.place_hits(hits, beats, first_downbeat), "hits": hits, "groups": groups}
 
@@ -747,7 +749,7 @@ class Service:
         model = await run_blocking(lambda: drums.recogniser(self.config / "cache"))
         await say({"kind": "progress", "done": 0.5, "total": 1.0, "step": "Listening for the drums"})
         digest = await run_blocking(lambda: file_digest(stem))
-        cached = cache_root / "analysis" / f"{digest[:20]}-drums-{drums.VERSION}.json"
+        cached = cache_root / "analysis" / f"{digest[:20]}-drums-{drums.VERSION}.{drums.FINDING}.json"
         if cached.exists():
             hits: list[dict[str, Any]] = json.loads(cached.read_text(encoding="utf-8"))
             return hits
