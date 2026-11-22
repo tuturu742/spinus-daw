@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: better bass lines.** The bass's low notes often came out an octave too high, along with extra notes
+  that were only their overtones. Spinus now checks each bass note's octave and leaves the overtones out. In fast
+  songs, notes shorter than about an eighth of a second were dropped, so fast repeated bass and guitar notes went
+  missing; the shortest note kept now follows the song's tempo.
 - **Learn an instrument from the command line and from coding agents.** `spinus --learn <project> --device <id>`
   and the agents' `learn_instrument` tool do what Learn this instrument's Ask the plugin and Listen to every key do,
   without the window, and keep what they learn. Listening now also notes the octave an instrument's keys sound in:

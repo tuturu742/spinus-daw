@@ -1684,6 +1684,7 @@ void Analyzer::transcribeNext()
                                            : "ai.v1.transcribe.notes";
     auto params = object ({ { "file", stems[name].getFullPathName() },
                             { "drums", name == "drums" },
+                            { "bass", name == "bass" },
                             { "beats", beats },
                             { "firstDownbeat", rhythm ? rhythm->firstDownbeat : 0.0 },
                             { "beatsPerBar", rhythm ? rhythm->beatsPerBar : 4 },
