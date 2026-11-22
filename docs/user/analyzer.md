@@ -120,8 +120,9 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    a few seconds learning Spinus's drum sounds the first time) but hears hi-hats and snares less well.
 
    When the song has two clearly different sounds of one kind (a tight snare and a big one, say), each
-   gets a pad of its own ("snare" and "snare 2"), so you can give them different samples. Each pad's
-   loudest hit plays at full strength and the others keep their accents.
+   gets a pad of its own ("snare" and "snare 2"), so you can give them different samples. A drum that only
+   sounds different because another drum plays with it (a hi-hat with or without the kick under it) stays on
+   one pad. Each pad's loudest hit plays at full strength and the others keep their accents.
 
    Beside a replicated stem, two lists choose what plays its notes, then how; each stem can have a
    different choice. The second list shows only the ways the chosen sound can play it, and is hidden when

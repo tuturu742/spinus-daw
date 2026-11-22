@@ -219,6 +219,31 @@ def test_two_different_snares_become_two_pads_and_one_kick_stays_one() -> None:
     assert all(g["end"] > g["start"] for g in groups) and groups[0]["count"] == 8
 
 
+def test_drums_struck_with_other_drums_stay_on_one_pad() -> None:
+    from spinus_ai.drums import group_hits
+
+    rng = np.random.default_rng(4)
+    hat, kick, snare = make_hit("closed_hat", rng) * 0.5, make_hit("kick", rng), make_hit("snare", rng)
+    audio = np.zeros(int(8.5 * RATE))
+    hits = []
+
+    def add(sound: np.ndarray, t: float, kind: str) -> None:
+        start = int(t * RATE)
+        audio[start : start + len(sound)] += sound[: len(audio) - start]
+        hits.append({"time": t, "kind": kind, "pad": PADS[kind], "velocity": 1.0})
+
+    for i in range(16):  # hats on the eighths, a kick on every beat and a snare with every other kick
+        t = i * 0.5
+        add(hat, t, "closed_hat")
+        add(hat, t + 0.25, "closed_hat")
+        add(kick, t, "kick")
+        if i % 2:
+            add(snare, t, "snare")
+    _grouped, groups = group_hits(audio, RATE, hits)
+    # A hat struck with a kick, or a kick with a snare, is the same drum: no "closed hat 2" or "kick 2".
+    assert sorted(g["name"] for g in groups) == ["closed hat", "kick", "snare"]
+
+
 def test_a_hit_without_low_end_is_no_kick() -> None:
     rng = np.random.default_rng(3)
     kick, snare = make_hit("kick", rng), make_hit("snare", rng)
