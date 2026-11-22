@@ -5,6 +5,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: a more exact tempo at the end of a song.** The tempo of a song's last part came from its first and
+  last bar only, and the beat finder can place a bar a few hundredths of a second off: a 160 BPM song came out at
+  159.7, and its notes slowly drifted off the recording. That tempo now fits all the part's beats (159.9).
 - **Analyzer: no more "closed hat 2" and "kick 2" for one drum.** Hits of one drum went to a second pad when
   another drum played with them: hi-hats with the kick under them on one pad, the hi-hats played alone on
   another. Spinus now listens to each drum in its own range, less what was still ringing before it, and keeps
