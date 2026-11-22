@@ -922,7 +922,7 @@ void TrackCreator::separate()
                 work->stems = *restored;
                 for (const auto& [name, file] : work->stems)
                     work->queue.add (name);
-                transcribeNext();
+                checkCount();
             });
     }
     runStep ("ai.v1.stems.separate",
@@ -953,8 +953,33 @@ void TrackCreator::keepStems()
         [this]
         {
             task = nullptr;
-            transcribeNext();
+            checkCount();
         });
+}
+
+void TrackCreator::checkCount()
+{
+    const auto& r = work->rhythm;
+    if ((double)r["tempo"] < 140.0 || (int)r["beatsPerBar"] != 4 || r["counted"].isString() ||
+        ! work->stems.contains ("drums"))
+        return transcribeNext();
+    runStep ("ai.v1.analyze.count",
+             object ({ { "file", work->stems["drums"].getFullPathName() },
+                       { "beats", r["beats"] },
+                       { "firstDownbeat", r["firstDownbeat"] },
+                       { "beatsPerBar", r["beatsPerBar"] },
+                       { "tempo", r["tempo"] },
+                       { "cacheFolder", work->folder.getFullPathName() } }),
+             "Checking the tempo...",
+             [this] (const juce::var& result)
+             {
+                 if ((bool)result["slower"] && result["rhythm"].isObject())
+                 {
+                     work->rhythm = result["rhythm"];
+                     getLibrary().set (work->digest, work->name, "rhythm", work->rhythm);
+                 }
+                 transcribeNext();
+             });
 }
 
 void TrackCreator::transcribeNext()

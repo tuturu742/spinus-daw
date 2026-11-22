@@ -167,6 +167,7 @@ class Service:
             "ai.v1.stems.remove": self.stems_remove,
             "ai.v1.stems.separate": self.stems_separate,
             "ai.v1.analyze.tempo": self.analyze_tempo,
+            "ai.v1.analyze.count": self.analyze_count,
             "ai.v1.analyze.key": self.analyze_key,
             "ai.v1.transcribe.notes": self.transcribe_notes,
             "ai.v1.transcribe.drums": self.transcribe_drums,
@@ -604,6 +605,39 @@ class Service:
             cached.parent.mkdir(parents=True, exist_ok=True)
             cached.write_text(json.dumps(kept) + "\n", encoding="utf-8")
             return {**await run_blocking(lambda: worked_out(kept["beats"], kept["downbeats"])), "cached": False}
+
+        return {"job": self.job(notify, work)}
+
+    async def analyze_count(self, params: dict[str, Any], notify: Notify) -> Any:
+        """Whether a song was counted twice too fast, from its drums: {file (the drum stem), beats, firstDownbeat,
+        beatsPerBar, tempo, cacheFolder} -> {slower: true, rhythm (as ai.v1.analyze.tempo gives it, at half the
+        tempo, "counted": "slower")} or {slower: false} (drums.slower_count). The drum hits are kept for turning
+        the drums into steps after."""
+        if importlib.util.find_spec("numpy") is None:
+            raise RpcError(-32000, "Checking the count needs NumPy: install the python-numpy package.")
+        stem = Path(str(params.get("file", "")))
+        if not stem.is_file():
+            raise RpcError(-32602, f"There is no audio file at {stem}.")
+        beats = [float(b) for b in params.get("beats", [])]
+        first_downbeat = float(params.get("firstDownbeat", beats[0] if beats else 0.0))
+        per_bar = int(params.get("beatsPerBar", 4))
+        tempo = float(params.get("tempo", 0.0))
+        cache_root = Path(str(params.get("cacheFolder", ""))) if params.get("cacheFolder") else self.config / "cache"
+
+        async def work(say: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            from . import drums
+            from .analysis import rhythm
+
+            if tempo < 140 or per_bar != 4:
+                return {"slower": False}
+            hits = await self.drum_hits(stem, cache_root, say)
+            found = drums.slower_count(hits, beats, first_downbeat, per_bar, tempo)
+            if found is None:
+                return {"slower": False}
+            slower, downbeat = found
+            start = slower.index(downbeat) % 4
+            counted = rhythm(slower, slower[start::4])
+            return {"slower": True, "rhythm": {**counted, "mended": [], "counted": "slower"}}
 
         return {"job": self.job(notify, work)}
 
