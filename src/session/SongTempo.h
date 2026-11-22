@@ -62,8 +62,8 @@ struct Section
     Bars that keep no tempo (a fill, a break) or twice or half of it (beats found twice as often in a blast beat,
     half time) stay in the section they are in, and are counted at its tempo, so the bars after them land
    where the song's are. A band that only drifts (within 4%) is one section at its average, as average() gives it. Each
-   section's tempo puts its first and last downbeats where they are in the recording (the last section's last
-   downbeat: that of its last bar at its tempo). */
+   section's tempo puts its first and last downbeats where they are in the recording; the last section's (which
+   has no next section to reach) is the one that fits all its beats best. */
 inline std::vector<Section> sections (const std::vector<double>& beats, double firstDownbeat, int beatsPerBar)
 {
     const auto bar = std::max (1, beatsPerBar);
@@ -164,6 +164,30 @@ inline std::vector<Section> sections (const std::vector<double>& beats, double f
             section.bpm = 60.0 * bars * bar / span;
             if (s + 1 < starts.size())
                 section.beats = (int)bars * bar;
+            else if (to >= starts[s].first + 4 && std::abs (bars - (double)(to - starts[s].first)) < 0.5)
+            {
+                // The last section: no next downbeat to reach, so its tempo is fitted to all its beats (least
+                // squares). Found on 20 ms frames, the last downbeat alone can be 40 ms off, which made a 160 BPM
+                // song 159.7 and moved its last notes off the recording.
+                const auto firstBeat = first + starts[s].first * (size_t)bar;
+                const auto lastBeat = first + to * (size_t)bar;
+                const auto n = (double)(lastBeat - firstBeat + 1);
+                double meanK = 0.0, meanT = 0.0;
+                for (auto i = firstBeat; i <= lastBeat; ++i)
+                {
+                    meanK += (double)(i - firstBeat) / n;
+                    meanT += beats[i] / n;
+                }
+                double covariance = 0.0, variance = 0.0;
+                for (auto i = firstBeat; i <= lastBeat; ++i)
+                {
+                    const auto di = (double)(i - firstBeat) - meanK;
+                    covariance += di * (beats[i] - meanT);
+                    variance += di * di;
+                }
+                if (covariance > 0.0)
+                    section.bpm = 60.0 * variance / covariance;
+            }
         }
         found.push_back (section);
     }

@@ -125,3 +125,16 @@ TEST_CASE ("Beats found after a song ends don't change its tempo", "[analyzer][t
     REQUIRE (found.size() == 1);
     CHECK (found[0].bpm == Catch::Approx (160.0).epsilon (0.001));
 }
+
+TEST_CASE ("The last section's tempo fits all its bars, not only its last downbeat", "[analyzer][tempo]")
+{
+    // 16 bars at 160 BPM, found on 20 ms frames: every beat a little off, the last downbeat 40 ms late.
+    std::vector<double> beats;
+    beats.reserve (65);
+    for (int i = 0; i <= 64; ++i)
+        beats.push_back (std::round ((i * 0.375 + (i % 3 == 0 ? 0.008 : -0.006)) / 0.02) * 0.02);
+    beats.back() = 24.04;
+    const auto found = songtempo::sections (beats, 0.0, 4);
+    REQUIRE (found.size() == 1);
+    CHECK (found[0].bpm == Catch::Approx (160.0).epsilon (0.0015));
+}
