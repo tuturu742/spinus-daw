@@ -5,6 +5,14 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: a Timing choice for songs played without a click.** A band that speeds up and slows down (AC/DC's
+  "Back in Black", for example) had its notes snapped to a steady grid that wandered up to a quarter of a second
+  from the band, so many notes landed on the wrong sixteenth. Such a song now asks how to time it: **Follow the
+  band** (a small tempo change at every bar; the notes stay with the recording) or **One steady tempo** (the
+  notes counted on the band's beats, the recording drifting from them). On "Back in Black" kicks matching a tab
+  went from 46% to 74%, snares from 50% to 82%, bass notes from 43% to 67%.
+- **Analyzer: Use for the song works on a project with several tempo changes.** Replacing them stopped part way
+  with "there is no tempo change at tick ...".
 - **Analyzer and Track creator: the slower count for songs that fit two tempos.** A funk song at 100 BPM was
   found at 200, so its bars came out half as long. When a song found at 140 BPM or faster has its snare on only
   one beat of each bar, Spinus now counts it at half the tempo. Fast punk and metal songs, whose snare falls on

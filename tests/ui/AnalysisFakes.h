@@ -95,6 +95,12 @@ inline bool placeBasicPitch (const juce::File& models)
     return false;
 }
 
+/** The drum model's checkpoint (Inverse Drum Machine), as if downloaded: the Analyzer and the Track creator need it. */
+inline void placeDrumModel (const juce::File& models)
+{
+    placeModel (models, "drum_transcriber", { { "drums.ckpt", 2544694 } });
+}
+
 /** A 6-second stereo song: a click every half second over an A minor chord. */
 inline juce::File makeSong (const juce::File& folder, const juce::String& name = "Test Song")
 {

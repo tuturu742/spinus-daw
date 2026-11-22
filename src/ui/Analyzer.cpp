@@ -197,6 +197,15 @@ Analyzer::Analyzer (Session& s, ai::AiService* a) : Panel ("analyzer", "Analyzer
                           "and keeps those it hears; it is a bigger download (1.4 GB) and slower, best on a "
                           "graphics card with 16 GB of memory.");
     stemCount.setSelectedId (4, juce::dontSendNotification);
+    timingChoice.addItem ("Follow the band (a tempo change each bar; notes stay with the recording)", 1);
+    timingChoice.addItem ("One steady tempo (notes counted on the band's beats; the recording drifts from them)", 2);
+    timingChoice.setTextWhenNothingSelected ("Choose: follow the band, or one steady tempo");
+    timingChoice.setTooltip ("This song was played without a click, so its tempo wanders. Follow the band: the "
+                             "project's tempo changes a little each bar, so the notes land on the right sixteenths "
+                             "and stay with the stems added as audio. One steady tempo: the notes keep their place "
+                             "in the bar, but the stems added as audio drift from them.");
+    timingChoice.onChange = [this]
+    { setTiming (timingChoice.getSelectedId() == 1 ? Timing::followBand : Timing::steady); };
     // What the window says it needs to download follows the choice at once.
     stemCount.onChange = [this]
     {
@@ -259,7 +268,8 @@ Analyzer::Analyzer (Session& s, ai::AiService* a) : Panel ("analyzer", "Analyzer
              &fullDataToggle })
         addAndMakeVisible (c);
     for (auto* c : std::initializer_list<juce::Component*> { &needsText, &downloadButton, &engineButton, &bar,
-                                                             &cancelButton, &addButton, &continueButton, &anewButton })
+                                                             &cancelButton, &addButton, &continueButton, &anewButton,
+                                                             &timingLabel, &timingChoice })
         addChildComponent (c);
     // The stems' rows scroll: separating into many instruments can give a dozen or more.
     stemRows.addChildComponent (drumFolderButton);
@@ -343,6 +353,7 @@ bool Analyzer::analyze (const juce::File& file)
     resume = afterEngine = nullptr;
     clapWanted = false;
     countChecked = false;
+    timing = Timing::unchosen;
     rhythm.reset();
     key.reset();
     stems.clear();
@@ -816,21 +827,51 @@ void Analyzer::findTempo()
             });
 }
 
-std::vector<songtempo::Section> Analyzer::getTempoSections() const
+std::vector<songtempo::Section> Analyzer::steadySections() const
 {
     return rhythm ? songtempo::sections (beatTimes, rhythm->firstDownbeat, rhythm->beatsPerBar)
                   : std::vector<songtempo::Section>();
 }
 
+std::vector<songtempo::Section> Analyzer::getTempoSections() const
+{
+    if (rhythm && timing == Timing::followBand && playedLive())
+        return songtempo::barSections (beatTimes, rhythm->firstDownbeat, rhythm->beatsPerBar);
+    return steadySections();
+}
+
 double Analyzer::getSongTempo() const
 {
-    const auto sections = getTempoSections();
+    const auto sections = steadySections();
     return sections.empty() ? 0.0 : sections.front().bpm;
+}
+
+bool Analyzer::playedLive() const
+{
+    // The beat finder's own wobble is up to about 0.2 s on songs made to a click.
+    return rhythm && songtempo::driftFrom (beatTimes, songtempo::sectionBeats (steadySections(), beatTimes)) > 0.25;
 }
 
 std::vector<double> Analyzer::placementBeats() const
 {
-    return rhythm ? songtempo::sectionBeats (getTempoSections(), beatTimes) : beatTimes;
+    if (! rhythm)
+        return beatTimes;
+    // One steady tempo for a song played live: the notes counted on the band's own beats.
+    if (timing == Timing::steady && playedLive())
+        return beatTimes;
+    return songtempo::sectionBeats (getTempoSections(), beatTimes);
+}
+
+void Analyzer::setTiming (Timing chosen)
+{
+    timing = chosen;
+    timingChoice.setSelectedId (chosen == Timing::followBand ? 1
+                                : chosen == Timing::steady   ? 2
+                                                             : 0,
+                                juce::dontSendNotification);
+    if (chosen != Timing::unchosen && getLibrary().isAvailable() && songDigest.isNotEmpty())
+        getLibrary().set (songDigest, song.getFileName(), "timing",
+                          chosen == Timing::followBand ? "follow the band" : "steady");
 }
 
 bool Analyzer::addTempoSteps (Steps& steps, bool& changed) const
@@ -841,7 +882,9 @@ bool Analyzer::addTempoSteps (Steps& steps, bool& changed) const
     changed = false;
     if (sections.empty())
         return true;
-    for (auto& change : steps.project().settings.tempoChanges)
+    // A copy: each removal changes the project's list.
+    const auto existing = steps.project().settings.tempoChanges;
+    for (const auto& change : existing)
     {
         if (steps.add ("project.removeTempoChange", object ({ { "at", (juce::int64)change.at } })).isVoid())
             return false;
@@ -878,18 +921,29 @@ void Analyzer::applyTempo (const juce::var& result)
         // A song that changes tempo: each tempo from where it starts ("158.0 BPM, then 145.3 from 1:19").
         juce::String text (getSongTempo(), 1);
         text << " BPM";
-        const auto sections = getTempoSections();
+        const auto sections = steadySections();
         for (size_t i = 1; i < sections.size(); ++i)
         {
             const auto at = (int)std::lround (sections[i].from);
             text << ", then " << juce::String (sections[i].bpm, 1) << " from " << at / 60 << ":"
                  << juce::String (at % 60).paddedLeft ('0', 2);
         }
-        tempoText.setText (text + ", " + juce::String (rhythm->beatsPerBar) + " beats per bar",
+        tempoText.setText (text + ", " + juce::String (rhythm->beatsPerBar) + " beats per bar" +
+                               (playedLive() ? " (played without a click: choose the timing)" : ""),
                            juce::dontSendNotification);
+        // The timing kept with the song, from before.
+        const auto kept = getLibrary().isAvailable() && songDigest.isNotEmpty()
+                              ? getLibrary().read (songDigest)["timing"].toString()
+                              : juce::String();
+        setTiming (kept == "follow the band" ? Timing::followBand
+                   : kept == "steady"        ? Timing::steady
+                                             : Timing::unchosen);
     }
     else
         tempoText.setText ("No steady beat found.", juce::dontSendNotification);
+    timingLabel.setVisible (playedLive());
+    timingChoice.setVisible (playedLive());
+    resized();
 }
 
 void Analyzer::findKey()
@@ -1393,6 +1447,12 @@ bool Analyzer::addChosen()
     if (std::none_of (uses.begin(), uses.end(), [] (auto& u) { return u.second != StemUse::leaveOut; }))
     {
         cannotAdd ("every stem is left out.");
+        return false;
+    }
+    if (playedLive() && timing == Timing::unchosen)
+    {
+        cannotAdd ("this song was played without a click: choose its Timing first (follow the band, or one steady "
+                   "tempo).");
         return false;
     }
     if (! addStems (uses, getChosenSounds(), getChosenInstruments()))
@@ -2489,12 +2549,15 @@ bool Analyzer::addNotesToProject()
                                                            (tempoChanges == 1 ? " tempo change" : " tempo changes") +
                                                            " where the song's tempo changes")
                             : juce::String()) +
-                  // The beat finder's own wobble is up to about 0.2 s on songs made to a click.
-                  (songtempo::driftFrom (beatTimes, placementBeats()) > 0.25
-                       ? ". This song speeds up and slows down (played live, not to a click): the notes keep the "
-                         "recording's timing, so in places they are up to " +
-                             juce::String (songtempo::driftFrom (beatTimes, placementBeats()), 1) + " s off the grid"
-                       : juce::String()) +
+                  (! playedLive() ? juce::String()
+                   : timing == Timing::followBand
+                       ? ". This song was played without a click: the project's tempo follows the band, bar by bar"
+                       : ". This song was played without a click: the notes are counted on the band's beats at a "
+                         "steady tempo, so the stems added as audio drift from them by up to " +
+                             juce::String (songtempo::driftFrom (beatTimes,
+                                                                 songtempo::sectionBeats (steadySections(), beatTimes)),
+                                           1) +
+                             " s") +
                   ". Ctrl+Z takes them away." +
                   (tuneNotes.isEmpty() ? juce::String() : " " + tuneNotes.joinIntoString (" "))
             : "Added, but not every sound could be loaded: " + result.getErrorMessage(),
@@ -2762,6 +2825,13 @@ void Analyzer::resized()
         area.removeFromTop (4);
     };
     row (tempoLabel, tempoText, &useTempoButton);
+    if (timingChoice.isVisible())
+    {
+        auto r = area.removeFromTop (28);
+        timingLabel.setBounds (r.removeFromLeft (60));
+        timingChoice.setBounds (r.removeFromLeft (juce::jmin (r.getWidth(), 520)).reduced (0, 1));
+        area.removeFromTop (4);
+    }
     row (keyLabel, keyText, &useKeyButton);
     {
         auto r = area.removeFromTop (28);

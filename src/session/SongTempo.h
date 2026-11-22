@@ -219,6 +219,25 @@ inline std::vector<double> sectionBeats (const std::vector<Section>& sections, c
     return grid;
 }
 
+/** For following a band that plays without a click: one section per bar, each bar's tempo putting the next
+    downbeat where the band played it (the downbeats every `beatsPerBar` beats from the first). The last bar's tempo
+    goes on to the end. Fewer than two bars: sections(). */
+inline std::vector<Section> barSections (const std::vector<double>& beats, double firstDownbeat, int beatsPerBar)
+{
+    const auto bar = std::max (1, beatsPerBar);
+    size_t first = 0;
+    for (size_t i = 0; i < beats.size(); ++i)
+        if (std::abs (beats[i] - firstDownbeat) < std::abs (beats[first] - firstDownbeat))
+            first = i;
+    std::vector<Section> bars;
+    for (auto i = first; i + (size_t)bar < beats.size(); i += (size_t)bar)
+        bars.push_back ({ beats[i], 60.0 * bar / std::max (1.0e-6, beats[i + (size_t)bar] - beats[i]), bar });
+    if (bars.size() < 2)
+        return sections (beats, firstDownbeat, beatsPerBar);
+    bars.back().beats = 0;
+    return bars;
+}
+
 /** How far, in seconds, the song's beats stray from the nearest beat of `grid`. */
 inline double driftFrom (const std::vector<double>& beats, const std::vector<double>& grid)
 {
