@@ -116,6 +116,7 @@ TEST_CASE ("Beats found after a song ends don't change its tempo", "[analyzer][t
 {
     // 16 bars at 160 BPM, then the ring after the last chord, where the beat finder still finds a few beats, late.
     std::vector<double> beats;
+    beats.reserve (67);
     for (int i = 0; i < 64; ++i)
         beats.push_back (i * 0.375);
     for (auto late : { 24.58, 24.96, 25.34 })
