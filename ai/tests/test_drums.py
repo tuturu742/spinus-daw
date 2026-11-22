@@ -260,3 +260,61 @@ def test_a_hit_without_low_end_is_no_kick() -> None:
         {"time": 0.5, "kind": "snare", "pad": 61, "velocity": 0.8},
     ]
     assert [(h["time"], h["kind"]) for h in check_kicks(audio, RATE, hits)] == [(0.0, "kick"), (0.5, "snare")]
+
+
+def test_a_song_counted_twice_too_fast_is_counted_at_half() -> None:
+    from spinus_ai.drums import slower_count
+
+    beats = [0.1 + i * 0.3 for i in range(64)]  # found at 200 BPM
+    kicks = [{"time": beats[i], "kind": "kick"} for i in range(0, 64, 4)]
+    # A funk beat at 100: the snare on its 2 and 4, so on beat 3 of each bar of four at 200.
+    half_time = kicks + [{"time": beats[i], "kind": "snare"} for i in range(2, 64, 4)]
+    found = slower_count(half_time, beats, beats[0], 4, 200.0)
+    assert found is not None
+    slower, downbeat = found
+    assert slower == beats[0::2]
+    assert downbeat == beats[0]
+    assert all(
+        ((beats.index(h["time"]) - beats.index(downbeat)) // 2) % 4 in (1, 3) for h in half_time if h["kind"] == "snare"
+    )
+
+    # A fast punk beat counted right: the snare on every other beat (2 and 4 at 200). And slower songs stay.
+    punk = kicks + [{"time": beats[i], "kind": "snare"} for i in range(1, 64, 2)]
+    assert slower_count(punk, beats, beats[0], 4, 200.0) is None
+    assert slower_count(half_time, beats, beats[0], 4, 120.0) is None
+    assert slower_count(half_time, beats, beats[0], 3, 200.0) is None
+    # The bars found a beat late: the snare on beat 2 of four at 200; still 2 and 4 at half.
+    late = slower_count(half_time, beats, beats[1], 4, 200.0)
+    assert late == (beats[0::2], beats[4])  # the snares at beats[6], [14]...: beats 2 and 4 from beats[4]
+
+
+async def test_the_service_counts_a_song_at_half_when_its_drums_say_so(tmp_path: Path) -> None:
+    from typing import Any
+
+    from test_stems import collect, fake_download, service_with_fake_engine
+
+    service = service_with_fake_engine(tmp_path, [])
+    beats = [0.1 + i * 0.3 for i in range(64)]
+    heard = [{"time": beats[i], "kind": "kick", "pad": PADS["kick"], "velocity": 1.0} for i in range(0, 64, 4)]
+    heard += [{"time": beats[i], "kind": "snare", "pad": PADS["snare"], "velocity": 1.0} for i in range(2, 64, 4)]
+
+    async def engine(method: str, params: dict[str, Any], progress: Any = None) -> Any:
+        return {"hits": [{**h, "finder": drums.MODEL_FINDER} for h in heard]}
+
+    service.engine.call = engine  # type: ignore[method-assign]
+    service.engine.plan = lambda: object()  # type: ignore[assignment,method-assign,return-value]
+    fake_download(service, "drum_transcriber")
+    stem = tmp_path / "drums.wav"
+    write_mono_wav(stem, np.zeros(RATE))
+    params = {"file": str(stem), "beats": beats, "firstDownbeat": beats[0], "beatsPerBar": 4, "tempo": 200.0,
+              "cacheFolder": str(tmp_path / "c")}  # fmt: skip
+    done, _ = await collect(service, "ai.v1.analyze.count", params)
+    assert done["kind"] == "done", done
+    result = done["result"]
+    assert result["slower"] and result["rhythm"]["counted"] == "slower"
+    assert result["rhythm"]["tempo"] == pytest.approx(100.0, abs=0.1) and result["rhythm"]["beatsPerBar"] == 4
+    assert result["rhythm"]["firstDownbeat"] == pytest.approx(beats[0])
+    params["tempo"] = 120.0  # not fast: not even listened to
+    done, _ = await collect(service, "ai.v1.analyze.count", params)
+    assert done["result"] == {"slower": False}
+    await service.close()

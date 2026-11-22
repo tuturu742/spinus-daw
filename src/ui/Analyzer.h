@@ -308,6 +308,9 @@ private:
                  const std::function<void (const juce::String&)>& failed = {}); // default: fail()
     void downloadNext();
     void findTempo();
+    /** Once per song, before its stems become notes: a song counted twice too fast (its snare on one beat of each
+        bar at 140 BPM or more) is counted at half the tempo (ai.v1.analyze.count), then `then`. */
+    void checkCount (const std::function<void()>& then);
     void transcribeNext();
     /** How loud each melodic stem is and where it sits, over time (on a thread of its own), then `then`. */
     void measureDynamics (const std::function<void()>& then);
@@ -390,7 +393,8 @@ private:
     juce::StringArray afterEngineNeeds;
     bool lookingForEngine = false;
     juce::TimedCallback engineWatch { [this] { lookForEngine(); } };
-    bool clapWanted = false; // the notes being made compare sounds by ear (CLAP)
+    bool clapWanted = false;   // the notes being made compare sounds by ear (CLAP)
+    bool countChecked = false; // checkCount() has run for this song
     juce::int64 downloadSize = 0;
     juce::StringArray downloadProblems; // this round's models that could not be downloaded, and why
     double progress = -1.0;

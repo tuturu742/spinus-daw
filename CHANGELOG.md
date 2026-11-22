@@ -5,6 +5,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer and Track creator: the slower count for songs that fit two tempos.** A funk song at 100 BPM was
+  found at 200, so its bars came out half as long. When a song found at 140 BPM or faster has its snare on only
+  one beat of each bar, Spinus now counts it at half the tempo. Fast punk and metal songs, whose snare falls on
+  every other beat, keep theirs.
 - **Analyzer: a more exact tempo at the end of a song.** The tempo of a song's last part came from its first and
   last bar only, and the beat finder can place a bar a few hundredths of a second off: a 160 BPM song came out at
   159.7, and its notes slowly drifted off the recording. That tempo now fits all the part's beats (159.9).

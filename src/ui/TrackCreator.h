@@ -201,6 +201,9 @@ private:
     void measureLoudness();
     void separate();
     void keepStems();
+    /** A song counted twice too fast (its snare on one beat of each bar at 140 BPM or more) is counted at half the
+        tempo (ai.v1.analyze.count, as in the Analyzer), then transcribeNext(). */
+    void checkCount();
     void transcribeNext();
     void measureStyle();
     void finishSong (const juce::var& features, bool keptBefore);

@@ -109,6 +109,8 @@ next update) or **Delete them too**.
 Once the songs are analyzed, **What the songs have in common** says it in plain words, for example:
 
 - **Tempo**: "120 to 128 BPM, typically 124 BPM; 4 beats per bar."
+- **Tempo counted at the slower speed**: like the Analyzer, a song found at 140 BPM or faster whose snare falls
+  on only one beat of each bar is counted at half that tempo (100 rather than 200).
 - **Tempo, second thoughts**: when a fast song has its snare on every beat, Spinus adds that it "may be
   felt at half that speed" (and the other way round for a slow one). The tempo itself is left as found.
 - **Key**: "mostly minor (67 % of the songs): A minor (2), C major." Spinus asks several independent

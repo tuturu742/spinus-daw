@@ -53,6 +53,12 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
    works the tempo out from the hits themselves. **Use for the song** sets your song's tempo, with
    [tempo changes](playlist.md) where the song's tempo changes (and the time signature, if the bars are not four
    beats), in one undo step. **Add to the project** sets them too.
+
+   A song can often be counted at two speeds, such as 100 or 200 BPM; Spinus picks the slower one. Once the stems
+   are separated, before their notes are made, it checks the drums of a song found at 140 BPM or faster: when the
+   snare falls on only one beat of each bar, the beat was found twice too fast, and the tempo becomes half
+   ("100.0 BPM, 4 beats per bar (half the beat found: the snare falls once a bar)"). A fast song whose snare
+   falls on every other beat (punk, metal) keeps its tempo.
 4. **Key**: for example "A minor". When it is not sure, it says what else it might be. **Use for the song**
    sets your song's key.
 5. **Stems**: choose **4 stems** (vocals, drums, bass, other) or **6 stems** (also piano and guitar, less

@@ -342,6 +342,7 @@ bool Analyzer::analyze (const juce::File& file)
     song = file;
     resume = afterEngine = nullptr;
     clapWanted = false;
+    countChecked = false;
     rhythm.reset();
     key.reset();
     stems.clear();
@@ -1528,12 +1529,47 @@ bool Analyzer::makeNotesWith (const std::map<juce::String, Sounds>& soundPerStem
     resume = [this, soundPerStem, instrumentPerStem] { makeNotesWith (soundPerStem, instrumentPerStem); };
     if (! withPresets.empty() || clap)
     {
-        checkReady ([this, withPresets] { measurePresets (withPresets, 0, [this] { transcribeNext(); }); },
-                    { "clap_music" });
+        checkReady (
+            [this, withPresets]
+            { checkCount ([this, withPresets] { measurePresets (withPresets, 0, [this] { transcribeNext(); }); }); },
+            { "clap_music" });
         return true;
     }
-    checkReady ([this] { transcribeNext(); });
+    checkReady ([this] { checkCount ([this] { transcribeNext(); }); });
     return true;
+}
+
+void Analyzer::checkCount (const std::function<void()>& then)
+{
+    // Only a fast song in 4 can have been counted twice too fast (owner 2026-11-22: 100 rather than 200).
+    if (countChecked || ! rhythm || rhythm->tempo < 140.0 || rhythm->beatsPerBar != 4 || ! stems.contains ("drums") ||
+        ! stems["drums"].existsAsFile())
+        return then();
+    countChecked = true;
+    juce::Array<juce::var> beats;
+    for (auto b : beatTimes)
+        beats.add (b);
+    runJob (
+        "ai.v1.analyze.count",
+        object ({ { "file", stems["drums"].getFullPathName() },
+                  { "beats", beats },
+                  { "firstDownbeat", rhythm->firstDownbeat },
+                  { "beatsPerBar", rhythm->beatsPerBar },
+                  { "tempo", rhythm->tempo },
+                  { "cacheFolder", getCacheFolder().getFullPathName() } }),
+        "Checking the tempo",
+        [this, then] (const juce::var& result)
+        {
+            if ((bool)result["slower"] && result["rhythm"].isObject())
+            {
+                getLibrary().set (songDigest, song.getFileName(), "rhythm", result["rhythm"]);
+                applyTempo (result["rhythm"]);
+                tempoText.setText (tempoText.getText() + " (half the beat found: the snare falls once a bar)",
+                                   juce::dontSendNotification);
+            }
+            then();
+        },
+        [then] (const juce::String&) { then(); }); // the tempo as found
 }
 
 bool Analyzer::usesClap (const juce::String& stem) const

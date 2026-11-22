@@ -404,6 +404,54 @@ def model_hits(
     return hits
 
 
+def slower_count(
+    hits: list[dict[str, Any]], beats: list[float], first_downbeat: float, beats_per_bar: int, tempo: float
+) -> tuple[list[float], float] | None:
+    """The beats at half the tempo, when the song is counted twice too fast (owner 2026-11-22: a song that can be
+    counted at 100 or 200 is 100): at 140 BPM or more in 4, with the snare on one beat of each bar only (the
+    backbeat of 2 and 4 at half the speed), never on every other beat (a fast song's own 2 and 4). Returns (every
+    other beat, the new first downbeat, with the snare on its beats 2 and 4) or None."""
+    if tempo < 140 or beats_per_bar != 4 or len(beats) < 16:
+        return None
+    times = np.asarray(beats, dtype=float)
+    intervals = np.diff(times)
+    middle = float(np.median(intervals))
+    period = float(np.mean(intervals[np.abs(intervals - middle) <= 0.1 * middle]))
+    # Each beat's place in the steady count: the beats found skip or add one here and there, and counting them one
+    # by one would put every beat after that a place out.
+    place = np.zeros(len(times), dtype=int)
+    anchor = 0  # the last beat that fell where the steady count has one: stray beats don't move the count
+    for i in range(1, len(times)):
+        steps = (times[i] - times[anchor]) / period
+        place[i] = place[anchor] + round(steps)
+        if abs(steps - round(steps)) < 0.15 and round(steps) >= 1:
+            anchor = i
+    first = int(np.argmin(np.abs(times - first_downbeat)))
+    where = np.zeros(4)
+    snares = 0
+    for h in hits:
+        if h.get("kind") not in ("snare", "clap"):
+            continue
+        snares += 1
+        i = int(np.argmin(np.abs(times - float(h["time"]))))
+        if abs(times[i] - float(h["time"])) < 0.06:
+            where[(place[i] - place[first]) % 4] += 1
+    if snares < 16:
+        return None
+    order = np.argsort(where)[::-1]
+    backbeat, second = int(order[0]), where[order[1]]
+    if where[backbeat] < 0.3 * snares or where[backbeat] < 2.5 * max(second, 1.0):
+        return None
+    # Every other place, in step with the snare's, the bars starting two of them before it (it falls on 2 and 4):
+    # each on its beat found, or between its neighbours where none was found.
+    start = place[first] + (backbeat - 2) % 4
+    known = {int(p): float(t) for p, t in zip(place[::-1], times[::-1], strict=True)}  # the first beat at a place
+    slower = [
+        known[p] if p in known else float(np.interp(p, place, times)) for p in range(start % 2, int(place[-1]) + 1, 2)
+    ]
+    return slower, known.get(int(start), float(np.interp(start, place, times)))
+
+
 def check_kicks(audio: np.ndarray, rate: int, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Hits found before (kept in the analysis library) without the kicks that have no low end."""
     from .transcribe import resample
