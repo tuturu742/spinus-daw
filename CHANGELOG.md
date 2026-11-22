@@ -8,6 +8,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 - **Analyzer: fewer snares taken for kicks.** The drum finder often heard a snare as a kick too, so kicks
   appeared on the snare's beats and the real kicks went to a second kick pad. A hit now counts as a kick only
   if it has a kick's low end.
+- **Analyzer: the right tempo when a song ends with a ringing chord.** The beat finder can find a few beats in the
+  ring after a song ends, and they stretched every bar: a 160 BPM song came out at 156. The tempo now ends at the
+  last bar that keeps it.
 - **Analyzer: better bass lines.** The bass's low notes often came out an octave too high, along with extra notes
   that were only their overtones. Spinus now checks each bass note's octave and leaves the overtones out. In fast
   songs, notes shorter than about an eighth of a second were dropped, so fast repeated bass and guitar notes went
