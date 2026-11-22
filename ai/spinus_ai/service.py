@@ -726,9 +726,16 @@ class Service:
             from . import drums
             from .compute.worker import read_wav
 
-            found = [dict(h) for h in known] if isinstance(known, list) else await self.drum_hits(stem, cache_root, say)
+            # Hits kept from before the drum transcription model was downloaded are found again with it.
+            earlier = [dict(h) for h in known if isinstance(h, dict)] if isinstance(known, list) else None
+            by_model = earlier is not None and any(h.get("finder") == drums.MODEL_FINDER for h in earlier)
+            if not by_model and self.drum_model() is not None:
+                earlier = None
+            kept = earlier is not None
+            found = earlier if earlier is not None else await self.drum_hits(stem, cache_root, say)
             audio, rate = await run_blocking(lambda: read_wav(str(stem)))
-            if isinstance(known, list):  # kept from before the kicks were checked: checking again changes nothing
+            if kept and not any(h.get("finder") == drums.MODEL_FINDER for h in found):
+                # kept from before the kicks were checked: checking again changes nothing
                 found = await run_blocking(lambda: drums.check_kicks(audio, rate, found))
             hits, groups = await run_blocking(lambda: drums.group_hits(audio, rate, found))
             return {"notes": drums.place_hits(hits, beats, first_downbeat), "hits": hits, "groups": groups}
@@ -738,9 +745,34 @@ class Service:
     async def drum_hits(
         self, stem: Path, cache_root: Path, say: Callable[[dict[str, Any]], Awaitable[None]]
     ) -> list[dict[str, Any]]:
-        """The drum hits of a stem, kept in the cache by its contents."""
+        """The drum hits of a stem, kept in the cache by its contents: with the drum transcription model when it
+        is downloaded (in the analysis engine), else with the recogniser."""
         from . import drums
         from .compute.worker import read_wav
+
+        transcriber = self.drum_model()
+        if transcriber is not None:
+            digest = await run_blocking(lambda: file_digest(stem))
+            cached = cache_root / "analysis" / f"{digest[:20]}-{transcriber.id}.json"
+            if cached.exists():
+                kept: list[dict[str, Any]] = json.loads(cached.read_text(encoding="utf-8"))
+                return kept
+
+            async def progress(update: dict[str, Any]) -> None:
+                await say({"kind": "progress", "done": float(update.get("done", 0.0)), "total": 1.0,
+                           "step": str(update.get("step", "Listening for the drums"))})  # fmt: skip
+
+            try:
+                checkpoint = self.weights.folder(transcriber) / transcriber.files[0].path
+                found = await self.engine.call(
+                    "drum_hits", {"input": str(stem), "checkpoint": str(checkpoint)}, progress
+                )
+                heard: list[dict[str, Any]] = list(found["hits"])
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                cached.write_text(json.dumps(heard) + "\n", encoding="utf-8")
+                return heard
+            except EngineError as error:  # e.g. an analysis engine from before the model: the recogniser
+                log.warning("Could not use the drum transcription model: %s", error)
 
         model_file = self.config / "cache" / f"drum-recogniser-{drums.VERSION}.json"
         if not model_file.exists():
@@ -762,6 +794,13 @@ class Service:
         cached.parent.mkdir(parents=True, exist_ok=True)
         cached.write_text(json.dumps(hits) + "\n", encoding="utf-8")
         return hits
+
+    def drum_model(self) -> Any:
+        """The drum transcription model, when it is downloaded and the analysis engine can run it."""
+        model = find_model("drum_transcriber")
+        if model is None or not self.weights.is_ready(model) or self.engine.plan() is None:
+            return None
+        return model
 
     async def make_samples(self, params: dict[str, Any], notify: Notify) -> Any:
         """Samples from a stem: {file, drums (true for a drum stem), beats, firstDownbeat,

@@ -45,6 +45,7 @@ class Worker:
             "benchmark": self.benchmark,
             "separate": self.separate,
             "beats": self.beats,
+            "drum_hits": self.drum_hits,
             "embed": self.embed,
         }
         self.models: dict[str, Any] = {}  # loaded stem separators, by folder
@@ -251,6 +252,25 @@ class Worker:
             "downbeats": [float(d) for d in downbeats],
             "seconds": time.perf_counter() - start,
         }
+
+    def drum_hits(self, params: dict[str, Any], say: Say) -> Any:
+        """The hits of a drum stem (a WAV file) and what each is, with the drum transcription model: params
+        input, checkpoint (its .ckpt file). {hits: [{time, kind, pad, velocity, finder}]}, times in seconds."""
+        from .. import drums
+        from ..transcribe import resample
+        from . import drum_model
+
+        checkpoint = str(params["checkpoint"])
+        key = "drums:" + checkpoint
+        if key not in self.models:
+            self.models[key] = drum_model.load(checkpoint, self.kind)
+        say({"done": 0.1, "step": "Listening for the drums"})
+        audio, rate = read_wav(str(params["input"]))
+        start = time.perf_counter()
+        mono = resample(audio.mean(axis=0), rate, drum_model.RATE)
+        onsets, velocities = drum_model.activations(self.models[key], mono, self.kind)
+        hits = drums.model_hits(onsets, velocities, list(drum_model.CLASSES), drum_model.FRAME_RATE)
+        return {"hits": hits, "seconds": time.perf_counter() - start}
 
     def embed(self, params: dict[str, Any], say: Say) -> Any:
         """How sounds sound, as unit vectors (LAION-CLAP's audio tower): params model (a folder

@@ -575,6 +575,8 @@ juce::StringArray Analyzer::neededModels() const
     if (beatModel.isNotEmpty())
         needed.add (beatModel);
     needed.add ("basic_pitch");
+    // Drum hits: without it (an older download), the drum recogniser that needs no download finds them.
+    needed.add ("drum_transcriber");
     needed.add (separationModel (stemCount.getSelectedId()));
     // Closest presets and drum samples, and synths tuned from their closest preset, compare sounds by ear (CLAP).
     bool clap = clapWanted;

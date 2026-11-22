@@ -36,7 +36,7 @@ computer; nothing is sent anywhere.
 2. **The analysis engine** (PyTorch), installed once: the Track creator offers a **Set up the analysis
    engine...** button that opens [the analysis engine page](analysis-engine.md).
 3. **Model files**, downloaded once: Beat This! (8 MB on the CPU, 81 MB with a graphics card), Demucs for
-   6 stems (55 MB: drums, bass, vocals, guitar, piano and the rest) and Basic Pitch (230 KB). The Track creator says what is missing and how big it is;
+   6 stems (55 MB: drums, bass, vocals, guitar, piano and the rest) Basic Pitch (230 KB) and the Inverse Drum Machine (2.5 MB, for the drums). The Track creator says what is missing and how big it is;
    click **Download** to agree, and it carries on. The Analyzer's **Sources and licences...** says where
    each comes from and under which licence, and can download one from another link its authors give (the
    models are shared, so the Track creator then has it too).

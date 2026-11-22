@@ -10,6 +10,11 @@ recordings. The trained numbers are kept in the AI service's cache.
 Then: onsets (spectral flux, from listening.py), each hit's sound described by its spectrum shape and
 envelope, the recogniser's guess, toms split into low, mid and high by pitch, and the hits placed on the
 song's beats as Drum Machine pads.
+
+When the drum transcription model is downloaded (the Inverse Drum Machine, Apache-2.0: compute/drum_model.py),
+it finds the hits and what each is instead, in the analysis engine; model_hits() turns what it hears into hits.
+It tells kick, snare and hi-hats apart far better than the recogniser on real drum kits. The recogniser stays for
+when the model or the analysis engine is missing.
 """
 
 from __future__ import annotations
@@ -332,6 +337,70 @@ def low_share(hit: np.ndarray) -> float:
     power = np.abs(np.fft.rfft(segment * np.hanning(len(segment)), 4096)) ** 2
     f = np.fft.rfftfreq(4096, 1.0 / RATE)
     return float(power[(f > 30) & (f < 150)].sum() / (power.sum() + 1e-12))
+
+
+# The drum transcription model's classes (compute/drum_model.py) as Spinus's kinds. Its toms: high floor, low
+# mid and high mid, from low to high.
+MODEL_KINDS = {
+    "CY_CR": "crash",
+    "CY_RD": "ride",
+    "HH_CHH": "closed_hat",
+    "HH_OHH": "open_hat",
+    "KD": "kick",
+    "SD": "snare",
+    "TT_HFT": "low_tom",
+    "TT_LMT": "mid_tom",
+    "TT_HMT": "high_tom",
+}
+MODEL_FINDER = "drum_transcriber"  # marks hits the model found (an earlier finder's are found again)
+MODEL_LATE = 0.027  # its onsets peak this late (seconds), measured on Spinus's test songs
+MODEL_THRESHOLD = 0.1  # how far above its neighbourhood's average a peak must be
+
+
+def pick_peaks(signal: np.ndarray, frame_rate: float, delta: float = MODEL_THRESHOLD) -> np.ndarray:
+    """Frames where an onset probability peaks (as librosa.util.peak_pick with the Inverse Drum Machine's
+    settings): the largest within 50 ms either side, `delta` above the average within 100 ms, and 46 ms after
+    the peak before (two kicks of a fast double bass drum stay two)."""
+    if len(signal) == 0:
+        return np.zeros(0, dtype=int)
+    reach, around, wait = int(frame_rate // 20), int(frame_rate // 10), int(frame_rate * 0.046)
+    padded = np.pad(signal, (reach, reach), constant_values=-np.inf)
+    windows = np.lib.stride_tricks.sliding_window_view(padded, 2 * reach)[: len(signal)]
+    biggest = windows.max(axis=1)
+    padded = np.pad(signal, (around, around), mode="edge")
+    average = np.lib.stride_tricks.sliding_window_view(padded, 2 * around)[: len(signal)].mean(axis=1)
+    peaks: list[int] = []
+    for n in np.flatnonzero((signal >= biggest) & (signal >= average + delta)):
+        if not peaks or n - peaks[-1] > wait:
+            peaks.append(int(n))
+    return np.asarray(peaks, dtype=int)
+
+
+def model_hits(
+    onsets: np.ndarray, velocities: np.ndarray, classes: list[str], frame_rate: float
+) -> list[dict[str, Any]]:
+    """Hits from the drum transcription model's onset probabilities and velocities (classes x frames): {time (s),
+    kind, pad, velocity, finder}, the velocities relative to the loudest hit of each kind."""
+    hits: list[dict[str, Any]] = []
+    for row, name in enumerate(classes):
+        kind = MODEL_KINDS.get(name)
+        if kind is None:
+            continue
+        frames = pick_peaks(onsets[row], frame_rate)
+        if len(frames) == 0:
+            continue
+        loudness = velocities[row, frames]
+        loudest = max(float(loudness.max()), 1e-6)
+        for frame, level in zip(frames, loudness, strict=True):
+            hits.append({
+                "time": round(max(0.0, frame / frame_rate - MODEL_LATE), 4),
+                "kind": kind,
+                "pad": PADS[kind],
+                "velocity": round(float(np.clip(level / loudest, 0.1, 1.0)), 2),
+                "finder": MODEL_FINDER,
+            })  # fmt: skip
+    hits.sort(key=lambda h: (h["time"], h["pad"]))
+    return hits
 
 
 def check_kicks(audio: np.ndarray, rate: int, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
