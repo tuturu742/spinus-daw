@@ -103,6 +103,14 @@ std::optional<PlayableKeys> InstrumentProfiles::Mode::playable() const
     return p;
 }
 
+int InstrumentProfiles::Mode::keyToSound (int pitch) const
+{
+    const auto key = keyFor (pitch);
+    if (const auto playing = playable())
+        return playing->fit (key);
+    return juce::jlimit (0, 127, key);
+}
+
 void InstrumentProfiles::Mode::setKeys (int from, int to, const Key& key)
 {
     for (int n = juce::jmax (0, juce::jmin (from, to)); n <= juce::jmin (127, juce::jmax (from, to)); ++n)

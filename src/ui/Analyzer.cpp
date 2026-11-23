@@ -3,6 +3,7 @@
 #include "AskForName.h"
 #include "AnalysisLibraryView.h"
 #include "session/DrumKeys.h"
+#include "session/InstrumentPresets.h"
 #include "session/PartSounds.h"
 #include "session/PresetFolders.h"
 #include "session/SoundIndex.h"
@@ -1675,6 +1676,18 @@ juce::String Analyzer::instrumentKey (const model::Device& device)
                : device.plugin.format + "|" + device.plugin.fileOrIdentifier + "|" + device.plugin.name;
 }
 
+std::optional<InstrumentProfiles::Mode> Analyzer::keysOf (const juce::String& stem) const
+{
+    if (stem == "drums" || soundOf (stem) == Sounds::song)
+        return std::nullopt;
+    InstrumentProfiles profiles (profilesFolder != juce::File() ? profilesFolder : SoundIndex::getDefaultFolder());
+    profiles.load();
+    if (const auto profile = profiles.get (InstrumentPresets::libraryOf (instrumentOf (stem)));
+        profile && ! profile->modes.empty())
+        return profile->modes.front(); // the mode it opens in
+    return std::nullopt;
+}
+
 juce::String Analyzer::instrumentName (const model::Device& device) const
 {
     if (auto profile = SynthProfile::find (device); profile && ! profile->automatic)
@@ -2045,7 +2058,10 @@ void Analyzer::tuneSynth (const juce::String& name)
         return transcribeNext();
     const auto device = instrumentOf (name);
     auto profile = SynthProfile::find (device);
-    const auto excerpt = chooseExcerpt (heard[name]);
+    auto excerpt = chooseExcerpt (heard[name]);
+    if (const auto keys = keysOf (name)) // played on the keys that sound the stem's notes, as they will be added
+        for (auto& n : excerpt.notes)
+            n.note = keys->keyToSound (n.note);
     if ((! profile && sound != Sounds::tunedInstrument) || excerpt.notes.empty())
         return transcribeNext(); // nothing to tune to: the synth plays as it is
     const auto target = readExcerpt (stems[name], excerpt.start, excerpt.length);
@@ -2408,6 +2424,12 @@ bool Analyzer::addNotesToProject()
                     kitKey != drumKit->drumKeys.end())
                     n.pitch = kitKey->second;
         }
+        // On an instrument whose keys Spinus has learned, each note goes on the key that sounds it: an octave up on
+        // a bass that sounds an octave below its keys, and never on a key that switches how it plays or does
+        // something else (moved by octaves onto one that plays).
+        if (const auto keys = keysOf (name))
+            for (auto& n : notes)
+                n.pitch = keys->keyToSound (n.pitch);
         // A stem that holds several parts (two guitars) gets a channel and a track per part, on the same sound.
         const auto parts = stemparts::splits (name)
                                ? stemparts::split (notes, sections, barLength)

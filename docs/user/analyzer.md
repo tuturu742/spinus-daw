@@ -157,6 +157,11 @@ The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
      in the Browser (effects are not listed). Each instrument is listed once: Surge XT installed by your
      system as well as by Spinus shows only once.
 
+   An instrument you have [taught Spinus](track-creator.md) (**Learn this instrument...**) gets each note on
+   the key that sounds it: a bass that sounds an octave below its keys (Ample Bass P, for example) gets its notes
+   an octave up, and no note lands on a switch key or another key that does not play a note; such a note moves
+   by octaves onto one that does.
+
    The second list, **how**:
    - **As is (default sound)**: the notes on a new channel with that instrument as it sounds when added;
      choose a preset in its own window.
