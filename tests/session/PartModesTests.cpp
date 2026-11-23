@@ -432,6 +432,16 @@ TEST_CASE ("Instrument profiles: a bass that sounds an octave under its keys kee
     bass.setKeys (40, 77, { J::plays, {}, InstrumentProfiles::Source::probing });
     bass.octaves = -1;
     CHECK (bass.keyFor (28) == 40); // the low E sounds from key 40
+    // A note heard in the song goes on the key that sounds it; one under its lowest string moves up an octave
+    // rather than landing on a switch key below the ones that play.
+    bass.setKeys (24, 35, { J::switches, "articulation", InstrumentProfiles::Source::probing });
+    CHECK (bass.keyToSound (28) == 40);
+    CHECK (bass.keyToSound (33) == 45);
+    CHECK (bass.keyToSound (23) == 47); // key 35 is a switch: an octave up
+    InstrumentProfiles::Mode unknown;   // no key known to play: only the octave
+    unknown.octaves = -1;
+    CHECK (unknown.keyToSound (28) == 40);
+    CHECK (unknown.keyToSound (120) == 127);
 
     const InstrumentProfiles::Profile profile { { bass }, {} };
     CHECK (InstrumentProfiles::fromVar (InstrumentProfiles::toVar (profile)) == profile);

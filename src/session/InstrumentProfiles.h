@@ -93,6 +93,9 @@ public:
 
         /** The key that sounds `pitch` (a MIDI number as heard). */
         int keyFor (int pitch) const noexcept { return pitch - 12 * octaves; }
+        /** The key to press for a note meant to sound at `pitch`: keyFor, moved by octaves onto a key that plays
+            when it lands on one that does something else (a switch, a special key, a key that does not play). */
+        int keyToSound (int pitch) const;
 
         /** The keys that play, if any is known to. */
         std::optional<PlayableKeys> playable() const;

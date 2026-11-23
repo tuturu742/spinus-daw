@@ -10,6 +10,8 @@
 #include "ProgramsTestPlugin.h"
 #include "commands/CommandRegistry.h"
 #include "ui/Analyzer.h"
+#include "session/InstrumentPresets.h"
+#include "session/InstrumentProfiles.h"
 #include "ui/Theme.h"
 
 #include <algorithm>
@@ -345,6 +347,16 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
             model::Device guitar;
             guitar.kind = model::Device::Kind::plugin;
             guitar.plugin = { "VST3", "Some Guitar", "Someone", "/nowhere/Some Guitar.vst3", 1234 };
+            // Learned to sound an octave under its keys, with switch keys below the ones that play.
+            InstrumentProfiles::Mode keys;
+            keys.setKeys (40, 77, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+            keys.setKeys (24, 39, { InstrumentProfiles::Job::switches, {}, InstrumentProfiles::Source::user });
+            keys.octaves = -1;
+            const auto index = t.root.getChildFile ("sounds");
+            InstrumentProfiles profiles (index);
+            profiles.set (InstrumentPresets::libraryOf (guitar), InstrumentProfiles::Profile { { keys }, {} });
+            REQUIRE (profiles.save());
+            analyzer.setProfilesFolder (index);
             REQUIRE (analyzer.addStems ({ { "bass", Analyzer::StemUse::replicate } },
                                         { { "bass", Analyzer::Sounds::instrument } }, { { "bass", guitar } }));
             REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 180000));
@@ -356,6 +368,10 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
             CHECK (instrument.plugin.name == "Some Guitar");
             REQUIRE (! made.patterns.empty());
             CHECK (! made.patterns[0].notes.empty());
+            for (const auto& pattern : made.patterns) // every note on a key that plays
+                for (const auto& [channel, notes] : pattern.notes)
+                    for (const auto& n : notes)
+                        CHECK ((n.pitch >= 40 && n.pitch <= 77));
         }
     }
 

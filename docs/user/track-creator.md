@@ -372,8 +372,9 @@ and drums": those three), or empty. Then:
   special keys, type what they do ("palm mute") before marking. Keys are named as the Piano roll names them,
   middle C being C5; hover a key to see its MIDI number too (instruments' manuals number octaves differently),
   what it does and where Spinus learned it. From then on **Listen**, **Play** in
-  [Save this sound](#save-this-sound), the sounds added to the project and the written song play only on the
-  keys marked Plays, moving a note up or down by octaves (as few as it takes) onto one. An instrument with no
+  [Save this sound](#save-this-sound), the sounds added to the project, the written song and the
+  [Analyzer](analyzer.md)'s notes play only on the keys marked Plays, moving a note up or down by octaves (as
+  few as it takes) onto one. An instrument with no
   keys marked Plays plays any note.
 
   **Listen to every key** lets Spinus find out for you: it plays every key of the mode shown, one at a time (in

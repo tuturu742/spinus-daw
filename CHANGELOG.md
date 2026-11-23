@@ -5,6 +5,11 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Analyzer: notes on the keys a learned instrument plays.** A bass played on Ample Bass P had its notes on the
+  keys of their real pitch (the low E on key 28), where that bass keeps its switch keys: it sounds an octave below
+  its keys. The Analyzer now uses what Spinus learned about the instrument: each note goes on the key that sounds
+  it (the low E on key 40 there), and a note that would land on a switch or other special key moves by octaves
+  onto one that plays.
 - **Analyzer: a Timing choice for songs played without a click.** A band that speeds up and slows down (AC/DC's
   "Back in Black", for example) had its notes snapped to a steady grid that wandered up to a quarter of a second
   from the band, so many notes landed on the wrong sixteenth. Such a song now asks how to time it: **Follow the

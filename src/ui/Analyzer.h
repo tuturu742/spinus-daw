@@ -4,6 +4,7 @@
 #include "Workspace.h"
 #include "ai/AiService.h"
 #include "session/AnalysisLibrary.h"
+#include "session/InstrumentProfiles.h"
 #include "session/Session.h"
 #include "session/SongTempo.h"
 #include "session/PresetPreviews.h"
@@ -217,6 +218,8 @@ public:
     /** The folder of drum samples to suggest from (searched with its subfolders); remembered. */
     void setDrumSamplesFolder (const juce::File&);
     juce::File getDrumSamplesFolder() const { return drumSamplesFolder; }
+    /** Where the instruments' learned profiles are read from (the sound index's folder; another for tests). */
+    void setProfilesFolder (const juce::File& folder) { profilesFolder = folder; }
 
     /** For each stem tuned: what the synth match found. */
     const std::map<juce::String, SynthMatcher::Result>& getTuned() const noexcept { return tuned; }
@@ -307,6 +310,9 @@ private:
     bool usesPresets (const juce::String& stem) const;
     /** What plays a melodic stem's notes (Surge XT for the closest presets when none is chosen). */
     model::Device instrumentOf (const juce::String& stem) const;
+    /** The keys of the instrument a melodic stem plays on, as its learned profile knows them (which keys play, how
+        many octaves from them it sounds); none when it has no profile or the stem plays its own phrases. */
+    std::optional<InstrumentProfiles::Mode> keysOf (const juce::String& stem) const;
     juce::String instrumentName (const model::Device&) const;
     static juce::String instrumentKey (const model::Device&);
     /** Whether an installed instrument may have presets: false only once Spinus has looked and found none
@@ -435,6 +441,7 @@ private:
     std::unique_ptr<SynthMatcher> matcher;
     juce::StringArray tuneNotes; // instruments that could not be tuned, said with the result
     std::map<juce::String, SynthMatcher::Result> tuned;
+    juce::File profilesFolder;
     std::map<juce::String, std::vector<HiddenInstrument::Note>> heard; // the notes, in seconds of the stem
     std::vector<DrumGroup> drumGroups;
     std::map<int, std::vector<juce::File>> drumSuggestions;
