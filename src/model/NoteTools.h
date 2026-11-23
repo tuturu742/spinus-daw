@@ -28,4 +28,13 @@ std::vector<Note> legato (std::vector<Note>);
 /** Velocities moved at random by up to `amount` (0..1), kept between 0.05 and 1. */
 std::vector<Note> humanizeVelocity (std::vector<Note>, float amount, juce::Random&);
 
+/** Each chord (notes that start together; a single note is one too) becomes the chord with these intervals
+    (semitones, 0 first) on its lowest note, held as long as its longest note, at its loudest note's velocity.
+    Pitches past 127 are left out. */
+std::vector<Note> chordOnEach (const std::vector<Note>&, const std::vector<int>& intervals);
+
+/** Notes that start together at the same pitch become one (the longest, the loudest velocity), and a note
+    that starts where another of its pitch is still sounding cuts that one short. */
+std::vector<Note> removeOverlaps (std::vector<Note>);
+
 } // namespace spinus::model::noteTools

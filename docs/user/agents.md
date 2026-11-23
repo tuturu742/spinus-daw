@@ -166,6 +166,15 @@ Each change is one undo step, and Spinus renders the tuned vocal in the backgrou
   until the project is saved. Opening and starting aren't undo steps, like File › Open and
   File › New.
 
+## Editing notes
+
+An agent changes some of a part's notes with the `pattern.editNotes` command, the Piano Roll's
+[note tools](piano-roll.md#note-tools) on the notes it names by bars (ticks), pitches or velocities, the rest
+staying as they are: quantize, strum, arpeggiate, chop, legato, humanize, transpose, move, set lengths or
+velocities, turn each note or chord into a named chord (a power chord, a minor seventh...), or remove them.
+For example "bars 9 to 12 of the guitar as power chords" or "remove the hi-hats under 30% velocity". Each
+change is one undo step.
+
 ## Finding sounds and reading audio files
 
 These work with Spinus's AI off too:

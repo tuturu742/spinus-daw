@@ -251,7 +251,9 @@ const juce::String conventions =
     "device.setParameters' values is 0 to 1 over the setting's whole range. A part's volume is its fader in dB. "
     "run_commands: a step may be labelled with \"as\" (\"bass\") and later steps name its result as "
     "\"$bass.channel\", or by its number from 1 (\"$1.channel\"). load_sounds loads a Drum Machine's kit or a "
-    "Sampler's samples.";
+    "Sampler's samples. To change some of a part's notes (a few bars as power chords, quiet hi-hats removed, an "
+    "octave up, quantized, strummed), pattern.editNotes does it on the notes in a range of ticks, pitches or "
+    "velocities, keeping the rest, rather than writing the whole part again.";
 
 /** What the agent is told when it connects (MCP's instructions), for the tools it has: the music tools only
     while AI is on. */

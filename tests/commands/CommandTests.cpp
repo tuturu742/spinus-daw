@@ -6,6 +6,7 @@
 #include "commands/CommandRegistry.h"
 #include "model/Automation.h"
 #include "model/ModelJson.h"
+#include "model/NoteTools.h"
 #include "model/Validation.h"
 
 using namespace spinus::commands;
@@ -1269,4 +1270,101 @@ TEST_CASE ("device.setParameters reads text for Spinus devices; for plugins only
     CHECK (result.failed());
     CHECK (result.getErrorMessage().contains ("'values'"));
     CHECK (createError ("device.setParameters", R"({"device": 3, "text": "4:1"})").isNotEmpty());
+}
+
+TEST_CASE ("pattern.editNotes: the Piano roll's tools on a range of notes, one undo step each", "[commands]")
+{
+    CommandHistory history (makeExample());
+    const auto notes = [&]
+    {
+        const auto& all = history.getProject().findPattern (PatternId { beat })->notes;
+        const auto it = all.find (ChannelId { synth });
+        return it != all.end() ? it->second : std::vector<Note> {};
+    };
+    const auto perform = [&] (const juce::String& params)
+    {
+        juce::String error;
+        auto command = CommandRegistry::get().create ("pattern.editNotes",
+                                                      json (R"({"pattern": 11, "channel": 9, )" + params + "}"), error);
+        INFO (error);
+        REQUIRE (command != nullptr);
+        return history.perform (std::move (command));
+    };
+    // Two bars of A2 (45) quarters, loud then quiet.
+    REQUIRE (history
+                 .perform (make ("pattern.setNotes", R"({"pattern": 11, "channel": 9, "notes": [
+                     {"start": 0, "length": 960, "pitch": 45, "velocity": 0.9},
+                     {"start": 960, "length": 960, "pitch": 45, "velocity": 0.2},
+                     {"start": 1920, "length": 960, "pitch": 45, "velocity": 0.9},
+                     {"start": 2880, "length": 960, "pitch": 45, "velocity": 0.2}]})"))
+                 .wasOk());
+
+    // Power chords on the first two only: root, fifth and octave.
+    REQUIRE (perform (R"("tool": "chord", "chord": "5", "to": 1920)").wasOk());
+    auto now = notes();
+    CHECK (now.size() == 8);
+    CHECK (std::count_if (now.begin(), now.end(), [] (const Note& n) { return n.pitch == 52; }) == 2);
+    CHECK (std::count_if (now.begin(), now.end(), [] (const Note& n) { return n.pitch == 57; }) == 2);
+    const auto steps = history.getUndoDescriptions();
+    CHECK (steps[steps.size() - 1] == "Chords");
+
+    // The quiet ones removed, whatever their pitch.
+    REQUIRE (perform (R"("tool": "remove", "highVelocity": 0.5)").wasOk());
+    now = notes();
+    CHECK (now.size() == 4);
+    CHECK (std::all_of (now.begin(), now.end(), [] (const Note& n) { return n.velocity > 0.5f; }));
+
+    // An octave up within a pitch range; then undo puts them back.
+    REQUIRE (perform (R"("tool": "transpose", "semitones": 12, "lowPitch": 50)").wasOk());
+    now = notes();
+    CHECK (std::count_if (now.begin(), now.end(), [] (const Note& n) { return n.pitch == 64; }) == 1);
+    CHECK (std::count_if (now.begin(), now.end(), [] (const Note& n) { return n.pitch == 45; }) == 2);
+    REQUIRE (history.undo());
+    now = notes();
+    CHECK (std::count_if (now.begin(), now.end(), [] (const Note& n) { return n.pitch == 52; }) == 1);
+
+    // Humanized velocities come back the same on redo.
+    REQUIRE (perform (R"("tool": "humanize", "amount": 0.5)").wasOk());
+    const auto humanized = notes();
+    REQUIRE (history.undo());
+    REQUIRE (history.redo());
+    CHECK (notes() == humanized);
+
+    // Mistakes are said, and nothing changes.
+    const auto before = history.getProject();
+    CHECK (perform (R"("tool": "transpose", "semitones": 100)").failed());
+    CHECK (perform (R"("tool": "remove", "from": 30000)").getErrorMessage().contains ("no notes match"));
+    juce::String error;
+    CHECK (CommandRegistry::get().create ("pattern.editNotes",
+                                          json (R"({"pattern": 11, "channel": 9, "tool": "chord", "chord": "m13"})"),
+                                          error) == nullptr);
+    CHECK (error.contains ("a chord it knows"));
+    CHECK (history.getProject() == before);
+}
+
+TEST_CASE ("Note tools: chords on each note, and no doubled notes after", "[commands][notetools]")
+{
+    namespace nt = spinus::model::noteTools;
+    // A single note and a two-note chord become power chords on their lowest notes.
+    const std::vector<Note> in { { 0, 480, 40, 0.5f, 0.5f, 0.0f, 0.0f, {} },
+                                 { 960, 240, 45, 0.4f, 0.5f, 0.0f, 0.0f, {} },
+                                 { 960, 480, 52, 0.8f, 0.5f, 0.0f, 0.0f, {} } };
+    const auto out = nt::chordOnEach (in, { 0, 7, 12 });
+    REQUIRE (out.size() == 6);
+    CHECK (out[0].pitch == 40);
+    CHECK (out[1].pitch == 47);
+    CHECK (out[2].pitch == 52);
+    CHECK (out[3].pitch == 45);
+    CHECK (out[3].length == 480);                       // the chord's longest
+    CHECK (juce::exactlyEqual (out[3].velocity, 0.8f)); // and loudest
+    CHECK (out[5].pitch == 57);
+
+    // Two notes on one key at once become one; one still sounding when the next starts is cut there.
+    const auto tidy = nt::removeOverlaps ({ { 0, 960, 40, 0.5f, 0.5f, 0.0f, 0.0f, {} },
+                                            { 0, 480, 40, 0.9f, 0.5f, 0.0f, 0.0f, {} },
+                                            { 480, 480, 40, 0.5f, 0.5f, 0.0f, 0.0f, {} } });
+    REQUIRE (tidy.size() == 2);
+    CHECK (tidy[0].length == 480);
+    CHECK (juce::exactlyEqual (tidy[0].velocity, 0.9f));
+    CHECK (tidy[1].start == 480);
 }

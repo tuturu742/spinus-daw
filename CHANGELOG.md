@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Agents and the assistant can use the Piano Roll's note tools.** A new command, `pattern.editNotes`, changes
+  only the notes in a range of bars, pitches or velocities: quantize, strum, arpeggiate, chop, legato, humanize,
+  transpose, move, set lengths or velocities, turn notes into a named chord, or remove them, as one undo step.
+  "Bars 9 to 12 of the guitar as power chords" or "remove the quiet hi-hats" no longer means rewriting the whole
+  part.
+- **Piano Roll: a Power chord stamp** (root, fifth and octave).
 - **Agents can search the sound index and read audio files.** `find_sounds` finds presets and samples by words,
   role or class, each with what an agent needs to use it; `audio_file_info` gives a file's length (also in ticks
   at the song's tempo), and a sample's class, tempo and key as the sound index hears them. Both work with
