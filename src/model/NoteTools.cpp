@@ -113,4 +113,51 @@ std::vector<Note> humanizeVelocity (std::vector<Note> notes, float amount, juce:
     return notes;
 }
 
+std::vector<Note> chordOnEach (const std::vector<Note>& notes, const std::vector<int>& intervals)
+{
+    std::vector<Note> result;
+    for (auto& [start, group] : byStartGroups (notes))
+    {
+        auto chord = group.front(); // the lowest
+        for (auto& n : group)
+        {
+            chord.length = std::max (chord.length, n.length);
+            chord.velocity = std::max (chord.velocity, n.velocity);
+        }
+        for (auto interval : intervals)
+            if (juce::isPositiveAndBelow (group.front().pitch + interval, 128))
+            {
+                auto n = chord;
+                n.pitch = group.front().pitch + interval;
+                result.push_back (n);
+            }
+    }
+    return removeOverlaps (std::move (result));
+}
+
+std::vector<Note> removeOverlaps (std::vector<Note> notes)
+{
+    std::sort (notes.begin(), notes.end(), byStart);
+    std::vector<Note> result;
+    std::map<int, size_t> sounding; // pitch -> its last note in result
+    for (auto& n : notes)
+    {
+        if (const auto last = sounding.find (n.pitch); last != sounding.end())
+        {
+            auto& before = result[last->second];
+            if (before.start == n.start)
+            {
+                before.length = std::max (before.length, n.length);
+                before.velocity = std::max (before.velocity, n.velocity);
+                continue;
+            }
+            if (before.start + before.length > n.start)
+                before.length = n.start - before.start;
+        }
+        sounding[n.pitch] = result.size();
+        result.push_back (n);
+    }
+    return result;
+}
+
 } // namespace spinus::model::noteTools

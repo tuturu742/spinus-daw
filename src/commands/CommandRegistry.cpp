@@ -5,6 +5,8 @@
 #include "dsp/threeosc/ThreeOscPresets.h"
 #include "engine/ParameterIds.h"
 #include "model/Automation.h"
+#include "model/Chords.h"
+#include "model/NoteTools.h"
 #include "model/Freeze.h"
 #include "model/Scales.h"
 #include "model/ModelJson.h"
@@ -2036,6 +2038,16 @@ public:
         changes.patterns.insert (pat);
     }
 
+    /** The notes worked out from the channel's notes as they are when it first runs (pattern.editNotes): the
+        result is kept, so a redo gives the same notes (a humanize's random velocities among them). */
+    using Edit = std::function<juce::Result (const std::vector<Note>& current, std::vector<Note>& result)>;
+    SetNotes (const juce::String& commandName, juce::var p, PatternId pat, ChannelId ch, Edit e, juce::String d)
+        : JsonCommand (commandName, std::move (p)), pattern (pat), channel (ch), description (std::move (d)),
+          edit (std::move (e))
+    {
+        changes.patterns.insert (pat);
+    }
+
     juce::String getDescription() const override { return description.isNotEmpty() ? description : "Edit notes"; }
 
     juce::Result perform (Project& p) override
@@ -2045,6 +2057,15 @@ public:
             return juce::Result::fail ("pattern " + juce::String (pattern.value) + " does not exist");
         if (! p.findChannel (channel))
             return juce::Result::fail ("channel " + juce::String (channel.value) + " does not exist");
+        if (edit)
+        {
+            const auto it = pat->notes.find (channel);
+            std::vector<Note> result;
+            if (auto r = edit (it != pat->notes.end() ? it->second : std::vector<Note> {}, result); r.failed())
+                return r;
+            notes = std::move (result);
+            edit = nullptr;
+        }
 
         for (auto& n : notes)
         {
@@ -2094,6 +2115,7 @@ private:
     std::map<ClipId, Ticks> oldClipLengths;
     bool hadEntry = false;
     juce::String description;
+    Edit edit;
 };
 
 /** A pattern's length (FL: patterns grow as notes are placed further on; the Generate dialog's bars). */
@@ -5105,6 +5127,188 @@ void addPatternCommands (std::vector<CommandInfo>& list)
                               return std::make_unique<SetPatternTripletSteps> (p.json, p.id<PatternId> ("pattern"),
                                                                                triplets.value_or (false));
                           }));
+
+    constexpr int farTicks = 1'073'741'824, longestStep = 1'048'576; // the ranges pattern.editNotes takes
+    list.push_back (info (
+        "pattern.editNotes",
+        "Change some of one channel's notes in one pattern with one of the Piano roll's tools, as one undo step. "
+        "Which notes: those starting from 'from' up to (not including) 'to' (ticks in the pattern), with pitches "
+        "'lowPitch' to 'highPitch' and velocities 'lowVelocity' to 'highVelocity'; every note when none of these "
+        "is given. The other notes stay as they are. Tools: quantize (starts on the nearest 'step'), strum "
+        "(chords played one note after another, 'spacing' ticks apart, 'direction' up or down), arpeggiate "
+        "(chords as running notes, 'step' each), chop (notes cut into repeats 'step' long), legato (each lasts "
+        "until the next starts), humanize (velocities moved at random by up to 'amount'), transpose (by "
+        "'semitones'), move (by 'ticks', later or earlier), length (every note 'length' ticks), velocity (set to "
+        "'velocity', or multiplied by 'factor'), chord (each chord, or single note, becomes the chord named in "
+        "'chord' on its lowest note), remove (the notes are deleted).",
+        ParameterSchema()
+            .id ("pattern", "Pattern ID")
+            .id ("channel", "Channel ID")
+            .custom ("tool", "What to do with the notes", true,
+                     schemaObject ({ { "type", "string" },
+                                     { "enum", juce::Array<juce::var> { "quantize", "strum", "arpeggiate", "chop",
+                                                                        "legato", "humanize", "transpose", "move",
+                                                                        "length", "velocity", "chord", "remove" } } }))
+            .integer ("from", "First tick of the notes to change (a note is chosen by where it starts)", false, 0,
+                      farTicks)
+            .integer ("to", "The tick after the last notes to change", false, 1, farTicks)
+            .integer ("lowPitch", "Lowest pitch to change (MIDI, C5 = 60)", false, 0, 127)
+            .integer ("highPitch", "Highest pitch to change", false, 0, 127)
+            .number ("lowVelocity", "Quietest velocity to change (0-1)", false, 0.0, 1.0)
+            .number ("highVelocity", "Loudest velocity to change (0-1)", false, 0.0, 1.0)
+            .integer ("step", "quantize, arpeggiate, chop: ticks (default 240, a sixteenth)", false, 1, longestStep)
+            .integer ("spacing", "strum: ticks between the notes (default 40)", false, 1, 3840)
+            .string ("direction", "strum: \"up\" (lowest first, the default) or \"down\"")
+            .number ("amount", "humanize: how far velocities move, 0-1 (default 0.15)", false, 0.0, 1.0)
+            .integer ("semitones", "transpose: semitones, up or down", false, -127, 127)
+            .integer ("ticks", "move: ticks, later (positive) or earlier (negative)", false, -farTicks, farTicks)
+            .integer ("length", "length: ticks", false, 1, farTicks)
+            .number ("velocity", "velocity: the new velocity, 0-1", false, 0.0, 1.0)
+            .number ("factor", "velocity: multiply each velocity by this (kept between 0.01 and 1)", false, 0.0, 10.0)
+            .string ("chord", "chord: a chord name or its symbol: Major (\"\"), Minor (\"m\"), Power chord (\"5\"), "
+                              "Seventh (\"7\"), Minor 7 (\"m7\"), Major 7 (\"maj7\"), sus2, sus4, dim, aug, m7b5, "
+                              "dim7, 6, m6, add9")
+            .string ("description", "Undo history text (default: the tool's name)"),
+        [] (Params& p) -> std::unique_ptr<Command>
+        {
+            p.allowOnly ({ "pattern",     "channel",      "tool",     "from",    "to",        "lowPitch",   "highPitch",
+                           "lowVelocity", "highVelocity", "step",     "spacing", "direction", "amount",     "semitones",
+                           "ticks",       "length",       "velocity", "factor",  "chord",     "description" });
+            const auto tool = p.string ("tool", true).value_or ("");
+            static const juce::StringArray tools { "quantize",  "strum", "arpeggiate", "chop",     "legato", "humanize",
+                                                   "transpose", "move",  "length",     "velocity", "chord",  "remove" };
+            if (tool.isNotEmpty() && ! tools.contains (tool))
+                p.errors.add ("'tool' must be one of: " + tools.joinIntoString (", "));
+            const auto integer = [&p] (const char* key, int low, int high) -> std::optional<int>
+            {
+                if (const auto v = p.number (key, low, high))
+                {
+                    if (! juce::exactlyEqual (*v, std::floor (*v)))
+                        p.errors.add (juce::String ("'") + key + "' must be a whole number");
+                    return (int)*v;
+                }
+                return std::nullopt;
+            };
+            const auto from = integer ("from", 0, farTicks), to = integer ("to", 1, farTicks);
+            const auto lowPitch = integer ("lowPitch", 0, 127), highPitch = integer ("highPitch", 0, 127);
+            const auto lowVelocity = p.number ("lowVelocity", 0.0, 1.0),
+                       highVelocity = p.number ("highVelocity", 0.0, 1.0);
+            const auto step = integer ("step", 1, longestStep).value_or (240);
+            const auto spacing = integer ("spacing", 1, 3840).value_or (40);
+            const auto direction = p.string ("direction").value_or ("up");
+            if (direction != "up" && direction != "down")
+                p.errors.add ("'direction' must be \"up\" or \"down\"");
+            const auto amount = (float)p.number ("amount", 0.0, 1.0).value_or (0.15);
+            const auto semitones = integer ("semitones", -127, 127);
+            const auto ticks = integer ("ticks", -farTicks, farTicks);
+            const auto length = integer ("length", 1, farTicks);
+            const auto velocity = p.number ("velocity", 0.0, 1.0), factor = p.number ("factor", 0.0, 10.0);
+            const auto chordName = p.string ("chord");
+            const ChordType* chord = nullptr;
+            if (chordName)
+                for (const auto& type : getChordTypes())
+                    if (chordName->equalsIgnoreCase (type.name) || *chordName == type.suffix)
+                        chord = &type;
+            // What each tool needs.
+            const auto need = [&p, &tool] (const char* forTool, bool given, const juce::String& what)
+            {
+                if (tool == forTool && ! given)
+                    p.errors.add (juce::String (forTool) + " needs " + what);
+            };
+            need ("transpose", semitones.has_value(), "'semitones'");
+            need ("move", ticks.has_value(), "'ticks'");
+            need ("length", length.has_value(), "'length'");
+            need ("velocity", velocity.has_value() || factor.has_value(), "'velocity' or 'factor'");
+            need ("chord", chord != nullptr,
+                  chordName ? "a chord it knows, not \"" + *chordName + "\"" : juce::String ("'chord'"));
+            if (from && to && *to <= *from)
+                p.errors.add ("'to' must be after 'from'");
+
+            const auto chosen = [=] (const Note& n)
+            {
+                return n.start >= from.value_or (0) && (! to || n.start < *to) && n.pitch >= lowPitch.value_or (0) &&
+                       n.pitch <= highPitch.value_or (127) && n.velocity >= (float)lowVelocity.value_or (0.0) &&
+                       n.velocity <= (float)highVelocity.value_or (1.0);
+            };
+            const auto intervals = chord != nullptr ? chord->intervals : std::vector<int> {};
+            auto edit = [=] (const std::vector<Note>& current, std::vector<Note>& result) -> juce::Result
+            {
+                namespace nt = noteTools;
+                std::vector<Note> picked;
+                for (const auto& n : current)
+                    (chosen (n) ? picked : result).push_back (n);
+                if (picked.empty())
+                    return juce::Result::fail ("no notes match: the channel has " + juce::String ((int)current.size()) +
+                                               " notes in this pattern, none in the range given");
+                std::vector<Note> changed;
+                if (tool == "quantize")
+                    changed = nt::quantize (picked, step);
+                else if (tool == "strum")
+                    changed = nt::strum (picked, spacing, direction == "up");
+                else if (tool == "arpeggiate")
+                    changed = nt::arpeggiate (picked, step);
+                else if (tool == "chop")
+                    changed = nt::chop (picked, step);
+                else if (tool == "legato")
+                    changed = nt::legato (picked);
+                else if (tool == "humanize")
+                {
+                    juce::Random random;
+                    changed = nt::humanizeVelocity (picked, amount, random);
+                }
+                else if (tool == "transpose")
+                {
+                    changed = picked;
+                    for (auto& n : changed)
+                    {
+                        n.pitch += *semitones;
+                        if (n.pitch < 0 || n.pitch > 127)
+                            return juce::Result::fail ("transposing by " + juce::String (*semitones) +
+                                                       " takes a note past MIDI's 0 to 127");
+                    }
+                }
+                else if (tool == "move")
+                {
+                    changed = picked;
+                    for (auto& n : changed)
+                    {
+                        n.start += *ticks;
+                        if (n.start < 0)
+                            return juce::Result::fail ("moving by " + juce::String (*ticks) +
+                                                       " ticks takes a note before the pattern's start");
+                    }
+                }
+                else if (tool == "length")
+                {
+                    changed = picked;
+                    for (auto& n : changed)
+                        n.length = *length;
+                }
+                else if (tool == "velocity")
+                {
+                    changed = picked;
+                    for (auto& n : changed)
+                        n.velocity =
+                            velocity ? (float)*velocity : juce::jlimit (0.01f, 1.0f, n.velocity * (float)*factor);
+                }
+                else if (tool == "chord")
+                    changed = nt::chordOnEach (picked, intervals);
+                // "remove": nothing of the picked notes stays
+                result.insert (result.end(), changed.begin(), changed.end());
+                result = nt::removeOverlaps (std::move (result));
+                return juce::Result::ok();
+            };
+            static const std::map<juce::String, juce::String> names {
+                { "quantize", "Quantize notes" }, { "strum", "Strum" },     { "arpeggiate", "Arpeggiate" },
+                { "chop", "Chop notes" },         { "legato", "Legato" },   { "humanize", "Humanize velocity" },
+                { "transpose", "Transpose" },     { "move", "Move notes" }, { "length", "Note length" },
+                { "velocity", "Velocity" },       { "chord", "Chords" },    { "remove", "Remove notes" }
+            };
+            const auto named = names.find (tool);
+            return std::make_unique<SetNotes> (
+                "pattern.editNotes", p.json, p.id<PatternId> ("pattern"), p.id<ChannelId> ("channel"), edit,
+                p.string ("description").value_or (named != names.end() ? named->second : juce::String()));
+        }));
 
     list.push_back (info ("pattern.setNotes",
                           "Replace all notes of one channel in one pattern. The pattern's length follows its notes: "

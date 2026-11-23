@@ -70,7 +70,8 @@ Each paint stroke, cut or deletion is one undo step.
   the whole chord on the note you click, and dragging moves it as one. **Chord in key** draws the key's own
   chord there, 3 or 4 notes (the song's key, or the scale chosen with the Scale button; C major without
   one); or choose a chord by name: Major, Minor, Diminished, Augmented, Suspended 2 and 4, Seventh, Major 7,
-  Minor 7, Half-diminished, Diminished 7, Sixth, Minor 6, Add 9. It is one undo step.
+  Minor 7, Half-diminished, Diminished 7, Sixth, Minor 6, Add 9, Power chord (root, fifth and octave, as
+  rock guitars play). It is one undo step.
 - **Chord names**: notes that start together and make a chord are named above them, for example **Cm**,
   **G7** or **F/A** (an F chord with A in the bass).
 
@@ -88,6 +89,11 @@ afterwards either. With snap set to **None**, the tools work in sixteenths. Each
 | **Chop** (**Ctrl+U**) | Cuts each note into repeats one snap step long (FL's note repeat): for rolls and stutters. |
 | **Legato** (**Ctrl+L**) | Each note lasts until the next one starts. |
 | **Humanize velocities** (**Alt+R**) | Makes each note a little louder or softer at random, so repeated notes sound less mechanical. |
+
+An [agent](agents.md) or the [assistant](assistant.md) uses the same tools on the notes you name ("bars 9 to
+12 of the guitar as power chords", "remove the quiet hi-hats", "the bass an octave up"), through the
+`pattern.editNotes` command: it also transposes, moves, sets lengths and velocities, turns notes into chords and
+removes notes, each as one undo step.
 
 **Slides:** with [3x Osc](3x-osc.md#slides-mono) set to **Mono (slides)**, a note that overlaps the next
 one slides to it. Drag a note's end a little past the next note's start to make a slide.
