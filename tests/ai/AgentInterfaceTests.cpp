@@ -1571,3 +1571,45 @@ TEST_CASE ("Agents load a Drum Machine kit and samples, only from the project an
     CHECK ((bool)result["isError"]);
     CHECK (said (result).contains ("Spinus Synth Kit"));
 }
+
+TEST_CASE ("An agent plays one pattern on its own, or launches a clip launcher scene", "[ai][agents]")
+{
+    Fixture f (false);
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto made =
+        f.call (id, "run_commands",
+                stepsOf ({ command ("pattern.add", object ({ { "name", "Groove" }, { "length", 3840 } }), "groove"),
+                           command ("launcher.addTrack", object ({ { "name", "Jam" } }), "track"),
+                           command ("launcher.addScene", object ({ { "name", "Drop" } }), "scene"),
+                           command ("launcher.addPattern", object ({ { "track", "$track.track" },
+                                                                     { "scene", "$scene.scene" },
+                                                                     { "pattern", "$groove.pattern" },
+                                                                     { "length", 3840 } })) }));
+    INFO (said (made));
+    REQUIRE_FALSE ((bool)made["isError"]);
+    const auto& project = f.session.getProject();
+    const auto pattern = (int)project.patterns.back().id.value;
+    const auto scene = (int)project.launcher.scenes.back().id.value;
+    const auto undoSteps = f.session.getHistory().getUndoDescriptions().size();
+
+    const auto played = f.call (id, "play", object ({ { "pattern", pattern } }));
+    INFO (said (played));
+    CHECK_FALSE ((bool)played["isError"]);
+    CHECK (f.session.getMode() == Session::Mode::pattern);
+    CHECK (f.session.getCurrentPattern().value == (uint32_t)pattern);
+    CHECK (f.session.isPlaying());
+    CHECK_FALSE ((bool)f.call (id, "stop", none())["isError"]);
+
+    const auto launched = f.call (id, "play", object ({ { "scene", scene } }));
+    INFO (said (launched));
+    CHECK_FALSE ((bool)launched["isError"]);
+    CHECK (said (launched).contains ("Drop"));
+    CHECK_FALSE ((bool)f.call (id, "stop", none())["isError"]);
+    CHECK_FALSE (f.session.isPlaying());
+
+    CHECK ((bool)f.call (id, "play", object ({ { "pattern", 9999 } }))["isError"]);
+    CHECK ((bool)f.call (id, "play", object ({ { "scene", 9999 } }))["isError"]);
+    CHECK ((bool)f.call (id, "play", object ({ { "pattern", pattern }, { "bars", "1" } }))["isError"]);
+    CHECK (f.session.getHistory().getUndoDescriptions().size() == undoSteps); // playing changes nothing
+}

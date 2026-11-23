@@ -1141,12 +1141,17 @@ juce::var AgentInterface::nativeTools() const
                      noInput, Does::reads));
     tools.add (
         tool ("play",
-              "Play the song for the user to hear (they listen in Spinus; you don't hear it), in song mode. With "
-              "bars it sets the song's loop region to them (looped unless loop is false). Without bars, plays from "
-              "where the playhead is. It changes nothing in the song.",
+              "Play for the user to hear (they listen in Spinus; you don't hear it). The song, in song mode: with "
+              "bars it sets the song's loop region to them (looped unless loop is false); without bars, from where "
+              "the playhead is. Or one pattern on its own, looped (pattern mode, as the Channel Rack plays it). Or a "
+              "scene of the clip launcher, launched (its clips play until stop). It changes nothing in the song.",
               schema ({ { "bars", property ("string", "Bars from 1, '9' or '9-16', or a section's name from the "
                                                       "Playlist's markers ('Chorus'; 'Chorus 2' for the second one)") },
-                        { "loop", property ("boolean", "Loop the bars (true when left out)") } }),
+                        { "loop", property ("boolean", "Loop the bars (true when left out)") },
+                        { "pattern", property ("integer", "Play this pattern alone, looped (its id, as song_summary "
+                                                          "shows it)") },
+                        { "scene", property ("integer", "Launch this clip launcher scene (its id, as song_summary "
+                                                        "shows it)") } }),
               Does::plays));
     tools.add (tool ("stop", "Stop playback (the playhead goes back to where it started).", noInput, Does::plays));
 
@@ -1643,6 +1648,37 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
     }
     if (name == "play")
     {
+        const auto& project = session.getProject();
+        if ((int)arguments.hasProperty ("bars") + (int)arguments.hasProperty ("pattern") +
+                (int)arguments.hasProperty ("scene") >
+            1)
+            return reply (text ("Give one of 'bars', 'pattern' or 'scene'.", true));
+        if (arguments.hasProperty ("pattern"))
+        {
+            const model::PatternId pattern { (uint32_t)(int)arguments["pattern"] };
+            if (! pattern.isValid() || project.findPattern (pattern) == nullptr)
+                return reply (text ("There is no pattern " + arguments["pattern"].toString() +
+                                        " (song_summary lists the patterns).",
+                                    true));
+            session.stop();
+            session.setCurrentPattern (pattern);
+            session.setMode (Session::Mode::pattern);
+            session.setLoopRegion (Session::Mode::pattern, std::nullopt); // the whole pattern
+            session.play();
+            return reply (text ("Playing pattern \"" + project.findPattern (pattern)->name + "\", looped."));
+        }
+        if (arguments.hasProperty ("scene"))
+        {
+            const model::SceneId scene { (uint32_t)(int)arguments["scene"] };
+            const auto& scenes = project.launcher.scenes;
+            const auto found = std::find_if (scenes.begin(), scenes.end(), [&] (auto& s) { return s.id == scene; });
+            if (! scene.isValid() || found == scenes.end())
+                return reply (text ("There is no clip launcher scene " + arguments["scene"].toString() +
+                                        " (song_summary lists the launcher's scenes).",
+                                    true));
+            session.launchScene (scene);
+            return reply (text ("Launched scene \"" + found->name + "\"; it plays until stop."));
+        }
         const auto error =
             play (arguments["bars"].toString(), arguments.hasProperty ("loop") ? (bool)arguments["loop"] : true);
         return reply (error.isEmpty() ? text ("Playing (" + session.getPositionText() + ").") : text (error, true));
