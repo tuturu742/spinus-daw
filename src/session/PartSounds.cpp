@@ -822,6 +822,11 @@ juce::var Choice::deviceJson() const
         return object ({ { "kind", "stock" }, { "stockType", "spinus.sampler" } });
     if (kind == Kind::drumSamples)
         return object ({ { "kind", "stock" }, { "stockType", "spinus.drum-machine" } });
+    return deviceJsonOf (source);
+}
+
+juce::var deviceJsonOf (const SoundSource& source)
+{
     if (source.stockType.isNotEmpty())
         return object ({ { "kind", "stock" }, { "stockType", source.stockType } });
     return object ({ { "kind", "plugin" },
