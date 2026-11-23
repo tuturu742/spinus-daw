@@ -5128,6 +5128,7 @@ void addPatternCommands (std::vector<CommandInfo>& list)
                                                                                triplets.value_or (false));
                           }));
 
+    constexpr int farTicks = 1'073'741'824, longestStep = 1'048'576; // the ranges pattern.editNotes takes
     list.push_back (info (
         "pattern.editNotes",
         "Change some of one channel's notes in one pattern with one of the Piano roll's tools, as one undo step. "
@@ -5149,19 +5150,19 @@ void addPatternCommands (std::vector<CommandInfo>& list)
                                                                         "legato", "humanize", "transpose", "move",
                                                                         "length", "velocity", "chord", "remove" } } }))
             .integer ("from", "First tick of the notes to change (a note is chosen by where it starts)", false, 0,
-                      1 << 30)
-            .integer ("to", "The tick after the last notes to change", false, 1, 1 << 30)
+                      farTicks)
+            .integer ("to", "The tick after the last notes to change", false, 1, farTicks)
             .integer ("lowPitch", "Lowest pitch to change (MIDI, C5 = 60)", false, 0, 127)
             .integer ("highPitch", "Highest pitch to change", false, 0, 127)
             .number ("lowVelocity", "Quietest velocity to change (0-1)", false, 0.0, 1.0)
             .number ("highVelocity", "Loudest velocity to change (0-1)", false, 0.0, 1.0)
-            .integer ("step", "quantize, arpeggiate, chop: ticks (default 240, a sixteenth)", false, 1, 1 << 20)
+            .integer ("step", "quantize, arpeggiate, chop: ticks (default 240, a sixteenth)", false, 1, longestStep)
             .integer ("spacing", "strum: ticks between the notes (default 40)", false, 1, 3840)
             .string ("direction", "strum: \"up\" (lowest first, the default) or \"down\"")
             .number ("amount", "humanize: how far velocities move, 0-1 (default 0.15)", false, 0.0, 1.0)
             .integer ("semitones", "transpose: semitones, up or down", false, -127, 127)
-            .integer ("ticks", "move: ticks, later (positive) or earlier (negative)", false, -(1 << 30), 1 << 30)
-            .integer ("length", "length: ticks", false, 1, 1 << 30)
+            .integer ("ticks", "move: ticks, later (positive) or earlier (negative)", false, -farTicks, farTicks)
+            .integer ("length", "length: ticks", false, 1, farTicks)
             .number ("velocity", "velocity: the new velocity, 0-1", false, 0.0, 1.0)
             .number ("factor", "velocity: multiply each velocity by this (kept between 0.01 and 1)", false, 0.0, 10.0)
             .string ("chord", "chord: a chord name or its symbol: Major (\"\"), Minor (\"m\"), Power chord (\"5\"), "
@@ -5188,19 +5189,19 @@ void addPatternCommands (std::vector<CommandInfo>& list)
                 }
                 return std::nullopt;
             };
-            const auto from = integer ("from", 0, 1 << 30), to = integer ("to", 1, 1 << 30);
+            const auto from = integer ("from", 0, farTicks), to = integer ("to", 1, farTicks);
             const auto lowPitch = integer ("lowPitch", 0, 127), highPitch = integer ("highPitch", 0, 127);
             const auto lowVelocity = p.number ("lowVelocity", 0.0, 1.0),
                        highVelocity = p.number ("highVelocity", 0.0, 1.0);
-            const auto step = integer ("step", 1, 1 << 20).value_or (240);
+            const auto step = integer ("step", 1, longestStep).value_or (240);
             const auto spacing = integer ("spacing", 1, 3840).value_or (40);
             const auto direction = p.string ("direction").value_or ("up");
             if (direction != "up" && direction != "down")
                 p.errors.add ("'direction' must be \"up\" or \"down\"");
             const auto amount = (float)p.number ("amount", 0.0, 1.0).value_or (0.15);
             const auto semitones = integer ("semitones", -127, 127);
-            const auto ticks = integer ("ticks", -(1 << 30), 1 << 30);
-            const auto length = integer ("length", 1, 1 << 30);
+            const auto ticks = integer ("ticks", -farTicks, farTicks);
+            const auto length = integer ("length", 1, farTicks);
             const auto velocity = p.number ("velocity", 0.0, 1.0), factor = p.number ("factor", 0.0, 10.0);
             const auto chordName = p.string ("chord");
             const ChordType* chord = nullptr;
