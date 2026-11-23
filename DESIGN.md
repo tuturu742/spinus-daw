@@ -678,7 +678,8 @@ can work on the open project while the user watches and listens.
     `what_changed`, `play`, `stop`, the reads of what the summary only names (owner, 2026-11-20: everything the UI
     does reachable by agents): `read_pattern` (notes as `pattern.setNotes` takes them, its automation),
     `read_clip` (a Playlist or launcher clip as `clipToJson` writes it, without tune notes) and
-    `device_settings` (`Session::getDeviceParameterTexts`, at most 300, `find` by name), `load_sounds` (a kit or
+    `device_settings` (`Session::getDeviceParameterTexts`, at most 300, `find` by name), `export_audio` (File › Export's settings, ringing out, the song or a pattern, stems; only into the
+    project's folder, so a saved project; a planned file already there only with `replace`), `load_sounds` (a kit or
     samples, `cli::loadSounds` as `--run`'s actions, without waiting for the engine; like the device's window, not
     an undo step; files only where `checkPaths` allows); and the project as files (owner decision 2026-11-13), when the host gives
     them (`Host::projects`, `openProject`...; MainView without message boxes): `save_project` (an untitled
