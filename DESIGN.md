@@ -676,7 +676,7 @@ can work on the open project while the user watches and listens.
   - **Spinus's own, always, in C++:** `song_summary` (`cli::summarize`), `run_commands`, `command_help`,
     `list_devices`, `list_presets`, `render` (an offline export measured: mix, sections, stems), `undo_last`,
     `what_changed`, `play`, `stop`, the reads of what the summary only names (owner, 2026-11-20: everything the UI
-    does reachable by agents): `read_pattern` (notes as `pattern.setNotes` takes them, its automation),
+    does reachable by agents): `read_pattern` (notes as `pattern.setNotes` takes them, its automation), the Piano Roll's note tools as a command, `pattern.editNotes` (`model::noteTools` on the notes in a range of ticks, pitches and velocities, plus transpose, move, length, velocity, `chordOnEach` with a named chord type, remove; overlaps tidied by `removeOverlaps`; a `SetNotes` whose notes are worked out from the current ones at its first perform and kept, so redo gives the same),
     `read_clip` (a Playlist or launcher clip as `clipToJson` writes it, without tune notes) and
     `device_settings` (`Session::getDeviceParameterTexts`, at most 300, `find` by name), `load_sounds` (a kit or
     samples, `cli::loadSounds` as `--run`'s actions, without waiting for the engine; like the device's window, not
