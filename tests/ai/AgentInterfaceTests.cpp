@@ -14,6 +14,7 @@
 #include "dsp/drums/DrumMachineProcessor.h"
 #include "dsp/sampler/SamplerProcessor.h"
 #include "session/Session.h"
+#include "session/SoundIndex.h"
 #include "ui/AgentInterfacePage.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -1570,6 +1571,97 @@ TEST_CASE ("Agents load a Drum Machine kit and samples, only from the project an
     result = f.call (id, "load_sounds", object ({ { "device", drumsId }, { "kit", "No Such Kit" } }));
     CHECK ((bool)result["isError"]);
     CHECK (said (result).contains ("Spinus Synth Kit"));
+}
+
+TEST_CASE ("Agents find sounds in the sound index and read an audio file's length, tempo and key", "[ai][agents]")
+{
+    Fixture f (false); // both work with AI off
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto answer = [&] (const juce::String& tool, const juce::var& arguments)
+    {
+        const auto result = f.call (id, tool, arguments);
+        INFO (result["content"][0]["text"].toString());
+        REQUIRE_FALSE ((bool)result["isError"]);
+        return juce::JSON::parse (result["content"][0]["text"].toString());
+    };
+
+    // An index with two Surge XT presets and a kick sample.
+    const auto indexFolder = f.folder.root.getChildFile ("ai/sounds");
+    f.session.getSoundIndex().setFolder (indexFolder);
+    CHECK (
+        f.call (id, "find_sounds", object ({})).getProperty ("content", {})[0]["text"].toString().contains ("empty"));
+    {
+        SoundIndex index (indexFolder);
+        SoundIndex::Instrument surge;
+        surge.source.key = "surge-xt";
+        surge.source.name = "Surge XT";
+        surge.source.format = "CLAP";
+        surge.source.stockType = "bundled.surge-xt";
+        surge.complete = true;
+        for (auto [name, category, role] :
+             { std::tuple { "Warm Pad", "Pads", "pad" }, std::tuple { "Reese", "Basses", "bass" } })
+            surge.sounds.add (
+                object ({ { "id", name }, { "name", name }, { "category", category }, { "role", role } }));
+        index.instruments[surge.source.key] = surge;
+        index.samples.push_back ({ "/samples/Kicks/Deep Kick.wav", 1, 1,
+                                   object ({ { "kind", "one-shot" }, { "class", "kick" }, { "duration", 0.4 } }) });
+        REQUIRE (index.saveInstrument (surge));
+        REQUIRE (index.saveSamples());
+        REQUIRE (index.saveIndex());
+    }
+    const auto pads = answer ("find_sounds", object ({ { "find", "warm" } }))["sounds"];
+    REQUIRE (pads.size() == 1);
+    CHECK (pads[0]["name"].toString() == "Warm Pad");
+    CHECK (pads[0]["instrument"].toString() == "Surge XT");
+    CHECK (pads[0]["device"]["stockType"].toString() == "bundled.surge-xt"); // what channel.add takes
+    const auto basses = answer ("find_sounds", object ({ { "role", "bass" } }))["sounds"];
+    REQUIRE (basses.size() == 1);
+    CHECK (basses[0]["name"].toString() == "Reese");
+    const auto kicks = answer ("find_sounds", object ({ { "kind", "sample" } }))["sounds"];
+    REQUIRE (kicks.size() == 1);
+    CHECK (kicks[0]["class"].toString() == "kick");
+    CHECK (kicks[0]["file"].toString().endsWith ("Deep Kick.wav"));
+    const auto few = answer ("find_sounds", object ({ { "limit", 1 } }));
+    CHECK (few["sounds"].size() == 1);
+    CHECK (few["more"].toString().contains ("of 3"));
+
+    // A two-second loop in the project's folder, named with its tempo.
+    f.openFolder.createDirectory();
+    const auto loop = f.openFolder.getChildFile ("audio/Beat 120bpm.wav");
+    loop.getParentDirectory().createDirectory();
+    {
+        const double rate = 44100;
+        juce::AudioBuffer<float> audio (1, (int)(2 * rate));
+        audio.clear();
+        for (int beat = 0; beat < 4; ++beat) // a click every half second
+            for (int i = 0; i < 2000; ++i)
+                audio.setSample (0, beat * (int)(rate / 2) + i,
+                                 0.5f * std::sin ((float)i * 0.3f) * (1.0f - (float)i / 2000.0f));
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (loop);
+        auto writer = wav.createWriterFor (
+            stream, juce::AudioFormatWriterOptions().withSampleRate (rate).withNumChannels (1).withBitsPerSample (16));
+        REQUIRE (writer != nullptr);
+        writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+    }
+    REQUIRE (f.call (id, "run_commands",
+                     object ({ { "steps", juce::Array<juce::var> { object (
+                                              { { "command", "project.setTempo" },
+                                                { "parameters", object ({ { "bpm", 90 } }) } }) } } }))
+                 .getProperty ("isError", false) == juce::var (false));
+    const auto info = answer ("audio_file_info", object ({ { "file", "audio/Beat 120bpm.wav" } }));
+    CHECK ((double)info["seconds"] == Catch::Approx (2.0));
+    CHECK ((int)info["ticksAtSongTempo"] == 2880); // 2 s at 90 BPM: 3 beats
+    CHECK ((int)info["channels"] == 1);
+    CHECK ((double)info["tempo"] == Catch::Approx (120.0));
+    CHECK (info["tempoFrom"].toString() == "name");
+
+    // Only where agents may look.
+    const auto outside = f.call (id, "audio_file_info", object ({ { "file", "/etc/passwd" } }));
+    CHECK ((bool)outside["isError"]);
+    CHECK (outside["content"][0]["text"].toString().contains ("outside the project"));
+    CHECK ((bool)f.call (id, "audio_file_info", object ({ { "file", "audio/missing.wav" } }))["isError"]);
 }
 
 TEST_CASE ("export_audio writes the song to the project's folder, and replaces a file only when asked",

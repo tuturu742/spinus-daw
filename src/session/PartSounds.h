@@ -202,6 +202,9 @@ struct Choice
 /** A choice as JSON (the Track creator remembers the parts' sounds between runs), and back. */
 juce::var toVar (const Choice&);
 Choice choiceFromVar (const juce::var&);
+/** The device that plays an instrument of the index, as channel.add's 'instrument' takes it. */
+juce::var deviceJsonOf (const SoundSource&);
+
 /** An instrument (SoundSource) as JSON, and back. */
 juce::var toVar (const SoundSource&);
 SoundSource sourceFromVar (const juce::var&);
