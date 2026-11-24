@@ -11,6 +11,10 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   "Bars 9 to 12 of the guitar as power chords" or "remove the quiet hi-hats" no longer means rewriting the whole
   part.
 - **Piano Roll: a Power chord stamp** (root, fifth and octave).
+- **Agents can search the sound index and read audio files.** `find_sounds` finds presets and samples by words,
+  role or class, each with what an agent needs to use it; `audio_file_info` gives a file's length (also in ticks
+  at the song's tempo), and a sample's class, tempo and key as the sound index hears them. Both work with
+  Spinus's AI off.
 - **Analyzer: notes on the keys a learned instrument plays.** A bass played on Ample Bass P had its notes on the
   keys of their real pitch (the low E on key 28), where that bass keeps its switch keys: it sounds an octave below
   its keys. The Analyzer now uses what Spinus learned about the instrument: each note goes on the key that sounds

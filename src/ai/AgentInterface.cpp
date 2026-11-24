@@ -12,7 +12,10 @@
 #include "model/StockDevices.h"
 #include "session/AgentCommandLine.h"
 #include "session/InstrumentLearning.h"
+#include "session/PartSounds.h"
+#include "session/SoundDescriptors.h"
 #include "session/SoundIndex.h"
+#include "model/Tempo.h"
 #include "session/MelodyMatch.h"
 #include "session/Session.h"
 
@@ -1197,6 +1200,31 @@ juce::var AgentInterface::nativeTools() const
                                                     "them") } },
                 { "device" }),
         Does::replaces));
+    tools.add (tool (
+        "find_sounds",
+        "Search the sound index (Options > Sound index: what Spinus measured of the presets of the user's "
+        "instruments and of the audio files in their sample folders) for sounds to use. Each preset comes with the "
+        "instrument to add for it (channel.add's 'instrument') and its name for device.loadPreset; each sample "
+        "with its file for load_sounds, and its class, tempo and key when Spinus found them. Works with Spinus's AI "
+        "off.",
+        schema ({ { "find", property ("string", "Words the sound's name, instrument, category or role must all have "
+                                                "(\"warm pad\", \"808\")") },
+                  { "role", property ("string", "Only presets of this role (bass, lead, pad, pluck, keys, drums, fx) "
+                                                "or samples of this class (kick, snare, clap, hat, cymbal, tom, perc, "
+                                                "bass, drums, melodic...)") },
+                  { "kind", property ("string", "\"preset\" or \"sample\" (both when left out)") },
+                  { "limit", property ("integer", "At most this many (30 when left out, 100 at most)") } },
+                {}),
+        Does::reads));
+    tools.add (tool (
+        "audio_file_info",
+        "An audio file's length (in seconds, and in ticks at the song's tempo, as clip.addAudio's 'length' takes "
+        "it), sample rate and channels; and for a file up to a minute long, what Spinus hears in it as the sound "
+        "index does: one-shot or loop, its class (kick, snare, bass, drums...), a loop's tempo and bars, and its "
+        "key (each saying whether the name or the sound told). Only files in the project's folder, the user's "
+        "sample folders and Spinus's starter pack. Works with Spinus's AI off.",
+        schema ({ { "file", property ("string", "A full path, or a path in the project's folder") } }, { "file" }),
+        Does::reads));
     if (! host.projects || ! host.openProject || ! host.newProject || ! host.saveProject)
         return tools;
     tools.add (tool ("list_projects",
@@ -1811,6 +1839,132 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
                                                  { reply (text (juce::JSON::toString (result), ! ok)); });
             });
         return;
+    }
+    if (name == "find_sounds")
+    {
+        const auto words = juce::StringArray::fromTokens (arguments["find"].toString().toLowerCase(), true);
+        const auto role = arguments["role"].toString().toLowerCase().trim();
+        const auto kind = arguments["kind"].toString().toLowerCase().trim();
+        if (kind.isNotEmpty() && kind != "preset" && kind != "sample")
+            return reply (text ("'kind' is \"preset\" or \"sample\".", true));
+        const auto limit = arguments.hasProperty ("limit") ? juce::jlimit (1, 100, (int)arguments["limit"]) : 30;
+        SoundIndex index (session.getSoundIndex().getFolder());
+        index.load();
+        if (index.instruments.empty() && index.samples.empty())
+            return reply (text ("The sound index is empty: the user builds it in Options > Sound index (Update)."));
+        const auto has = [&words] (const juce::String& about)
+        {
+            const auto lower = about.toLowerCase();
+            return std::all_of (words.begin(), words.end(), [&] (const juce::String& w) { return lower.contains (w); });
+        };
+        juce::Array<juce::var> found;
+        int matching = 0;
+        if (kind != "sample")
+            for (const auto& [key, instrument] : index.instruments)
+                for (const auto& sound : instrument.sounds)
+                {
+                    if (sound.hasProperty ("problem") || (bool)sound["silent"])
+                        continue;
+                    const auto soundRole = sound["role"].toString();
+                    if (role.isNotEmpty() && soundRole.toLowerCase() != role)
+                        continue;
+                    if (! has (sound["name"].toString() + " " + sound["category"].toString() + " " +
+                               instrument.source.name + " " + soundRole))
+                        continue;
+                    if (++matching > limit)
+                        continue;
+                    auto row = object ({ { "kind", "preset" },
+                                         { "name", sound["name"] },
+                                         { "instrument", instrument.source.name },
+                                         { "role", soundRole },
+                                         { "device", parts::deviceJsonOf (instrument.source) } });
+                    if (sound["category"].toString().isNotEmpty())
+                        row.getDynamicObject()->setProperty ("category", sound["category"]);
+                    found.add (row);
+                }
+        if (kind != "preset")
+            for (const auto& sample : index.samples)
+            {
+                const auto& info = sample.info;
+                if (info.hasProperty ("problem") || info["kind"].toString() == "long")
+                    continue;
+                const auto sampleClass = info["class"].toString();
+                if (role.isNotEmpty() && sampleClass.toLowerCase() != role)
+                    continue;
+                if (! has (sample.path + " " + sampleClass + " " + info["kind"].toString()))
+                    continue;
+                if (++matching > limit)
+                    continue;
+                auto row = object ({ { "kind", "sample" },
+                                     { "file", sample.path },
+                                     { "sampleKind", info["kind"] },
+                                     { "class", sampleClass },
+                                     { "seconds", info["duration"] } });
+                if ((double)info["tempo"] > 0.0)
+                    row.getDynamicObject()->setProperty ("tempo", info["tempo"]);
+                if (info["key"].toString().isNotEmpty())
+                    row.getDynamicObject()->setProperty ("key", info["key"]);
+                found.add (row);
+            }
+        auto answer = object ({ { "sounds", found } });
+        if (matching > found.size())
+            answer.getDynamicObject()->setProperty ("more", "the first " + juce::String (found.size()) + " of " +
+                                                                juce::String (matching) +
+                                                                ": give more words, a role or a kind to narrow them");
+        return reply (text (juce::JSON::toString (answer)));
+    }
+    if (name == "audio_file_info")
+    {
+        if (auto e = checkPaths (arguments); e.isNotEmpty())
+            return reply (text (e + ".", true));
+        const auto given = arguments["file"].toString();
+        const auto folder = host.projectFolder ? host.projectFolder() : juce::File();
+        const auto file = juce::File::isAbsolutePath (given) || folder == juce::File() ? juce::File (given)
+                                                                                       : folder.getChildFile (given);
+        juce::AudioFormatManager formats;
+        formats.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+        if (reader == nullptr || reader->sampleRate <= 0.0)
+            return reply (
+                text ("Can't read \"" + given + "\" as audio (missing, or not WAV, AIFF, FLAC, Ogg or MP3).", true));
+        const auto seconds = (double)reader->lengthInSamples / reader->sampleRate;
+        const auto bpm = session.getProject().settings.tempoBpm;
+        auto answer = object (
+            { { "file", file.getFullPathName() },
+              { "seconds", seconds },
+              { "ticksAtSongTempo", (juce::int64)std::llround (seconds * bpm / 60.0 * model::ticksPerQuarterNote) },
+              { "songTempo", bpm },
+              { "sampleRate", reader->sampleRate },
+              { "channels", (int)reader->numChannels } });
+        auto* o = answer.getDynamicObject();
+        if (seconds <= 60.0)
+        {
+            // As the sound index measures a sample (a longer file is a song: only its length).
+            const auto count = (int)reader->lengthInSamples;
+            juce::AudioBuffer<float> all ((int)reader->numChannels, count), mono (1, count);
+            reader->read (&all, 0, count, 0, true, true);
+            mono.clear();
+            for (int c = 0; c < all.getNumChannels(); ++c)
+                mono.addFrom (0, 0, all, c, 0, count, 1.0f / (float)all.getNumChannels());
+            const auto heard = sounds::describeSample (mono, reader->sampleRate, file);
+            o->setProperty ("sampleKind", heard.kind);
+            o->setProperty ("class", heard.sampleClass);
+            o->setProperty ("classFrom", heard.classFrom);
+            if (heard.tempo > 0.0)
+            {
+                o->setProperty ("tempo", heard.tempo);
+                o->setProperty ("tempoFrom", heard.tempoFrom);
+                o->setProperty ("bars", heard.bars);
+            }
+            if (heard.key.isNotEmpty())
+            {
+                o->setProperty ("key", heard.key);
+                o->setProperty ("keyFrom", heard.keyFrom);
+            }
+        }
+        else if (const auto tempo = model::bpmFromFileName (file.getFileName()))
+            o->setProperty ("tempoFromName", *tempo);
+        return reply (text (juce::JSON::toString (answer)));
     }
     if (name == "list_presets")
     {

@@ -175,6 +175,19 @@ velocities, turn each note or chord into a named chord (a power chord, a minor s
 For example "bars 9 to 12 of the guitar as power chords" or "remove the hi-hats under 30% velocity". Each
 change is one undo step.
 
+## Finding sounds and reading audio files
+
+These work with Spinus's AI off too:
+
+- `find_sounds`: searches the [sound index](sound-index.md) (Options › Sound index), the presets of your
+  instruments and the audio files in your sample folders, by words ("warm pad", "808"), role (bass, pad, lead...)
+  or class (kick, snare, loop...). Each preset comes with the instrument to add for it and its name to load;
+  each sample with its file, and its tempo and key when Spinus found them. When the index is empty, the agent
+  is told to ask you to update it.
+- `audio_file_info`: an audio file's length (in seconds and in ticks at the song's tempo), sample rate and
+  channels, and for a file up to a minute long what Spinus hears in it: one-shot or loop, its class, a loop's
+  tempo and bars, and its key. Only files in the project's folder, your sample folders and the starter pack.
+
 ## Kits and samples
 
 An agent loads a Drum Machine kit ("Magpie", "Spinus Synth Kit" or a `.spinuskit` file) or samples into a Sampler
