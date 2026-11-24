@@ -2,6 +2,7 @@
 
 #include "AudioChecks.h"
 #include "RealtimeRunner.h"
+#include "engine/Beats.h"
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
 #include "ui/ChannelRack.h"
@@ -43,6 +44,38 @@ struct Fixture
 
     void press (int note, float velocity = 0.8f) { keyboard->keyboardState.noteOn (1, note, velocity); }
     void release (int note) { keyboard->keyboardState.noteOff (1, note, 0.0f); }
+
+    /** Presses or releases a key between two blocks, and answers where the playhead was then, in ticks within the
+        one-bar loop. A test that waits and then presses may wake late on a busy machine (almost a second, seen
+        under the sanitizers in CI): the note is where the playhead was, not where the test meant it to be. */
+    model::Ticks pressNow (int note, float velocity)
+    {
+        model::Ticks at = 0;
+        runner.betweenBlocks (
+            [&]
+            {
+                at = playheadTicks();
+                press (note, velocity);
+            });
+        return at;
+    }
+    model::Ticks releaseNow (int note)
+    {
+        model::Ticks at = 0;
+        runner.betweenBlocks (
+            [&]
+            {
+                at = playheadTicks();
+                release (note);
+            });
+        return at;
+    }
+    model::Ticks playheadTicks() const
+    {
+        auto& edit = session->getEdit();
+        const auto ticks = (model::Ticks)std::floor (engine::timeToTicks (edit, edit.getTransport().getPosition()));
+        return ((ticks % 3840) + 3840) % 3840;
+    }
     void waitUntil (double seconds) { runner.runUntil (seconds); }
 
     const std::vector<model::Note>* notesOf (size_t channel) const
@@ -105,13 +138,13 @@ TEST_CASE ("Recording writes the played notes into the current pattern", "[sessi
 
     // 120 BPM: a beat is 0.5 s. Play E at beat 1 (0.5 s) and G at beat 2.5 (1.25 s).
     f.waitUntil (start + 0.5);
-    f.press (64, 1.0f);
+    const auto eOn = f.pressNow (64, 1.0f);
     f.waitUntil (start + 0.8);
-    f.release (64);
+    const auto eOff = f.releaseNow (64);
     f.waitUntil (start + 1.25);
-    f.press (67, 0.5f);
+    const auto gOn = f.pressNow (67, 0.5f);
     f.waitUntil (start + 1.4);
-    f.release (67);
+    f.releaseNow (67);
     f.waitUntil (start + 1.6);
     session.stop();
 
@@ -132,11 +165,18 @@ TEST_CASE ("Recording writes the played notes into the current pattern", "[sessi
     const auto* g = find (67);
     REQUIRE (e != nullptr);
     REQUIRE (g != nullptr);
-    // Quantized to sixteenths (240 ticks); real-time timing may land a step either side.
+    // Quantized to sixteenths (240 ticks), where the playhead was when each key went down (a step either side:
+    // the block the key lands in, and quantizing); around the one-bar loop.
+    const auto apart = [] (model::Ticks a, model::Ticks b)
+    {
+        const auto d = std::abs (a - b) % 3840;
+        return std::min (d, 3840 - d);
+    };
+    INFO ("E pressed at " << eOn << ", released at " << eOff << "; G pressed at " << gOn);
     CHECK (e->start % 240 == 0);
-    CHECK (std::abs (e->start - 960) <= 240);
-    CHECK (std::abs (g->start - 2400) <= 240);
-    CHECK (std::abs (e->length - 576) <= 240); // 0.3 s
+    CHECK (apart (e->start, eOn) <= 240);
+    CHECK (apart (g->start, gOn) <= 240);
+    CHECK (std::abs (e->length - apart (eOff, eOn)) <= 240);
     CHECK (e->velocity > g->velocity);
     CHECK (session.getHistory().getUndoDescriptions().strings.getLast() == "Record notes");
 
