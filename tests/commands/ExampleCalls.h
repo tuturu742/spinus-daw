@@ -93,6 +93,7 @@ inline const std::vector<std::pair<juce::String, juce::String>>& exampleCalls()
         { "project.setTimeSignature", R"({"numerator": 6, "denominator": 8})" },
         { "pattern.setNotes",
           R"({"pattern": 11, "channel": 9, "notes": [{"start": 0, "length": 480, "pitch": 48, "velocity": 0.6}]})" },
+        { "pattern.editNotes", R"({"pattern": 11, "channel": 7, "tool": "transpose", "semitones": 2, "from": 960})" },
         // The example's launcher: track 18, scenes 19 and 20, pattern clip 21 (18/19), audio clip 22 (18/20).
         { "launcher.addTrack", R"({"name": "Bass jam"})" },
         { "launcher.removeTrack", R"({"track": 18})" },

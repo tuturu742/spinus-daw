@@ -676,9 +676,12 @@ can work on the open project while the user watches and listens.
   - **Spinus's own, always, in C++:** `song_summary` (`cli::summarize`), `run_commands`, `command_help`,
     `list_devices`, `list_presets`, `render` (an offline export measured: mix, sections, stems), `undo_last`,
     `what_changed`, `play` (bars of the song in song mode, a pattern alone in pattern mode, or a launcher scene launched), `stop`, the reads of what the summary only names (owner, 2026-11-20: everything the UI
-    does reachable by agents): `read_pattern` (notes as `pattern.setNotes` takes them, its automation),
+    does reachable by agents): `read_pattern` (notes as `pattern.setNotes` takes them, its automation), the Piano Roll's note tools as a command, `pattern.editNotes` (`model::noteTools` on the notes in a range of ticks, pitches and velocities, plus transpose, move, length, velocity, `chordOnEach` with a named chord type, remove; overlaps tidied by `removeOverlaps`; a `SetNotes` whose notes are worked out from the current ones at its first perform and kept, so redo gives the same),
     `read_clip` (a Playlist or launcher clip as `clipToJson` writes it, without tune notes) and
-    `device_settings` (`Session::getDeviceParameterTexts`, at most 300, `find` by name), `load_sounds` (a kit or
+    `device_settings` (`Session::getDeviceParameterTexts`, at most 300, `find` by name), `find_sounds` (the sound index's presets and samples by words, role or class, each preset with
+    `parts::deviceJsonOf` its instrument for channel.add; at most 100), `audio_file_info` (length in seconds and in
+    ticks at the song's tempo; for a file up to a minute `sounds::describeSample` as the index measures it; paths
+    as `checkPaths` allows), `load_sounds` (a kit or
     samples, `cli::loadSounds` as `--run`'s actions, without waiting for the engine; like the device's window, not
     an undo step; files only where `checkPaths` allows); and the project as files (owner decision 2026-11-13), when the host gives
     them (`Host::projects`, `openProject`...; MainView without message boxes): `save_project` (an untitled
