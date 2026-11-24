@@ -603,17 +603,24 @@ TEST_CASE ("A drag in a CLAP plugin's window is one undo step, and holds an auto
     run();
     CHECK (near (at (12.0), 0.2f));
 
-    // Playing in the clip: the hand wins while it holds Tone; then the clip again.
+    // Playing in the clip: the hand wins while it holds Tone; then the clip again. Looped over the clip's bar, and
+    // waiting for each change rather than a set time: on a slow machine (the sanitizers in CI) a tenth of a second
+    // isn't always enough, and the playhead would leave the clip.
+    session.setLoopRegion (Session::Mode::song, Session::LoopRegion { 3840, 7680 });
     session.getEdit().getTransport().setPosition (te::TimePosition::fromSeconds (2.1)); // bar 2 at 120 BPM
     session.play();
-    run();
-    CHECK (near (parameter->getCurrentNormalisedValue(), 0.9f));
+    const auto reaches = [&] (float wanted)
+    {
+        for (int i = 0; i < 40 && ! near (parameter->getCurrentNormalisedValue(), wanted); ++i)
+            run();
+        INFO ("Tone is " << parameter->getCurrentNormalisedValue());
+        return near (parameter->getCurrentNormalisedValue(), wanted);
+    };
+    CHECK (reaches (0.9f));
     hand (1, 0.3, 1);
-    run();
-    CHECK (near (parameter->getCurrentNormalisedValue(), 0.3f));
+    CHECK (reaches (0.3f));
     hand (1, 0.3, 3);
-    run();
-    CHECK (near (parameter->getCurrentNormalisedValue(), 0.9f));
+    CHECK (reaches (0.9f));
     session.stop();
     runner.stop();
 }
