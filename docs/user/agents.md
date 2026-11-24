@@ -155,6 +155,9 @@ Each change is one undo step, and Spinus renders the tuned vocal in the backgrou
   "Chorus 2" for the second section named Chorus. The agent doesn't hear it; you do. Press Stop as usual, or ask
   the agent to stop. Playing doesn't change the song, but it switches Spinus to song mode and sets the loop
   region to the section, and it doesn't put them back afterwards.
+  It can also play one pattern on its own, looped ("play the new groove": pattern mode, as the Channel Rack
+  plays it), or launch a scene of the [clip launcher](launcher.md), which plays until you or the agent
+  stop it.
 - Rendering to listen takes as long as the song does to render. The agent sees the numbers; you hear the song in
   Spinus as usual.
 - **It can save the project, start a new one, and open one of yours:** "save it", "start a new song", "open

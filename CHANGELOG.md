@@ -17,6 +17,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   Spinus's AI off.
 - **Agents can export the song.** `export_audio` writes the song or a pattern, and its stems if asked, to the
   project's folder in any of File › Export's formats; it replaces a file only when told to.
+- **Agents can play a pattern on its own or launch a clip launcher scene** (the `play` tool), as well as a part
+  of the song.
 - **Analyzer: notes on the keys a learned instrument plays.** A bass played on Ample Bass P had its notes on the
   keys of their real pitch (the low E on key 28), where that bass keeps its switch keys: it sounds an octave below
   its keys. The Analyzer now uses what Spinus learned about the instrument: each note goes on the key that sounds
