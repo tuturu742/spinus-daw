@@ -1663,3 +1663,66 @@ TEST_CASE ("Agents find sounds in the sound index and read an audio file's lengt
     CHECK (outside["content"][0]["text"].toString().contains ("outside the project"));
     CHECK ((bool)f.call (id, "audio_file_info", object ({ { "file", "audio/missing.wav" } }))["isError"]);
 }
+
+TEST_CASE ("export_audio writes the song to the project's folder, and replaces a file only when asked",
+           "[ai][agents][audio]")
+{
+    Fixture f (false); // works with AI off
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+
+    // Not before the project has a folder.
+    f.openFolder = juce::File();
+    const auto unsaved = f.call (id, "export_audio", none());
+    CHECK ((bool)unsaved["isError"]);
+    CHECK (said (unsaved).contains ("isn't saved"));
+    f.openFolder = f.folder.root.getChildFile ("Song");
+    f.openFolder.createDirectory();
+
+    const auto made = f.call (
+        id, "run_commands",
+        stepsOf (
+            { command (
+                  "channel.add",
+                  object ({ { "name", "Bass" },
+                            { "instrument", object ({ { "kind", "stock" }, { "stockType", "spinus.3x-osc" } }) } }),
+                  "bass"),
+              command ("pattern.add", object ({ { "name", "Loop" }, { "length", 3840 } }), "loop"),
+              command (
+                  "pattern.setNotes",
+                  object ({ { "pattern", "$loop.pattern" },
+                            { "channel", "$bass.channel" },
+                            { "notes",
+                              juce::Array<juce::var> { object (
+                                  { { "start", 0 }, { "length", 1920 }, { "pitch", 45 }, { "velocity", 0.8 } }) } } })),
+              command ("lane.add", object ({ { "name", "Music" } }), "lane"),
+              command ("clip.addPattern",
+                       object ({ { "lane", "$lane.lane" }, { "pattern", "$loop.pattern" }, { "start", 0 } })) }));
+    INFO (said (made));
+    REQUIRE_FALSE ((bool)made["isError"]);
+
+    const auto exported = f.call (id, "export_audio", object ({ { "name", "Mix" }, { "format", "wav16" } }));
+    INFO (said (exported));
+    REQUIRE_FALSE ((bool)exported["isError"]);
+    const auto file = f.openFolder.getChildFile ("Mix.wav");
+    CHECK (file.existsAsFile());
+    CHECK (juce::JSON::parse (said (exported))["files"][0].toString() == "Mix.wav");
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    {
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+        REQUIRE (reader != nullptr);
+        CHECK (reader->bitsPerSample == 16);
+        CHECK ((double)reader->lengthInSamples / reader->sampleRate > 1.0); // a bar at 120 BPM, and the tail
+    }
+
+    // Again: refused unless replacing; a name with folders, a bad format.
+    const auto again = f.call (id, "export_audio", object ({ { "name", "Mix" }, { "format", "wav16" } }));
+    CHECK ((bool)again["isError"]);
+    CHECK (said (again).contains ("already there"));
+    CHECK_FALSE ((bool)f.call (id, "export_audio",
+                               object ({ { "name", "Mix" }, { "format", "wav16" }, { "replace", true } }))["isError"]);
+    CHECK ((bool)f.call (id, "export_audio", object ({ { "name", "../Mix" } }))["isError"]);
+    CHECK ((bool)f.call (id, "export_audio", object ({ { "format", "ogg" } }))["isError"]);
+    CHECK ((bool)f.call (id, "export_audio", object ({ { "pattern", 9999 } }))["isError"]);
+}

@@ -203,6 +203,13 @@ keys play, which switch what it plays, and the octave its keys sound in. It take
 keeps what it learns for that instrument, as when you learn it yourself; keys you marked stay as you set them.
 It doesn't change the song.
 
+## Exporting
+
+An agent exports the song with `export_audio`, as **File › Export** does: the whole song or one pattern, in
+WAV (16, 24 or 32-bit), FLAC, MP3, Opus or AAC, with reverbs and echoes ringing out, and with stems if asked
+(a file per mixer track). The file goes in the project's folder, so the project must be saved first; a file
+already there is replaced only when the agent says so. This works with Spinus's AI off.
+
 ## What an agent can't do
 
 - **Load presets on Spinus's own devices other than 3x Osc.** They have none: the agent changes their settings
@@ -218,7 +225,7 @@ It doesn't change the song.
   connect any more. Keep the token to yourself, like a password.
 - **No web pages:** a web page in your browser can't use it.
 - **Files:** an agent can only use files in the project's folder, your sample folders (Browser › Samples) and
-  Spinus's starter pack. It can't change Spinus's settings.
+  Spinus's starter pack. It writes files only into the project's folder (exports, saving the project). It can't change Spinus's settings.
 - **Turning it off** (untick it) disconnects every agent at once, and none can connect until you turn it on
   again.
 

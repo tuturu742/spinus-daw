@@ -186,6 +186,8 @@ private:
     juce::var matchVocal (const juce::String& sessionId, const juce::var& arguments);
     juce::String checkPaths (const juce::var& value) const;
     void render (bool stems, const ToolReply& reply);
+    /** export_audio: the song (or a pattern), and its stems, as files in the project's folder. */
+    void exportAudio (const juce::var& arguments, const ToolReply& reply);
     /** Playback for the user to hear: bars ("9-16", a section's name; empty: from where it is), looped or not. An
         error text (empty when it plays). */
     juce::String play (const juce::String& bars, bool loop);

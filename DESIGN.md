@@ -681,7 +681,8 @@ can work on the open project while the user watches and listens.
     `device_settings` (`Session::getDeviceParameterTexts`, at most 300, `find` by name), `find_sounds` (the sound index's presets and samples by words, role or class, each preset with
     `parts::deviceJsonOf` its instrument for channel.add; at most 100), `audio_file_info` (length in seconds and in
     ticks at the song's tempo; for a file up to a minute `sounds::describeSample` as the index measures it; paths
-    as `checkPaths` allows), `load_sounds` (a kit or
+    as `checkPaths` allows), `export_audio` (File › Export's settings, ringing out, the song or a pattern, stems; only into the
+    project's folder, so a saved project; a planned file already there only with `replace`), `load_sounds` (a kit or
     samples, `cli::loadSounds` as `--run`'s actions, without waiting for the engine; like the device's window, not
     an undo step; files only where `checkPaths` allows); and the project as files (owner decision 2026-11-13), when the host gives
     them (`Host::projects`, `openProject`...; MainView without message boxes): `save_project` (an untitled
