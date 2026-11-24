@@ -1116,6 +1116,24 @@ juce::var AgentInterface::nativeTools() const
               "render.",
               schema ({ { "stems", property ("boolean", "Also measure each mixer insert on its own (slower)") } }),
               Does::reads));
+    tools.add (tool (
+        "export_audio",
+        "Export the song as File > Export does, to a file in the project's folder (the project must be saved): the "
+        "whole song, or one pattern, with reverbs and echoes ringing out; with stems, also a file per mixer insert "
+        "beside it. Answers with the files made, when the export is done (it takes as long as rendering the song). "
+        "An existing file is replaced only with 'replace'.",
+        schema (
+            { { "name", property ("string", "The file's name without folders (the song's title when left out); the "
+                                            "format's extension is added") },
+              { "format", object ({ { "type", "string" },
+                                    { "enum", juce::Array<juce::var> { "wav16", "wav24", "wav32", "flac", "mp3", "opus",
+                                                                       "aac" } },
+                                    { "description", "wav24 when left out; mp3 is 320 kbit/s, aac needs ffmpeg" } }) },
+              { "stems", property ("boolean", "Also a file per mixer insert") },
+              { "pattern", property ("integer", "Export only this pattern (its id, as song_summary shows it)") },
+              { "sampleRate", property ("integer", "44100 or 48000 (the project's when left out)") },
+              { "replace", property ("boolean", "Replace files already there (false when left out)") } }),
+        Does::adds));
     tools.add (
         tool ("list_presets",
               "The presets device.loadPreset can load on a device of the song (an instrument or effect): "
@@ -2069,6 +2087,8 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
     }
     if (name == "render")
         return render ((bool)arguments["stems"], reply);
+    if (name == "export_audio")
+        return exportAudio (arguments, reply);
 
     // The project harness's tools, through the local AI service.
     if (! host.callHarnessTool || ! musicToolsOn())
@@ -2476,6 +2496,93 @@ void AgentInterface::render (bool stems, const ToolReply& reply)
     {
         scratch.deleteRecursively();
         return reply (text ("Nothing to render: the song is empty.", true));
+    }
+    renders.push_back (job);
+    (*job)->start();
+}
+
+void AgentInterface::exportAudio (const juce::var& arguments, const ToolReply& reply)
+{
+    using Format = engine::ExportSettings::Format;
+    const auto folder = host.projectFolder ? host.projectFolder() : juce::File();
+    if (folder == juce::File())
+        return reply (
+            text ("Not exported: the project isn't saved yet, so it has no folder (save_project saves it).", true));
+    engine::ExportSettings settings;
+    settings.maxTailSeconds = engine::ExportSettings::ringOutSeconds; // as the Export dialog: rings out
+    static const std::map<juce::String, Format> formats { { "wav16", Format::wav16 },      { "wav24", Format::wav24 },
+                                                          { "wav32", Format::wav32Float }, { "flac", Format::flac },
+                                                          { "mp3", Format::mp3 },          { "opus", Format::opus },
+                                                          { "aac", Format::aac } };
+    const auto formatName = arguments.hasProperty ("format") ? arguments["format"].toString() : juce::String ("wav24");
+    const auto format = formats.find (formatName);
+    if (format == formats.end())
+        return reply (text ("Not exported: 'format' is one of wav16, wav24, wav32, flac, mp3, opus, aac.", true));
+    settings.format = format->second;
+    const auto rate = arguments.hasProperty ("sampleRate")
+                          ? (int)arguments["sampleRate"]
+                          : juce::roundToInt (session.getProject().settings.sampleRate);
+    if (rate != 44100 && rate != 48000)
+        return reply (text ("Not exported: 'sampleRate' is 44100 or 48000.", true));
+    settings.sampleRate = (double)rate;
+    settings.stems = (bool)arguments["stems"];
+    if (arguments.hasProperty ("pattern"))
+    {
+        const model::PatternId pattern { (uint32_t)(int)arguments["pattern"] };
+        if (! pattern.isValid() || session.getProject().findPattern (pattern) == nullptr)
+            return reply (text ("Not exported: there is no pattern " + arguments["pattern"].toString() +
+                                    " (song_summary lists the patterns).",
+                                true));
+        settings.pattern = pattern;
+    }
+    settings.audioFolder = folder.getChildFile ("audio");
+    const auto title = session.getSongInfo().title;
+    const auto given = arguments["name"].toString().trim();
+    if (given.containsAnyOf ("/\\") || given == "." || given == "..")
+        return reply (text ("Not exported: 'name' is a file name without folders.", true));
+    auto name = juce::File::createLegalFileName (given.isNotEmpty() ? given : title.isNotEmpty() ? title : "Song");
+    const auto extension = engine::ExportSettings::extensionFor (settings.format);
+    if (name.endsWithIgnoreCase (extension))
+        name = name.dropLastCharacters (extension.length());
+    const auto destination = folder.getChildFile (name + extension);
+
+    auto job = std::make_shared<std::unique_ptr<engine::ExportJob>>();
+    std::weak_ptr<std::unique_ptr<engine::ExportJob>> weakJob = job;
+    auto stillAlive = alive;
+    *job = session.createExportJob (
+        destination, settings,
+        [this, reply, folder, weakJob, stillAlive] (const engine::ExportJob::Result& result)
+        {
+            if (! *stillAlive)
+                return;
+            juce::MessageManager::callAsync (
+                [this, weakJob, stillAlive]
+                {
+                    if (*stillAlive)
+                        std::erase_if (renders, [&] (const auto& r) { return r == weakJob.lock(); });
+                });
+            if (! result.ok || result.files.empty())
+                return reply (text ("The export failed: " + result.error, true));
+            juce::Array<juce::var> files;
+            for (const auto& file : result.files)
+                files.add (file.getRelativePathFrom (folder));
+            auto answer = object ({ { "folder", folder.getFullPathName() }, { "files", files } });
+            if (result.warning.isNotEmpty())
+                answer.getDynamicObject()->setProperty ("warning", result.warning);
+            reply (text (juce::JSON::toString (answer)));
+        });
+    if (*job == nullptr)
+        return reply (text ("Nothing to export: the song is empty.", true));
+    if (! (bool)arguments["replace"])
+    {
+        juce::StringArray there;
+        for (const auto& file : (*job)->getPlannedFiles())
+            if (file.exists())
+                there.add (file.getFileName());
+        if (! there.isEmpty())
+            return reply (text ("Not exported: " + there.joinIntoString (", ") + (there.size() == 1 ? " is" : " are") +
+                                    " already there. Give another 'name', or 'replace': true to replace.",
+                                true));
     }
     renders.push_back (job);
     (*job)->start();

@@ -15,6 +15,8 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   role or class, each with what an agent needs to use it; `audio_file_info` gives a file's length (also in ticks
   at the song's tempo), and a sample's class, tempo and key as the sound index hears them. Both work with
   Spinus's AI off.
+- **Agents can export the song.** `export_audio` writes the song or a pattern, and its stems if asked, to the
+  project's folder in any of File › Export's formats; it replaces a file only when told to.
 - **Agents can play a pattern on its own or launch a clip launcher scene** (the `play` tool), as well as a part
   of the song.
 - **Analyzer: notes on the keys a learned instrument plays.** A bass played on Ample Bass P had its notes on the
