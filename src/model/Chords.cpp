@@ -24,6 +24,7 @@ const std::vector<ChordType>& getChordTypes()
         { "Sixth", "6", { 0, 4, 7, 9 } },
         { "Minor 6", "m6", { 0, 3, 7, 9 } },
         { "Add 9", "add9", { 0, 4, 7, 14 } },
+        { "Power chord", "5", { 0, 7, 12 } },
     };
     return types;
 }

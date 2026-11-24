@@ -5,6 +5,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Agents and the assistant can use the Piano Roll's note tools.** A new command, `pattern.editNotes`, changes
+  only the notes in a range of bars, pitches or velocities: quantize, strum, arpeggiate, chop, legato, humanize,
+  transpose, move, set lengths or velocities, turn notes into a named chord, or remove them, as one undo step.
+  "Bars 9 to 12 of the guitar as power chords" or "remove the quiet hi-hats" no longer means rewriting the whole
+  part.
+- **Piano Roll: a Power chord stamp** (root, fifth and octave).
 - **Agents can export the song.** `export_audio` writes the song or a pattern, and its stems if asked, to the
   project's folder in any of File › Export's formats; it replaces a file only when told to.
 - **Analyzer: notes on the keys a learned instrument plays.** A bass played on Ample Bass P had its notes on the

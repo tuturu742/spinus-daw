@@ -1186,6 +1186,144 @@
         "additionalProperties": false
       }
     },
+    "pattern.editNotes": {
+      "description": "Change some of one channel's notes in one pattern with one of the Piano roll's tools, as one undo step. Which notes: those starting from 'from' up to (not including) 'to' (ticks in the pattern), with pitches 'lowPitch' to 'highPitch' and velocities 'lowVelocity' to 'highVelocity'; every note when none of these is given. The other notes stay as they are. Tools: quantize (starts on the nearest 'step'), strum (chords played one note after another, 'spacing' ticks apart, 'direction' up or down), arpeggiate (chords as running notes, 'step' each), chop (notes cut into repeats 'step' long), legato (each lasts until the next starts), humanize (velocities moved at random by up to 'amount'), transpose (by 'semitones'), move (by 'ticks', later or earlier), length (every note 'length' ticks), velocity (set to 'velocity', or multiplied by 'factor'), chord (each chord, or single note, becomes the chord named in 'chord' on its lowest note), remove (the notes are deleted).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pattern ID"
+          },
+          "channel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Channel ID"
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "quantize",
+              "strum",
+              "arpeggiate",
+              "chop",
+              "legato",
+              "humanize",
+              "transpose",
+              "move",
+              "length",
+              "velocity",
+              "chord",
+              "remove"
+            ],
+            "description": "What to do with the notes"
+          },
+          "from": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1073741824,
+            "description": "First tick of the notes to change (a note is chosen by where it starts)"
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1073741824,
+            "description": "The tick after the last notes to change"
+          },
+          "lowPitch": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 127,
+            "description": "Lowest pitch to change (MIDI, C5 = 60)"
+          },
+          "highPitch": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 127,
+            "description": "Highest pitch to change"
+          },
+          "lowVelocity": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Quietest velocity to change (0-1)"
+          },
+          "highVelocity": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Loudest velocity to change (0-1)"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1048576,
+            "description": "quantize, arpeggiate, chop: ticks (default 240, a sixteenth)"
+          },
+          "spacing": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3840,
+            "description": "strum: ticks between the notes (default 40)"
+          },
+          "direction": {
+            "type": "string",
+            "description": "strum: \"up\" (lowest first, the default) or \"down\""
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "humanize: how far velocities move, 0-1 (default 0.15)"
+          },
+          "semitones": {
+            "type": "integer",
+            "minimum": -127,
+            "maximum": 127,
+            "description": "transpose: semitones, up or down"
+          },
+          "ticks": {
+            "type": "integer",
+            "minimum": -1073741824,
+            "maximum": 1073741824,
+            "description": "move: ticks, later (positive) or earlier (negative)"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1073741824,
+            "description": "length: ticks"
+          },
+          "velocity": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "velocity: the new velocity, 0-1"
+          },
+          "factor": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 10.0,
+            "description": "velocity: multiply each velocity by this (kept between 0.01 and 1)"
+          },
+          "chord": {
+            "type": "string",
+            "description": "chord: a chord name or its symbol: Major (\"\"), Minor (\"m\"), Power chord (\"5\"), Seventh (\"7\"), Minor 7 (\"m7\"), Major 7 (\"maj7\"), sus2, sus4, dim, aug, m7b5, dim7, 6, m6, add9"
+          },
+          "description": {
+            "type": "string",
+            "description": "Undo history text (default: the tool's name)"
+          }
+        },
+        "required": [
+          "pattern",
+          "channel",
+          "tool"
+        ],
+        "additionalProperties": false
+      }
+    },
     "pattern.setNotes": {
       "description": "Replace all notes of one channel in one pattern. The pattern's length follows its notes: whole bars of its time signature, at least one.",
       "parameters": {
