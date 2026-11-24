@@ -63,6 +63,10 @@ jobs:
       # A compiler cache kept between runs (as ccache on Linux): files that didn't change aren't compiled again.
       - name: Compiler cache
         uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          # 0.20.0 started every build with an empty cache (0 hits, 85-minute Windows builds): the last
+          # one that kept it, until a newer one is checked.
+          version: "v0.19.0"
 
       - name: Configure
         run: >-
