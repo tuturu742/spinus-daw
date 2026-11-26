@@ -23,7 +23,9 @@ struct Outcome
 /** An instrument ready to learn: what the helper loads, and with which sound. */
 struct Job
 {
-    juce::String key, name; // the sound index's key of the instrument (InstrumentPresets::libraryOf), its name
+    juce::String key, name; // the sound index's key of the instrument (InstrumentPresets::libraryOf), its name;
+                            // when its loaded bank decides its keys, the bank's own key (keyForBank)
+    juce::String bankName;  // that bank's name, then
     SoundSource source;
     juce::File state; // its state now (a scratch file, deleted with the job), or none
     juce::File indexFolder;
@@ -39,8 +41,10 @@ struct Job
     program (parts::keyNamesInHelper, parts::probeInHelper), as Ask the instrument and Listen to every key do; what
     they found goes into its first mode (and each mode entered by a key, listened to after that key), the keys the
     user set staying theirs, with the octave its keys sound in, and the profile is saved (InstrumentProfiles, beside
-    the sound index's folder). The manual is not read (that needs the AI). Takes a minute or two: not the audio
-    thread; `say` gets progress in words, `shouldStop` ends it early (what was found is kept). */
+    the sound index's folder). For an instrument whose loaded bank decides its keys (Profile::byBank), it is the
+    bank the channel plays that is learned (instrumentbanks::of), and nothing when that bank isn't known. The manual is
+   not read (that needs the AI). Takes a minute or two: not the audio thread; `say` gets progress in words, `shouldStop`
+   ends it early (what was found is kept). */
 Outcome learn (Session&, model::DeviceId, const juce::File& indexFolder, const std::function<bool()>& shouldStop,
                const std::function<void (const juce::String&)>& say);
 /** learn() in two halves, for a caller that listens on another thread: prepare() reads the device (message

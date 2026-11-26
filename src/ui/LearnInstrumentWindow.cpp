@@ -220,6 +220,10 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
                    juce::dontSendNotification);
     intro.setJustificationType (juce::Justification::topLeft);
     intro.setMinimumHorizontalScale (1.0f);
+    bankToggle.setTooltip ("For sample players (sfz files, drum kits...): each bank they load keeps its own keys and "
+                           "modes, learned on a channel playing it");
+    bankToggle.onClick = [this] { setByBank (bankToggle.getToggleState()); };
+    bankLabel.setJustificationType (juce::Justification::centredLeft);
     modeLabel.setText ("Mode:", juce::dontSendNotification);
     enterLabel.setText ("How to enter it:", juce::dontSendNotification);
     goodForLabel.setText ("Good for:", juce::dontSendNotification);
@@ -306,7 +310,7 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
             onAsk();
         }
     };
-    applyButton.setTooltip ("Take what was found (the keys you set stay yours)");
+    applyButton.setTooltip ("Take what was found (keys you set, or a manual named, stay as they are)");
     applyButton.onClick = [this] { applyHeard(); };
     discardButton.setTooltip ("Drop what was found");
     discardButton.onClick = [this] { discardHeard(); };
@@ -338,11 +342,11 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
              &summary,       &forgetButton,       &cancelButton,    &saveButton,     &listenButton,
              &askButton,     &heardLabel,         &manualsLabel,    &manualsBox,     &removeManualButton,
              &manualEditor,  &chooseManualButton, &addManualButton, &readButton,     &exportButton,
-             &importButton })
+             &importButton,  &bankToggle,         &bankLabel })
         addAndMakeVisible (c);
     addChildComponent (applyButton);
     addChildComponent (discardButton);
-    setSize (980, 504);
+    setSize (980, 536);
     updateManuals();
     showMode (0);
 }
@@ -361,6 +365,23 @@ std::optional<InstrumentProfiles::Profile> LearnInstrumentPanel::getProfile() co
     if (forgotten)
         return std::nullopt;
     return profile;
+}
+
+void LearnInstrumentPanel::setBank (const InstrumentBank& playing, bool byBank)
+{
+    bank = playing;
+    setByBank (byBank);
+}
+
+void LearnInstrumentPanel::setByBank (bool byBank)
+{
+    bankToggle.setToggleState (byBank, juce::dontSendNotification);
+    bankLabel.setText (! byBank ? juce::String()
+                       : bank.isKnown()
+                           ? "Bank: " + bank.name + ". These keys are this bank's; other banks keep their own."
+                           : juce::String ("Bank: not known. Name this channel's bank in its menu (Bank) to learn "
+                                           "its keys; Save keeps the setting."),
+                       juce::dontSendNotification);
 }
 
 void LearnInstrumentPanel::showMode (int index)
@@ -774,6 +795,13 @@ void LearnInstrumentPanel::resized()
     auto area = getLocalBounds().reduced (12);
     intro.setBounds (area.removeFromTop (40));
     area.removeFromTop (6);
+    {
+        auto r = area.removeFromTop (26);
+        area.removeFromTop (6);
+        bankToggle.setBounds (r.removeFromLeft (320));
+        r.removeFromLeft (8);
+        bankLabel.setBounds (r);
+    }
     auto row = [&area] (int height = 26)
     {
         auto r = area.removeFromTop (height);
@@ -874,16 +902,17 @@ std::vector<LearnInstrumentWindow*>& openWindows()
 
 void LearnInstrumentWindow::open (const juce::File& indexFolder, const juce::String& instrument,
                                   const juce::String& name, juce::Component* near, Saved saved,
-                                  std::optional<Listening> listening, ai::AiService* service)
+                                  std::optional<Listening> listening, ai::AiService* service,
+                                  const InstrumentBank& bank)
 {
     for (auto* w : openWindows())
-        if (w->instrument == instrument)
+        if (w->instrument == instrument && w->bank == bank)
         {
             w->toFront (true);
             return;
         }
-    auto* window =
-        new LearnInstrumentWindow (indexFolder, instrument, name, std::move (saved), std::move (listening), service);
+    auto* window = new LearnInstrumentWindow (indexFolder, instrument, name, std::move (saved), std::move (listening),
+                                              service, bank);
     if (near != nullptr && near->isOnDesktop())
         keepAboveOwner (*window, *near);
     window->setVisible (true);
@@ -891,23 +920,71 @@ void LearnInstrumentWindow::open (const juce::File& indexFolder, const juce::Str
 
 LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const juce::String& key,
                                               const juce::String& instrumentName, Saved s, std::optional<Listening> l,
-                                              ai::AiService* aiService)
-    : juce::DocumentWindow ("Learn " + instrumentName, juce::Colours::black, juce::DocumentWindow::closeButton, false),
-      indexFolder (folder), instrument (key), saved (std::move (s)), listening (std::move (l)), service (aiService),
-      name (instrumentName)
+                                              ai::AiService* aiService, const InstrumentBank& playing)
+    : juce::DocumentWindow ("Learn " + instrumentName +
+                                (playing.isKnown() ? " (" + playing.name + ")" : juce::String()),
+                            juce::Colours::black, juce::DocumentWindow::closeButton, false),
+      indexFolder (folder), instrument (key), bank (playing), saved (std::move (s)), listening (std::move (l)),
+      service (aiService), name (instrumentName)
 {
     InstrumentProfiles profiles (indexFolder);
     profiles.load();
-    auto* panel = new LearnInstrumentPanel (name, profiles.get (instrument));
+    const bool byBank = profiles.byBank (instrument);
+    auto start = profiles.get (instrument);
+    if (byBank)
+    {
+        // This bank's own keys, with the manuals kept for the instrument as a whole.
+        const auto manuals = start.has_value() ? start->manuals : std::vector<InstrumentProfiles::Manual> {};
+        start = profiles.get (instrument, bank);
+        if (start.has_value())
+            start->manuals = manuals;
+        else if (! manuals.empty())
+            start = InstrumentProfiles::Profile { { InstrumentProfiles::Mode {} }, manuals };
+    }
+    auto* panel = new LearnInstrumentPanel (name, start);
+    panel->setBank (bank, byBank);
     panel->onCancel = [this] { finish(); };
-    panel->onSave = [this] (std::optional<InstrumentProfiles::Profile> profile)
+    panel->onSave = [this, panel] (std::optional<InstrumentProfiles::Profile> profile)
     {
         InstrumentProfiles all (indexFolder);
         all.load();
-        all.set (instrument, std::move (profile));
-        all.save();
-        if (saved)
-            saved (all.playable (instrument));
+        if (panel->getByBank())
+        {
+            // The instrument keeps only the setting and its manuals; the keys go to the bank it plays here.
+            auto whole = all.hasOwn (instrument) ? all.get (instrument).value_or (InstrumentProfiles::Profile {})
+                                                 : InstrumentProfiles::Profile {};
+            whole.modes.clear();
+            whole.byBank = true;
+            whole.bankName = {};
+            if (profile.has_value())
+                whole.manuals = profile->manuals;
+            all.set (instrument, whole);
+            if (bank.isKnown())
+            {
+                if (profile.has_value())
+                {
+                    profile->manuals.clear();
+                    profile->byBank = false;
+                    profile->bankName = bank.name;
+                }
+                all.set (InstrumentProfiles::keyForBank (instrument, bank), std::move (profile));
+            }
+            all.save();
+            if (saved)
+                saved (all.playable (instrument, bank));
+        }
+        else
+        {
+            if (profile.has_value())
+            {
+                profile->byBank = false;
+                profile->bankName = {};
+            }
+            all.set (instrument, std::move (profile));
+            all.save();
+            if (saved)
+                saved (all.playable (instrument));
+        }
         finish();
     };
     panel->onListen = [this] (int enterKey) { listen (enterKey); };

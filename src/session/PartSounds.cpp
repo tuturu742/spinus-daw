@@ -1,5 +1,6 @@
 #include "PartSounds.h"
 
+#include "InstrumentBanks.h"
 #include "PresetPreviews.h"
 #include "ProgramFolder.h"
 #include "StemSamples.h"
@@ -1229,7 +1230,7 @@ std::optional<PlayableKeys> playableFor (const Choice& choice, const juce::File&
         return std::nullopt;
     InstrumentProfiles profiles (indexFolder);
     profiles.load();
-    return profiles.playable (instrumentKey (choice));
+    return profiles.playable (instrumentKey (choice), instrumentbanks::fromStateFile (choice.state));
 }
 
 std::optional<InstrumentProfiles::Profile> profileFor (const Choice& choice, const juce::File& indexFolder)
@@ -1238,7 +1239,7 @@ std::optional<InstrumentProfiles::Profile> profileFor (const Choice& choice, con
         return std::nullopt;
     InstrumentProfiles profiles (indexFolder);
     profiles.load();
-    return profiles.get (instrumentKey (choice));
+    return profiles.get (instrumentKey (choice), instrumentbanks::fromStateFile (choice.state));
 }
 
 std::vector<OfflineInstrument::Note> auditionPhrase (const Target& target, const Choice& choice, double tempo,

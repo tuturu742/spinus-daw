@@ -94,6 +94,7 @@ add_executable (spinus_tests
     session/SoundDescriptorsTests.cpp
     session/SoundIndexTests.cpp
     session/PartSoundsTests.cpp
+    session/InstrumentBanksTests.cpp
     session/KeyProbeTests.cpp
     session/PluginKeyNamesTests.cpp
     session/ManualReadingTests.cpp

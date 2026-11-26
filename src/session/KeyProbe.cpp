@@ -218,13 +218,32 @@ Result probe (const Player& play, const std::function<void()>& reset, const Opti
     return result;
 }
 
+int rankOf (InstrumentProfiles::Source source)
+{
+    using Source = InstrumentProfiles::Source;
+    switch (source)
+    {
+    case Source::user:
+        return 3;
+    case Source::manual:
+    case Source::imported:
+    case Source::bundled:
+        return 2;
+    case Source::plugin:
+        return 1;
+    case Source::probing:
+        return 0;
+    }
+    return 0;
+}
+
 int merge (InstrumentProfiles::Mode& mode, const std::array<InstrumentProfiles::Key, 128>& heard)
 {
     int changed = 0;
     for (size_t n = 0; n < heard.size(); ++n)
     {
         auto& key = mode.keys[n];
-        if (heard[n].job == Job::unknown || (key.job != Job::unknown && key.source == InstrumentProfiles::Source::user))
+        if (heard[n].job == Job::unknown || (key.job != Job::unknown && rankOf (key.source) > rankOf (heard[n].source)))
             continue;
         if (key != heard[n])
         {

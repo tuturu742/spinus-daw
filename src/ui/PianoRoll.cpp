@@ -11,6 +11,7 @@
 #include "DeviceMenu.h"
 #include "MainView.h"
 #include "model/Automation.h"
+#include "session/InstrumentBanks.h"
 #include "session/InstrumentPresets.h"
 #include "session/SoundIndex.h"
 
@@ -1733,17 +1734,27 @@ void PianoRoll::reloadKeyJobs (bool always)
                                 : juce::String();
     const auto folder = profilesFolder != juce::File() ? profilesFolder : SoundIndex::getDefaultFolder();
     const auto modified = InstrumentProfiles::fileIn (folder).getLastModificationTime();
-    if (! always && instrument == keyJobsInstrument && modified == keyJobsRead)
+    // The bank only matters (and is only asked of the plugin) when the instrument's keys depend on it.
+    const bool sameInstrument = instrument == keyJobsInstrument;
+    const auto bank = sameInstrument && keyJobsByBank && channel != nullptr ? instrumentbanks::of (session, *channel)
+                                                                            : InstrumentBank {};
+    if (! always && sameInstrument && modified == keyJobsRead && (! keyJobsByBank || bank.id == keyJobsBank))
         return;
     keyJobsInstrument = instrument;
     keyJobsRead = modified;
 
     std::optional<InstrumentProfiles::Mode> jobs;
+    keyJobsByBank = false;
+    keyJobsBank = {};
     if (instrument.isNotEmpty())
     {
         InstrumentProfiles profiles (folder);
         profiles.load();
-        if (auto profile = profiles.get (instrument); profile && ! profile->modes.empty())
+        keyJobsByBank = profiles.byBank (instrument);
+        const auto playing =
+            keyJobsByBank ? (bank.isKnown() ? bank : instrumentbanks::of (session, *channel)) : InstrumentBank {};
+        keyJobsBank = playing.id;
+        if (auto profile = profiles.get (instrument, playing); profile && ! profile->modes.empty())
             if (profile->modes.front().playable())
                 jobs = profile->modes.front();
     }

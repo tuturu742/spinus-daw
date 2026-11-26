@@ -56,6 +56,12 @@ public:
     void markSelected (Job, const juce::String& what = {});
     void forget();
     void save();
+    /** The loaded bank decides what the keys do (Profile::byBank): the tick box, and the bank the channel plays,
+        whose keys the panel then edits ("Bank: Growlybass"; not known: the line says how to name it). */
+    void setBank (const InstrumentBank&, bool byBank);
+    bool getByBank() const noexcept { return bankToggle.getToggleState(); }
+    juce::String getBankText() const { return bankLabel.getText(); }
+    void setByBank (bool);
     /** Listen to every key, for the mode shown (its entry key); none: the button says it can't. */
     std::function<void (int enterKey)> onListen;
     std::function<void()> onStopListening;
@@ -139,7 +145,9 @@ private:
         exportButton { "Export..." }, importButton { "Import..." };
     juce::TextButton listenButton { "Listen to every key" }, askButton { "Ask the plugin" }, applyButton { "Apply" },
         discardButton { "Discard" };
-    juce::Label heardLabel, manualsLabel;
+    juce::Label heardLabel, manualsLabel, bankLabel;
+    juce::ToggleButton bankToggle { "The loaded bank decides what the keys do" };
+    InstrumentBank bank;
     juce::ComboBox manualsBox;
     juce::TextEditor manualEditor;
     juce::TextButton removeManualButton { "Remove" }, chooseManualButton { "Choose file..." },
@@ -163,10 +171,11 @@ public:
     };
 
     /** Opens (or brings to the front) the window for `instrument` (InstrumentPresets::libraryOf, the sound index's
-        key). Without `listening`, Listen to every key says it can't load the instrument. */
+        key) playing `bank` (instrumentbanks: when the loaded bank decides its keys, that bank's keys are the ones
+        edited and saved). Without `listening`, Listen to every key says it can't load the instrument. */
     static void open (const juce::File& indexFolder, const juce::String& instrument, const juce::String& name,
                       juce::Component* near, Saved saved, std::optional<Listening> listening = {},
-                      ai::AiService* service = nullptr);
+                      ai::AiService* service = nullptr, const InstrumentBank& bank = {});
     static int getNumOpen();
     static void closeAll();
     /** For tests: the panel of the window opened last; null when none is open. */
@@ -177,7 +186,8 @@ public:
 
 private:
     LearnInstrumentWindow (const juce::File& indexFolder, const juce::String& instrument, const juce::String& name,
-                           Saved saved, std::optional<Listening> listening, ai::AiService* service);
+                           Saved saved, std::optional<Listening> listening, ai::AiService* service,
+                           const InstrumentBank& bank);
     void finish();
     void listen (int enterKey);
     void ask();
@@ -188,6 +198,7 @@ private:
 
     juce::File indexFolder;
     juce::String instrument;
+    InstrumentBank bank;
     Saved saved;
     std::optional<Listening> listening;
     ai::AiService* service = nullptr;

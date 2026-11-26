@@ -1,5 +1,6 @@
 #include "InstrumentLearning.h"
 
+#include "InstrumentBanks.h"
 #include "InstrumentPresets.h"
 #include "KeyProbe.h"
 #include "PartSounds.h"
@@ -28,11 +29,12 @@ Job prepare (Session& session, model::DeviceId id, const juce::File& indexFolder
         job.problem = "there is no device " + juce::String ((int)id.value) + " in the song.";
         return job;
     }
-    job.key = InstrumentPresets::libraryOf (*device);
+    const auto instrument = InstrumentPresets::libraryOf (*device);
+    job.key = instrument;
     job.name = model::getDeviceDisplayName (*device);
     bool found = false;
     for (auto& s : findSoundSources (session.getDeviceList()))
-        if (s.key == job.key)
+        if (s.key == instrument)
         {
             job.source = s;
             found = true;
@@ -54,6 +56,26 @@ Job prepare (Session& session, model::DeviceId id, const juce::File& indexFolder
             if (block.getSize() > 0 && file.replaceWithData (block.getData(), block.getSize()))
                 job.state = file;
         }
+    // When the loaded bank decides its keys, the bank this channel plays is what is learned.
+    InstrumentProfiles profiles (indexFolder);
+    profiles.load();
+    if (profiles.byBank (instrument))
+    {
+        InstrumentBank bank;
+        for (const auto& c : session.getProject().channels)
+            if (c.instrument && c.instrument->id == id)
+                bank = instrumentbanks::of (session, c);
+        if (! bank.isKnown())
+        {
+            job.problem = "what " + job.name +
+                          "'s keys do depends on the bank it plays, and Spinus can't tell which "
+                          "bank this channel plays: name it first (Bank, in the channel's menu, "
+                          "or channel.set with a bank).";
+            return job;
+        }
+        job.key = InstrumentProfiles::keyForBank (instrument, bank);
+        job.bankName = bank.name;
+    }
     return job;
 }
 
@@ -129,6 +151,7 @@ Outcome run (const Job& job, const std::function<bool()>& shouldStop,
         return outcome;
     }
     outcome.note = std::move (listenProblem); // the keys it named are kept even when listening failed
+    profile.bankName = job.bankName;
     profiles.set (job.key, profile);
     if (! profiles.save())
         outcome.problem = "the learned keys could not be saved.";
@@ -152,6 +175,8 @@ juce::var toVar (const Outcome& outcome, const juce::String& instrumentName)
         o->setProperty ("problem", outcome.problem);
         return juce::var (o);
     }
+    if (outcome.profile.bankName.isNotEmpty())
+        o->setProperty ("bank", outcome.profile.bankName);
     o->setProperty ("named", outcome.named);
     o->setProperty ("heard", outcome.heard);
     o->setProperty ("changed", outcome.changed);

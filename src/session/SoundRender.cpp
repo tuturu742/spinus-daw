@@ -529,12 +529,14 @@ int runRender (const juce::var& request, Lines& out)
     return 0;
 }
 
-/** Puts the request's sound in place: its "preset" (an id, with "state" for a saved sound); none: as it opens.
-    False (with the error written) when it could not be loaded. */
+/** Puts the request's sound in place: its "preset" (an id, with "state" for a saved sound); no preset but a "state":
+    that state (a channel's sound as it is, as Learn this instrument sends it); neither: as it opens. False (with the
+    error written) when it could not be loaded. */
 bool loadSound (const juce::var& request, juce::AudioPluginInstance& plugin, OfflineInstrument& player, Lines& out)
 {
     const auto device = deviceOf (request);
-    if (const auto presetId = request["preset"].toString(); SavedSounds::isSaved (presetId))
+    if (const auto presetId = request["preset"].toString();
+        SavedSounds::isSaved (presetId) || (presetId.isEmpty() && request["state"].toString().isNotEmpty()))
     {
         const auto saved = savedPreset (presetId, request["state"].toString());
         if (! saved || player.loadPreset (*saved).failed())

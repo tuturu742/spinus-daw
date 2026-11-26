@@ -273,7 +273,8 @@ you marked yourself stay as you set them. `spinus --check` lists the devices' id
 It prints a `progress` line now and then, and at the end what it learned: `named` (keys the plugin named),
 `heard` (keys that did something), `changed`, and `keys` as `--check` shows them. That includes
 `soundsOctaves` when the keys sound in another octave: -1 for a bass whose key 40 plays the low E (E1, MIDI
-28). It takes a minute or two. It doesn't read the manual, which needs the AI: use the window for that.
+28), and `bank` for a sample player whose loaded bank decides its keys ([Sample banks](channel-rack.md#sample-banks)):
+that bank is the one learned. It takes a minute or two. It doesn't read the manual, which needs the AI: use the window for that.
 
 ```sh
 spinus --learn ~/Music/Song --device 6

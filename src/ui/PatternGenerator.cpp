@@ -3,6 +3,7 @@
 #include "dsp/drums/DrumMachineProcessor.h"
 #include "model/StockDevices.h"
 #include "session/InstrumentPresets.h"
+#include "session/InstrumentBanks.h"
 #include "session/InstrumentProfiles.h"
 #include "session/SoundIndex.h"
 
@@ -110,9 +111,8 @@ juce::var PatternGenerator::describe (const Request& request) const
         {
             o.getDynamicObject()->setProperty ("channel", (int)c.id.value);
             if (c.instrument)
-                if (const auto profile = profiles.get (InstrumentPresets::libraryOf (*c.instrument)))
-                    if (auto keys = InstrumentProfiles::describeForAgents (*profile); ! keys.isVoid())
-                        o.getDynamicObject()->setProperty ("keys", keys);
+                if (auto keys = instrumentbanks::keysForAgents (profiles, session, c); ! keys.isVoid())
+                    o.getDynamicObject()->setProperty ("keys", keys);
         }
         juce::Array<juce::var> pads;
         for (auto& [name, note] : getPads (session, c.id))

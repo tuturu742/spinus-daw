@@ -374,8 +374,9 @@ private:
     bool followSongKey = true;
     std::optional<model::Key> chosenKey;
     juce::File profilesFolder;
-    juce::String keyJobsInstrument;
+    juce::String keyJobsInstrument, keyJobsBank;
     juce::Time keyJobsRead;
+    bool keyJobsByBank = false; // the shown instrument's keys depend on its bank: its bank is looked at too
     std::optional<InstrumentProfiles::Mode> keyJobs;
     int keyJobsCheck = 0; // timer ticks since the profiles file was last looked at
 

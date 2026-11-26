@@ -860,6 +860,7 @@ public:
         std::optional<juce::String> group;
         std::optional<double> recordInput;
         std::optional<bool> recordStereo, recordArmed;
+        std::optional<juce::String> bank;
     };
 
     SetChannel (juce::var p, ChannelId c, Values v)
@@ -885,6 +886,9 @@ public:
             return *values.recordArmed ? "Arm track for recording" : "Disarm track";
         if (values.recordInput || values.recordStereo)
             return "Choose the track's input";
+        if (values.bank)
+            return values.bank->trim().isEmpty() ? "Find the channel's bank from its sound"
+                                                 : "Name the channel's bank " + quoted (values.bank->trim());
         return "Change channel";
     }
 
@@ -917,6 +921,8 @@ public:
             c->recordStereo = *values.recordStereo;
         if (values.recordArmed)
             c->recordArmed = *values.recordArmed;
+        if (values.bank)
+            c->bank = values.bank->trim();
         return juce::Result::ok();
     }
 
@@ -3753,43 +3759,48 @@ void addChannelCommands (std::vector<CommandInfo>& list)
             return std::make_unique<ReplaceInstrument> (p.json, p.id<ChannelId> ("channel"), device, name);
         }));
 
-    list.push_back (info ("channel.set",
-                          "Change a channel's name, colour, volume, pan, pitch, mute, solo or group (the Channel "
-                          "Rack's filter group, e.g. \"Drums\"; empty for none), or an audio track's recording: its "
-                          "input, stereo, and whether it is armed.",
-                          ParameterSchema()
-                              .id ("channel", "Channel ID")
-                              .string ("name", "New name")
-                              .string ("colour", "Colour as #AARRGGBB")
-                              .number ("volumeDb", "Volume in dB", false, -100.0, 12.0)
-                              .number ("pan", "Pan, -1 left to 1 right", false, -1.0, 1.0)
-                              .number ("pitchCents", "Pitch offset in cents", false, -4800.0, 4800.0)
-                              .boolean ("muted", "Muted")
-                              .boolean ("solo", "Solo")
-                              .string ("group", "Its group in the Channel Rack; empty for none")
-                              .integer ("recordInput",
-                                        "Audio track: the sound card input it records from, from 1 (0: the "
-                                        "input chosen in the audio settings)",
-                                        false, 0, 256)
-                              .boolean ("recordStereo", "Audio track: records that input and the next as a stereo pair")
-                              .boolean ("recordArmed", "Audio track: Record audio records it"),
-                          [] (Params& p) -> std::unique_ptr<Command>
-                          {
-                              p.allowOnly ({ "channel", "name", "colour", "volumeDb", "pan", "pitchCents", "muted",
-                                             "solo", "group", "recordInput", "recordStereo", "recordArmed" });
-                              SetChannel::Values v { p.string ("name"),
-                                                     p.colour ("colour"),
-                                                     p.number ("volumeDb", -100.0, 12.0),
-                                                     p.number ("pan", -1.0, 1.0),
-                                                     p.number ("pitchCents", -4800.0, 4800.0),
-                                                     p.boolean ("muted"),
-                                                     p.boolean ("solo"),
-                                                     p.string ("group"),
-                                                     p.number ("recordInput", 0.0, 256.0),
-                                                     p.boolean ("recordStereo"),
-                                                     p.boolean ("recordArmed") };
-                              return std::make_unique<SetChannel> (p.json, p.id<ChannelId> ("channel"), v);
-                          }));
+    list.push_back (
+        info ("channel.set",
+              "Change a channel's name, colour, volume, pan, pitch, mute, solo or group (the Channel "
+              "Rack's filter group, e.g. \"Drums\"; empty for none), the sample bank its instrument plays "
+              "(for an instrument whose keys depend on the loaded bank), or an audio track's recording: "
+              "its input, stereo, and whether it is armed.",
+              ParameterSchema()
+                  .id ("channel", "Channel ID")
+                  .string ("name", "New name")
+                  .string ("colour", "Colour as #AARRGGBB")
+                  .number ("volumeDb", "Volume in dB", false, -100.0, 12.0)
+                  .number ("pan", "Pan, -1 left to 1 right", false, -1.0, 1.0)
+                  .number ("pitchCents", "Pitch offset in cents", false, -4800.0, 4800.0)
+                  .boolean ("muted", "Muted")
+                  .boolean ("solo", "Solo")
+                  .string ("group", "Its group in the Channel Rack; empty for none")
+                  .integer ("recordInput",
+                            "Audio track: the sound card input it records from, from 1 (0: the "
+                            "input chosen in the audio settings)",
+                            false, 0, 256)
+                  .boolean ("recordStereo", "Audio track: records that input and the next as a stereo pair")
+                  .boolean ("recordArmed", "Audio track: Record audio records it")
+                  .string ("bank", "The sample bank its instrument plays, by name, when its keys depend on the "
+                                   "loaded bank and Spinus can't tell which it is; empty: as Spinus finds it"),
+              [] (Params& p) -> std::unique_ptr<Command>
+              {
+                  p.allowOnly ({ "channel", "name", "colour", "volumeDb", "pan", "pitchCents", "muted", "solo", "group",
+                                 "recordInput", "recordStereo", "recordArmed", "bank" });
+                  SetChannel::Values v { p.string ("name"),
+                                         p.colour ("colour"),
+                                         p.number ("volumeDb", -100.0, 12.0),
+                                         p.number ("pan", -1.0, 1.0),
+                                         p.number ("pitchCents", -4800.0, 4800.0),
+                                         p.boolean ("muted"),
+                                         p.boolean ("solo"),
+                                         p.string ("group"),
+                                         p.number ("recordInput", 0.0, 256.0),
+                                         p.boolean ("recordStereo"),
+                                         p.boolean ("recordArmed"),
+                                         p.string ("bank") };
+                  return std::make_unique<SetChannel> (p.json, p.id<ChannelId> ("channel"), v);
+              }));
 
     list.push_back (info ("channel.freeze",
                           "Freeze a channel: its instrument is rendered to audio, which plays instead of the plugin "

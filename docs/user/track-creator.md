@@ -383,7 +383,10 @@ and drums": those three), or empty. Then:
   key; a silent one that changes nothing is unused. For a mode entered by a key, set that key under **How to enter
   it** first: Spinus plays it before every key. What it heard is shown as a proposal: the keys that would change
   get a dot of their new colour, and nothing changes until **Apply** (**Discard** drops it). Keys you marked
-  yourself stay as you set them. It listens to the sound the part has (or the instrument as it opens, from the
+  yourself stay as you set them, and so do keys a manual or an imported file named: listening only fills in the
+  keys they don't mention. So when listening gets an instrument wrong (one that plays a slightly different
+  recording on every hit can fool it into hearing switch keys that aren't there), mark those keys yourself or
+  read its manual, and listening again won't undo it. It listens to the sound the part has (or the instrument as it opens, from the
   instrument menu); **Stop listening** keeps nothing. Then **Save**. It also notes the octave the keys sound in:
   some basses sound an octave under their keys (key 40 plays the low E that sounds as E1), and the Track
   creator, the Analyzer and coding agents then write notes on the keys that sound the pitches meant.
@@ -393,7 +396,8 @@ and drums": those three), or empty. Then:
   (or whose name says so, such as "KS Legato" or "Articulation 2") is proposed as a switch with that name; any
   other named key as one that plays, with its name. Few instruments name their keys (most commercial sampled
   instruments don't), so it often says the instrument names none; Listen to every key works on any instrument.
-  What it says is a proposal like a listening's: **Apply** or **Discard**, and keys you marked stay yours.
+  What it says is a proposal like a listening's: **Apply** or **Discard**. When they disagree, what counts most is
+  what you marked yourself, then a manual or an imported file, then the plugin's own names, then listening.
   Spinus's own Drum Machine names its pads by their sounds.
 
   **Read the manual** has the AI read the instrument's manuals and propose what they say: its modes (a guitar's

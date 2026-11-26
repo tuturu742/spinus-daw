@@ -13,6 +13,7 @@
 #include "model/ModelJson.h"
 #include "model/Tempo.h"
 #include "model/StockDevices.h"
+#include "session/InstrumentBanks.h"
 #include "session/InstrumentPresets.h"
 #include "session/EffectProfiles.h"
 #include "session/InstrumentProfiles.h"
@@ -466,9 +467,8 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
         if (c.solo)
             channels.getReference (channels.size() - 1).getDynamicObject()->setProperty ("solo", true);
         if (c.instrument)
-            if (const auto profile = profiles.get (InstrumentPresets::libraryOf (*c.instrument)))
-                if (auto keys = InstrumentProfiles::describeForAgents (*profile); ! keys.isVoid())
-                    channels.getReference (channels.size() - 1).getDynamicObject()->setProperty ("keys", keys);
+            if (auto keys = instrumentbanks::keysForAgents (profiles, session, c); ! keys.isVoid())
+                channels.getReference (channels.size() - 1).getDynamicObject()->setProperty ("keys", keys);
         if (used.count (c.id) == 0)
             unused.add (c.name);
     }
