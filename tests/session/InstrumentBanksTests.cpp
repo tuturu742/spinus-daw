@@ -154,8 +154,8 @@ TEST_CASE ("When the loaded bank decides the keys, each bank keeps its own", "[b
     // A bank not learned, or not known, has no keys: another bank's would be wrong.
     CHECK (! read.get (player, unlearned).has_value());
     CHECK (! read.get (player, {}).has_value());
-    CHECK (read.get (player)->manuals.size() == 1); // the instrument keeps its manuals
-    CHECK (read.get (player, guitar)->bankName == "Green Guitar");
+    CHECK (read.get (player).value_or (InstrumentProfiles::Profile {}).manuals.size() == 1); // keeps its manuals
+    CHECK (read.get (player, guitar).value_or (InstrumentProfiles::Profile {}).bankName == "Green Guitar");
 
     const auto banks = read.banksOf (player);
     REQUIRE (banks.size() == 2);

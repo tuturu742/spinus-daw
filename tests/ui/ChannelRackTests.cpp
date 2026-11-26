@@ -612,7 +612,8 @@ TEST_CASE ("Learn this instrument: when the loaded bank decides the keys, each b
     player.plugin = { "VST3", "Sample Player", "Someone", "/nonexistent/Sample Player.vst3", 4321 };
     REQUIRE (r.rack.addChannelWith (player, "Strings"));
     const auto channel = r.lastChannel();
-    const auto key = InstrumentPresets::libraryOf (*r.session.getProject().findChannel (channel)->instrument);
+    const auto key = InstrumentPresets::libraryOf (
+        r.session.getProject().findChannel (channel)->instrument.value_or (model::Device {}));
     CHECK_FALSE (r.rack.bankDecidesKeys (channel));
     // Spinus's own instruments name no file: the Sampler has no bank, 3x Osc is known by its program's name.
     REQUIRE (r.rack.addChannel ("spinus.sampler", "Sampler"));

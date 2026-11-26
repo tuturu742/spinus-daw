@@ -99,14 +99,14 @@ void look (const juce::MemoryBlock& block, juce::StringArray& found, int depth);
     made of these is turned into a String: JUCE reads past the end of a truncated sequence. */
 size_t readableAt (const char* bytes, size_t at, size_t size)
 {
-    const auto b = (unsigned char)bytes[at];
+    const auto b = (unsigned)(unsigned char)bytes[at];
     if (b >= 0x20 && b < 0x7f)
         return 1;
-    const size_t length = (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : (b & 0xf8) == 0xf0 ? 4 : 0;
-    if (length == 0 || b == 0xc0 || b == 0xc1 || b > 0xf4 || at + length > size)
+    const size_t length = (b & 0xe0u) == 0xc0u ? 2 : (b & 0xf0u) == 0xe0u ? 3 : (b & 0xf8u) == 0xf0u ? 4 : 0;
+    if (length == 0 || b == 0xc0u || b == 0xc1u || b > 0xf4u || at + length > size)
         return 0;
     for (size_t k = 1; k < length; ++k)
-        if (((unsigned char)bytes[at + k] & 0xc0) != 0x80)
+        if (((unsigned)(unsigned char)bytes[at + k] & 0xc0u) != 0x80u)
             return 0;
     return length;
 }
