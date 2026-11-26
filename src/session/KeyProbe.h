@@ -46,8 +46,14 @@ Result probe (const Player&, const std::function<void()>& reset, const Options& 
 /** The key's frequency in Hz (A4 = 69 = 440 Hz). */
 double frequencyOf (int note);
 
-/** Merges a probing's keys into a mode: the keys the user set stay theirs (the user's word wins), every other key
-    heard takes what was heard. Returns how many keys changed. */
+/** How much a key's source counts when sources disagree (owner decision, 2026-11-26): the user's own marks, then
+    what a person wrote down (a manual, a profile file someone shared, a profile shipped with Spinus), then the
+    plugin's own key names, then listening. */
+int rankOf (InstrumentProfiles::Source);
+
+/** Merges found keys (listening, the plugin's names, a manual, an imported file) into a mode: a key found takes
+    the mode's key unless the mode's comes from a source that counts more (rankOf); an unknown key takes anything.
+    Returns how many keys changed. */
 int merge (InstrumentProfiles::Mode&, const std::array<InstrumentProfiles::Key, 128>& heard);
 } // namespace keyprobe
 

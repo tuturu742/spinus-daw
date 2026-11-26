@@ -310,7 +310,7 @@ LearnInstrumentPanel::LearnInstrumentPanel (const juce::String& instrumentName, 
             onAsk();
         }
     };
-    applyButton.setTooltip ("Take what was found (the keys you set stay yours)");
+    applyButton.setTooltip ("Take what was found (keys you set, or a manual named, stay as they are)");
     applyButton.onClick = [this] { applyHeard(); };
     discardButton.setTooltip ("Drop what was found");
     discardButton.onClick = [this] { discardHeard(); };

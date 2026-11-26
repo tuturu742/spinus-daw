@@ -105,6 +105,26 @@ TEST_CASE ("Listen to every key: playing keys, switch keys, special keys and sil
     CHECK (mode.keys[41].job == Job::plays);
     CHECK (changes == 127);
     CHECK (keyprobe::merge (mode, result.keys) == 0);
+
+    // A manual counts more than listening, the plugin's own names less than a manual and more than listening.
+    using Source = InstrumentProfiles::Source;
+    InstrumentProfiles::Mode ranked;
+    ranked.setKeys (24, 24, { Job::unused, {}, Source::manual });
+    ranked.setKeys (32, 32, { Job::plays, {}, Source::plugin });
+    ranked.setKeys (41, 41, { Job::special, "from a shared file", Source::imported });
+    keyprobe::merge (ranked, result.keys);
+    CHECK (ranked.keys[24].job == Job::unused);           // the manual's word stays
+    CHECK (ranked.keys[32].job == Job::plays);            // the plugin's too
+    CHECK (ranked.keys[41].what == "from a shared file"); // and a shared file's
+    CHECK (ranked.keys[30].source == Source::probing);    // keys nobody said anything about are as heard
+    std::array<InstrumentProfiles::Key, 128> manual {};
+    manual[32] = { Job::switches, "palm mute", Source::manual };
+    manual[50] = { Job::switches, "slide", Source::manual };
+    CHECK (keyprobe::merge (ranked, manual) == 2); // a manual read later replaces what was heard and named
+    CHECK (ranked.keys[32].what == "palm mute");
+    std::array<InstrumentProfiles::Key, 128> named {};
+    named[32] = { Job::plays, {}, Source::plugin };
+    CHECK (keyprobe::merge (ranked, named) == 0);
 }
 
 TEST_CASE ("Listen to every key: a mode entered by a key, and stopping", "[profiles]")

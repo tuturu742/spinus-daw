@@ -12,6 +12,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   learned on a channel playing it. Spinus finds the bank from the files the plugin's saved sound names; for a
   plugin that doesn't say, name it in the channel's menu (**Bank**). A bank not learned yet plays any key, as an
   instrument not learned does, and agents are told so.
+- **Learn this instrument: a manual counts more than listening.** Keys a manual or an imported profile names are
+  no longer replaced by Listen to every key or the plugin's own names; listening fills in the rest. Your own marks
+  still count most. So a manual (or your marks) can correct an instrument listening gets wrong.
 - **Learn this instrument listens to the channel's sound as it is.** It used to listen to the plugin as it first
   opens, so a preset or bank loaded in its window was ignored: sfizz was learned as its built-in tone, and a
   preset's switch keys were missed.
