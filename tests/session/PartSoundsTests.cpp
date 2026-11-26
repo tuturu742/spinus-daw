@@ -4,6 +4,7 @@
 #include "ai/Proposal.h"
 #include "commands/CommandHistory.h"
 #include "dsp/SpinusPluginFormat.h"
+#include "dsp/threeosc/ThreeOscProcessor.h"
 #include "session/PartSounds.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -885,6 +886,35 @@ TEST_CASE ("Sounds per part: playing and tuning a synth in the helper, out of Sp
         CHECK (playing >= 120);
         CHECK (std::none_of (heard.begin(), heard.end(), [] (const InstrumentProfiles::Key& k)
                              { return k.job == InstrumentProfiles::Job::switches; }));
+    }
+    // With the channel's sound as it is (a state, no preset; as Learn this instrument sends it): 3x Osc tuned two
+    // octaves up is heard two octaves up. (The helper used to listen to it as it opens instead.)
+    {
+        SoundSource osc;
+        osc.key = "stock-spinus.3x-osc";
+        osc.name = "3x Osc";
+        osc.format = "Spinus";
+        osc.file = "spinus:3x-osc";
+        osc.stockType = "spinus.3x-osc";
+        juce::MemoryBlock data;
+        {
+            auto instance = dsp::SpinusPluginFormat::create ("spinus:3x-osc");
+            REQUIRE (instance != nullptr);
+            for (auto* parameter : instance->getParameters())
+                if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter);
+                    ranged != nullptr && ranged->getParameterID() == dsp::ThreeOscProcessor::parameterId ("coarse", 0))
+                    ranged->setValueNotifyingHost (ranged->convertTo0to1 (24.0f));
+            instance->getStateInformation (data);
+        }
+        const auto higher = temp.folder.getChildFile ("higher.state");
+        REQUIRE (higher.replaceWithData (data.getData(), data.getSize()));
+        juce::String why;
+        int asItOpens = -100, asSaved = -100;
+        REQUIRE (probeInHelper (helper(), osc, {}, {}, -1, {}, {}, why, &asItOpens).has_value());
+        INFO (why);
+        REQUIRE (probeInHelper (helper(), osc, {}, higher, -1, {}, {}, why, &asSaved).has_value());
+        CHECK (asItOpens == 0);
+        CHECK (asSaved == 2);
     }
     CHECK (temp.folder.getChildFile ("cut.wav").existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader (

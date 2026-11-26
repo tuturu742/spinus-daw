@@ -12,6 +12,9 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   learned on a channel playing it. Spinus finds the bank from the files the plugin's saved sound names; for a
   plugin that doesn't say, name it in the channel's menu (**Bank**). A bank not learned yet plays any key, as an
   instrument not learned does, and agents are told so.
+- **Learn this instrument listens to the channel's sound as it is.** It used to listen to the plugin as it first
+  opens, so a preset or bank loaded in its window was ignored: sfizz was learned as its built-in tone, and a
+  preset's switch keys were missed.
 - **Agents and the assistant can use the Piano Roll's note tools.** A new command, `pattern.editNotes`, changes
   only the notes in a range of bars, pitches or velocities: quantize, strum, arpeggiate, chop, legato, humanize,
   transpose, move, set lengths or velocities, turn notes into a named chord, or remove them, as one undo step.
