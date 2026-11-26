@@ -504,6 +504,8 @@ juce::var toJson (const Project& p)
             o.set ("recordStereo", true);
         if (c.recordArmed)
             o.set ("recordArmed", true);
+        if (c.bank.isNotEmpty())
+            o.set ("bank", c.bank);
         channels.add (o.set ("targetInsert", id (c.targetInsert)));
     }
 
@@ -678,6 +680,7 @@ juce::Result readProject (const juce::var& input, Project& result, juce::StringA
         ch.recordInput = juce::jmax (0, r.integer (c, "recordInput", 0));
         ch.recordStereo = r.boolean (c, "recordStereo", false);
         ch.recordArmed = r.boolean (c, "recordArmed", false);
+        ch.bank = r.text (c, "bank");
         if (! leaveOut (before, named ("channel", ch.name)))
             p.channels.push_back (ch);
     }

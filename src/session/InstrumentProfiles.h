@@ -34,6 +34,17 @@ struct PlayableKeys
     juce::String describe() const;
 };
 
+/** The sample bank an instrument plays (a sample player's .sfz file, a drum kit and its key map), when what its
+    keys do depends on it (InstrumentProfiles::Profile::byBank). `id` tells banks apart (the files the instrument's
+    saved sound names, or the name the user gave it); `name` is what the user sees ("Growlybass"). Empty: not
+    known. */
+struct InstrumentBank
+{
+    juce::String id, name;
+    bool isKnown() const noexcept { return id.isNotEmpty(); }
+    bool operator== (const InstrumentBank&) const = default;
+};
+
 /** What Spinus knows of each instrument, by the sound index's instrument key: its playing modes and, for each,
     what every key does, how to enter the mode and what it suits. Kept beside the index's folder
     (`sound-profiles.json` next to it), like the user's roles (UserRoles), so it survives a new scan. The notes the
@@ -117,6 +128,11 @@ public:
     {
         std::vector<Mode> modes;
         std::vector<Manual> manuals;
+        /** The loaded bank decides what the keys do (a sample player: sfz files, drum kits): the instrument's own
+            profile then holds no modes, and each bank has a profile of its own (keyForBank), learned on a channel
+            playing it. */
+        bool byBank = false;
+        juce::String bankName; // a bank's own profile: the bank's name, for the user and agents
         bool operator== (const Profile&) const = default;
     };
 
@@ -136,6 +152,18 @@ public:
 
     /** The instrument's profile: the user's, else the one Spinus ships for it (bundled), else none. */
     std::optional<Profile> get (const juce::String& instrument) const;
+    /** The profile for an instrument playing `bank`: when the loaded bank decides its keys (byBank), that bank's own
+        (none for a bank not learned yet, or not known); else the instrument's, as get(). */
+    std::optional<Profile> get (const juce::String& instrument, const InstrumentBank& bank) const;
+    /** Whether the loaded bank decides what the instrument's keys do (Profile::byBank). */
+    bool byBank (const juce::String& instrument) const;
+    /** The key a bank's own profile is kept under, beside its instrument's. */
+    static juce::String keyForBank (const juce::String& instrument, const InstrumentBank& bank)
+    {
+        return instrument + "|bank|" + bank.id;
+    }
+    /** The banks learned for an instrument: their keys' bank ids and names, as kept. */
+    std::vector<InstrumentBank> banksOf (const juce::String& instrument) const;
     /** Whether the user has a profile of their own for it (not only the bundled one). */
     bool hasOwn (const juce::String& instrument) const { return profiles.contains (instrument); }
     /** The profile Spinus ships for one of its own instruments or the free ones it gets, by the instrument's key
@@ -143,19 +171,22 @@ public:
         each as an exported profile (toShared) with the key it is `for`, built into Spinus; their keys are
         Source::bundled. */
     static std::optional<Profile> bundled (const juce::String& instrument);
-    /** Sets the instrument's profile (nullopt, or one with no modes: forgotten). Not saved until save(). */
+    /** Sets the instrument's profile (nullopt, or one with no modes and not byBank: forgotten). Not saved until
+        save(). A bank's own profile goes under keyForBank. */
     void set (const juce::String& instrument, std::optional<Profile>);
-    /** The keys the instrument plays as it opens (its first mode's), if they are known. */
+    /** The keys the instrument plays as it opens (its first mode's), if they are known (for `bank`, as get()). */
     std::optional<PlayableKeys> playable (const juce::String& instrument) const;
+    std::optional<PlayableKeys> playable (const juce::String& instrument, const InstrumentBank& bank) const;
 
     /** What the assistant and outside agents are told of an instrument's keys: per mode its name, how to enter it,
         what it suits, chords or one note, the keys that play (as runs, and in words: "E2 to G6") and its switch
-        and special keys by number, name and job. Void when it plays every key in one mode (nothing to tell). */
+        and special keys by number, name and job, and the bank they are for (a bank's own profile). Void when it plays
+        every key in one mode (nothing to tell). */
     static juce::var describeForAgents (const Profile&);
 
     static juce::String jobName (Job);
     static juce::String sourceName (Source);
-    /** A profile as JSON, and back (a profile file's entry); nullopt when it holds no mode. */
+    /** A profile as JSON, and back (a profile file's entry); nullopt when it holds no mode (and is not byBank). */
     static juce::var toVar (const Profile&);
     static std::optional<Profile> fromVar (const juce::var&);
     /** A profile as a file to share ({kind: "spinus.instrument-profile", version, instrument, profile}): facts only,

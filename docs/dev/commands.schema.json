@@ -283,7 +283,7 @@
       }
     },
     "channel.set": {
-      "description": "Change a channel's name, colour, volume, pan, pitch, mute, solo or group (the Channel Rack's filter group, e.g. \"Drums\"; empty for none), or an audio track's recording: its input, stereo, and whether it is armed.",
+      "description": "Change a channel's name, colour, volume, pan, pitch, mute, solo or group (the Channel Rack's filter group, e.g. \"Drums\"; empty for none), the sample bank its instrument plays (for an instrument whose keys depend on the loaded bank), or an audio track's recording: its input, stereo, and whether it is armed.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -343,6 +343,10 @@
           "recordArmed": {
             "type": "boolean",
             "description": "Audio track: Record audio records it"
+          },
+          "bank": {
+            "type": "string",
+            "description": "The sample bank its instrument plays, by name, when its keys depend on the loaded bank and Spinus can't tell which it is; empty: as Spinus finds it"
           }
         },
         "required": [

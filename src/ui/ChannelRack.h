@@ -3,6 +3,7 @@
 #include "core/FileDialog.h"
 
 #include "Workspace.h"
+#include "session/InstrumentProfiles.h"
 #include "session/Session.h"
 
 namespace spinus::ui
@@ -131,6 +132,15 @@ public:
         profile is found by the instrument itself, and Listen to every key plays its sound as it is set up now. */
     bool learnInstrument (model::ChannelId);
 
+    /** Banks (Learn this instrument's "The loaded bank decides what the keys do"): whether the channel's instrument
+        keeps its keys per bank, the bank the channel plays now (instrumentbanks::of), the banks the user named for
+        it before, and naming the channel's bank (Bank › Name this bank...; empty: as Spinus finds it from the
+        instrument's sound), one undo step. */
+    bool bankDecidesKeys (model::ChannelId) const;
+    InstrumentBank getBank (model::ChannelId) const;
+    juce::StringArray getNamedBanks (model::ChannelId) const;
+    bool setChannelBank (model::ChannelId, const juce::String& name);
+
     /** Whether the channel's instrument can take preset files (PresetFolders): a plugin, not VST2 (its state is a
         bank format Spinus does not write). */
     bool canUsePresetFiles (model::ChannelId) const;
@@ -140,7 +150,8 @@ public:
     bool usePresetFolder (model::ChannelId, const juce::File& folder, bool use);
     /** The folders of preset files chosen for the channel's instrument. */
     juce::Array<juce::File> getPresetFolders (model::ChannelId) const;
-    /** Where the sound index lives, beside which preset folders are kept (tests); the default index's otherwise. */
+    /** Where the sound index lives, beside which preset folders and learned instruments are kept (tests); the
+        default index's otherwise. */
     void setIndexFolder (const juce::File& folder) { indexFolder = folder; }
 
     /** Writes the channel's Beat Slicer slices as notes (see spinus::slicesToPattern). */

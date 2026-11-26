@@ -19,6 +19,7 @@
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
 #include "plugins/HostLibraries.h"
+#include "session/InstrumentBanks.h"
 #include "session/InstrumentPresets.h"
 #include "session/PluginPresets.h"
 #include "session/PresetFolders.h"
@@ -327,6 +328,41 @@ private:
         menu.addItem (frozen ? "Open instrument window (unfreeze to edit)" : "Open instrument window",
                       hasInstrument && ! frozen, false, [this] { rack.showInstrumentWindow (id); });
         menu.addItem ("Learn this instrument...", hasInstrument, false, [this] { rack.learnInstrument (id); });
+        if (hasInstrument && rack.bankDecidesKeys (id))
+        {
+            // Which bank the channel plays: as its sound says, or as the user named it.
+            const auto* channel = rack.session.getProject().findChannel (id);
+            const auto chosen = channel != nullptr ? channel->bank : juce::String();
+            auto setBank = [safe = juce::Component::SafePointer<ChannelRack> (&rack), id = id] (const juce::String& b)
+            {
+                if (safe != nullptr)
+                    safe->setChannelBank (id, b);
+            };
+            juce::PopupMenu banks;
+            juce::String found;
+            if (channel != nullptr && channel->instrument)
+            {
+                auto unnamed = *channel;
+                unnamed.bank = {};
+                found = instrumentbanks::of (rack.session, unnamed).name;
+            }
+            banks.addItem (found.isNotEmpty() ? "As its sound says: " + found
+                                              : juce::String ("As its sound says (it doesn't say)"),
+                           true, chosen.isEmpty(), [setBank] { setBank ({}); });
+            const auto named = rack.getNamedBanks (id);
+            if (! named.isEmpty())
+                banks.addSeparator();
+            for (const auto& b : named)
+                banks.addItem (b, true, b == chosen, [setBank, b] { setBank (b); });
+            banks.addSeparator();
+            banks.addItem ("Name this bank...",
+                           [setBank, chosen]
+                           {
+                               askForName ("Name the bank this channel plays", chosen.isNotEmpty() ? chosen : "Bank 1",
+                                           [setBank] (const juce::String& b) { setBank (b); });
+                           });
+            menu.addSubMenu ("Bank", banks);
+        }
         if (rack.canUsePresetFiles (id))
         {
             // Many instruments keep their presets as files in a folder no host can list.
@@ -1091,6 +1127,45 @@ bool ChannelRack::showInstrumentWindow (model::ChannelId channel)
     return c != nullptr && c->instrument && session.showDeviceWindow (c->instrument->id);
 }
 
+bool ChannelRack::bankDecidesKeys (model::ChannelId channel) const
+{
+    const auto* c = session.getProject().findChannel (channel);
+    if (c == nullptr || ! c->instrument)
+        return false;
+    InstrumentProfiles profiles (getIndexFolder());
+    profiles.load();
+    return profiles.byBank (InstrumentPresets::libraryOf (*c->instrument));
+}
+
+InstrumentBank ChannelRack::getBank (model::ChannelId channel) const
+{
+    const auto* c = session.getProject().findChannel (channel);
+    return c != nullptr ? instrumentbanks::of (session, *c) : InstrumentBank {};
+}
+
+juce::StringArray ChannelRack::getNamedBanks (model::ChannelId channel) const
+{
+    juce::StringArray names;
+    const auto* c = session.getProject().findChannel (channel);
+    if (c == nullptr || ! c->instrument)
+        return names;
+    InstrumentProfiles profiles (getIndexFolder());
+    profiles.load();
+    for (const auto& bank : profiles.banksOf (InstrumentPresets::libraryOf (*c->instrument)))
+        if (bank.id.startsWith ("named:"))
+            names.addIfNotAlreadyThere (bank.name);
+    for (const auto& other : session.getProject().channels) // named in this song, learned or not
+        if (other.instrument && other.bank.isNotEmpty() &&
+            InstrumentPresets::libraryOf (*other.instrument) == InstrumentPresets::libraryOf (*c->instrument))
+            names.addIfNotAlreadyThere (other.bank);
+    return names;
+}
+
+bool ChannelRack::setChannelBank (model::ChannelId channel, const juce::String& name)
+{
+    return perform ("channel.set", object ({ { "channel", (int)channel.value }, { "bank", name.trim() } }));
+}
+
 bool ChannelRack::learnInstrument (model::ChannelId channel)
 {
     const auto* c = session.getProject().findChannel (channel);
@@ -1125,7 +1200,7 @@ bool ChannelRack::learnInstrument (model::ChannelId channel)
 
     auto* view = findParentComponentOfClass<MainView>();
     LearnInstrumentWindow::open (
-        SoundIndex::getDefaultFolder(), key, model::getDeviceDisplayName (device), getTopLevelComponent(),
+        getIndexFolder(), key, model::getDeviceDisplayName (device), getTopLevelComponent(),
         [safe = juce::Component::SafePointer<ChannelRack> (this), name = c->name] (std::optional<PlayableKeys> keys)
         {
             if (safe == nullptr)
@@ -1135,7 +1210,7 @@ bool ChannelRack::learnInstrument (model::ChannelId channel)
                                                  ? name + " plays " + keys->describe() + "."
                                                  : name + " plays any note: which keys play is not known.");
         },
-        std::move (listening), view != nullptr ? view->getAiService() : nullptr);
+        std::move (listening), view != nullptr ? view->getAiService() : nullptr, instrumentbanks::of (session, *c));
     return true;
 }
 

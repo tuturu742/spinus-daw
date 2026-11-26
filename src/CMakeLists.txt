@@ -265,6 +265,7 @@ add_library (spinus_core STATIC
     session/SongWriter.cpp
     session/EffectProfiles.cpp
     session/EffectProfiles.h
+    session/InstrumentBanks.cpp
     session/InstrumentProfiles.cpp
     session/KeyProbe.cpp
     session/KeyProbe.h
@@ -274,6 +275,7 @@ add_library (spinus_core STATIC
     session/ManualReading.h
     session/PartModes.cpp
     session/PartModes.h
+    session/InstrumentBanks.h
     session/InstrumentProfiles.h
     session/PresetFolders.cpp
     session/PresetFolders.h

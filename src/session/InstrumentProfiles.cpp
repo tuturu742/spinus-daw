@@ -221,6 +221,8 @@ juce::var InstrumentProfiles::describeForAgents (const Profile& profile)
         modes.add (juce::var (m));
     }
     auto* o = new juce::DynamicObject();
+    if (profile.bankName.isNotEmpty())
+        o->setProperty ("bank", profile.bankName);
     o->setProperty ("modes", modes);
     return juce::var (o);
 }
@@ -266,6 +268,10 @@ juce::var InstrumentProfiles::toVar (const Profile& profile)
     }
     auto* o = new juce::DynamicObject();
     o->setProperty ("modes", modes);
+    if (profile.byBank)
+        o->setProperty ("byBank", true);
+    if (profile.bankName.isNotEmpty())
+        o->setProperty ("bank", profile.bankName);
     if (! profile.manuals.empty())
     {
         juce::Array<juce::var> manuals;
@@ -310,7 +316,9 @@ std::optional<InstrumentProfiles::Profile> InstrumentProfiles::fromVar (const ju
         for (const auto& m : *manuals)
             if (const auto source = m["source"].toString().trim(); source.isNotEmpty())
                 profile.manuals.push_back ({ source, m["version"].toString() });
-    if (profile.modes.empty())
+    profile.byBank = (bool)v["byBank"];
+    profile.bankName = v["bank"].toString();
+    if (profile.modes.empty() && ! profile.byBank)
         return std::nullopt;
     return profile;
 }
@@ -432,7 +440,7 @@ InstrumentProfiles::fromShared (const juce::var& v, juce::String& instrumentName
 
 void InstrumentProfiles::set (const juce::String& instrument, std::optional<Profile> profile)
 {
-    if (profile.has_value() && ! profile->modes.empty())
+    if (profile.has_value() && (! profile->modes.empty() || profile->byBank))
         profiles[instrument] = std::move (*profile);
     else
         profiles.erase (instrument);
@@ -443,6 +451,45 @@ std::optional<PlayableKeys> InstrumentProfiles::playable (const juce::String& in
     if (const auto profile = get (instrument); profile.has_value() && ! profile->modes.empty())
         return profile->modes.front().playable();
     return std::nullopt;
+}
+
+std::optional<PlayableKeys> InstrumentProfiles::playable (const juce::String& instrument,
+                                                          const InstrumentBank& bank) const
+{
+    if (const auto profile = get (instrument, bank); profile.has_value() && ! profile->modes.empty())
+        return profile->modes.front().playable();
+    return std::nullopt;
+}
+
+std::optional<InstrumentProfiles::Profile> InstrumentProfiles::get (const juce::String& instrument,
+                                                                    const InstrumentBank& bank) const
+{
+    auto profile = get (instrument);
+    if (! profile.has_value() || ! profile->byBank)
+        return profile;
+    // Another bank's keys would be wrong here: only this bank's own, once learned.
+    if (! bank.isKnown())
+        return std::nullopt;
+    if (const auto found = profiles.find (keyForBank (instrument, bank)); found != profiles.end())
+        return found->second;
+    return std::nullopt;
+}
+
+bool InstrumentProfiles::byBank (const juce::String& instrument) const
+{
+    const auto profile = get (instrument);
+    return profile.has_value() && profile->byBank;
+}
+
+std::vector<InstrumentBank> InstrumentProfiles::banksOf (const juce::String& instrument) const
+{
+    std::vector<InstrumentBank> banks;
+    const auto prefix = keyForBank (instrument, {});
+    for (const auto& [key, profile] : profiles)
+        if (key.startsWith (prefix) && key.length() > prefix.length())
+            banks.push_back ({ key.substring (prefix.length()),
+                               profile.bankName.isNotEmpty() ? profile.bankName : key.substring (prefix.length()) });
+    return banks;
 }
 
 } // namespace spinus

@@ -3,6 +3,7 @@
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
 #include "session/EffectProfiles.h"
+#include "session/InstrumentBanks.h"
 #include "session/InstrumentPresets.h"
 #include "session/InstrumentProfiles.h"
 #include "session/Session.h"
@@ -57,7 +58,7 @@ juce::var projectContext (Session& session, const ContextOptions& options)
     auto* instrumentKeys = new juce::DynamicObject();
     for (auto& channel : project.channels)
         if (channel.instrument)
-            if (auto keys = keysOf (*channel.instrument); ! keys.isVoid())
+            if (auto keys = instrumentbanks::keysForAgents (profiles, session, channel); ! keys.isVoid())
                 instrumentKeys->setProperty (juce::String ((int)channel.instrument->id.value), keys);
     context->setProperty ("instrumentKeys", juce::var (instrumentKeys));
 

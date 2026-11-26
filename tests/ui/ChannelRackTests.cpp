@@ -6,6 +6,8 @@
 #include "engine/BundledDevices.h"
 #include "engine/EngineHost.h"
 #include "model/ModelJson.h"
+#include "session/InstrumentBanks.h"
+#include "session/InstrumentPresets.h"
 #include "session/PresetFolders.h"
 #include "ui/ChannelRack.h"
 #include "ui/LearnInstrumentWindow.h"
@@ -596,6 +598,79 @@ TEST_CASE ("Learn this instrument opens from a channel's menu, without the Track
     CHECK (LearnInstrumentWindow::getNumOpen() == 0);
 
     CHECK_FALSE (r.rack.learnInstrument (model::ChannelId { 999 }));
+}
+
+TEST_CASE ("Learn this instrument: when the loaded bank decides the keys, each bank keeps its own",
+           "[ui][channelrack][banks]")
+{
+    Rack r;
+    const auto root = juce::File::createTempFile ("banks");
+    const auto index = root.getChildFile ("sounds");
+    r.rack.setIndexFolder (index);
+    model::Device player;
+    player.kind = model::Device::Kind::plugin;
+    player.plugin = { "VST3", "Sample Player", "Someone", "/nonexistent/Sample Player.vst3", 4321 };
+    REQUIRE (r.rack.addChannelWith (player, "Strings"));
+    const auto channel = r.lastChannel();
+    const auto key = InstrumentPresets::libraryOf (*r.session.getProject().findChannel (channel)->instrument);
+    CHECK_FALSE (r.rack.bankDecidesKeys (channel));
+    // Spinus's own instruments name no file: the Sampler has no bank, 3x Osc is known by its program's name.
+    REQUIRE (r.rack.addChannel ("spinus.sampler", "Sampler"));
+    CHECK_FALSE (r.rack.getBank (r.lastChannel()).isKnown());
+    REQUIRE (r.rack.addChannel ("spinus.3x-osc", "Lead"));
+    CHECK (r.rack.getBank (r.lastChannel()) == instrumentbanks::fromProgram ("Default"));
+
+    // Ticked with no bank known (the plugin isn't here to say): the setting is kept, no keys.
+    REQUIRE (r.rack.learnInstrument (channel));
+    auto* learn = LearnInstrumentWindow::lastOpened();
+    REQUIRE (learn != nullptr);
+    CHECK_FALSE (learn->getByBank());
+    learn->setByBank (true);
+    CHECK (learn->getBankText().contains ("not known"));
+    learn->selectKeys (40, 80);
+    learn->markSelected (InstrumentProfiles::Job::plays);
+    learn->save();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    CHECK (r.rack.bankDecidesKeys (channel));
+    {
+        InstrumentProfiles profiles (index);
+        profiles.load();
+        CHECK (profiles.banksOf (key).empty());
+        CHECK_FALSE (profiles.playable (key, {}).has_value());
+    }
+
+    // The user names the channel's bank (one undo step), and its keys are learned for it alone.
+    REQUIRE (r.rack.setChannelBank (channel, "Legato"));
+    CHECK (r.rack.getBank (channel).name == "Legato");
+    CHECK (r.rack.getNamedBanks (channel).contains ("Legato"));
+    REQUIRE (r.rack.learnInstrument (channel));
+    learn = LearnInstrumentWindow::lastOpened();
+    REQUIRE (learn != nullptr);
+    CHECK (learn->getByBank());
+    CHECK (learn->getBankText().contains ("Legato"));
+    learn->selectKeys (48, 72);
+    learn->markSelected (InstrumentProfiles::Job::plays);
+    learn->save();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    {
+        InstrumentProfiles profiles (index);
+        profiles.load();
+        CHECK (profiles.playable (key, instrumentbanks::named ("Legato")) == PlayableKeys::between (48, 72));
+        CHECK_FALSE (profiles.get (key, instrumentbanks::named ("Pizzicato")).has_value());
+    }
+
+    // Another bank starts with nothing learned; going back finds Legato's keys again.
+    REQUIRE (r.rack.setChannelBank (channel, "Pizzicato"));
+    REQUIRE (r.rack.learnInstrument (channel));
+    learn = LearnInstrumentWindow::lastOpened();
+    REQUIRE (learn != nullptr);
+    CHECK (learn->getSummaryText().contains ("is not known")); // nothing learned for it yet
+    LearnInstrumentWindow::closeAll();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    REQUIRE (r.session.getHistory().undo());
+    CHECK (r.rack.getBank (channel).name == "Legato");
+    CHECK (r.rack.getNamedBanks (channel).contains ("Legato"));
+    root.deleteRecursively();
 }
 
 TEST_CASE ("Preset files: a folder of a plugin's preset files is chosen from a channel's menu", "[ui][channelrack]")

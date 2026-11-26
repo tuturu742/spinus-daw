@@ -153,6 +153,10 @@ struct Channel
     int recordInput = 0;
     bool recordStereo = false;
     bool recordArmed = false;
+    /** The sample bank its instrument plays, as the user named it (Bank, in the Channel Rack's menu), for an
+        instrument whose keys depend on the loaded bank and whose saved sound doesn't say which it is. Empty: as
+        Spinus finds it (instrumentbanks::of). */
+    juce::String bank;
 
     bool operator== (const Channel&) const = default;
 };

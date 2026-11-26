@@ -204,6 +204,10 @@ An agent can learn an instrument's keys with `learn_instrument`, as **Learn this
 the plugin** and **Listen to every key** ([Learn this instrument](channel-rack.md#learn-this-instrument)): which
 keys play, which switch what it plays, and the octave its keys sound in. It takes a minute or two, and Spinus
 keeps what it learns for that instrument, as when you learn it yourself; keys you marked stay as you set them.
+For a sample player whose keys depend on its bank ([Sample banks](channel-rack.md#sample-banks)), it learns
+the bank the channel plays, and an agent is told which bank a channel's keys are for, or that its bank isn't
+learned yet (any key may play). When Spinus can't tell the bank, an agent can name it with `channel.set`'s
+`bank`, as **Bank › Name this bank...** does.
 It doesn't change the song.
 
 ## Exporting

@@ -5,6 +5,7 @@
 #include "ai/AnalysisJobs.h"
 #include "ai/Proposal.h"
 #include "dsp/sampler/SampleStorage.h"
+#include "session/InstrumentBanks.h"
 #include "session/InstrumentPresets.h"
 #include "session/PresetFolders.h"
 #include "session/PresetPreviews.h"
@@ -1626,7 +1627,7 @@ void PartSoundsPanel::learnInstrument (const juce::String& instrument, const Sou
                                                        : name + " plays any note: which keys play is not known.",
                                       juce::dontSendNotification);
         },
-        std::move (listening), context.service);
+        std::move (listening), context.service, instrumentbanks::fromStateFile (presetState));
 }
 
 bool PartSoundsPanel::usePresetFolder (const SoundSource& instrument, const juce::File& folder, bool use)
