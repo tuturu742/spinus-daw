@@ -14,6 +14,20 @@ namespace spinus::plugins::sandbox
 
 namespace
 {
+/** What each channel of the plugin's main output is (left, right, a numbered one...), as JUCE's channel types:
+    Spinus gives its side of the plugin the same layout, so it mixes many outputs as it would the plugin's own. */
+juce::var mainOutputTypes (const juce::AudioProcessor& plugin)
+{
+    juce::Array<juce::var> types;
+    if (plugin.getBusCount (false) > 0)
+    {
+        const auto set = plugin.getChannelLayoutOfBus (false, 0);
+        for (int c = 0; c < set.size(); ++c)
+            types.add ((int)set.getTypeOfChannel (c));
+    }
+    return types;
+}
+
 juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items)
 {
     auto* o = new juce::DynamicObject();
@@ -216,6 +230,7 @@ private:
         return object ({ { "name", instance->getName() },
                          { "inputs", instance->getTotalNumInputChannels() },
                          { "outputs", instance->getTotalNumOutputChannels() },
+                         { "mainOutputs", mainOutputTypes (*instance) },
                          { "acceptsMidi", instance->acceptsMidi() },
                          { "producesMidi", instance->producesMidi() },
                          { "latency", instance->getLatencySamples() },
@@ -238,7 +253,9 @@ private:
     {
         auto& s = shared->get();
         juce::AudioBuffer<float> buffer;
-        float* channels[maxChannels] {};
+        // The plugin gets all its channels: those past what the shared memory holds play into spare ones.
+        juce::AudioBuffer<float> spare;
+        std::vector<float*> channels;
         const auto params = instance->getParameters();
 
         while (! threadShouldExit())
@@ -257,9 +274,16 @@ private:
                     midi.addEvent (slot.midi[i].bytes, slot.midi[i].size, slot.midi[i].sample);
 
                 const int numChannels = juce::jlimit (1, maxChannels, s.numChannels);
-                for (int c = 0; c < numChannels; ++c)
-                    channels[c] = slot.audio[c];
-                buffer.setDataToReferTo (channels, numChannels, slot.numSamples);
+                const int wanted = juce::jmax (numChannels, instance->getTotalNumInputChannels(),
+                                               instance->getTotalNumOutputChannels());
+                if (spare.getNumChannels() < wanted - numChannels)
+                    spare.setSize (wanted - numChannels, maxBlock); // once, when the plugin is set up
+                channels.resize ((size_t)wanted);
+                for (int c = 0; c < wanted; ++c)
+                    channels[(size_t)c] = c < numChannels ? slot.audio[c] : spare.getWritePointer (c - numChannels);
+                for (int c = numChannels; c < wanted; ++c)
+                    juce::FloatVectorOperations::clear (channels[(size_t)c], slot.numSamples);
+                buffer.setDataToReferTo (channels.data(), wanted, slot.numSamples);
                 instance->processBlock (buffer, midi);
 
                 ++processed;

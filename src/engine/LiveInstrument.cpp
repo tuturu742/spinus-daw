@@ -11,6 +11,8 @@ void LiveInstrument::prepare (double rate)
     instance.prepareToPlay (sampleRate, maxBlockSize);
     // The main output's channels (the first ones); a mono one plays on both sides.
     right = instance.getBusCount (false) > 0 && instance.getChannelCountOfBus (false, 0) == 1 ? 0 : 1;
+    sides = instance.getBusCount (false) > 0 ? outputmix::sidesOf (instance.getChannelLayoutOfBus (false, 0))
+                                             : std::vector<outputmix::Side> {};
     const auto channels = juce::jmax (2, instance.getTotalNumOutputChannels(), instance.getTotalNumInputChannels());
     block.setSize (channels, maxBlockSize);
     midi.ensureSize ((size_t)maxEvents * 16);
@@ -90,6 +92,7 @@ void LiveInstrument::mix (float* const* outputs, int numChannels, int numSamples
         block.clear();
         if (! instance.isSuspended())
             instance.processBlock (block, midi);
+        outputmix::mixToStereo (block, 0, count, sides.data(), (int)sides.size());
 
         float loudest = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)

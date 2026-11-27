@@ -1,5 +1,7 @@
 #include "OfflineInstrument.h"
 
+#include "engine/OutputMix.h"
+
 namespace spinus
 {
 
@@ -21,6 +23,10 @@ void OfflineInstrument::play (int samples, const juce::MidiBuffer& midi, juce::A
     const auto channels = juce::jmax (2, instance.getTotalNumOutputChannels(), instance.getTotalNumInputChannels());
     // The main output's channels (the first ones); a mono one plays on both sides.
     const auto right = instance.getBusCount (false) > 0 && instance.getChannelCountOfBus (false, 0) == 1 ? 0 : 1;
+    // A main output of more than two channels (a microphone on each) is heard whole: mixed into the first two.
+    const auto sides = instance.getBusCount (false) > 0
+                           ? engine::outputmix::sidesOf (instance.getChannelLayoutOfBus (false, 0))
+                           : std::vector<engine::outputmix::Side> {};
     juce::AudioBuffer<float> block (channels, blockSize);
     for (int done = 0; done < samples; done += blockSize)
     {
@@ -30,6 +36,7 @@ void OfflineInstrument::play (int samples, const juce::MidiBuffer& midi, juce::A
         juce::MidiBuffer events;
         events.addEvents (midi, done, count, -done);
         instance.processBlock (block, events);
+        engine::outputmix::mixToStereo (block, 0, count, sides.data(), (int)sides.size());
         if (into != nullptr && into->getNumChannels() >= 2)
             for (int c = 0; c < 2; ++c)
                 into->addFrom (c, done, block, c == 0 ? 0 : right, 0, count);

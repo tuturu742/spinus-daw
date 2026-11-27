@@ -160,9 +160,9 @@ public:
                     juce::PluginDescription r, const juce::var& info)
         : juce::AudioPluginInstance (layoutFor (info)), connection (std::move (c)), memory (std::move (m)),
           description (std::move (d)), real (std::move (r)), name (info["name"].toString()),
-          numIn ((int)info["inputs"]), numOut ((int)info["outputs"]), midiIn ((bool)info["acceptsMidi"]),
-          midiOut ((bool)info["producesMidi"]), editor ((bool)info["hasEditor"]), pluginLatency ((int)info["latency"]),
-          tail ((double)info["tail"]), watch ((juce::int64)info["process"])
+          numIn ((int)info["inputs"]), numOut ((int)info["outputs"]), numMainOut (mainOutputOf (info).size()),
+          midiIn ((bool)info["acceptsMidi"]), midiOut ((bool)info["producesMidi"]), editor ((bool)info["hasEditor"]),
+          pluginLatency ((int)info["latency"]), tail ((double)info["tail"]), watch ((juce::int64)info["process"])
     {
         if (auto* list = info["parameters"].getArray())
             for (int i = 0; i < list->size(); ++i)
@@ -275,7 +275,7 @@ public:
 
     bool isBusesLayoutSupported (const BusesLayout& layout) const override
     {
-        return layout.getMainInputChannels() == numIn && layout.getMainOutputChannels() == numOut;
+        return layout.getMainInputChannels() == numIn && layout.getMainOutputChannels() == numMainOut;
     }
 
     //==============================================================================
@@ -302,10 +302,30 @@ private:
         BusesProperties buses;
         if ((int)info["inputs"] > 0)
             buses = buses.withInput ("Input", juce::AudioChannelSet::canonicalChannelSet ((int)info["inputs"]), true);
-        if ((int)info["outputs"] > 0)
-            buses =
-                buses.withOutput ("Output", juce::AudioChannelSet::canonicalChannelSet ((int)info["outputs"]), true);
+        const auto outputs = (int)info["outputs"];
+        const auto main = mainOutputOf (info);
+        if (main.size() > 0)
+            buses = buses.withOutput ("Output", main, true);
+        if (outputs > main.size())
+            buses = buses.withOutput ("More outputs", juce::AudioChannelSet::discreteChannels (outputs - main.size()),
+                                      true);
         return buses;
+    }
+
+    /** The plugin's main output as the host reported it (its channels' kinds), or, from a host that did not
+        say, all its outputs as one. */
+    static juce::AudioChannelSet mainOutputOf (const juce::var& info)
+    {
+        const auto outputs = (int)info["outputs"];
+        if (const auto* types = info["mainOutputs"].getArray();
+            types != nullptr && ! types->isEmpty() && types->size() <= outputs)
+        {
+            juce::Array<juce::AudioChannelSet::ChannelType> kinds;
+            for (const auto& type : *types)
+                kinds.add ((juce::AudioChannelSet::ChannelType)(int)type);
+            return juce::AudioChannelSet::channelSetWithChannels (kinds);
+        }
+        return outputs > 0 ? juce::AudioChannelSet::canonicalChannelSet (outputs) : juce::AudioChannelSet();
     }
 
     void processPart (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, int offset)
@@ -411,9 +431,11 @@ private:
             if (fifoCount + n <= fifo.getNumSamples())
             {
                 const int write = (fifoRead + fifoCount) % fifo.getNumSamples();
+                // The shared memory holds the first `maxChannels`; a plugin's outputs past them are silent.
                 for (int c = 0; c < fifo.getNumChannels(); ++c)
                     for (int i = 0; i < n; ++i)
-                        fifo.setSample (c, (write + i) % fifo.getNumSamples(), slot.audio[c][i]);
+                        fifo.setSample (c, (write + i) % fifo.getNumSamples(),
+                                        c < maxChannels ? slot.audio[c][i] : 0.0f);
                 fifoCount += n;
             }
             ++collected;
@@ -491,7 +513,7 @@ private:
     std::unique_ptr<SharedMemory> memory;
     juce::PluginDescription description, real;
     juce::String name;
-    int numIn = 0, numOut = 0;
+    int numIn = 0, numOut = 0, numMainOut = 0;
     bool midiIn = false, midiOut = false, editor = false, killed = false, reportedFailure = false;
     int pluginLatency = 0, bufferedLatency = 0;
     double tail = 0.0;

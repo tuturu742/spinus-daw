@@ -1,6 +1,10 @@
 #pragma once
 
+#include "OutputMix.h"
+
 #include <tracktion_engine/tracktion_engine.h>
+
+#include <array>
 
 #include <atomic>
 #include <memory>
@@ -52,6 +56,19 @@ public:
     }
     const DeviceMeter* getMeter() const noexcept { return meter.get(); }
 
+    /** An instrument with more outputs than two: the guard after it mixes them into the first two (see
+        outputmix::sidesOf), before it checks the sound. Empty: the channels pass as they are. Message thread. */
+    void setOutputSides (const std::vector<outputmix::Side>& sides) noexcept
+    {
+        const auto n = juce::jmin ((int)sides.size(), maxOutputSides);
+        numOutputSides.store (0, std::memory_order_release);
+        for (int i = 0; i < n; ++i)
+            outputSides[(size_t)i] = sides[(size_t)i];
+        numOutputSides.store (n, std::memory_order_release);
+    }
+    int getNumOutputSides() const noexcept { return numOutputSides.load (std::memory_order_acquire); }
+    static constexpr int maxOutputSides = 64;
+
     /** Blocks silenced since the last call (message thread). */
     int takeSilencedBlockCount() noexcept { return silencedBlocks.exchange (0, std::memory_order_acq_rel); }
 
@@ -92,6 +109,8 @@ private:
     void holdAndFadeIn (juce::AudioBuffer<float>&, int start, int numSamples) noexcept;
 
     std::atomic<int> silencedBlocks { 0 };
+    std::array<outputmix::Side, maxOutputSides> outputSides {};
+    std::atomic<int> numOutputSides { 0 };
     std::shared_ptr<DeviceMeter> meter;
     bool probe = false;
     double sampleRate = 44100.0;

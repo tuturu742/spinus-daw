@@ -55,10 +55,12 @@ what happened, and attach the project if you can.
   the Flatpak has run in a separate process with your system's libraries, so they have that process's limits
   (below). A plugin that needs a library your system doesn't have either is listed under Problem plugins
   with the reason. The Flatpak can use only Spinus's tested Wine for Windows plugins. See [Install](install.md#as-a-flatpak).
-- Only a plugin's main stereo output is heard; extra outputs (for example one per drum) aren't routed to the
-  mixer yet.
+- An instrument whose main output has more than two channels (DrumGizmo gives each microphone its own) is
+  heard mixed into its channel's stereo sound: left outputs on the left, right ones on the right, the rest in
+  the middle. Its outputs can't go to mixer tracks of their own yet, so its microphones are balanced only in the
+  plugin. Outputs outside the main one (for example extra stereo pairs) aren't heard yet.
 - A plugin running in a separate process can't use sidechain inputs, send MIDI out, or have more than
-  eight channels. See [Plugins](plugins.md).
+  32 channels. See [Plugins](plugins.md).
 - Some **LV2 plugins open with Spinus's sliders instead of their own window**: those whose window is
   made for GTK or Qt only (some Calf and older plugins), and those whose window needs something Spinus
   doesn't offer yet or fails to open. The plugin itself works as usual.

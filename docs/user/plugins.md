@@ -58,8 +58,16 @@ You can switch any plugin in or out of a separate process yourself. Right-click 
 separate process (safe from crashes)**. The choice is for the plugin on this computer: it applies in
 every project.
 
-Not yet supported in a separate process: sidechain inputs, MIDI a plugin sends out, and more than eight
+Not yet supported in a separate process: sidechain inputs, MIDI a plugin sends out, and more than 32
 channels. Plugins needing those run inside Spinus.
+
+## Instruments with many outputs
+
+Some instruments put each part of their sound on an output of its own: DrumGizmo gives each microphone of a
+drum kit its own (kick, snare, overheads, room). Spinus mixes them all into the channel's stereo sound, so you
+hear the whole kit: an output the plugin calls left goes left, a right one goes right, and any other (a
+numbered output, as DrumGizmo's are) goes to the middle. An instrument with a plain stereo output plays as it
+always did. Balance the outputs in the plugin itself; sending each to a mixer track of its own is planned.
 
 ## When a plugin makes invalid sound
 
