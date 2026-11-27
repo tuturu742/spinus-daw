@@ -380,7 +380,10 @@ and drums": those three), or empty. Then:
   **Listen to every key** lets Spinus find out for you: it plays every key of the mode shown, one at a time (in
   its separate helper program, a few minutes), and listens. A key that sounds at its own pitch plays; one that
   sounds at another pitch or plays a chord is special; a silent key after which notes sound different is a switch
-  key; a silent one that changes nothing is unused. For a mode entered by a key, set that key under **How to enter
+  key; a silent one that changes nothing is unused. A drum kit works too: each drum is a special key (a sound, not
+  a note), and Spinus waits for a cymbal to stop ringing before the next key, so the keys after it aren't taken
+  for drums. A cymbal's choke key (it stops the cymbal) makes no sound of its own, so it shows as unused. For a
+  mode entered by a key, set that key under **How to enter
   it** first: Spinus plays it before every key. What it heard is shown as a proposal: the keys that would change
   get a dot of their new colour, and nothing changes until **Apply** (**Discard** drops it). Keys you marked
   yourself stay as you set them, and so do keys a manual or an imported file named: listening only fills in the

@@ -3,6 +3,7 @@
 #include "session/KeyProbe.h"
 
 #include <cmath>
+#include <set>
 
 using namespace spinus;
 using Job = InstrumentProfiles::Job;
@@ -161,5 +162,53 @@ TEST_CASE ("Listen to every key: an instrument that sounds an octave under its k
                                              [&] { guitar.switched = false; });
         CHECK (result.octaves == octaves);
         CHECK (result.keys[52].job == Job::plays); // an octave off still plays
+    }
+}
+
+TEST_CASE ("Listen to every key: a drum kit, which plays no note in tune", "[profiles]")
+{
+    // A kit with drums on its GM keys only: a burst of noise each (no pitch), silence elsewhere. Its crash (49)
+    // rings on for two seconds, whatever is played next: a drum sampler doesn't stop it.
+    const std::set<int> drums { 36, 38, 42, 46, 49 };
+    double ringLeft = 0.0;
+    juce::Random random (7);
+    const auto play = [&] (const std::vector<sounds::Note>& notes, double tail)
+    {
+        double end = 0.0;
+        for (const auto& n : notes)
+            end = juce::jmax (end, n.start + n.length);
+        const auto rate = 48000.0;
+        juce::AudioBuffer<float> b (2, (int)((end + tail) * rate));
+        b.clear();
+        const auto noise = [&] (int from, int to, float gain)
+        {
+            for (int i = juce::jmax (0, from); i < juce::jmin (b.getNumSamples(), to); ++i)
+                for (int c = 0; c < 2; ++c)
+                    b.addSample (c, i, gain * (random.nextFloat() * 2.0f - 1.0f));
+        };
+        noise (0, (int)(ringLeft * rate), 0.05f); // the crash still ringing from before
+        ringLeft = juce::jmax (0.0, ringLeft - b.getNumSamples() / rate);
+        for (const auto& n : notes)
+            if (drums.count (n.note) != 0)
+            {
+                noise ((int)(n.start * rate), (int)((n.start + 0.15) * rate), 0.3f);
+                if (n.note == 49)
+                {
+                    noise ((int)((n.start + 0.15) * rate), b.getNumSamples(), 0.05f);
+                    ringLeft = 2.0 - (b.getNumSamples() / rate - n.start);
+                }
+            }
+        return b;
+    };
+    const auto heard = keyprobe::probe (play, {});
+    CHECK (heard.problem.isEmpty());
+    CHECK (heard.reference == 36); // the first drum tried
+    for (int key = 0; key < 128; ++key)
+    {
+        INFO ("key " << key);
+        if (drums.count (key) != 0)
+            CHECK (heard.keys[(size_t)key].job == Job::special);
+        else
+            CHECK (heard.keys[(size_t)key].job == Job::unused); // the keys after the crash too
     }
 }

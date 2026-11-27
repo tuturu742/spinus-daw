@@ -87,6 +87,23 @@ TEST_CASE ("A sample player's bank is found from the files its saved sound names
         CHECK (instrumentbanks::fromState (kit).name == "DRSKit_full");
         CHECK (instrumentbanks::fromState (kit) != instrumentbanks::fromState (other));
     }
+    SECTION ("a drum kit's settings in base64 inside an LV2 host's preset, its lines broken every 76 letters")
+    {
+        const juce::String config =
+            R"(<config version="1.0"><value name="drumkitfile">/home/me/Kits/ShittyKit/ShittyKit.xml</value>)"
+            R"(<value name="midimapfile">/home/me/Kits/ShittyKit/midimap.xml</value>)"
+            R"(<value name="voice_limit_max">15</value></config>)";
+        auto encoded = juce::Base64::toBase64 (config);
+        juce::String lines;
+        for (int i = 0; i < encoded.length(); i += 76)
+            lines << encoded.substring (i, i + 76) << "\n";
+        const auto preset = textBlock ("<http://example.org/kit/savedState>\n\ta pset:Preset ;\n\tstate:state [\n"
+                                       "\t\t<http://example.org/kit#config> \"\"\"" +
+                                       lines.trimEnd() + "\"\"\"^^xsd:base64Binary\n\t] .\n");
+        CHECK (instrumentbanks::filesNamedIn (preset) ==
+               juce::StringArray { "/home/me/Kits/ShittyKit/ShittyKit.xml", "/home/me/Kits/ShittyKit/midimap.xml" });
+        CHECK (instrumentbanks::fromState (preset).name == "ShittyKit");
+    }
     SECTION ("file:// addresses and Windows paths")
     {
         CHECK (instrumentbanks::filesNamedIn (textBlock ("{\"bank\": \"file:///home/me/My%20Kits/Kit.dspreset\"}")) ==

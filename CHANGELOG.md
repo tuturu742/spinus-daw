@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Learn this instrument works on DrumGizmo kits.** Spinus didn't recognise which kit DrumGizmo had loaded (it
+  keeps the kit's file in a form Spinus didn't read), so a kit's keys couldn't be kept apart from the others'.
+  Listen to every key also gave up on any drum kit ("It played no note in tune": it needed a key that plays a
+  note), and a cymbal still ringing made the keys after it look like drums. Now Spinus knows the kit and its key
+  map, listening works without a key in tune, and it waits for cymbals to stop before the next key. On DrumGizmo's
+  ShittyKit, MuldjordKit3 and DRSKit (with each of its five key maps) it finds exactly the drums each key map
+  lists.
 - **Instruments with many outputs are heard whole.** DrumGizmo gives each microphone of a kit its own output;
   Spinus heard only the first two (the kick and snare microphones) and, for a plugin running in a separate
   process (DrumGizmo in the Flatpak), read its outputs past the eighth from the wrong memory, so the sound was

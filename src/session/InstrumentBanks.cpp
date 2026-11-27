@@ -140,13 +140,51 @@ bool decodeBase64 (const juce::String& text, juce::MemoryBlock& out)
     return juce::Base64::convertFromBase64 (stream, t) && stream.getDataSize() > 0;
 }
 
-/** Text that may be base64: looked into as well as read. */
+bool isBase64Char (char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' ||
+           c == '=';
+}
+
+/** Standard base64 inside other text, as a plugin's data in an LV2 host's preset (Turtle, its lines 76 long):
+    each long run of base64 characters, across line breaks, decoded and looked into. */
+void lookInBase64Runs (const juce::String& text, juce::StringArray& found, int depth)
+{
+    const auto* bytes = text.toRawUTF8();
+    const auto size = text.getNumBytesAsUTF8();
+    for (size_t i = 0; i < size;)
+    {
+        if (! isBase64Char (bytes[i]))
+        {
+            ++i;
+            continue;
+        }
+        juce::MemoryOutputStream run;
+        auto end = i;
+        for (; end < size && (isBase64Char (bytes[end]) || bytes[end] == '\n' || bytes[end] == '\r'); ++end)
+            if (isBase64Char (bytes[end]))
+                run.writeByte (bytes[end]);
+        if (run.getDataSize() >= 64)
+        {
+            juce::MemoryOutputStream decoded;
+            if (juce::Base64::convertFromBase64 (decoded, run.toString()) && decoded.getDataSize() > 0)
+                look (decoded.getMemoryBlock(), found, depth + 1);
+        }
+        i = end;
+    }
+}
+
+/** Text that may be base64, or hold some: looked into as well as read. */
 void lookInText (const juce::String& text, juce::StringArray& found, int depth)
 {
     pathsInText (text, found);
     if (looksLikeBase64 (text))
+    {
         if (juce::MemoryBlock decoded; decodeBase64 (text, decoded))
             look (decoded, found, depth + 1);
+    }
+    else if (depth < deepest)
+        lookInBase64Runs (text, found, depth);
 }
 
 void lookInXml (const juce::XmlElement& xml, juce::StringArray& found, int depth)
@@ -189,7 +227,10 @@ void look (const juce::MemoryBlock& block, juce::StringArray& found, int depth)
             lookInXml (*xml, found, depth);
             return;
         }
-    // Anything else: the readable runs in it (binary data with strings inside, JSON, a plugin's own text).
+    // Anything else: the readable runs in it (binary data with strings inside, JSON, a plugin's own text), its
+    // lines together (base64 can run across them).
+    const auto inRun = [bytes, size] (size_t at) -> size_t
+    { return bytes[at] == '\n' || bytes[at] == '\r' || bytes[at] == '\t' ? 1 : readableAt (bytes, at, size); };
     for (size_t i = 0; i < size;)
     {
         if (readableAt (bytes, i, size) == 0)
@@ -199,7 +240,7 @@ void look (const juce::MemoryBlock& block, juce::StringArray& found, int depth)
         }
         auto end = i;
         while (end < size && end - i < longestRun)
-            if (const auto step = readableAt (bytes, end, size); step > 0 && end + step - i <= longestRun)
+            if (const auto step = inRun (end); step > 0 && end + step - i <= longestRun)
                 end += step;
             else
                 break;
