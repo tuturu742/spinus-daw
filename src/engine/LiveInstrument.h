@@ -60,7 +60,8 @@ private:
     juce::AudioPluginInstance& instance;
     double sampleRate = 48000.0;
     int right = 1; // the output channel heard on the right
-    std::vector<outputmix::Side> sides; // a main output of more than two channels, mixed into two
+    // A main output of more than two channels, mixed into two.
+    std::vector<outputmix::Side> sides;
     std::atomic<float> peak { 0.0f };
 
     juce::AbstractFifo fifo { maxEvents };
