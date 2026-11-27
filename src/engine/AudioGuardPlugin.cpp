@@ -71,6 +71,9 @@ void AudioGuardPlugin::applyToBuffer (const te::PluginRenderContext& fc)
         return;
     }
 
+    if (const auto sides = numOutputSides.load (std::memory_order_acquire); sides > 0)
+        outputmix::mixToStereo (*fc.destBuffer, fc.bufferStartSample, fc.bufferNumSamples, outputSides.data(), sides);
+
     if (containsInvalidSamples (*fc.destBuffer, fc.bufferStartSample, fc.bufferNumSamples))
     {
         fc.destBuffer->clear (fc.bufferStartSample, fc.bufferNumSamples);

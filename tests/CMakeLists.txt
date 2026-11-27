@@ -40,6 +40,7 @@ add_executable (spinus_tests
     engine/EdgeCaseTests.cpp
     engine/TuneRenderTests.cpp
     engine/LiveInstrumentTests.cpp
+    engine/OutputMixTests.cpp
     engine/EngineHostTests.cpp
     golden/GoldenAudioTests.cpp
     model/ModelTests.cpp
@@ -256,6 +257,14 @@ set_target_properties (spinus_test_sidechain_clap PROPERTIES
     PREFIX "" OUTPUT_NAME "sidechain-echo" SUFFIX ".clap"
     LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
 add_dependencies (spinus_tests spinus_test_sidechain_clap)
+
+# An instrument with sixteen numbered outputs (SandboxTests.cpp, OutputMixTests.cpp).
+add_library (spinus_test_many_outputs_clap MODULE plugins/ManyOutputsClap.c)
+target_include_directories (spinus_test_many_outputs_clap PRIVATE ${PROJECT_SOURCE_DIR}/external/clap/include)
+set_target_properties (spinus_test_many_outputs_clap PROPERTIES
+    PREFIX "" OUTPUT_NAME "many-outputs" SUFFIX ".clap"
+    LIBRARY_OUTPUT_DIRECTORY "${SPINUS_BROKEN_PLUGINS_DIR}")
+add_dependencies (spinus_tests spinus_test_many_outputs_clap)
 
 # An effect whose CLAP parameter IDs are not their positions (DeviceParametersTests.cpp).
 add_library (spinus_test_param_ids_clap MODULE plugins/ParamIdsClap.c)

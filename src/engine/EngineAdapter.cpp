@@ -4,6 +4,7 @@
 #include "ExpressiveMidi.h"
 
 #include "AudioGuardPlugin.h"
+#include "OutputMix.h"
 #include "MutePlugin.h"
 #include "ParameterIds.h"
 #include "model/Automation.h"
@@ -833,7 +834,14 @@ te::Plugin::Ptr EngineAdapter::ensureDevice (const Device& device)
         probes[device.id] = edit.getPluginCache().createNewPlugin (AudioGuardPlugin::xmlTypeName, {});
         auto meter = std::make_shared<DeviceMeter>();
         if (auto* guard = dynamic_cast<AudioGuardPlugin*> (guards[device.id].get()))
+        {
             guard->setMeter (meter, false);
+            // A plugin with many outputs (a microphone on each) is heard whole, in stereo.
+            if (auto* external = dynamic_cast<te::ExternalPlugin*> (created.get()))
+                if (auto* instance = external->getAudioPluginInstance();
+                    instance != nullptr && instance->getBusCount (false) > 0)
+                    guard->setOutputSides (outputmix::sidesOf (instance->getChannelLayoutOfBus (false, 0)));
+        }
         if (auto* probe = dynamic_cast<AudioGuardPlugin*> (probes[device.id].get()))
             probe->setMeter (meter, true);
         plugin = created.get();

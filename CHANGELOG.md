@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Instruments with many outputs are heard whole.** DrumGizmo gives each microphone of a kit its own output;
+  Spinus heard only the first two (the kick and snare microphones) and, for a plugin running in a separate
+  process (DrumGizmo in the Flatpak), read its outputs past the eighth from the wrong memory, so the sound was
+  broken and Spinus muted it. Now all of an instrument's outputs are mixed into its channel's stereo sound
+  (left outputs left, right ones right, the rest in the middle), in songs, previews, exports and Learn this
+  instrument, and a plugin in a separate process can have up to 32 channels. Sending each output to a mixer
+  track of its own comes later.
 - **Learn this instrument: each sample bank keeps its own keys.** A sample player (sfizz, DrumGizmo, and players
   like Kontakt) plays whatever bank it loads: a guitar with switch keys, a bass, a drum kit with its own key map.
   Spinus kept one set of keys per plugin, so the keys learned for one bank were used for every other. Tick **The

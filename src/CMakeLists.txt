@@ -152,6 +152,8 @@ add_library (spinus_core STATIC
     engine/SamplePreview.h
     engine/LiveInstrument.cpp
     engine/LiveInstrument.h
+    engine/OutputMix.cpp
+    engine/OutputMix.h
     engine/EngineHost.cpp
     engine/PipeWireInput.cpp
     engine/EngineHost.h

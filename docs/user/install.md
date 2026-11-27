@@ -99,7 +99,7 @@ your system's own libraries, and the Flatpak brings its own, older ones. When a 
 doesn't load with the Flatpak's libraries, Spinus tries it again with your system's, and if it loads, it
 always runs in a separate process started with them. You don't need to do anything; the log says
 "loads with the computer's own libraries" for each one. A plugin in a separate process can't use sidechain
-inputs, send MIDI out or have more than eight channels (see [Plugins](plugins.md)).
+inputs, send MIDI out or have more than 32 channels (see [Plugins](plugins.md)).
 
 A plugin that doesn't load even so (it needs a library your system doesn't have either), or a system older
 than the Flatpak, still shows under **Problem plugins** in the Browser with the reason ("... was installed by

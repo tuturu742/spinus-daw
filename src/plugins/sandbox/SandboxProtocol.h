@@ -27,7 +27,7 @@
 namespace spinus::plugins::sandbox
 {
 
-inline constexpr int maxChannels = 8;
+inline constexpr int maxChannels = 32; // more (a plugin with 64 outputs): those are not heard
 inline constexpr int maxBlock = 4096;
 inline constexpr int slotCount = 8;
 inline constexpr int maxMidiEvents = 512;
