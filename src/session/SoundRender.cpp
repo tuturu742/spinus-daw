@@ -145,7 +145,9 @@ bool waitUntilAudible (OfflineInstrument& player, Lines& out, double seconds)
     const auto until = juce::Time::getMillisecondCounterHiRes() + seconds * 1000.0;
     for (;;)
     {
-        const auto audio = player.render ({ { 48, 0.0, 0.4, 0.8f }, { 60, 0.0, 0.4, 0.8f } }, 0.3);
+        // Two notes, and a kick and a snare for a drum kit that only has drum keys.
+        const auto audio = player.render (
+            { { 48, 0.0, 0.4, 0.8f }, { 60, 0.0, 0.4, 0.8f }, { 36, 0.0, 0.4, 0.8f }, { 38, 0.0, 0.4, 0.8f } }, 0.3);
         if (audio.getMagnitude (0, audio.getNumSamples()) > 1.0e-4f)
             return true;
         if (juce::Time::getMillisecondCounterHiRes() > until)

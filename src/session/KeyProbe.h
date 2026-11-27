@@ -14,7 +14,8 @@ namespace spinus
     Every key is played on its own, after the mode's entry key when it has one, and heard:
     - a sound at the key's pitch (an octave off counts): it plays;
     - a sound at another pitch, several pitches, or no pitch: a special key (a strummer's chord key, a noise);
-    - silence, after which a reference note (one that plays, heard before the probing starts) sounds different:
+    - silence, after which a reference note (one that plays, heard before the probing starts; for a drum kit,
+      which plays no note in tune, a key that sounds) sounds different:
       a switch key; the instrument is then put back as it was (`reset`) before the next key;
     - silence that changes nothing: unused.
     The reference note is heard a few times first, so a sampler's own variation (round robin) isn't taken for a

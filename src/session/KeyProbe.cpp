@@ -26,6 +26,16 @@ std::vector<float> monoOf (const juce::AudioBuffer<float>& audio)
     return mono;
 }
 
+float peakOf (const std::vector<float>& x, double from, double to)
+{
+    const auto a = juce::jlimit (0, (int)x.size(), (int)(from * 48000.0));
+    const auto b = juce::jlimit (a, (int)x.size(), (int)(to * 48000.0));
+    float peak = 0.0f;
+    for (int i = a; i < b; ++i)
+        peak = juce::jmax (peak, std::abs (x[(size_t)i]));
+    return peak;
+}
+
 /** What a sound is like, to tell the reference note's sound changed. */
 struct Print
 {
@@ -138,23 +148,67 @@ Result probe (const Player& play, const std::function<void()>& reset, const Opti
               const std::function<bool (int, int)>& progress)
 {
     Result result;
-    const auto render = [&] (int key) { return monoOf (play (notesFor (key, options), options.tail)); };
+    // Some instruments (a drum sampler's cymbals) ring on through "all sound off": after a key still sounding at
+    // its end, nothing is played until it is quiet (at most 10 seconds of sound, quick to render), so the next key
+    // isn't heard in it. Three keys in a row that never go quiet (a drone) end the waiting.
+    auto quiet = silentPeak;
+    bool ringing = false;
+    int endless = 0;
+    const auto render = [&] (int key)
+    {
+        for (int i = 0; ringing && endless < 3; ++i)
+        {
+            ringing = peakOf (monoOf (play ({}, 0.5)), 0.25, 0.5) > quiet;
+            if (! ringing)
+                endless = 0;
+            else if (i == 19)
+                ++endless;
+            if (i == 19)
+                break;
+        }
+        auto x = monoOf (play (notesFor (key, options), options.tail));
+        const auto length = (double)x.size() / Print::OfflineRate;
+        ringing = peakOf (x, length - 0.05, length) > quiet;
+        return x;
+    };
     const auto heardFrom = entry, heardTo = entry + options.hold + options.tail;
+    // How loud a key is, or 0 when it is no louder than what still rang just before it (a key that makes no sound
+    // of its own).
+    const auto loudnessOf = [heardFrom, heardTo] (const std::vector<float>& x)
+    {
+        const auto peak = peakOf (x, heardFrom, heardTo);
+        return peak > 2.0f * peakOf (x, heardFrom - 0.04, heardFrom - 0.005) ? peak : 0.0f;
+    };
 
     // The reference: a key in the middle that plays, heard three times (a sampler varies from one to the next).
+    // A drum kit plays no note in tune: then the first key tried that sounds (a drum).
     std::vector<Print> prints;
-    for (const auto candidate : { 60, 57, 64, 48, 72, 52, 67, 45, 36, 84, 40, 76 })
+    int sounding = -1;
+    Print soundingPrint;
+    for (const auto candidate : { 60, 57, 64, 48, 72, 52, 67, 45, 36, 84, 40, 76, 38, 42, 35 })
     {
         if (candidate == options.enterKey)
             continue;
         const auto x = render (candidate);
         const auto print = Print::of (x, heardFrom, heardTo);
-        if (print.peak > silentPeak && heardAs (candidate, x, options).job == Job::plays)
+        if (print.peak <= silentPeak || loudnessOf (x) <= 0.0f)
+            continue;
+        if (heardAs (candidate, x, options).job == Job::plays)
         {
             result.reference = candidate;
             prints.push_back (print);
             break;
         }
+        if (sounding < 0)
+        {
+            sounding = candidate;
+            soundingPrint = print;
+        }
+    }
+    if (result.reference < 0 && sounding >= 0)
+    {
+        result.reference = sounding;
+        prints.push_back (soundingPrint);
     }
     if (result.reference < 0)
     {
@@ -173,6 +227,7 @@ Result probe (const Player& play, const std::function<void()>& reset, const Opti
         std::max_element (prints.begin(), prints.end(), [] (const Print& a, const Print& b) { return a.peak < b.peak; })
             ->peak;
     const auto silent = juce::jmax (silentPeak, loudest * 0.003f); // 50 dB under the reference
+    quiet = silent;
 
     // The octave the keys sound in: most of those in the middle (70 Hz to 1 kHz expected), whose pitch is heard
     // surely (the lowest keys are heard by their harmonics, which can read an octave up).
@@ -190,7 +245,7 @@ Result probe (const Player& play, const std::function<void()>& reset, const Opti
             continue;
         }
         const auto x = render (key);
-        if (Print::of (x, heardFrom, heardTo).peak > silent)
+        if (loudnessOf (x) > silent)
         {
             auto octave = std::numeric_limits<int>::min();
             found = heardAs (key, x, options, &octave);

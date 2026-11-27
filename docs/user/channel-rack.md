@@ -61,6 +61,9 @@ loading another bank in the plugin's window is enough. Some plugins don't say: r
 and the next channel with that plugin can pick it from the same menu. **As its sound says** goes back to finding
 it from the plugin. Leave the tick box off for synths: their keys don't change with a preset.
 
+DrumGizmo is a sample bank too: its kit and key map together make the bank, so DRSKit with its full key map and
+with its minimal one are two banks. Listen to every key finds each kit's drums from its key map, and nothing else.
+
 ## Preset files
 
 Many sampled instruments keep their presets as files in a folder of their own that no host can list (many sampled
