@@ -648,3 +648,11 @@ def test_a_chord_mode_is_described_by_its_chord_and_pattern_keys() -> None:
     )
     assert lines[2] == "Odd: no key plays a note by itself; switches: mute (C2)"
     assert lines[3] == "Empty: keys not known"
+
+
+def test_the_overview_names_the_instruments_the_user_taught_spinus() -> None:
+    learned = [{"instrument": "Electric Guitar"}, {"instrument": "Sample Player", "banks": ["Growlybass"]}]
+    overview = json.loads(harness(learnedInstruments=learned).call("song_overview", {})[0])
+    assert overview["learnedInstruments"] == learned
+    # Nothing learned: nothing said.
+    assert "learnedInstruments" not in json.loads(harness().call("song_overview", {})[0])

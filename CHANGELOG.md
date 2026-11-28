@@ -5,6 +5,13 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Agents know the instruments you taught Spinus, and can load a learned sample bank.** A connected agent's
+  first look at the song (`song_summary`, `song_overview`) now names every learned instrument and, for a sample
+  player (sfizz, DrumGizmo), the banks learned for it; the new `learned_instruments` tool tells how to add each,
+  what its modes suit and which keys play. Learning a bank now also keeps the plugin's sound for it, so the bank
+  shows among the plugin's presets under **Learned banks** and loads by name (`device.loadPreset`, or
+  `add_part`'s `preset`). A bank learned before this update has no kept sound: learn it once more to make it
+  loadable.
 - **Songs can be analyzed from the command line and by agents.** `spinus --analyze <song or folder>` analyzes
   songs as references without the window (tempo, key, loudness, stems, notes, sections, chords, drum groove) and
   keeps them with your analyzed songs; `spinus --songs` lists them and `spinus --song <name>` prints what was

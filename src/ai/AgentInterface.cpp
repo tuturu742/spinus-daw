@@ -12,7 +12,9 @@
 #include "model/ModelJson.h"
 #include "model/StockDevices.h"
 #include "session/AgentCommandLine.h"
+#include "session/InstrumentBanks.h"
 #include "session/InstrumentLearning.h"
+#include "session/InstrumentProfiles.h"
 #include "session/PartSounds.h"
 #include "session/SoundDescriptors.h"
 #include "session/SoundIndex.h"
@@ -140,7 +142,8 @@ const std::vector<Prompt>& prompts()
           "Build a song in the project open in Spinus from a description.",
           { { "description", "The song: genre, mood, tempo, instruments, length" } },
           "Make a song in the project open in Spinus: {description}.\n"
-          "1. Call song_overview to see what is there already.\n"
+          "1. Call song_overview to see what is there already, and learned_instruments for the instruments (and "
+          "sample banks) I taught Spinus: use those where they fit the style.\n"
           "2. Set the tempo and key with run_commands (project.setTempo, project.setKey) if the description "
           "gives them.\n"
           "3. Mark the sections (intro, verse, chorus...) with markers (marker.add), in 4- or 8-bar phrases.\n"
@@ -274,11 +277,16 @@ juce::String instructionsFor (bool musicTools)
                      "insert_bars, automate, add_effect, send, duck, set_sound, shape_sound) or with run_commands "
                      "(Spinus commands; command_help gives their parameters)." +
                          common +
-                         "search_manual answers how a device, command or feature works; reference_style gives the "
-                         "style of the user's reference songs (from the Track creator). Check your work with check, "
-                         "and render to measure the loudness of the mix, each section and each part."
+                         "The overview's 'learnedInstruments' are the instruments the user taught Spinus (and the "
+                         "sample banks learned for them): prefer them, and call learned_instruments for how to add "
+                         "each and load a bank. search_manual answers how a device, command or feature works; "
+                         "reference_style gives the style of the user's reference songs (from the Track creator). "
+                         "Check your work with check, and render to measure the loudness of the mix, each section "
+                         "and each part."
                    : "Start with song_summary. Edit with run_commands (Spinus commands; command_help gives their "
-                     "parameters, list_devices and list_presets find instruments, effects and presets)." +
+                     "parameters, list_devices and list_presets find instruments, effects and presets; the summary's "
+                     "'learnedInstruments' are the instruments the user taught Spinus and the sample banks learned "
+                     "for them: prefer them, learned_instruments says how to add each and load a bank)." +
                          common +
                          "Render to measure the loudness of the mix, each section and each part. Spinus's music "
                          "tools (song_overview, write_part, add_part, insert_bars, check, shape_sound and more) are "
@@ -1161,6 +1169,19 @@ juce::var AgentInterface::nativeTools() const
                       { "device" }),
               Does::reads));
     tools.add (tool (
+        "learned_instruments",
+        "The instruments the user taught Spinus (Learn this instrument) that you can add: each with its name, the "
+        "'device' to give channel.add (or its name to add_part), its playing modes with what each suits and the "
+        "keys that play, and, for a sample player whose loaded bank decides its sound and keys (an .sfz player, a "
+        "drum kit player), the banks learned for it. A bank with a 'preset' loads by that name: device.loadPreset "
+        "on the instrument (or add_part's 'preset'), after which the channel's 'keys' are that bank's. These are "
+        "the instruments Spinus knows best: look here before choosing sounds. 'keys': true adds every mode's and "
+        "bank's keys in full (switch keys, drum names); narrow it with 'find' then. Works with Spinus's AI off.",
+        schema ({ { "find", property ("string", "Words the instrument's or the bank's name must all have") },
+                  { "keys", property ("boolean", "Every mode's and bank's keys in full too") } },
+                {}),
+        Does::reads));
+    tools.add (tool (
         "learn_instrument",
         "Learn an instrument's keys by ear, as its channel's Learn this instrument does with Ask the instrument and "
         "Listen to every key: which keys play notes, which switch articulations or do something else, and the "
@@ -1681,8 +1702,8 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
     if (name == "song_summary")
     {
         markSeen (*agent);
-        return reply (text (
-            juce::JSON::toString (cli::summarize (session, host.projectFolder ? host.projectFolder() : juce::File()))));
+        return reply (text (juce::JSON::toString (cli::summarize (
+            session, host.projectFolder ? host.projectFolder() : juce::File(), session.getSoundIndex().getFolder()))));
     }
     if (name == "list_analyzed_songs" || name == "song_analysis")
     {
@@ -1936,6 +1957,13 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
                                                  { reply (text (juce::JSON::toString (result), ! ok)); });
             });
         return;
+    }
+    if (name == "learned_instruments")
+    {
+        InstrumentProfiles profiles (session.getSoundIndex().getFolder());
+        profiles.load();
+        return reply (text (juce::JSON::toString (instrumentbanks::learnedForAgents (
+            profiles, session, arguments["find"].toString(), (bool)arguments["keys"]))));
     }
     if (name == "find_sounds")
     {

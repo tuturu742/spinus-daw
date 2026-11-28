@@ -256,7 +256,10 @@ TOOLS = [
             {
                 "name": {"type": "string", "description": "The part's name ('Bass', 'Lead')"},
                 "instrument": {"type": "string", "description": "Words that find the instrument ('3x Osc')"},
-                "preset": {"type": "string", "description": "A preset of the instrument, by name"},
+                "preset": {
+                    "type": "string",
+                    "description": "A preset of the instrument, by name (a learned bank: 'Learned banks/<name>')",
+                },
                 "family": {
                     "type": "string",
                     "description": "Drums, Bass, Synths, Leads, Guitars, Keys, Orchestra or FX (guessed if left out)",
@@ -469,6 +472,10 @@ class ProjectHarness:
         self.instrument_keys: dict[str, dict[str, Any]] = {
             str(k): v for k, v in (context.get("instrumentKeys") or {}).items() if isinstance(v, dict)
         }
+        # The instruments the user taught Spinus: [{instrument, banks?: [names]}] (learned_instruments tells more).
+        self.learned_instruments: list[dict[str, Any]] = [
+            i for i in (context.get("learnedInstruments") or []) if isinstance(i, dict)
+        ]
         self.moved = 0  # notes the last parse moved onto keys that play
         self.steps: list[dict[str, Any]] = []
         self.changes: list[str] = []  # in words, one per edit
@@ -996,6 +1003,7 @@ class ProjectHarness:
                 "sections": [{"name": s["name"], "bars": s["bars"]} for s in self.sections()],
                 "parts": parts,
                 "mixer": inserts,
+                **({"learnedInstruments": self.learned_instruments} if self.learned_instruments else {}),
             }
         )
 

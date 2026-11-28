@@ -75,6 +75,12 @@ off or making a new token. Several agents can be connected at once, each in its 
   markers), and with `stems: true` each insert's LUFS and how long it sounds. It takes as long as the song.
 - `list_presets`: the presets `device.loadPreset` can load on a device of the song, plugins too. Spinus's own
   devices other than 3x Osc have none: change their settings with `device.setParameters`.
+- `learned_instruments`: the instruments the user taught Spinus, which `song_summary` names under
+  `learnedInstruments`. Each comes with the device object to add, its modes (what each suits, the keys that
+  play) and, for a sample player (an .sfz player, a drum kit player), the banks learned for it. A bank with a
+  `preset` loads with `device.loadPreset` (`{"device": 6, "preset": "Learned banks/Growlybass"}`). Look here
+  before choosing sounds: these are real instruments whose keys Spinus knows. `{"keys": true, "find": "bass"}`
+  adds the switch keys and drum names.
 - `learn_instrument`: learns an instrument's keys by ear (`{"device": 6}`), as Learn this instrument does:
   which keys play, which switch, and `soundsOctaves` when its keys sound in another octave. It takes a minute
   or two; afterwards `song_summary` shows the channel's `keys`. Learn an instrument whose `keys` are missing
@@ -229,7 +235,7 @@ Make it look like a song a person built in Spinus, so the user can find their wa
 - **Plugins the user installed** are named in a project as `--check` shows them.
 - **Presets of any plugin** load by name with `device.loadPreset` (`{"device": 12, "preset": "Warm Pad"}`), as
   3x Osc's do: the plugin's programs, the presets a CLAP plugin lists, Surge XT's patches, and the sounds the user
-  saved for it ("Your saved sounds"). List them first: `list_presets` (live, `{"device": 12, "find": "pad"}`) or
+  saved for it ("Your saved sounds"), and the sample banks learned for it ("Learned banks"). List them first: `list_presets` (live, `{"device": 12, "find": "pad"}`) or
   `spinus --presets <project> [--device 12] [--find pad]`. A name may be "Category/Name" when two share one. It
   is one undo step. A plugin that only changes its sound in its own window (BFD, Ample's) lists none: ask the user
   to set a sound up and keep it with **Save this sound** in the Track creator, then load it by its name.

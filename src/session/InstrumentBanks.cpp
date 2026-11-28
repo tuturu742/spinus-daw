@@ -3,6 +3,10 @@
 #include "InstrumentPresets.h"
 #include "Session.h"
 #include "engine/EngineAdapter.h"
+#include "model/ModelJson.h"
+#include "plugins/DeviceList.h"
+
+#include <set>
 
 #include <tracktion_engine/tracktion_engine.h>
 
@@ -327,6 +331,136 @@ juce::var keysForAgents (const InstrumentProfiles& profiles, const juce::String&
                                   "tell which bank this channel plays: any key may play (the user can name it: "
                                   "channel.set bank)");
     return juce::var (o);
+}
+
+namespace
+{
+/** The modes of a profile in a few words: name, what it suits, the keys that play. */
+juce::Array<juce::var> modesInShort (const InstrumentProfiles::Profile& profile)
+{
+    juce::Array<juce::var> modes;
+    for (const auto& mode : profile.modes)
+    {
+        auto* m = new juce::DynamicObject();
+        m->setProperty ("name", mode.name);
+        if (mode.goodFor.isNotEmpty())
+            m->setProperty ("goodFor", mode.goodFor);
+        if (const auto keys = mode.playable())
+            m->setProperty ("plays", keys->describe());
+        modes.add (juce::var (m));
+    }
+    return modes;
+}
+
+bool hasWords (const juce::String& text, const juce::StringArray& words)
+{
+    const auto hay = text.toLowerCase();
+    for (const auto& w : words)
+        if (! hay.contains (w))
+            return false;
+    return true;
+}
+} // namespace
+
+juce::var learnedForAgents (const InstrumentProfiles& profiles, Session& session, const juce::String& find,
+                            bool withKeys)
+{
+    const auto words = juce::StringArray::fromTokens (find.toLowerCase(), true);
+    juce::Array<juce::var> learned;
+    std::set<juce::String> listed;
+    for (const auto& entry : session.getDeviceList().getEntries())
+    {
+        if (! entry.instrument || ! entry.available)
+            continue;
+        const auto key = InstrumentPresets::libraryOf (entry.device);
+        if (! profiles.hasOwn (key) || ! listed.insert (key).second)
+            continue;
+        const auto profile = profiles.get (key);
+        if (! profile.has_value())
+            continue;
+        const auto instrumentFits = hasWords (entry.name + " " + entry.maker, words);
+
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("instrument", entry.name);
+        auto device = model::deviceToJson (entry.device);
+        if (auto* d = device.getDynamicObject())
+        {
+            d->removeProperty ("id");
+            d->removeProperty ("bypassed");
+        }
+        o->setProperty ("device", device);
+        if (! profile->byBank)
+        {
+            if (! instrumentFits)
+                continue;
+            o->setProperty ("modes", modesInShort (*profile));
+            if (withKeys)
+                if (auto keys = InstrumentProfiles::describeForAgents (*profile); ! keys.isVoid())
+                    o->setProperty ("keys", keys);
+            learned.add (juce::var (o));
+            continue;
+        }
+
+        // A sample player: the banks learned for it, those that load by name first.
+        auto banks = profiles.banksOf (key);
+        const auto loads = [&] (const InstrumentBank& bank)
+        { return profiles.bankSoundFile (InstrumentProfiles::keyForBank (key, bank)).existsAsFile(); };
+        std::stable_sort (banks.begin(), banks.end(),
+                          [&] (const auto& a, const auto& b) { return loads (a) && ! loads (b); });
+        juce::Array<juce::var> list;
+        std::set<juce::String> names;
+        for (const auto& bank : banks)
+        {
+            if (! (instrumentFits || hasWords (bank.name, words)) || ! names.insert (bank.name.toLowerCase()).second)
+                continue;
+            auto* b = new juce::DynamicObject();
+            b->setProperty ("bank", bank.name);
+            if (loads (bank))
+                b->setProperty ("preset", juce::String (InstrumentProfiles::bankCategory) + "/" + bank.name);
+            else
+                b->setProperty ("note", "learned before Spinus kept a bank's sound: it can't be loaded by name "
+                                        "(the user loads it in the plugin's window, or learns it again)");
+            if (const auto own = profiles.get (key, bank))
+            {
+                if (! own->modes.empty())
+                    if (const auto keys = own->modes.front().playable())
+                        b->setProperty ("plays", keys->describe());
+                if (withKeys)
+                    if (auto keys = InstrumentProfiles::describeForAgents (*own); ! keys.isVoid())
+                        b->setProperty ("keys", keys);
+            }
+            list.add (juce::var (b));
+        }
+        if (list.isEmpty())
+            continue;
+        o->setProperty ("banks", list);
+        learned.add (juce::var (o));
+    }
+    return learned;
+}
+
+juce::var learnedInShort (const InstrumentProfiles& profiles, Session& session)
+{
+    juce::Array<juce::var> learned;
+    const auto all = learnedForAgents (profiles, session);
+    if (const auto* list = all.getArray())
+        for (const auto& one : *list)
+        {
+            auto* o = new juce::DynamicObject();
+            o->setProperty ("instrument", one["instrument"]);
+            if (const auto* banks = one["banks"].getArray())
+            {
+                juce::Array<juce::var> names;
+                for (const auto& bank : *banks)
+                    if (bank.hasProperty ("preset"))
+                        names.add (bank["bank"]);
+                if (names.isEmpty())
+                    continue; // a sample player none of whose banks loads by name: nothing to choose
+                o->setProperty ("banks", names);
+            }
+            learned.add (juce::var (o));
+        }
+    return learned;
 }
 
 juce::var keysForAgents (const InstrumentProfiles& profiles, Session& session, const model::Channel& channel)

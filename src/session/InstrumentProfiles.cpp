@@ -3,8 +3,10 @@
 #include "SpinusProfiles.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_cryptography/juce_cryptography.h>
 
 #include <algorithm>
+#include <set>
 
 namespace spinus
 {
@@ -359,6 +361,14 @@ bool InstrumentProfiles::save() const
     if (! file.replaceWithText (juce::JSON::toString (juce::var (root)) + "\n"))
         return false;
     oldNotes.deleteFile(); // read into the profiles, which are saved now
+    // The sounds of banks that were forgotten go too.
+    std::set<juce::String> kept;
+    for (const auto& [key, profile] : profiles)
+        kept.insert (bankSoundFile (key).getFileName());
+    for (const auto& sound :
+         bankSoundFile ({}).getParentDirectory().findChildFiles (juce::File::findFiles, false, "*.state"))
+        if (! kept.contains (sound.getFileName()))
+            sound.deleteFile();
     return true;
 }
 
@@ -473,6 +483,20 @@ std::optional<InstrumentProfiles::Profile> InstrumentProfiles::get (const juce::
     if (const auto found = profiles.find (keyForBank (instrument, bank)); found != profiles.end())
         return found->second;
     return std::nullopt;
+}
+
+juce::File InstrumentProfiles::bankSoundFile (const juce::String& bankKey) const
+{
+    return file.getSiblingFile ("bank-sounds")
+        .getChildFile (juce::SHA256 (bankKey.toUTF8()).toHexString().substring (0, 24) + ".state");
+}
+
+bool InstrumentProfiles::keepBankSound (const juce::String& bankKey, const juce::File& state) const
+{
+    if (! state.existsAsFile() || state.getSize() == 0)
+        return false;
+    const auto kept = bankSoundFile (bankKey);
+    return kept.getParentDirectory().createDirectory().wasOk() && state.copyFileTo (kept);
 }
 
 bool InstrumentProfiles::byBank (const juce::String& instrument) const

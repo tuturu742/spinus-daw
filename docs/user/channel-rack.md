@@ -61,6 +61,11 @@ loading another bank in the plugin's window is enough. Some plugins don't say: r
 and the next channel with that plugin can pick it from the same menu. **As its sound says** goes back to finding
 it from the plugin. Leave the tick box off for synths: their keys don't change with a preset.
 
+When a bank is learned, Spinus also keeps the plugin's sound as it was then. The bank is then one of the plugin's
+presets, under **Learned banks**, so it can be loaded again by its name, on this channel or a new one, by you or
+by a [coding agent](agents.md#the-instruments-you-taught-spinus). Forgetting the bank's keys removes that sound
+too. A bank learned in an older Spinus has no kept sound yet: learn it once more.
+
 DrumGizmo is a sample bank too: its kit and key map together make the bank, so DRSKit with its full key map and
 with its minimal one are two banks. Listen to every key finds each kit's drums from its key map, and nothing else.
 

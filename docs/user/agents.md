@@ -216,6 +216,21 @@ learned yet (any key may play). When Spinus can't tell the bank, an agent can na
 `bank`, as **Bank › Name this bank...** does.
 It doesn't change the song.
 
+## The instruments you taught Spinus
+
+When an agent first looks at the song (`song_summary`, or `song_overview` with AI on), the answer lists the
+instruments you learned with **Learn this instrument** under `learnedInstruments`, and for a sample player the
+banks learned for it. They are the instruments Spinus knows best, so an agent is told to choose among them
+first. `learned_instruments` tells more: the device to add for each, its playing modes with what each suits and
+the keys that play, and with `keys` every switch key and drum name; `find` narrows it by the instrument's or a
+bank's name. It works with AI off.
+
+A learned bank loads by name. When a bank is learned, Spinus keeps the plugin's sound as it was then, and lists
+the bank among that plugin's presets as **Learned banks/<name>**. An agent adds the player and loads the bank
+with `device.loadPreset` (or `add_part` with that `preset`); the channel's keys are then that bank's. A bank
+learned before Spinus kept these sounds is listed with a note instead: learn it once more (its keys stay) and it
+loads by name too.
+
 ## Exporting
 
 An agent exports the song with `export_audio`, as **File › Export** does: the whole song or one pattern, in
