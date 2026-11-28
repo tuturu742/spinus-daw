@@ -3,7 +3,7 @@ name: spinus
 description: Work with Spinus DAW as a coding agent, using only an installed Spinus (no source code). Use when asked to look at, change, mix, check or render a Spinus project or the song open in Spinus, or to build something with Spinus from the command line. For writing a whole song from nothing, also read the spinus-songwriter skill.
 ---
 
-#Working with Spinus DAW
+# Working with Spinus DAW
 
 Spinus is a free digital audio workstation for Linux and Windows, laid out like FL Studio: a **Channel Rack**
 (instruments), the **Piano Roll** (notes), **patterns** placed as clips on the **Playlist**, and a **Mixer** of
@@ -12,26 +12,19 @@ undo step. You use the same commands its buttons use, in one of two ways:
 
 | Way in | When | What you get |
 |---|---|---|
-| **The live interface** (MCP) | The user has Spinus open and turned on **Options › AI › Coding agents** | You change the song they are looking at;
-they hear it at once and can undo you | | **The command line** | Anything else : new songs, batch work, checks,
-    renders | Scripts run on a project without a window;
-you save a new project or
-    a copy |
+| **The live interface** (MCP) | The user has Spinus open and turned on **Options › AI › Coding agents** | You change the song they are looking at; they hear it at once and can undo you |
+| **The command line** | Anything else: new songs, batch work, checks, renders | Scripts run on a project without a window; you save a new project or a copy |
 
-        Pick the live interface when it's set up (you have a `spinus` MCP server). Otherwise use the command line.
+Pick the live interface when it's set up (you have a `spinus` MCP server). Otherwise use the command line.
 
-                ##Ground rules
+## Ground rules
 
-                1. *
-                *Never open
-                     Spinus 's window yourself.** Only `spinus` alone or `spinus <project>` opens it, on the user' s
-                         screen.On Linux run every command as `env -
-            u DISPLAY - u WAYLAND_DISPLAY spinus--<option>...`,
-    so even a typo
-            can't open a window. Every `--option` prints JSON, one object per line; an unknown one exits with code 1. 2. *
-        *Don 't overwrite the user' s work.**With the command line,
-    save into a new folder (`--save<new folder>`), or `--open` their project and `--save` a copy,
-    unless they ask you to change it in place.With the live interface, every change is one undo step named "Agent: ..."; tell the user what you changed.
+1. **Never open Spinus's window yourself.** Only `spinus` alone or `spinus <project>` opens it, on the user's
+   screen. On Linux run every command as `env -u DISPLAY -u WAYLAND_DISPLAY spinus --<option> ...`, so even a
+   typo can't open a window. Every `--option` prints JSON, one object per line; an unknown one exits with code 1.
+2. **Don't overwrite the user's work.** With the command line, save into a new folder (`--save <new folder>`),
+   or `--open` their project and `--save` a copy, unless they ask you to change it in place. With the live
+   interface, every change is one undo step named "Agent: ..."; tell the user what you changed.
 3. **Stay inside what's allowed.** Only use files in the project's folder, the user's sample folders and
    Spinus's starter pack. Don't edit Spinus's settings or its config folder. Never put API keys or tokens in
    files, scripts or messages.
@@ -45,66 +38,46 @@ you save a new project or
 
 | Install | Run it as (`spinus` below) | Demos, starter samples, manual |
 |---|---|---|
-| Flatpak | `flatpak run io.github.tuturu742.spinus` | `$(flatpak info --show-location io.github.tuturu742.spinus)/files/share/spinus/
-{
-    demo, samples
-}
-`;
-manual in `... / files / lib / spinus / ai / docs / user` | | AppImage |
-    the AppImage file | `--appimage - mount` prints a mount folder (and keeps running until you stop that PID)
-    : `<mount> / usr / share / spinus`,
-manual in `<mount> / usr / lib / spinus / ai / docs / user` | | Arch package | `spinus` | `/ usr / share / spinus /
-{
-    demo, samples
-}
-`;
-manual in `/usr/share/doc/spinus` |
+| Flatpak | `flatpak run io.github.tuturu742.spinus` | `$(flatpak info --show-location io.github.tuturu742.spinus)/files/share/spinus/{demo,samples}`; manual in `.../files/lib/spinus/ai/docs/user` |
+| AppImage | the AppImage file | `--appimage-mount` prints a mount folder (and keeps running until you stop that PID): `<mount>/usr/share/spinus`, manual in `<mount>/usr/lib/spinus/ai/docs/user` |
+| Arch package | `spinus` | `/usr/share/spinus/{demo,samples}`; manual in `/usr/share/doc/spinus` |
 | Windows (PowerShell) | `& "$env:LOCALAPPDATA\Programs\Spinus DAW\spinus.exe" ... \| Out-Host` | beside `spinus.exe`: `demo\`, `samples\`, `docs\` |
 
 If `spinus --commands` opens a window instead of printing JSON, that Spinus is too old: ask the user to update.
 
 ## The live interface (MCP)
 
-The user turns it on in** Options › AI › Coding agents...**and gives you the setup it shows : the address
-`http : // 127.0.0.1:47219/mcp` and a token, sent as `Authorization: Bearer <token>`. For Claude Code:
+The user turns it on in **Options › AI › Coding agents...** and gives you the setup it shows: the address
+`http://127.0.0.1:47219/mcp` and a token, sent as `Authorization: Bearer <token>`. For Claude Code:
 
-```sh claude mcp add-- scope user-- transport http spinus http
-    :    // 127.0.0.1:47219/mcp --header "Authorization: Bearer <token>"
+```sh
+claude mcp add --scope user --transport http spinus http://127.0.0.1:47219/mcp --header "Authorization: Bearer <token>"
 ```
 
-`--scope user` makes it work in every folder,
-      not only the one the command ran in.For Cursor,
-      the lines go in
-`~/.cursor / mcp.json` (every project) or a project's `.cursor/mcp.json`.
+`--scope user` makes it work in every folder, not only the one the command ran in. For Cursor, the lines go in
+`~/.cursor/mcp.json` (every project) or a project's `.cursor/mcp.json`.
 
-          It works only on this computer,
-      and the user can* * Disconnect * *you or
-          **Undo the agent's changes** at any time. After Disconnect your client may start a new session;
-the user keeps an agent out by turning the interface off or making a new token.Several agents can be connected at once,
-    each in its own session.
+It works only on this computer, and the user can **Disconnect** you or **Undo the agent's changes** at any time.
+After Disconnect your client may start a new session; the user keeps an agent out by turning the interface
+off or making a new token. Several agents can be connected at once, each in its own session.
 
-            **Spinus's own tools** (always there):
+**Spinus's own tools** (always there):
 
-        - `song_summary`: tempo,
-    key, length, channels, inserts, patterns, lanes, clips, markers, and what's missing. - `run_commands`: `
-{
-    summary, steps : [ { command, params } ]
-}
-`, run in order as* * one * *undo step.- `"$1.channel"` uses step 1's result;
-a step with `"as" : "bass"` can be named as `"$bass.channel"`.- Automation points may take `text` ("-12 dB").-
-        No `action` steps (`loadKit`, `loadSamples`)
-    : kits and
-    samples are loaded by the user in Spinus.- `command_help`
-    : one command's parameters, or the list of commands. - `list_devices`: instruments
-    and effects that can be added,
-    found by words.Each comes with the device object that `channel.add` and `insert.addEffect` take.- `render`
-    : an offline render that measures the mix 's LUFS and true peak, each section' s LUFS (between markers),
-    and with `stems : true` each insert's LUFS and how long it sounds. It takes as long as the song. - `list_presets`
-    : the presets `device.loadPreset` can load on a device of the song,
-    plugins too.Spinus's own devices other than 3x Osc have none
-    : change their settings with `device.setParameters`.- `learn_instrument`
-    : learns an instrument's keys by ear (`{"device": 6}`), as Learn this instrument does: which keys play,
-    which switch, and `soundsOctaves` when its keys sound in another octave.It takes a minute or two; afterwards `song_summary` shows the channel's `keys`. Learn an instrument whose `keys` are missing
+- `song_summary`: tempo, key, length, channels, inserts, patterns, lanes, clips, markers, and what's missing.
+- `run_commands`: `{summary, steps: [{command, params}]}`, run in order as **one** undo step.
+  - `"$1.channel"` uses step 1's result; a step with `"as": "bass"` can be named as `"$bass.channel"`.
+  - Automation points may take `text` ("-12 dB").
+  - No `action` steps (`loadKit`, `loadSamples`): kits and samples are loaded by the user in Spinus.
+- `command_help`: one command's parameters, or the list of commands.
+- `list_devices`: instruments and effects that can be added, found by words. Each comes with the device object
+  that `channel.add` and `insert.addEffect` take.
+- `render`: an offline render that measures the mix's LUFS and true peak, each section's LUFS (between
+  markers), and with `stems: true` each insert's LUFS and how long it sounds. It takes as long as the song.
+- `list_presets`: the presets `device.loadPreset` can load on a device of the song, plugins too. Spinus's own
+  devices other than 3x Osc have none: change their settings with `device.setParameters`.
+- `learn_instrument`: learns an instrument's keys by ear (`{"device": 6}`), as Learn this instrument does:
+  which keys play, which switch, and `soundsOctaves` when its keys sound in another octave. It takes a minute
+  or two; afterwards `song_summary` shows the channel's `keys`. Learn an instrument whose `keys` are missing
   before writing notes for it.
 - `undo_last`: undoes your last change, if nothing newer came after it.
 - `what_changed`: what the user (or another agent) changed or undid since you last looked, and whether they
@@ -186,10 +159,8 @@ A script is a JSON list of steps:
 - `as` names a step's result, so later steps can use `"$bass.channel"`, `"$bass.insert"` or `"$bass.device"`.
   `"$3.pattern"` is step 3's.
 - Two **actions** change sounds rather than the project:
-  - `{
-    "action" : "loadKit", "params" : { "device" : ..., "kit" : "Magpie" }}`;
-  - `{
-    "action" : "loadSamples", "params" : { "device" : ..., "files" : [...], "pad" : 1 }}`.
+  - `{"action": "loadKit", "params": {"device": ..., "kit": "Magpie"}}`;
+  - `{"action": "loadSamples", "params": {"device": ..., "files": [...], "pad": 1}}`.
 - Audio files are copied into the project's `audio` folder when it's saved. Give absolute paths, or names
   beside the script.
 

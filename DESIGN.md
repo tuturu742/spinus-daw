@@ -1,4 +1,4 @@
-#Spinus DAW : Design Document
+# Spinus DAW: Design Document
 
 **Repository:** https://github.com/tuturu742/spinus-daw
 **Describes:** Spinus 0.1.0. Planned work is in §17 Roadmap.
@@ -7,91 +7,66 @@
 
 ## 0. How to use this document (for agents)
 
-- This is the single source of truth for scope and architecture. If code and this document disagree, stop and raise it;
-do not silently diverge.
+- This is the single source of truth for scope and architecture. If code and this document disagree, stop and raise it; do not silently diverge.
 - Read in this order: §1 Principles → §2 Decisions → §4 Architecture → the section for your task → §18 Agent workflow.
-- Every architectural change requires an
-update here, including a sentence or two on why.- The owner tests and steers;
-agents write the code.Every pull request must include * * "How to test" * *steps a non -
-    programmer can follow on Arch Linux.
+- Every architectural change requires an update here, including a sentence or two on why.
+- The owner tests and steers; agents write the code. Every pull request must include **"How to test"** steps a non-programmer can follow on Arch Linux.
 
-    -- -
+---
 
-    ##1. Vision and principles
+## 1. Vision and principles
 
-        Spinus is a free,
-    open - source,
-    Linux - first digital audio workstation with an FL Studio - style workflow and built -
-        in AI assistance.
+Spinus is a free, open-source, Linux-first digital audio workstation with an FL Studio-style workflow and built-in AI assistance.
 
-            **Principles,
-    in priority order : **
+**Principles, in priority order:**
 
-                        1. *
-                        *The audio never glitches.**Real -
-        time safety beats every feature.Nothing slow (AI, disk, network, UI)
-ever runs on the audio thread.2. * *FL -
-        style workflow.**Channel rack → patterns → playlist → mixer
-                             .A user coming from FL Studio should feel at home within minutes.3. *
-            *One good tool per job.**No duplicate instruments or
-    effects.One flagship synth,
-    one simple synth, one sampler, one drum machine,
-    one of each core effect.4. * *Usable out of the box.**A fresh install can make a complete, mixed,
-    exported track with zero third - party plugins.5. * *AI proposes, the user decides.**Every AI change is previewed,
-    approved,
-    and lands as a single undo step.AI never silently modifies a project.6. * *Plugins just work.**Native VST3, CLAP,
-    LV2 and VST2,
-    plus Windows plugins on Linux without the user ever touching Wine.7. *
-        *Everything is a command.*
-            *Every project change (from the UI, the AI or a script) goes through one command API.This makes undo,
-    AI tooling and testing uniform.
+1. **The audio never glitches.** Real-time safety beats every feature. Nothing slow (AI, disk, network, UI) ever runs on the audio thread.
+2. **FL-style workflow.** Channel rack → patterns → playlist → mixer. A user coming from FL Studio should feel at home within minutes.
+3. **One good tool per job.** No duplicate instruments or effects. One flagship synth, one simple synth, one sampler, one drum machine, one of each core effect.
+4. **Usable out of the box.** A fresh install can make a complete, mixed, exported track with zero third-party plugins.
+5. **AI proposes, the user decides.** Every AI change is previewed, approved, and lands as a single undo step. AI never silently modifies a project.
+6. **Plugins just work.** Native VST3, CLAP, LV2 and VST2, plus Windows plugins on Linux without the user ever touching Wine.
+7. **Everything is a command.** Every project change (from the UI, the AI or a script) goes through one command API. This makes undo, AI tooling and testing uniform.
 
-        -- -
+---
 
-        ##2. Decision summary
+## 2. Decision summary
 
-        | # | Topic | Decision | | -- -| -- -| -- -| | D1 | Name | Spinus DAW (genus of siskins, family Fringillidae) |
-        | D2 | License | Open source.Effective license **AGPL - 3.0 * *(see §3) | | D3 | Platforms | Linux first;
-Windows 10 and 11(64 - bit) too (§16).macOS is not planned | | D4 | Primary distro | Arch Linux and
-    Arch - based distributions.Primary packaging target : AUR / PKGBUILD | | D5
-        | Owner's role | Tests and steers. Agents write all code | | D6 | Workflow | FL - style,
-    plus an Ableton - style clip launcher | | D7 | UI | Native JUCE UI | | D8 | Stock content
-        | Slightly more than basic;
-one flagship synth plus a simple 3 - oscillator synth (§11).Core effects come from open
-        - source plugins Spinus downloads on request (§11.2) |
-    | D9 | Import | Audio files; MIDI files later (§17). No other DAW's project files (FL Studio's `.flp` included) |
-| D10 | Plugin formats | VST3, CLAP, LV2, VST2;
-Windows VST2 / VST3 / CLAP via managed bridge | | D11 | AI placement | Hybrid : local audio models,
-    cloud LLM | | D12 | Tested AI hardware |
-            The analysis engine is tested on an AMD* * gfx1151 * *GPU (Radeon 8060S, RDNA 3.5, unified memory) and
-        on the CPU;
-other GPUs' builds are pinned but labelled untested. See §12.1 | | D13 | Assistant authority |
-    Acts in the project only with user approval | | D14 | LLM provider | Pluggable;
-Claude by default;
-**OpenRouter** supported;
-multiple keys and per - feature model routing (§12.3) | | D15 | Priorities | The core DAW comes first;
-AI features are optional and the DAW works without them | | D16 | Docs location |
-    GitHub repo `tuturu742 / spinus - daw`,
-    Markdown | | D17 | Flagship synth | **Surge XT **(GPLv3);
-a Spinus - built flagship synth is not planned (§11.1, §17) | | D18 | Mixer size |
-    **Dynamic * * : inserts are created on demand,
-    no fixed count (§7.1) |
+| # | Topic | Decision |
+|---|---|---|
+| D1 | Name | Spinus DAW (genus of siskins, family Fringillidae) |
+| D2 | License | Open source. Effective license **AGPL-3.0** (see §3) |
+| D3 | Platforms | Linux first; Windows 10 and 11 (64-bit) too (§16). macOS is not planned |
+| D4 | Primary distro | Arch Linux and Arch-based distributions. Primary packaging target: AUR / PKGBUILD |
+| D5 | Owner's role | Tests and steers. Agents write all code |
+| D6 | Workflow | FL-style, plus an Ableton-style clip launcher |
+| D7 | UI | Native JUCE UI |
+| D8 | Stock content | Slightly more than basic; one flagship synth plus a simple 3-oscillator synth (§11). Core effects come from open-source plugins Spinus downloads on request (§11.2) |
+| D9 | Import | Audio files; MIDI files later (§17). No other DAW's project files (FL Studio's `.flp` included) |
+| D10 | Plugin formats | VST3, CLAP, LV2, VST2; Windows VST2/VST3/CLAP via managed bridge |
+| D11 | AI placement | Hybrid: local audio models, cloud LLM |
+| D12 | Tested AI hardware | The analysis engine is tested on an AMD **gfx1151** GPU (Radeon 8060S, RDNA 3.5, unified memory) and on the CPU; other GPUs' builds are pinned but labelled untested. See §12.1 |
+| D13 | Assistant authority | Acts in the project only with user approval |
+| D14 | LLM provider | Pluggable; Claude by default; **OpenRouter** supported; multiple keys and per-feature model routing (§12.3) |
+| D15 | Priorities | The core DAW comes first; AI features are optional and the DAW works without them |
+| D16 | Docs location | GitHub repo `tuturu742/spinus-daw`, Markdown |
+| D17 | Flagship synth | **Surge XT** (GPLv3); a Spinus-built flagship synth is not planned (§11.1, §17) |
+| D18 | Mixer size | **Dynamic**: inserts are created on demand, no fixed count (§7.1) |
 
-            -- -
+---
 
-               ##3. Licensing
+## 3. Licensing
 
-            | Component | License | Notes | | -- -| -- -| -- -| | JUCE 9 | AGPLv3
-        or commercial | Open - source use
-                                requires AGPLv3
-                            | | Tracktion Engine | GPLv3
-                            or commercial | GPLv3 code may be combined with AGPLv3 code (GPLv3 §13) | | VST3 SDK |
-                                   MIT (since 3.8, Oct 2025) | No agreement with Steinberg needed | | CLAP SDK | MIT | |
-                                   | LV2 | ISC | | | yabridge | GPLv3 + | Bundled as a separate program |
-                                   | Rubber Band (time - stretch) | GPLv2 + | Usable under GPLv3 terms | | Surge XT
-                                   | GPLv3 | Flagship synth,
-                            downloaded on request;
-keep its name, credits and license visible |
+| Component | License | Notes |
+|---|---|---|
+| JUCE 9 | AGPLv3 or commercial | Open-source use requires AGPLv3 |
+| Tracktion Engine | GPLv3 or commercial | GPLv3 code may be combined with AGPLv3 code (GPLv3 §13) |
+| VST3 SDK | MIT (since 3.8, Oct 2025) | No agreement with Steinberg needed |
+| CLAP SDK | MIT | |
+| LV2 | ISC | |
+| yabridge | GPLv3+ | Bundled as a separate program |
+| Rubber Band (time-stretch) | GPLv2+ | Usable under GPLv3 terms |
+| Surge XT | GPLv3 | Flagship synth, downloaded on request; keep its name, credits and license visible |
 | LSP Plugins | LGPL-3.0-or-later | Optional effects downloaded on request (EQ, dynamics, multiband, analyzer), §11.2 |
 | Dragonfly Reverb | GPL-3.0-or-later | Reverbs downloaded on request, §11.2 |
 | Odin 2, OB-Xf, PeakEater, Six Sines, TIME-12, GATE-12 | GPL-3.0 | Synths, a clipper and two shapers downloaded on request, §11 |
@@ -150,20 +125,19 @@ keep its name, credits and license visible |
 - The AI service is a separate process. If it crashes or hangs, the DAW keeps playing. The DAW must start and be fully usable with the AI service absent.
 - Audio data passes to the AI service as files in the project cache folder, never over the socket.
 - Helper programs (ffmpeg, lame, Wine, the plugin scanner, pw-dump, the AI service) start through `core::ChildProcess` (`src/core/`), never `juce::ChildProcess`: on Linux JUCE's closes its pipe's file descriptor twice, which can close another thread's file. A test fails if `juce::ChildProcess` appears in Spinus code; JUCE's `ChildProcessCoordinator`/`ChildProcessWorker` (the plugin sandbox) are fine.
-- File dialogs go through `core::FileDialog` (`src/core/`), never `juce::FileChooser`: on Linux the desktop's own dialog through the XDG Desktop Portal (D-Bus, libdbus loaded at run time), waited for off the message thread and modal to Spinus's window; Spinus's own (JUCE's non-native) file browser when there is no portal;
-on Windows JUCE 's native dialogs. JUCE' s Linux chooser runs zenity /
-        kdialog through `juce::ChildProcess`.A test fails if `juce::FileChooser` appears elsewhere in Spinus code.
+- File dialogs go through `core::FileDialog` (`src/core/`), never `juce::FileChooser`: on Linux the desktop's own dialog through the XDG Desktop Portal (D-Bus, libdbus loaded at run time), waited for off the message thread and modal to Spinus's window; Spinus's own (JUCE's non-native) file browser when there is no portal; on Windows JUCE's native dialogs. JUCE's Linux chooser runs zenity/kdialog through `juce::ChildProcess`. A test fails if `juce::FileChooser` appears elsewhere in Spinus code.
 
-        -- -
+---
 
-        ##5. Technology stack
+## 5. Technology stack
 
-    | Area | Choice | | -- -| -- -| | Language (app) | C++ 20 | | Build | CMake ≥ 3.25,
-    Ninja | | Framework | JUCE 9(pinned git submodule) | | Engine |
-        Tracktion
-        Engine (pinned git submodule : a `develop` commit, since its latest release predates JUCE 9;
-                upgrades are deliberate : bump, rebuild, run all tests, record the commit in `THIRD_PARTY.md`) |
-        | Audio backends | ALSA and JACK via JUCE; PipeWire through its JACK interface (`pipewire-jack`), the default |
+| Area | Choice |
+|---|---|
+| Language (app) | C++20 |
+| Build | CMake ≥ 3.25, Ninja |
+| Framework | JUCE 9 (pinned git submodule) |
+| Engine | Tracktion Engine (pinned git submodule: a `develop` commit, since its latest release predates JUCE 9; upgrades are deliberate: bump, rebuild, run all tests, record the commit in `THIRD_PARTY.md`) |
+| Audio backends | ALSA and JACK via JUCE; PipeWire through its JACK interface (`pipewire-jack`), the default |
 | Time-stretch | Rubber Band through Tracktion Engine |
 | Flagship synth | Surge XT (pinned git submodule, built from source as a separate sub-build) |
 | Free plugins | Surge XT, LSP Plugins, Dragonfly Reverb, Odin 2, OB-Xf, PeakEater, Six Sines, TIME-12, GATE-12: the projects' own releases, downloaded on request (pinned, SHA-256 checked; libcurl and libarchive on Linux, JUCE's `URL` and `plugins/ArchiveReader` on Windows) and loaded as CLAP plugins, or as VST3 where a project publishes no CLAP build (TIME-12, GATE-12). Development builds also compile Surge XT, LSP Plugins and Dragonfly Reverb from source for tests |
@@ -220,9 +194,7 @@ spinus-daw/
 ### 7.1 Concepts (FL-equivalent in brackets)
 
 - **Project**: tempo, time signature, key/scale (optional, used by AI and autotune), sample rate, metadata.
-- **Channel** [channel rack entry]: one instrument (stock or plugin) or an audio sampler;
-volume, pan, pitch, mute / solo;
-target** mixer insert**; an optional **group** name (FL's channel rack filter groups: the rack shows all, one group, or none; a group can play through a new bus, `insert.addBus`).
+- **Channel** [channel rack entry]: one instrument (stock or plugin) or an audio sampler; volume, pan, pitch, mute/solo; target **mixer insert**; an optional **group** name (FL's channel rack filter groups: the rack shows all, one group, or none; a group can play through a new bus, `insert.addBus`).
 - **Pattern** [pattern]: named, colored, has a length in bars. Holds, *per channel*: a step sequence (one bar of its time signature in the grid view: 16 sixteenth steps in 4/4, or 24 with triplet steps, a per-pattern switch) and/or piano-roll notes. Also holds pattern automation. Its length follows its notes as in FL Studio: whole bars of its time signature, at least one; note and time-signature commands keep it fitted (`Project::fittedLength`), and Playlist clips that were as long as the pattern follow it.
 - **Note**: start (ticks), length (ticks), pitch (0–127), velocity, release velocity, pan, fine pitch, per-note modulation by name (for CLAP note expressions; per-note volume is stored there as `volume`). The Piano Roll's lane edits velocity, release velocity, pan, fine pitch and volume, switched like FL's event lane. Pan, fine pitch and volume reach Spinus's instruments and CLAP plugins (as CLAP note expressions) on a MIDI channel per note; other plugins get plain notes, and release velocity reaches every instrument. This is MPE's layout (channels 2–14, pitch bend for fine pitch, CC 10 pan, CC 7 volume; `dsp/NoteExpression.h`), so the project format needs nothing new; more than 13 overlapping notes with values share channels and so share values. MPE controllers' live input uses the same path: per-note pitch bend (48 semitones), channel pressure and CC 74 on channels 2–16 reach Spinus's instruments (3x Osc: swell, filter) and CLAP plugins as tuning, pressure and brightness note expressions; recording keeps the notes only (§17).
 - **Playlist** [playlist]: unlimited lanes. Lanes are *not* tied to channels (FL behavior). A lane can be grouped under another (`Lane::group`, nesting allowed, FL's track groups): a folded (`collapsed`) group hides its lanes in the Playlist (their clips drawn faintly on its row), and muting it mutes them (`Project::isLaneMuted`). Lanes contain **clips**:
@@ -735,11 +707,11 @@ can work on the open project while the user watches and listens.
     each song is going. It needs AI on and never downloads model files. The same steps run for
     `spinus --analyze <songs or folders> [--download-models]` (`ai::analyzeSongs`, which waits and prints JSON
     lines); `spinus --songs` and `--song <name> [--part --from --to]` read the library as the two tools above do.
-    All of them, the Track creator and the Analyzer's **Also measure its style** use one implementation of the
-    steps, `ai::SongAnalyzer` (`src/ai/SongAnalyzer.h`): the song decoded, then beat, key, loudness, the 6-stem
-    separation kept as FLAC, the count checked on the drums, each stem's notes, the drum hits and
-    `ai.v1.style.summarize`'s per-song features, each skipped when the library has it. It has no window and
-    changes no project.
+    All of them, the Track creator and the Analyzer's **Also measure its style** (owner 2026-11-28: the Analyzer
+    measures the style too) use one implementation of the steps, `ai::SongAnalyzer` (`src/ai/SongAnalyzer.h`):
+    the song decoded, then beat, key, loudness, the 6-stem separation kept as FLAC, the count checked on the
+    drums, each stem's notes, the drum hits and `ai.v1.style.summarize`'s per-song features, each skipped when
+    the library has it. It has no window and changes no project.
   - **The project harness's (§12.11), through the local AI service when AI is on:** `ai.v1.project.tools` lists
     them; `ai.v1.project.tool` runs one on the context and returns its steps, which the interface performs. The
     AI service needs no AI connection or internet for these, so an agent works offline; with AI off it still has

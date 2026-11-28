@@ -1,4 +1,4 @@
-#Let a coding agent work on your project
+# Let a coding agent work on your project
 
 A coding agent on your computer (Claude Code, Codex, Cursor and others that speak MCP) can work on the song open in
 Spinus, while you watch and play it here:

@@ -1,4 +1,4 @@
-#Spinus from the command line
+# Spinus from the command line
 
 Spinus can make, check and render songs without its window, from a terminal. This is for scripts and for
 AI coding agents: they write a song as a list of steps, and Spinus carries the steps out with the same
@@ -54,8 +54,7 @@ as `spinus --commands` lists them.
 ```
 
 **`as` names the step's result.** `channel.add`'s result is the new channel's IDs: `{"channel": 5,
-"insert": 7, "device": 6
-}`. A later step writes `"$bass.channel"`, `"$bass.insert"` or `"$bass.device"`
+"insert": 7, "device": 6}`. A later step writes `"$bass.channel"`, `"$bass.insert"` or `"$bass.device"`
 where it needs one of them. `"$3.pattern"` is the third step's result. `channel.replaceInstrument` (another
 instrument on a channel, keeping its notes) gives the new instrument's `"device"` the same way.
 
@@ -79,9 +78,7 @@ Two steps change a device's sounds rather than the project. They are **actions**
 | `loadSamples` | `device`, `files`, `pad` | Loads audio files into a [Sampler](sampler.md) (all of them, as a new set of zones), or into a Drum Machine's pads, one per pad from `pad` (1 to 16). |
 
 ```json
-{
-    "action" : "loadKit", "params" : { "device" : "$drums.device", "kit" : "Magpie" }
-}
+{"action": "loadKit", "params": {"device": "$drums.device", "kit": "Magpie"}}
 ```
 
 A file named without a folder (`"loop.flac"`) is looked for beside the script first. Audio files a song uses
@@ -143,10 +140,8 @@ spinus --check ~/Music/Example
 spinus --render ~/Music/Example --out ~/Music/Example.wav --stems ~/Music/Example-stems
 ```
 
-`--run` prints a line per step, such as `
-{
-    "step" : 4, "command" : "channel.add", "ok" : true, "result" : { "channel" : 5, "insert" : 7, "device" : 6 }
-}`, then `{"saved": "..."}`.
+`--run` prints a line per step, such as `{"step": 4, "command": "channel.add", "ok": true, "result":
+{"channel": 5, "insert": 7, "device": 6}}`, then `{"saved": "..."}`.
 
 ### Automation in the control's units
 
@@ -155,16 +150,9 @@ volume, `"30% L"` for a pan, `"1.2 kHz"` or `"Low cut"` for a device's setting. 
 with `--run` (the plain commands take `value`, 0 to 1):
 
 ```json
-{
-    "command" : "clip.addAutomation", "params":
-    {
-        "laneName" : "Fade out",
-                     "start" : 0,
-                     "length" : 15360,
-                     "target" : { "kind" : "channelVolume", "channel" : "$pad.channel" },
-                                "points" : [ { "time" : 0, "text" : "0 dB" }, { "time" : 15360, "text" : "-40 dB" } ]
-    }
-}
+{"command": "clip.addAutomation", "params": {"laneName": "Fade out", "start": 0, "length": 15360,
+  "target": {"kind": "channelVolume", "channel": "$pad.channel"},
+  "points": [{"time": 0, "text": "0 dB"}, {"time": 15360, "text": "-40 dB"}]}}
 ```
 
 A pan's text is `"30% L"`, `"20% R"` or `"C"` (the middle). As `value`, a pan is 0 (left) to 1 (right),

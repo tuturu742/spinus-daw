@@ -1,4 +1,4 @@
-#The Analyzer
+# The Analyzer
 
 Drop a song into the Analyzer to learn from it: Spinus finds its **tempo**, **beats** and **key**, and can
 split it into **stems** (vocals, drums, bass and the rest) that you can play along with, mute, solo and
@@ -9,12 +9,12 @@ study in the Playlist.
 The Analyzer is **experimental**: it is still being worked on, and may change, be slow or not work well
 for some songs. It is hidden until you turn it on: open **Options › AI...** and tick **Show experimental
 features**. **View › Analyzer (experimental)** then opens it (no restart needed). Untick it again and the
-Analyzer closes and disappears from the menus;
-a saved[window layout](main - window.md #layouts) doesn't bring it back while it's off.
+Analyzer closes and disappears from the menus; a saved [window layout](main-window.md#layouts) doesn't
+bring it back while it's off.
 
-    ##What it needs
+## What it needs
 
-    The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
+The Analyzer uses AI models that run on your computer; nothing is sent anywhere.
 
 1. **AI turned on** in **Options › AI...**.
 2. **The analysis engine** (PyTorch), installed once: the Analyzer offers a **Set up the analysis engine...**
@@ -22,18 +22,16 @@ a saved[window layout](main - window.md #layouts) doesn't bring it back while it
 3. **Model files**, downloaded once the first time: Beat This! (8 MB on the CPU, 81 MB with a graphics
    card), Basic Pitch (230 KB), the Inverse Drum Machine (2.5 MB, for the drums) and the separation model for the **Stems** choice: Demucs for 4 stems
    (84 MB) or 6 stems (55 MB), or MVSep for many instruments (1.4 GB). Basic Pitch also needs the
-   `python-onnxruntime-cpu` package. The Analyzer says what it needs and how big it is;
-click* * Download * *to agree.What it lists always follows your choices : change the* * Stems *
-    *choice and the list changes at once,
-    before you download anything.Once the download is done,
-    the Analyzer carries on with what you asked for (finding the beat, separating, or adding the stems).* * Sources and
-        licences...**(at the bottom of the Analyzer, always there)lists every model file it may use,
-    with its licence, its size and whether it is downloaded; choose one to open its page and check
+   `python-onnxruntime-cpu` package. The Analyzer says what it needs and how big it is; click
+   **Download** to agree. What it lists always follows your choices: change the **Stems** choice and the
+   list changes at once, before you download anything. Once the download is done, the Analyzer carries on
+   with what you asked for (finding the beat, separating, or adding the stems).
+   **Sources and licences...** (at the bottom of the Analyzer, always there) lists every model file it
+   may use, with its licence, its size and whether it is downloaded; choose one to open its page and check
    for yourself where it comes from. These are freely available open-source models made by others, not
    affiliated with Spinus.
    Each model downloads from its authors' own servers only (Spinus keeps no copies). If those servers are
-   busy, Spinus tries again a few times, then says that the authors' server isn't answering, to
-try again
+   busy, Spinus tries again a few times, then says that the authors' server isn't answering, to try again
    later. If the authors give a new link for a model (on its page, for example, when they move their
    files), use **Sources and licences... › Download from another link** and paste it: Spinus only keeps
    the file if it is exactly the same model (it checks the file's checksum).
@@ -56,12 +54,11 @@ try again
    [tempo changes](playlist.md) where the song's tempo changes (and the time signature, if the bars are not four
    beats), in one undo step. **Add to the project** sets them too.
 
-   A song can often be counted at two speeds, such as 100 or 200 BPM;
-Spinus picks the slower one.Once the stems are separated, before their notes are made,
-    it checks the drums of a song found at 140 BPM or faster : when the snare falls on only one beat of each bar,
-    the beat was found twice too fast,
-    and the tempo becomes half ("100.0 BPM, 4 beats per bar (half the beat found: the snare falls once a bar)")
-            .A fast song whose snare falls on every other beat (punk, metal) keeps its tempo.
+   A song can often be counted at two speeds, such as 100 or 200 BPM; Spinus picks the slower one. Once the stems
+   are separated, before their notes are made, it checks the drums of a song found at 140 BPM or faster: when the
+   snare falls on only one beat of each bar, the beat was found twice too fast, and the tempo becomes half
+   ("100.0 BPM, 4 beats per bar (half the beat found: the snare falls once a bar)"). A fast song whose snare
+   falls on every other beat (punk, metal) keeps its tempo.
 4. **Key**: for example "A minor". When it is not sure, it says what else it might be. **Use for the song**
    sets your song's key.
 5. **Stems**: choose **4 stems** (vocals, drums, bass, other) or **6 stems** (also piano and guitar, less
@@ -93,18 +90,14 @@ Spinus picks the slower one.Once the stems are separated, before their notes are
      is taken as the chorus, another that comes back as the verse, a part heard once as the intro, the outro
      or a bridge. These are guesses: rename the markers if they are wrong.
    - Each stem's notes become short **patterns**: where a section repeats a loop (drums and bass often repeat
-     every 1, 2, 4 or 8 bars), that loop is one pattern placed again and again ("Drums: Verse loop");
-a bar that differs, such as a drum fill,
-    gets a pattern of its own ("Drums: Verse fill").The same notes anywhere in the song are the same pattern,
-    so a chorus that comes back reuses its patterns
-    : change the pattern once and every chorus changes.No note is left out.-
-        A stem that holds more than one part,
-    such as two guitars
-        or a piano's chords and its tune, is **split by how it is played ** : chords and steady playing are the * *
-                                                                              rhythm * *part ("Guitar rhythm (<song>)"),
-    single higher, freer lines the * * lead * *("Guitar lead (<song>)"),
-    and a lead heard in one section only the * * solo * *.Each part gets its own channel and track,
-    with the same sound.Parts that take turns split well;
+     every 1, 2, 4 or 8 bars), that loop is one pattern placed again and again ("Drums: Verse loop"); a bar that
+     differs, such as a drum fill, gets a pattern of its own ("Drums: Verse fill"). The same notes anywhere in
+     the song are the same pattern, so a chorus that comes back reuses its patterns: change the pattern once
+     and every chorus changes. No note is left out.
+   - A stem that holds more than one part, such as two guitars or a piano's chords and its tune, is **split
+     by how it is played**: chords and steady playing are the **rhythm** part ("Guitar rhythm (<song>)"), single
+     higher, freer lines the **lead** ("Guitar lead (<song>)"), and a lead heard in one section only the
+     **solo**. Each part gets its own channel and track, with the same sound. Parts that take turns split well;
      where both play at the same moment the split is rough (notes struck together with a chord stay in the
      rhythm part). When Spinus is not sure, the stem stays one part. Drums, bass and vocals are never split.
    - Spinus also listens to **how each part gets louder, quieter or moves** between left and right over the song
