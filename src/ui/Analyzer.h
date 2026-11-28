@@ -3,6 +3,7 @@
 #include "core/FileDialog.h"
 #include "Workspace.h"
 #include "ai/AiService.h"
+#include "ai/SongAnalyzer.h"
 #include "session/AnalysisLibrary.h"
 #include "session/InstrumentProfiles.h"
 #include "session/Session.h"
@@ -56,6 +57,7 @@ public:
         key,
         separating,
         transcribing,
+        measuring, // its style, after the stems (the tick box beside Separate)
         downloading,
         done
     };
@@ -97,6 +99,14 @@ public:
     /** "lead-vocal" -> "lead vocals", "hh" -> "hi-hat": a stem's name as the window shows it. */
     static juce::String stemDisplayName (const juce::String& stem);
     void cancel();
+
+    /** Also measure its style (the tick box beside Separate, on unless the user unticks it; kept with the Analyzer's
+        settings): once the stems are there, the song's sections, chords per bar, drum groove, loudness and each
+        part's range are measured as the Track creator does (ai::SongAnalyzer), and kept in the library for the
+        Track creator and coding agents. The style is measured on 6 stems: with another choice in the Stems box,
+        the song is split into 6 stems as well. */
+    void setMeasuresStyle (bool);
+    bool measuresStyle() const { return styleToggle.getToggleState(); }
 
     /** The analysis library (shared with the Track creator; none without the AI service). What the Analyzer
         finds goes there: tempo, key, stems (as FLAC) and notes, by the song's contents. */
@@ -465,6 +475,12 @@ private:
     /** "Provide full data through MCP": agents may read the exact notes and drum hits of analyzed songs
         (agents::fullDataAllowed); turning it on asks first. */
     juce::ToggleButton fullDataToggle { "Provide full data through MCP" };
+    juce::ToggleButton styleToggle { "Also measure its style" };
+    juce::File styleFolder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                 .getChildFile ("spinus-analyzer-style-" + juce::Uuid().toString());
+    ai::SongAnalyzer styleAnalyzer { nullptr, AnalysisLibrary (juce::File()), styleFolder };
+    /** After the stems: measures the style if asked and not measured yet, then Step::done with `doneText`. */
+    void measureStyle (const juce::String& doneText);
     void setFullData (bool on);
     juce::ComboBox stemCount;
     juce::Label timingLabel { {}, "Timing" };

@@ -1,4 +1,5 @@
 #include "AgentInterface.h"
+#include "session/SongPreparation.h"
 #include "session/AnalysisForAgents.h"
 
 #include "ProjectContext.h"
@@ -1095,6 +1096,21 @@ juce::var AgentInterface::nativeTools() const
               { "to", property ("number", "With part: up to this many seconds") } },
             { "song" }),
         Does::reads));
+    tools.add (tool (
+        "analyze_song",
+        "Analyze a song (an audio file) as a reference, as the user does in the Analyzer or the Track creator: its "
+        "tempo and bars, key, loudness, stems, notes, sections, chords per bar and drum groove, kept with the "
+        "user's analyzed songs. It runs in the background on the user's computer and takes minutes (a song analyzed "
+        "before is ready at once): this answers at once with the songs being analyzed. Ask analysis_progress until "
+        "the song is done, then read it with song_analysis. Needs Spinus's AI on. The file must be in the project's "
+        "folder or the user's sample folders. It doesn't change the project.",
+        schema ({ { "file", property ("string", "The audio file: a full path, or one inside the project's folder") } },
+                { "file" }),
+        Does::adds));
+    tools.add (tool ("analysis_progress",
+                     "How the songs given to analyze_song are getting on: waiting, analyzing (with the step and how "
+                     "far it is), done, or failed with the problem.",
+                     noInput, Does::reads));
     tools.add (tool ("command_help", "A Spinus command's parameters (JSON Schema), or the list of commands.",
                      schema ({ { "command", property ("string", "The command's name; leave it out for the list") } }),
                      Does::reads));
@@ -1677,8 +1693,8 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
             const auto songs = agents::listSongs (library);
             return reply (text (songs.getArray() != nullptr && ! songs.getArray()->isEmpty()
                                     ? juce::JSON::toString (songs)
-                                    : "No songs are analyzed yet. The user analyzes one in Spinus's Analyzer "
-                                      "(Track Analyzer) or the Track creator."));
+                                    : "No songs are analyzed yet. analyze_song analyzes one, or the user does in "
+                                      "Spinus's Analyzer (Track Analyzer) or the Track creator."));
         }
         juce::String error;
         const auto readSeconds = [&arguments] (const char* key)
@@ -1687,6 +1703,33 @@ void AgentInterface::callTool (const juce::String& sessionId, const juce::String
             agents::describeSong (library, arguments["song"].toString(), agents::fullDataAllowed (aiFolder),
                                   arguments["part"].toString(), readSeconds ("from"), readSeconds ("to"), error);
         return reply (error.isEmpty() ? text (juce::JSON::toString (found)) : text ("Not done: " + error, true));
+    }
+    if (name == "analyze_song" || name == "analysis_progress")
+    {
+        if (! host.analyzeSong || ! host.analysisProgress)
+            return reply (text ("Analyzing songs isn't available here.", true));
+        const auto describe = [] (const juce::var& songs)
+        {
+            return juce::JSON::toString (songs) + "\nAsk analysis_progress again while a song is waiting or "
+                                                  "analyzing; read a done one with song_analysis (by its name).";
+        };
+        if (name == "analysis_progress")
+        {
+            const auto songs = host.analysisProgress();
+            return reply (text (songs.size() > 0 ? describe (songs) : "No song was given to analyze_song yet."));
+        }
+        if (host.musicToolsOn && ! host.musicToolsOn())
+            return reply (text ("Not done: analyzing a song needs Spinus's AI turned on (Options > AI).", true));
+        if (auto e = checkPaths (arguments); e.isNotEmpty())
+            return reply (text (e + ".", true));
+        const auto given = arguments["file"].toString();
+        const auto folder = host.projectFolder ? host.projectFolder() : juce::File();
+        if (! juce::File::isAbsolutePath (given) && folder == juce::File())
+            return reply (text ("Not done: the project isn't saved yet, so give the file's full path.", true));
+        const auto file = juce::File::isAbsolutePath (given) ? juce::File (given) : folder.getChildFile (given);
+        if (! file.existsAsFile() || ! isSongFile (file))
+            return reply (text ("Not done: \"" + given + "\" isn't an audio file Spinus can analyze.", true));
+        return reply (text (describe (host.analyzeSong (file))));
     }
     if (name == "what_changed")
     {

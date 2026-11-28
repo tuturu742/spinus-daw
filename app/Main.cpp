@@ -34,6 +34,8 @@
 #include "ai/AgentInterface.h"
 #include "ai/AnalysisJobs.h"
 #include "ai/AiService.h"
+#include "ai/SongAnalyzer.h"
+#include "session/AnalysisForAgents.h"
 #include "ai/ProjectContext.h"
 #include "ui/About.h"
 #include "ui/AiSettingsDialog.h"
@@ -372,6 +374,9 @@ public:
         *agentJobsAlive = false;  // no AI job started for an agent calls back any more
         agentInterface = nullptr; // stops the live interface before what it reads goes
         mainWindow = nullptr;
+        agentSongs = nullptr;
+        if (agentSongsFolder != juce::File())
+            agentSongsFolder.deleteRecursively();
         aiService = nullptr; // stops the AI service
         document = nullptr;
         session = nullptr;
@@ -422,7 +427,8 @@ private:
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         return args.contains ("--run") || args.contains ("--check") || args.contains ("--render") ||
                args.contains ("--describe") || args.contains ("--commands") || args.contains ("--presets") ||
-               args.contains ("--learn");
+               args.contains ("--learn") || args.contains ("--analyze") || args.contains ("--songs") ||
+               args.contains ("--song");
     }
 
     /** --run, --check, --render, --describe (session::AgentCommandLine): JSON lines on the terminal. */
@@ -498,6 +504,39 @@ private:
             if (found.size() == 0)
                 return failed (args.contains ("--device") ? "no device " + valueOf ("--device") + " in the project"
                                                           : "no device in the project has presets");
+            return 0;
+        }
+
+        // Songs analyzed as the Track creator does, kept in the analysis library; and what was measured, read.
+        if (args.contains ("--analyze"))
+        {
+            juce::Array<juce::File> given;
+            for (int i = args.indexOf ("--analyze") + 1; i < args.size() && ! args[i].startsWith ("--"); ++i)
+                given.add (juce::File::getCurrentWorkingDirectory().getChildFile (args[i].unquoted()));
+            const auto songs = ai::songsIn (given);
+            if (songs.isEmpty())
+                return failed (given.isEmpty() ? "--analyze needs a song or a folder of songs"
+                                               : "no song there (WAV, FLAC, MP3, Ogg...)");
+            ai::AiService service (getSettingsFolder());
+            return ai::analyzeSongs (service, songs, args.contains ("--download-models"), say);
+        }
+        if (args.contains ("--songs") || args.contains ("--song"))
+        {
+            const auto aiFolder = getSettingsFolder().getChildFile ("ai");
+            const auto library = AnalysisLibrary::inAiFolder (aiFolder);
+            if (args.contains ("--songs"))
+            {
+                say (juce::JSON::toString (agents::listSongs (library), true));
+                return 0;
+            }
+            juce::String error;
+            const auto seconds = [&] (const char* flag)
+            { return args.contains (flag) ? valueOf (flag).getDoubleValue() : -1.0; };
+            const auto found = agents::describeSong (library, valueOf ("--song"), agents::fullDataAllowed (aiFolder),
+                                                     valueOf ("--part"), seconds ("--from"), seconds ("--to"), error);
+            if (error.isNotEmpty())
+                return failed (error.replace ("list_analyzed_songs lists them", "spinus --songs lists them"));
+            say (juce::JSON::toString (found, true));
             return 0;
         }
 
@@ -809,6 +848,8 @@ private:
     std::unique_ptr<plugins::WindowsPlugins> windows;
     std::unique_ptr<plugins::PluginDialogs> pluginDialogs;
     std::unique_ptr<ai::AiService> aiService;
+    std::unique_ptr<ai::SongAnalysisQueue> agentSongs; // songs agents asked to analyze (analyze_song)
+    juce::File agentSongsFolder;
     std::unique_ptr<EngineHost> engineHost;
     std::unique_ptr<session::AudioDeviceLog> audioLog;
     std::unique_ptr<plugins::PluginCatalog> catalog;
@@ -902,6 +943,29 @@ private:
                             done (error);
                         });
         };
+        // Songs an agent asks to analyze: one after the other, in the background.
+        const auto songQueue = [this]() -> ai::SongAnalysisQueue&
+        {
+            if (agentSongs == nullptr)
+            {
+                agentSongsFolder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                       .getChildFile ("spinus-agent-songs-" + juce::Uuid().toString());
+                agentSongs = std::make_unique<ai::SongAnalysisQueue> (
+                    aiService.get(), AnalysisLibrary::inAiFolder (aiService->getFolder()), agentSongsFolder);
+                agentSongs->playing = [this] { return session->isPlaying(); };
+            }
+            return *agentSongs;
+        };
+        if (aiService != nullptr)
+        {
+            host.analyzeSong = [songQueue] (const juce::File& song)
+            {
+                songQueue().add (song);
+                return songQueue().describe();
+            };
+            host.analysisProgress = [this]
+            { return agentSongs != nullptr ? agentSongs->describe() : juce::var (juce::Array<juce::var>()); };
+        }
         return std::make_unique<ai::AgentInterface> (*session, getSettingsFolder(), std::move (host));
     }
 };

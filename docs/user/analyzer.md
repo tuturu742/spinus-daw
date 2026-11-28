@@ -246,12 +246,21 @@ If something goes wrong, the line under the buttons says what. Hover over it to 
 full, and right-click it and choose **Copy message** to paste it into a bug report. The same works in the
 Automixer, the analysis engine window and the AI settings.
 
+**Also measure its style** (beside **Separate**, ticked at first): once the stems are there, Spinus also measures
+the song's sections, chords per bar, drum groove, loudness and each part's range, as the
+[Track creator](track-creator.md) does. That takes a minute or two more (it listens for the notes of every
+stem), the line under the buttons says how far it is, and **Cancel** stops it and leaves the stems ready. The
+style is kept with the song for the Track creator and for [coding agents](agents.md#your-analyzed-songs). It is
+measured on 6 stems: with 4 stems or many instruments chosen, the song is split into 6 stems as well. Untick it
+to only separate the stems.
+
 To learn what several songs (an album, say) have in common rather than taking one apart, use the
-[Track creator](track-creator.md).
+[Track creator](track-creator.md). To analyze songs without the window, see
+[Spinus from the command line](command-line.md#analyzing-songs).
 
 ## A song analyzed before
 
-What the Analyzer finds (tempo, key, the stems and the notes it heard in them) is kept in Spinus's
+What the Analyzer finds (tempo, key, the stems, the notes it heard in them and the style) is kept in Spinus's
 [saved analyses](track-creator.md#saved-analyses), shared with the Track creator and recognised by the
 song's contents, whatever its name or project. When you drop a song that was analyzed before (here or in
 the Track creator), the Analyzer says what it has and offers:

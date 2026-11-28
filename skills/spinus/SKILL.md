@@ -116,6 +116,11 @@ Give `write_part` a `loop_bars` (1, 2 or 4) whenever a part repeats: it makes on
 as clips, and writing the same loop again later plays that pattern again. `automate` puts the automation on a
 track right under the part's own, in its Playlist group.
 
+**Reference songs:** `list_analyzed_songs` and `song_analysis` read what Spinus measured of the songs the user
+analyzed (they work with AI off). `analyze_song` analyzes an audio file in the project's folder or the user's
+sample folders: it answers at once, so ask `analysis_progress` until the song is done, then read it. Learn from
+a reference (tempo, form, chords, groove, how busy each part is); don't copy its melodies.
+
 A good loop:
 1. Read with `song_overview`.
 2. Make one change.
@@ -132,6 +137,8 @@ A good loop:
 | `spinus --run <script.json> [--open <project>] --save <folder>` | Runs a script's steps and saves a project. Without `--save` it's a dry run. It stops at the first failing step and saves nothing, unless you pass `--keep-going`. |
 | `spinus --check <project>` | What the project holds, `used` per channel, `unusedChannels`, and `problems` (missing plugins or files). Exit code 0 = fine, 3 = something missing, 1 = won't open. |
 | `spinus --render <project> --out <file> [--stems <folder>] [--tail <s>]` | Renders WAV, FLAC, Opus or MP3 (by the file's extension). Prints `seconds`, `lufs`, `soundingSeconds` and `truePeakDb` for the mix and each stem. |
+| `spinus --songs` / `--song <name>` | The reference songs analyzed so far, and what was measured of one: tempo and bar starts, key, loudness, sections, chords per bar, drum groove, each part's range and how busy it is. |
+| `spinus --analyze <song or folder>` | Analyzes songs as references (minutes each; needs AI on in Spinus) and keeps them for `--song`. |
 
 A script is a JSON list of steps:
 

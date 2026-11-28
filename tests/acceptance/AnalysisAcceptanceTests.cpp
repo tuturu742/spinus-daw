@@ -41,6 +41,7 @@ TEST_CASE ("Analysis acceptance: analyze a song, notes and sounds per stem, then
 
     // 1. The Analyzer: tempo, beats and key with an offer to use them, then stems as audio.
     ui::Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setSize (660, 560);
     REQUIRE (analyzer.analyze (makeSong (f.root)));
     REQUIRE (waitFor ([&] { return analyzer.getStep() == ui::Analyzer::Step::done || ! analyzer.isBusy(); }, 60000));

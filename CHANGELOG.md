@@ -5,6 +5,15 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
 
 ## Unreleased
 
+- **Songs can be analyzed from the command line and by agents.** `spinus --analyze <song or folder>` analyzes
+  songs as references without the window (tempo, key, loudness, stems, notes, sections, chords, drum groove) and
+  keeps them with your analyzed songs; `spinus --songs` lists them and `spinus --song <name>` prints what was
+  measured. A connected coding agent can do the same with `analyze_song` and `analysis_progress`, for files in
+  the project's folder or your sample folders. Both need AI on.
+- **The Analyzer measures a song's style too.** After **Separate**, the Analyzer now also measures the song's
+  sections, chords per bar, drum groove, loudness and each part's range, as the Track creator does (**Also measure
+  its style**, ticked at first). The Track creator and coding agents then have the whole picture of a song
+  whichever way it was analyzed.
 - **Learn this instrument works on DrumGizmo kits.** Spinus didn't recognise which kit DrumGizmo had loaded (it
   keeps the kit's file in a form Spinus didn't read), so a kit's keys couldn't be kept apart from the others'.
   Listen to every key also gave up on any drum kit ("It played no note in tune": it needed a key that plays a

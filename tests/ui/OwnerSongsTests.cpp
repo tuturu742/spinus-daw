@@ -55,6 +55,7 @@ TEST_CASE ("Analyzer on your own songs, into projects", "[.songs]")
         REQUIRE (document.saveAs (folder).wasOk());
 
         Analyzer analyzer (session, &service);
+        analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
         analyzer.setSize (660, 560);
         REQUIRE (analyzer.analyze (song));
         REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, tenMinutes));

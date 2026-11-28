@@ -86,6 +86,12 @@ public:
             Tuner keeps what it heard. `done` gets an error text, empty when done (unset: not available). */
         std::function<void (const juce::File& audio, std::function<void (const juce::String& error)> done)>
             listenToVocal;
+
+        /** analyze_song and analysis_progress (unset: not available). analyzeSong adds a song to those Spinus
+            analyzes in the background (ai::SongAnalysisQueue) and, like analysisProgress, answers with the songs
+            asked for so far: [{name, state, step, percent, problem, song}]. */
+        std::function<juce::var (const juce::File& song)> analyzeSong;
+        std::function<juce::var()> analysisProgress;
     };
 
     /** `settingsFolder` keeps agent-interface.json (on or off, the port, the token). */

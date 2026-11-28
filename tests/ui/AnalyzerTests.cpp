@@ -35,6 +35,7 @@ TEST_CASE ("Analyzer: opens with the presets it counted before", "[ui][ai][analy
     Session session (host.getEngine(), makeDevices (host.getEngine()));
     ai::AiService service (t.root, t.root.getChildFile ("models"));
     Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setService (&service);
     analyzer.setService (nullptr);
 }
@@ -51,6 +52,7 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
     const auto models = t.root.getChildFile ("models");
     ai::AiService service (t.root, models);
     Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setSize (660, 460);
     const auto song = makeSong (t.root);
 
@@ -379,6 +381,7 @@ TEST_CASE ("Analyzer: says what is missing, finds tempo and key, separates, adds
     analyzer.setDrumSamplesFolder (t.root);
     {
         Analyzer again (session, &service);
+        again.setMeasuresStyle (false); // the style after the stems has a test of its own
         CHECK (again.getDrumSamplesFolder() == t.root);
     }
 
@@ -408,12 +411,14 @@ TEST_CASE ("Analyzer screenshot for the manual", "[.screenshot][analyzer]")
     placeDrumModel (models);
     SpinusLookAndFeel lookAndFeel { Theme::dark() };
     Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setLookAndFeel (&lookAndFeel);
     analyzer.setSize (660, 560);
     REQUIRE (analyzer.analyze (makeSong (t.root, "Night Drive")));
     REQUIRE (waitFor ([&] { return analyzer.getStep() == Analyzer::Step::done; }, 60000));
     REQUIRE (analyzer.separate (4));
     REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    analyzer.setMeasuresStyle (true); // as the user finds it
     const auto image = analyzer.createComponentSnapshot (analyzer.getLocalBounds(), true, 1.0f);
     analyzer.setLookAndFeel (nullptr);
     const auto file =
@@ -495,6 +500,7 @@ TEST_CASE ("Analyzer: what it needs to download follows the Stems choice", "[ui]
     REQUIRE (waitFor (
         [&] { return models.getSiblingFile ("python").getChildFile ("cpu/spinus-build.json").existsAsFile(); }, 60000));
     Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setSize (660, 560);
     const auto song = makeSong (t.root);
 
@@ -560,6 +566,7 @@ TEST_CASE ("Analyzer: many instruments, replicated and tuned, added in one undo 
     placeManyInstruments (models);
 
     Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setSize (660, 560);
     analyzer.setStemChoice (Analyzer::manyInstruments);
     REQUIRE (analyzer.analyze (makeSong (t.root)));
@@ -711,6 +718,7 @@ TEST_CASE ("Analyzer: an installed instrument tuned (experimental), and one with
     placeManyInstruments (models);
 
     Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setSize (660, 560);
     analyzer.setStemChoice (Analyzer::manyInstruments);
     REQUIRE (analyzer.analyze (makeSong (t.root)));
@@ -837,6 +845,7 @@ TEST_CASE ("Analyzer: closest presets of installed instruments (a CLAP plugin's 
     placeManyInstruments (models);
 
     Analyzer analyzer (session, &service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setSize (660, 560);
     analyzer.setStemChoice (Analyzer::manyInstruments);
     REQUIRE (analyzer.analyze (makeSong (t.root)));

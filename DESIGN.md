@@ -701,6 +701,17 @@ can work on the open project while the user watches and listens.
     time (at most 3,000 per answer, `from`/`to` seconds for the rest), only while the Analyzer's **Provide full
     data through MCP** is on (`fullDataThroughMcp` in the AI folder's `analyzer.json`, off by default), which asks
     first with the copyright and provider disclaimer.
+  - **Analyzing a song** (owner decision 2026-11-28, replacing "reading is enough" of 2026-11-24): `analyze_song`
+    adds an audio file (in the project's folder or the sample folders, as every file an agent names) to a queue
+    the app keeps (`ai::SongAnalysisQueue`), answers at once with the queue, and `analysis_progress` tells how
+    each song is going. It needs AI on and never downloads model files. The same steps run for
+    `spinus --analyze <songs or folders> [--download-models]` (`ai::analyzeSongs`, which waits and prints JSON
+    lines); `spinus --songs` and `--song <name> [--part --from --to]` read the library as the two tools above do.
+    All of them, the Track creator and the Analyzer's **Also measure its style** (owner 2026-11-28: the Analyzer
+    measures the style too) use one implementation of the steps, `ai::SongAnalyzer` (`src/ai/SongAnalyzer.h`):
+    the song decoded, then beat, key, loudness, the 6-stem separation kept as FLAC, the count checked on the
+    drums, each stem's notes, the drum hits and `ai.v1.style.summarize`'s per-song features, each skipped when
+    the library has it. It has no window and changes no project.
   - **The project harness's (§12.11), through the local AI service when AI is on:** `ai.v1.project.tools` lists
     them; `ai.v1.project.tool` runs one on the context and returns its steps, which the interface performs. The
     AI service needs no AI connection or internet for these, so an agent works offline; with AI off it still has

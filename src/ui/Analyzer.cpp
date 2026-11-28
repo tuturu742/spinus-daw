@@ -262,11 +262,16 @@ Analyzer::Analyzer (Session& s, ai::AiService* a) : Panel ("analyzer", "Analyzer
         "Lets coding agents connected through MCP read the exact notes and drum hits of the songs "
         "you analyzed, not only their tempo, key, chords, sections and groove");
     fullDataToggle.onClick = [this] { setFullData (fullDataToggle.getToggleState()); };
+    styleToggle.setToggleState (true, juce::dontSendNotification);
+    styleToggle.setTooltip ("After separating, measure the song's sections, chords per bar, drum groove, loudness and "
+                            "each part's range, for the Track creator and coding agents. It is measured on 6 stems: "
+                            "with another choice, the song is split into 6 stems as well");
+    styleToggle.onClick = [this] { setMeasuresStyle (styleToggle.getToggleState()); };
 
     for (auto* c : std::initializer_list<juce::Component*> {
              &intro, &songText, &status, &tempoLabel, &tempoText, &keyLabel, &keyText, &stemsLabel, &stemsText, &notice,
              &chooseButton, &useTempoButton, &useKeyButton, &separateButton, &stemCount, &sourcesButton, &libraryButton,
-             &fullDataToggle })
+             &fullDataToggle, &styleToggle })
         addAndMakeVisible (c);
     for (auto* c : std::initializer_list<juce::Component*> { &needsText, &downloadButton, &engineButton, &bar,
                                                              &cancelButton, &addButton, &continueButton, &anewButton,
@@ -290,6 +295,8 @@ Analyzer::~Analyzer()
     *alive = false;
     stemTask = nullptr;
     decoder = nullptr;
+    styleAnalyzer.stop();
+    styleFolder.deleteRecursively();
     if (service != nullptr && listener != 0)
         service->removeListener (listener);
     if (tempFolder != juce::File())
@@ -313,6 +320,11 @@ void Analyzer::setService (ai::AiService* newService)
             drumSamplesFolder = juce::File (path);
     fullDataToggle.setToggleState (agents::fullDataAllowed (getSettingsFile().getParentDirectory()),
                                    juce::dontSendNotification);
+    if (const auto settings = getSettingsFile(); settings.existsAsFile())
+        if (const auto parsed = juce::JSON::parse (settings); parsed.hasProperty ("measureStyle"))
+            styleToggle.setToggleState ((bool)parsed["measureStyle"], juce::dontSendNotification);
+    styleAnalyzer.setService (service);
+    styleAnalyzer.setLibrary (getLibrary());
     if (service != nullptr)
         listener = service->addListener (
             [this] (const juce::String& method, const juce::var& params)
@@ -434,10 +446,11 @@ bool Analyzer::continueFromEarlier()
             return checkReady ([this] { findTempo(); });
         if (! key)
             return checkReady ([this] { findKey(); });
-        setStep (Step::done, stems.empty() ? "Continued from the earlier analysis. Split it into stems to hear and "
-                                             "learn its parts."
-                                           : "Continued from the earlier analysis. Choose what to do with each stem "
-                                             "below, then click Add to the project.");
+        if (stems.empty())
+            return setStep (Step::done, "Continued from the earlier analysis. Split it into stems to hear and learn "
+                                        "its parts.");
+        measureStyle ("Continued from the earlier analysis. Choose what to do with each stem below, then click Add "
+                      "to the project.");
     };
     // The stems of the separation the Stems box names, or else any kept.
     const auto models = getLibrary().stemModels (songDigest);
@@ -490,6 +503,54 @@ void Analyzer::useKeptStems (const juce::String& model, const std::function<void
             showStems (model);
             then();
         });
+}
+
+void Analyzer::setMeasuresStyle (bool on)
+{
+    styleToggle.setToggleState (on, juce::dontSendNotification);
+    if (const auto file = getSettingsFile(); file != juce::File())
+    {
+        // The file keeps the other settings (drumSamples, fullDataThroughMcp).
+        auto settings = juce::JSON::parse (file);
+        if (! settings.isObject())
+            settings = juce::var (new juce::DynamicObject());
+        settings.getDynamicObject()->setProperty ("measureStyle", on);
+        file.replaceWithText (juce::JSON::toString (settings));
+    }
+}
+
+void Analyzer::measureStyle (const juce::String& doneText)
+{
+    const auto library = getLibrary();
+    const bool measured = (int)library.read (songDigest)["features"]["version"] == ai::SongAnalyzer::featuresVersion;
+    if (! measuresStyle() || ! library.isAvailable() || songDigest.isEmpty() || measured)
+        return setStep (Step::done, doneText);
+    setStep (Step::measuring, "Measuring its style...");
+    // What could not be measured is said, and the stems are there all the same.
+    const auto without = [this, doneText] (const juce::String& why)
+    {
+        progress = -1.0;
+        setStep (Step::done, doneText + " Its style was not measured: " + why);
+    };
+    ai::SongAnalyzer::Callbacks callbacks;
+    callbacks.step = [this] (const juce::String& words, double done)
+    {
+        progress = done;
+        status.setText ("Measuring its style: " + words.substring (0, 1).toLowerCase() + words.substring (1),
+                        juce::dontSendNotification);
+    };
+    callbacks.done = [this, doneText] (const juce::var&, bool)
+    {
+        progress = -1.0;
+        earlier = getLibrary().read (songDigest);
+        setStep (Step::done, doneText);
+    };
+    callbacks.failed = without;
+    callbacks.held = [without] (const ai::SongAnalyzer::Needs& needs) { without (needs.text); };
+    callbacks.playing = [this] { return session.isPlaying(); };
+    styleAnalyzer.setService (service);
+    styleAnalyzer.setLibrary (library);
+    styleAnalyzer.start (song, songDigest, std::move (callbacks));
 }
 
 void Analyzer::showStems (const juce::String& model)
@@ -997,8 +1058,8 @@ bool Analyzer::separate (int count)
         useKeptStems (model,
                       [this]
                       {
-                          setStep (Step::done, "Separated before. Choose what to do with each stem below, then click "
-                                               "Add to the project.");
+                          measureStyle ("Separated before. Choose what to do with each stem below, then click "
+                                        "Add to the project.");
                       });
         return true;
     }
@@ -1021,19 +1082,28 @@ bool Analyzer::separate (int count)
                             for (auto& property : o->getProperties())
                                 stems[property.name.toString()] = juce::File (property.value.toString());
                         showStems (model);
-                        // Kept in the library as FLAC (in the background), for the next time and the Track creator.
+                        const juce::String doneText = "Separated. Choose what to do with each stem below, then "
+                                                      "click Add to the project.";
+                        // Kept in the library as FLAC, for the next time and the Track creator: in the background,
+                        // or first when the style is measured next (it uses the kept stems).
                         if (getLibrary().isAvailable() && songDigest.isNotEmpty())
                         {
                             earlier = getLibrary().read (songDigest);
+                            const bool thenStyle = measuresStyle();
                             stemTask = std::make_unique<BackgroundTask> (
                                 "Spinus analyzer stems",
                                 [library = getLibrary(), digest = songDigest, model,
                                  kept = stems] (const std::function<bool()>& stop)
                                 { return library.keepStems (digest, model, kept, stop); },
-                                [] (const juce::Result&) {});
+                                [this, thenStyle, doneText] (const juce::Result&)
+                                {
+                                    if (thenStyle && step == Step::measuring)
+                                        measureStyle (doneText);
+                                });
+                            if (thenStyle)
+                                return setStep (Step::measuring, "Keeping the stems...");
                         }
-                        setStep (Step::done, "Separated. Choose what to do with each stem below, then click "
-                                             "Add to the project.");
+                        setStep (Step::done, doneText);
                     });
         },
         juce::StringArray { model });
@@ -2589,6 +2659,14 @@ bool Analyzer::addNotesToProject()
 
 void Analyzer::cancel()
 {
+    if (step == Step::measuring)
+    {
+        styleAnalyzer.stop();
+        stemTask = nullptr;
+        progress = -1.0;
+        return setStep (Step::done, "Separated. Its style was not measured (stopped). Choose what to do with each "
+                                    "stem below, then click Add to the project.");
+    }
     if (dynamicsTask != nullptr)
     {
         dynamicsTask = nullptr;
@@ -2761,6 +2839,7 @@ void Analyzer::updateButtons()
                                  drums->second.chosenWay() == Way::closestPreset);
     drumFolderButton.setEnabled (! isBusy());
     chooseButton.setEnabled (! isBusy());
+    styleToggle.setEnabled (! isBusy());
     continueButton.setVisible (hasEarlierAnalysis() && ! isBusy());
     anewButton.setVisible (continueButton.isVisible());
     downloadButton.setEnabled (! isBusy());
@@ -2861,6 +2940,8 @@ void Analyzer::resized()
         stemCount.setBounds (r.removeFromLeft (220).reduced (0, 1));
         r.removeFromLeft (8);
         separateButton.setBounds (r.removeFromLeft (100).reduced (0, 1));
+        r.removeFromLeft (12);
+        styleToggle.setBounds (r.removeFromLeft (juce::jmin (r.getWidth(), 200)).reduced (0, 1));
         area.removeFromTop (4);
     }
     {

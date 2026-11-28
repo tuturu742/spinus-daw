@@ -5,8 +5,8 @@ AI coding agents: they write a song as a list of steps, and Spinus carries the s
 commands its own buttons use, then saves an ordinary project you open as usual.
 
 None of these use a sound card or open a window, and none of them change your settings, your recent
-projects or your logs. The one exception is `--learn`, which keeps what it learns of an instrument, as
-**Learn this instrument** does.
+projects or your logs. The exceptions are `--learn`, which keeps what it learns of an instrument, as
+**Learn this instrument** does, and `--analyze`, which keeps what it measures of a song with your analyzed songs.
 
 | Option | What it does |
 |---|---|
@@ -16,6 +16,8 @@ projects or your logs. The one exception is `--learn`, which keeps what it learn
 | `spinus --describe <device>` | Prints a device's settings, presets, pads and kits. `--describe all` covers every one. |
 | `spinus --learn <project> --device <id>` | Learns the instrument of one of the project's devices by ear ([below](#learning-an-instrument)) and keeps what it learns. |
 | `spinus --presets <project>` | Prints the presets `device.loadPreset` can load on each of the project's devices, plugins too. `--device <id>` for one, `--find <words>` to narrow them. |
+| `spinus --analyze <song or folder>` | Analyzes songs as references ([below](#analyzing-songs)) and keeps what it measures. |
+| `spinus --songs` | Lists the songs analyzed so far. `spinus --song <name>` prints what was measured of one. |
 | `spinus --commands` | Prints every command and its parameters (JSON Schema). |
 | `spinus --help` | Lists these options. |
 
@@ -278,4 +280,37 @@ that bank is the one learned. It takes a minute or two. It doesn't read the manu
 
 ```sh
 spinus --learn ~/Music/Song --device 6
+```
+
+## Analyzing songs
+
+`spinus --analyze <song or folder>` measures songs as the [Analyzer](analyzer.md) and the
+[Track creator](track-creator.md) do, without the window: tempo and bars, key, loudness, the stems, the notes
+and drum hits, and the style (sections, chords per bar, drum groove, each part's range). You can name several
+songs; a folder means its songs and those one folder down (an album with CD 1 and CD 2). What it measures is
+kept with your [saved analyses](track-creator.md#saved-analyses), so the songs then show as analyzed in the
+Analyzer and the Track creator, and coding agents can read them.
+
+It needs AI turned on in Spinus (Options › AI) and the analysis engine installed, as the Analyzer does, and it
+runs on this computer. A song takes a few minutes; one analyzed before is ready at once. If model files are
+missing it says which and how big they are: add `--download-models` to download them first (open-source models
+made by others, downloaded once).
+
+It prints a line as each step starts, a line per song at the end (`ok`, and its `key` in the library or the
+`error`), and a last line with how many were analyzed.
+
+```sh
+spinus --analyze ~/Music/References/Song.flac
+spinus --analyze ~/Music/Album --download-models
+```
+
+`spinus --songs` lists the analyzed songs, and `spinus --song <name>` prints what was measured of one (its
+name, part of it, or its key). The exact notes and drum hits of one part come with `--part` (`bass`, `drums`,
+`htdemucs_6s/vocals`), between `--from` and `--to` seconds if you like, and only when **Provide full data
+through MCP** is ticked in the Analyzer ([why](agents.md#your-analyzed-songs)).
+
+```sh
+spinus --songs
+spinus --song "Song"
+spinus --song "Song" --part bass --from 30 --to 60
 ```
