@@ -61,6 +61,9 @@ juce::var projectContext (Session& session, const ContextOptions& options)
             if (auto keys = instrumentbanks::keysForAgents (profiles, session, channel); ! keys.isVoid())
                 instrumentKeys->setProperty (juce::String ((int)channel.instrument->id.value), keys);
     context->setProperty ("instrumentKeys", juce::var (instrumentKeys));
+    // The instruments the user taught Spinus, to choose from first.
+    if (options.deviceChoices)
+        context->setProperty ("learnedInstruments", instrumentbanks::learnedInShort (profiles, session));
 
     // What each learned effect is good for and what its settings do (Learn this effect).
     EffectProfiles effectProfiles (options.profilesFolder != juce::File() ? options.profilesFolder

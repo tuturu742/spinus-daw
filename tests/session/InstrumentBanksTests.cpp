@@ -225,3 +225,45 @@ TEST_CASE ("A channel's bank can be named, kept in the song and undone", "[banks
     REQUIRE (history.undo());
     CHECK (history.getProject().channels.back().bank.isEmpty());
 }
+
+TEST_CASE ("A learned bank's sound is kept beside the profiles, and goes when the bank is forgotten", "[banks]")
+{
+    const auto root = juce::File::createTempFile ("bank-sounds");
+    REQUIRE (root.createDirectory().wasOk());
+    const auto index = root.getChildFile ("sounds");
+    const juce::String player = "plugin-sampleplayer";
+    const auto bass = instrumentbanks::fromState (samplePlayerState ("/s/Basses/Growlybass.sfz"));
+    const auto key = InstrumentProfiles::keyForBank (player, bass);
+
+    InstrumentProfiles profiles (index);
+    InstrumentProfiles::Profile whole;
+    whole.byBank = true;
+    profiles.set (player, whole);
+    InstrumentProfiles::Profile keys;
+    InstrumentProfiles::Mode mode;
+    mode.setKeys (28, 60, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::probing });
+    keys.modes.push_back (mode);
+    keys.bankName = bass.name;
+    profiles.set (key, keys);
+    REQUIRE (profiles.save());
+
+    // Nothing kept yet; an empty or missing state is not kept.
+    CHECK (! profiles.bankSoundFile (key).existsAsFile());
+    CHECK (! profiles.keepBankSound (key, root.getChildFile ("none.state")));
+    const auto state = root.getChildFile ("now.state");
+    const auto bytes = samplePlayerState ("/s/Basses/Growlybass.sfz");
+    REQUIRE (state.replaceWithData (bytes.getData(), bytes.getSize()));
+    REQUIRE (profiles.keepBankSound (key, state));
+    juce::MemoryBlock kept;
+    REQUIRE (profiles.bankSoundFile (key).loadFileAsData (kept));
+    CHECK (kept == bytes);
+    CHECK (profiles.bankSoundFile (key).getParentDirectory() == index.getSiblingFile ("bank-sounds"));
+
+    // Saving again keeps it; forgetting the bank removes it.
+    REQUIRE (profiles.save());
+    CHECK (profiles.bankSoundFile (key).existsAsFile());
+    profiles.set (key, std::nullopt);
+    REQUIRE (profiles.save());
+    CHECK (! profiles.bankSoundFile (key).existsAsFile());
+    root.deleteRecursively();
+}

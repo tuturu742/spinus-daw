@@ -655,6 +655,8 @@ juce::var summarize (Session& session, const juce::File& projectFolder, const ju
           { "markers", markers },
           { "launcher", launcher },
           { "unusedChannels", unused }, // channels no clip plays: not a problem, but often a mistake
+          // The instruments the user taught Spinus, to choose from first (learned_instruments tells more).
+          { "learnedInstruments", instrumentbanks::learnedInShort (profiles, session) },
           { "problems", problems } });
 }
 

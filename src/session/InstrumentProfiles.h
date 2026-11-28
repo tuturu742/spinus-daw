@@ -164,6 +164,17 @@ public:
     }
     /** The banks learned for an instrument: their keys' bank ids and names, as kept. */
     std::vector<InstrumentBank> banksOf (const juce::String& instrument) const;
+    /** Every profile the user has, by key: an instrument's, and each bank's own (keyForBank). */
+    const std::map<juce::String, Profile>& getAll() const noexcept { return profiles; }
+    /** The sound that loads a learned bank: the plugin's state as it was when the bank was learned (kept in
+        `bank-sounds` beside the profiles, by the bank's key), so the bank can be loaded again by its name (a
+        preset in "Learned banks": pluginPresets). The file need not exist: a bank learned before sounds were
+        kept has none. */
+    juce::File bankSoundFile (const juce::String& bankKey) const;
+    /** Keeps `state` (a plugin state file) as the sound that loads the bank. False when it could not be copied. */
+    bool keepBankSound (const juce::String& bankKey, const juce::File& state) const;
+    /** The category learned banks are listed under among a plugin's presets. */
+    static constexpr const char* bankCategory = "Learned banks";
     /** Whether the user has a profile of their own for it (not only the bundled one). */
     bool hasOwn (const juce::String& instrument) const { return profiles.contains (instrument); }
     /** The profile Spinus ships for one of its own instruments or the free ones it gets, by the instrument's key

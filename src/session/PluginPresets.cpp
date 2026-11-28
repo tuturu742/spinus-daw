@@ -1,6 +1,8 @@
 #include "PluginPresets.h"
 
 #include "session/HiddenInstrument.h"
+#include "session/InstrumentProfiles.h"
+#include "session/Session.h"
 #include "model/StockDevices.h"
 #include "session/SoundIndex.h"
 
@@ -50,6 +52,29 @@ std::vector<InstrumentPreset> savedSoundsFor (const model::Device& device)
     return presets;
 }
 
+/** The banks learned for this plugin whose sound was kept (Learn this instrument), as presets that are its
+    state: loading one loads the bank. */
+std::vector<InstrumentPreset> learnedBanksFor (Session& session, const model::Device& device)
+{
+    const auto folder = session.getSoundIndex().getFolder();
+    InstrumentProfiles profiles (folder != juce::File() ? folder : SoundIndex::getDefaultFolder());
+    profiles.load();
+    const auto instrument = InstrumentPresets::libraryOf (device);
+    std::vector<InstrumentPreset> presets;
+    for (const auto& bank : profiles.banksOf (instrument))
+    {
+        InstrumentPreset p;
+        p.kind = InstrumentPreset::Kind::state;
+        p.name = bank.name;
+        p.category = InstrumentProfiles::bankCategory;
+        p.id = "bank:" + bank.id;
+        p.file = profiles.bankSoundFile (InstrumentProfiles::keyForBank (instrument, bank));
+        if (p.file.loadFileAsData (p.state) && ! p.state.isEmpty())
+            presets.push_back (std::move (p));
+    }
+    return presets;
+}
+
 juce::String someNames (const std::vector<InstrumentPreset>& presets)
 {
     juce::StringArray names;
@@ -63,6 +88,8 @@ juce::String someNames (const std::vector<InstrumentPreset>& presets)
 std::vector<InstrumentPreset> find (Session& session, const model::Device& device, juce::String& problem)
 {
     auto presets = savedSoundsFor (device);
+    for (auto& bank : learnedBanksFor (session, device))
+        presets.push_back (std::move (bank));
     const auto key = keyOf (device);
     auto& found = foundBefore();
     if (auto it = found.find (key); it != found.end())

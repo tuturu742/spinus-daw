@@ -155,6 +155,8 @@ Outcome run (const Job& job, const std::function<bool()>& shouldStop,
     profiles.set (job.key, profile);
     if (! profiles.save())
         outcome.problem = "the learned keys could not be saved.";
+    else if (job.bankName.isNotEmpty()) // a bank: its sound too, so it can be loaded again by name
+        profiles.keepBankSound (job.key, job.state);
     outcome.profile = std::move (profile);
     return outcome;
 }

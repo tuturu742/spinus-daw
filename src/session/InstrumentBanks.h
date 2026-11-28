@@ -47,6 +47,16 @@ InstrumentBank of (Session&, const model::Channel&);
     known), {bank, learned: false, note} saying so, so an agent doesn't take another bank's keys for these. Void
     when there is nothing to tell. */
 juce::var keysForAgents (const InstrumentProfiles&, const juce::String& instrument, const InstrumentBank&);
+/** The instruments the user taught Spinus (Learn this instrument) that can be added here, for agents:
+    [{instrument (its name), device (channel.add's 'instrument'), modes?: [{name, goodFor?, plays (in words)}],
+    banks?: [{bank (its name), preset? ("Learned banks/<name>" for device.loadPreset, when its sound was kept),
+    note? (why it can't be loaded by name), plays?}]}]. A sample player whose bank decides its keys lists the
+    banks learned for it; a bank named twice is listed once, the one that loads first. `find`: only those whose
+    instrument or bank name has every word. `withKeys`: each mode's and bank's keys in full too
+    (InstrumentProfiles::describeForAgents). */
+juce::var learnedForAgents (const InstrumentProfiles&, Session&, const juce::String& find = {}, bool withKeys = false);
+/** learnedForAgents in a few words, for the start of a task: [{instrument, banks?: [names]}]. */
+juce::var learnedInShort (const InstrumentProfiles&, Session&);
 /** keysForAgents for a channel's instrument, asking for its bank (of) only when the bank decides its keys. */
 juce::var keysForAgents (const InstrumentProfiles&, Session&, const model::Channel&);
 

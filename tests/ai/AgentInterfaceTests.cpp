@@ -5,7 +5,10 @@
 #include "ai/ProjectContext.h"
 #include "session/AnalysisForAgents.h"
 #include "session/EffectProfiles.h"
+#include "session/InstrumentPresets.h"
 #include "session/InstrumentProfiles.h"
+#include "session/PluginPresets.h"
+#include "plugins/DeviceList.h"
 #include "commands/CommandRegistry.h"
 #include "engine/BundledDevices.h"
 #include "engine/DeviceFactory.h"
@@ -1585,6 +1588,119 @@ TEST_CASE ("Agents load a Drum Machine kit and samples, only from the project an
     result = f.call (id, "load_sounds", object ({ { "device", drumsId }, { "kit", "No Such Kit" } }));
     CHECK ((bool)result["isError"]);
     CHECK (said (result).contains ("Spinus Synth Kit"));
+}
+
+TEST_CASE ("Agents are told the learned instruments and their banks, and a learned bank is a preset",
+           "[ai][agents][instruments]")
+{
+    Fixture f (false); // works with AI off
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto answer = [&] (const juce::String& tool, const juce::var& arguments)
+    {
+        const auto result = f.call (id, tool, arguments);
+        INFO (result["content"][0]["text"].toString());
+        REQUIRE_FALSE ((bool)result["isError"]);
+        return juce::JSON::parse (result["content"][0]["text"].toString());
+    };
+    const auto indexFolder = f.folder.root.getChildFile ("ai/sounds");
+    f.session.getSoundIndex().setFolder (indexFolder);
+    CHECK (answer ("learned_instruments", object ({})).size() == 0); // nothing learned yet
+
+    // Two of Spinus's own instruments stand in: one learned as it is, one as a sample player with two banks.
+    std::vector<plugins::DeviceList::Entry> instruments;
+    for (auto& entry : f.session.getDeviceList().getEntries())
+        if (entry.instrument && entry.available && entry.device.stockType.isNotEmpty())
+            instruments.push_back (entry);
+    REQUIRE (instruments.size() >= 2);
+    const auto synth = InstrumentPresets::libraryOf (instruments[0].device);
+    const auto player = InstrumentPresets::libraryOf (instruments[1].device);
+    REQUIRE (synth != player);
+
+    InstrumentProfiles profiles (indexFolder);
+    InstrumentProfiles::Mode mode;
+    mode.name = "Strummer";
+    mode.goodFor = "strummed rhythm";
+    mode.setKeys (40, 88, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::user });
+    mode.setKeys (24, 24, { InstrumentProfiles::Job::switches, "palm mute", InstrumentProfiles::Source::user });
+    profiles.set (synth, InstrumentProfiles::Profile { { mode }, {} });
+    InstrumentProfiles::Profile whole;
+    whole.byBank = true;
+    profiles.set (player, whole);
+    const InstrumentBank bass { "/s/Basses/Growlybass.sfz", "Growlybass" }, old { "/s/Old/Old Kit.sfz", "Old Kit" };
+    for (const auto& bank : { bass, old })
+    {
+        InstrumentProfiles::Mode keys;
+        keys.setKeys (28, 60, { InstrumentProfiles::Job::plays, {}, InstrumentProfiles::Source::probing });
+        InstrumentProfiles::Profile own { { keys }, {} };
+        own.bankName = bank.name;
+        profiles.set (InstrumentProfiles::keyForBank (player, bank), own);
+    }
+    REQUIRE (profiles.save());
+    // Only the bass's sound was kept when it was learned.
+    const auto state = f.folder.root.getChildFile ("bass.state");
+    REQUIRE (state.replaceWithText ("the plugin's state naming /s/Basses/Growlybass.sfz"));
+    REQUIRE (profiles.keepBankSound (InstrumentProfiles::keyForBank (player, bass), state));
+
+    const auto learned = answer ("learned_instruments", object ({}));
+    REQUIRE (learned.size() == 2);
+    const auto find = [&] (const juce::String& name) -> juce::var
+    {
+        for (int i = 0; i < learned.size(); ++i)
+            if (learned[i]["instrument"].toString() == name)
+                return learned[i];
+        return {};
+    };
+    const auto plain = find (instruments[0].name);
+    REQUIRE (plain.isObject());
+    CHECK (plain["device"]["stockType"].toString() == instruments[0].device.stockType);
+    CHECK (plain["modes"][0]["name"].toString() == "Strummer");
+    CHECK (plain["modes"][0]["goodFor"].toString() == "strummed rhythm");
+    CHECK (plain["modes"][0]["plays"].toString().isNotEmpty());
+    CHECK (! plain.hasProperty ("keys")); // in full only when asked
+    const auto banks = find (instruments[1].name)["banks"];
+    REQUIRE (banks.size() == 2);
+    CHECK (banks[0]["bank"].toString() == "Growlybass"); // the one that loads by name first
+    CHECK (banks[0]["preset"].toString() == "Learned banks/Growlybass");
+    CHECK (banks[0]["plays"].toString().isNotEmpty());
+    CHECK (banks[1]["bank"].toString() == "Old Kit");
+    CHECK (! banks[1].hasProperty ("preset"));
+    CHECK (banks[1]["note"].toString().contains ("can't be loaded by name"));
+
+    // Narrowed by words (an instrument's or a bank's name), with the keys in full.
+    const auto narrowed = answer ("learned_instruments", object ({ { "find", "growly" }, { "keys", true } }));
+    REQUIRE (narrowed.size() == 1);
+    REQUIRE (narrowed[0]["banks"].size() == 1);
+    CHECK (narrowed[0]["banks"][0]["keys"]["bank"].toString() == "Growlybass");
+    const auto full = answer ("learned_instruments", object ({ { "find", instruments[0].name }, { "keys", true } }));
+    REQUIRE (full.size() == 1);
+    CHECK (full[0]["keys"]["modes"][0]["switches"][0]["what"].toString() == "palm mute");
+
+    // The summary an agent starts with names them: the banks that load by name only.
+    const auto summary = answer ("song_summary", object ({}))["learnedInstruments"];
+    REQUIRE (summary.size() == 2);
+    bool told = false;
+    for (int i = 0; i < summary.size(); ++i)
+        if (summary[i]["instrument"].toString() == instruments[1].name)
+        {
+            told = true;
+            REQUIRE (summary[i]["banks"].size() == 1);
+            CHECK (summary[i]["banks"][0].toString() == "Growlybass");
+        }
+    CHECK (told);
+    // And the music tools' context too.
+    ai::ContextOptions options;
+    options.profilesFolder = indexFolder;
+    CHECK (ai::projectContext (f.session, options)["learnedInstruments"].size() == 2);
+
+    // The bank is among the player's presets, as its kept state: device.loadPreset loads it by that name.
+    juce::String problem;
+    const auto presets = pluginPresets::find (f.session, instruments[1].device, problem);
+    const auto* bank = pluginPresets::match (presets, "Learned banks/Growlybass");
+    REQUIRE (bank != nullptr);
+    CHECK (bank->kind == InstrumentPreset::Kind::state);
+    CHECK (bank->state.toString() == "the plugin's state naming /s/Basses/Growlybass.sfz");
+    CHECK (pluginPresets::match (presets, "Old Kit") == nullptr);
 }
 
 TEST_CASE ("Agents find sounds in the sound index and read an audio file's length, tempo and key", "[ai][agents]")

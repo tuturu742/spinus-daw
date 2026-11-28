@@ -967,7 +967,12 @@ LearnInstrumentWindow::LearnInstrumentWindow (const juce::File& folder, const ju
                     profile->byBank = false;
                     profile->bankName = bank.name;
                 }
+                const auto learned = profile.has_value();
                 all.set (InstrumentProfiles::keyForBank (instrument, bank), std::move (profile));
+                all.save();
+                // The sound that plays this bank, so it can be loaded again by its name.
+                if (learned && listening.has_value())
+                    all.keepBankSound (InstrumentProfiles::keyForBank (instrument, bank), listening->state);
             }
             all.save();
             if (saved)
