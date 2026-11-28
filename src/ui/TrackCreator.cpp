@@ -31,7 +31,6 @@ juce::var object (std::initializer_list<std::pair<const char*, juce::var>> items
     return juce::var (o);
 }
 
-using parts::separationModel; // 6 stems: guitars and piano apart from the other instruments
 } // namespace
 
 //==============================================================================

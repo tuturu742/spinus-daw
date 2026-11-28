@@ -129,8 +129,8 @@ private:
 /** Downloads model files one after the other (ai.v1.stems.download). `progress`: the model's name and how far
     (0 to 1); `done`: an error, empty when all are there. Nothing is called once `alive` is false. */
 void downloadModels (AiService&, std::vector<SongAnalyzer::Needs::Model> models, const std::shared_ptr<bool>& alive,
-                     std::function<void (const juce::String& name, double fraction)> progress,
-                     std::function<void (const juce::String& error)> done);
+                     const std::function<void (const juce::String& name, double fraction)>& progress,
+                     const std::function<void (const juce::String& error)>& done);
 
 /** Songs analyzed one after the other, without a window: `spinus --analyze` and agents (analyze_song). A song
     that needs something missing (AI off, no engine, no model files) fails with those words, and so do the songs

@@ -476,8 +476,8 @@ void SongAnalyzer::measureStyle()
 //==============================================================================
 void downloadModels (AiService& service, std::vector<SongAnalyzer::Needs::Model> models,
                      const std::shared_ptr<bool>& alive,
-                     std::function<void (const juce::String& name, double fraction)> progress,
-                     std::function<void (const juce::String& error)> done)
+                     const std::function<void (const juce::String& name, double fraction)>& progress,
+                     const std::function<void (const juce::String& error)>& done)
 {
     if (models.empty())
         return done ({});
