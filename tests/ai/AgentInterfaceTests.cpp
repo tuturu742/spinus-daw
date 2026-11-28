@@ -67,7 +67,8 @@ struct Fixture
     juce::Array<juce::File> roots { folder.root.getChildFile ("Projects"), folder.root.getChildFile ("Mine") };
     bool unsaved = false;
     juce::File savedTo { "/nowhere" };
-    juce::var heard; // what the AI service hears in a vocal (void: AI is off)
+    juce::var heard;               // what the AI service hears in a vocal (void: AI is off)
+    juce::Array<juce::File> asked; // the songs given to analyze_song
 
     static std::unique_ptr<engine::DeviceFactory> makeDevices (tracktion::Engine& engine)
     {
@@ -112,6 +113,19 @@ struct Fixture
             done ({});
         };
         h.sampleFolders = [] { return juce::Array<juce::File>(); };
+        const auto songs = [this]
+        {
+            juce::Array<juce::var> list;
+            for (const auto& song : asked)
+                list.add (object ({ { "name", song.getFileName() }, { "state", "waiting" } }));
+            return juce::var (list);
+        };
+        h.analyzeSong = [this, songs] (const juce::File& song)
+        {
+            asked.addIfNotAlreadyThere (song);
+            return songs();
+        };
+        h.analysisProgress = songs;
         h.context = [] { return object ({ { "project", juce::var (new juce::DynamicObject()) } }); };
         if (withHarness)
         {
@@ -1662,6 +1676,41 @@ TEST_CASE ("Agents find sounds in the sound index and read an audio file's lengt
     CHECK ((bool)outside["isError"]);
     CHECK (outside["content"][0]["text"].toString().contains ("outside the project"));
     CHECK ((bool)f.call (id, "audio_file_info", object ({ { "file", "audio/missing.wav" } }))["isError"]);
+}
+
+TEST_CASE ("analyze_song takes a song in the project or the sample folders, and analysis_progress tells how it goes",
+           "[ai][agents][analysis]")
+{
+    Fixture f;
+    f.agents->setEnabled (true);
+    const auto id = f.connect();
+    const auto said = [&] (const juce::var& result) { return result["content"][0]["text"].toString(); };
+
+    CHECK (said (f.call (id, "analysis_progress", object ({}))) == "No song was given to analyze_song yet.");
+
+    f.openFolder.getChildFile ("audio").createDirectory();
+    const auto song = f.openFolder.getChildFile ("audio/Reference.flac");
+    song.replaceWithText ("flac");
+    auto result = f.call (id, "analyze_song", object ({ { "file", "audio/Reference.flac" } }));
+    CHECK_FALSE ((bool)result["isError"]);
+    CHECK (said (result).contains ("\"name\": \"Reference.flac\""));
+    CHECK (said (result).contains ("song_analysis"));
+    REQUIRE (f.asked.size() == 1);
+    CHECK (f.asked[0] == song);
+    CHECK (said (f.call (id, "analysis_progress", object ({}))).contains ("Reference.flac"));
+
+    // Only where agents may look, only audio, and only with AI on.
+    result = f.call (id, "analyze_song", object ({ { "file", "/etc/passwd" } }));
+    CHECK ((bool)result["isError"]);
+    CHECK (said (result).contains ("outside the project"));
+    f.openFolder.getChildFile ("notes.txt").replaceWithText ("words");
+    CHECK ((bool)f.call (id, "analyze_song", object ({ { "file", "notes.txt" } }))["isError"]);
+    CHECK ((bool)f.call (id, "analyze_song", object ({ { "file", "audio/Missing.wav" } }))["isError"]);
+    f.music = false;
+    result = f.call (id, "analyze_song", object ({ { "file", "audio/Reference.flac" } }));
+    CHECK ((bool)result["isError"]);
+    CHECK (said (result).contains ("AI turned on"));
+    CHECK (f.asked.size() == 1);
 }
 
 TEST_CASE ("export_audio writes the song to the project's folder, and replaces a file only when asked",

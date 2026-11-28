@@ -989,12 +989,36 @@ namespace
 const std::map<juce::String, bool>& knownOptions()
 {
     static const std::map<juce::String, bool> options {
-        { "--help", false },     { "-h", false },         { "--version", false },    { "--run", true },
-        { "--open", true },      { "--save", true },      { "--keep-going", false }, { "--check", true },
-        { "--render", true },    { "--out", true },       { "--stems", true },       { "--tail", true },
-        { "--describe", true },  { "--commands", false }, { "--self-test", false },  { "--scan-plugins", false },
-        { "--no-audio", false }, { "--snapshot", true },  { "--choose-file", true }, { "--presets", true },
-        { "--device", true },    { "--find", true },      { "--learn", true },
+        { "--help", false },
+        { "-h", false },
+        { "--version", false },
+        { "--run", true },
+        { "--open", true },
+        { "--save", true },
+        { "--keep-going", false },
+        { "--check", true },
+        { "--render", true },
+        { "--out", true },
+        { "--stems", true },
+        { "--tail", true },
+        { "--describe", true },
+        { "--commands", false },
+        { "--self-test", false },
+        { "--scan-plugins", false },
+        { "--no-audio", false },
+        { "--snapshot", true },
+        { "--choose-file", true },
+        { "--presets", true },
+        { "--device", true },
+        { "--find", true },
+        { "--learn", true },
+        { "--analyze", true },
+        { "--download-models", false },
+        { "--songs", false },
+        { "--song", true },
+        { "--part", true },
+        { "--from", true },
+        { "--to", true },
     };
     return options;
 }
@@ -1013,6 +1037,11 @@ juce::String usage()
            "  spinus --presets <project> [--device <id>] [--find <words>]\n"
            "                                              The presets device.loadPreset can load on its devices\n"
            "  spinus --learn <project> --device <id>     Learn an instrument's keys by ear, and keep what it learns\n"
+           "  spinus --analyze <song or folder>... [--download-models]\n"
+           "                                              Analyze songs as references (needs AI on), and keep it\n"
+           "  spinus --songs                             The songs analyzed so far\n"
+           "  spinus --song <name> [--part <part> [--from <seconds>] [--to <seconds>]]\n"
+           "                                              What was measured of an analyzed song\n"
            "  spinus --commands                          Every command and its parameters (JSON Schema)\n"
            "  spinus --self-test [<folder>]              Check that Spinus works on this computer\n"
            "  spinus --version                           The version\n"

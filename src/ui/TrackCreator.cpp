@@ -35,64 +35,6 @@ using parts::separationModel; // 6 stems: guitars and piano apart from the other
 } // namespace
 
 //==============================================================================
-/** Reads a song's contents (its digest names it in the analysis library) and, when its style was not measured
-    before, decodes it, off the message thread. */
-class TrackCreator::Preparer final : public juce::Thread
-{
-public:
-    Preparer (TrackCreator& c, juce::File song, AnalysisLibrary lib, juce::File work, juce::String known)
-        : juce::Thread ("Spinus track creator preparer"), creator (c), file (std::move (song)),
-          library (std::move (lib)), workFolderRoot (std::move (work)), digest (std::move (known))
-    {
-        startThread();
-    }
-
-    ~Preparer() override { stopThread (10000); }
-
-    void run() override
-    {
-        if (digest.isEmpty())
-            digest = contentDigest (file);
-        if (threadShouldExit())
-            return;
-        entry = library.read (digest);
-        if (const auto& found = entry["features"]; found.isObject() && (int)found["version"] == analysisVersion)
-            features = found;
-        else
-        {
-            prepared = preparedSongFile (workFolderRoot.getChildFile (digest.substring (0, 16)), file, digest);
-            result = prepareSong (file, prepared, [this] { return threadShouldExit(); }, progress);
-        }
-        if (! threadShouldExit())
-            creator.triggerAsyncUpdate();
-    }
-
-    TrackCreator& creator;
-    juce::File file;
-    AnalysisLibrary library;
-    juce::File workFolderRoot;
-    juce::String digest;
-    juce::var entry;    // what the library has of the song
-    juce::var features; // its style, measured before
-    juce::File prepared;
-    juce::Result result = juce::Result::ok();
-    std::atomic<double> progress { 0.0 };
-};
-
-/** What is known so far of the song being analyzed. */
-struct TrackCreator::Work
-{
-    juce::String digest, name;
-    juce::var entry; // what the analysis library had of it
-    juce::File prepared, folder;
-    juce::var rhythm, key, loudness;
-    std::map<juce::String, juce::File> stems;
-    juce::StringArray queue; // stems still to listen to
-    juce::DynamicObject::Ptr parts = new juce::DynamicObject();
-    juce::var drums = juce::Array<juce::var>();
-};
-
-//==============================================================================
 class TrackCreator::Rows final : public juce::ListBoxModel
 {
 public:
@@ -124,7 +66,8 @@ private:
 TrackCreator::TrackCreator (Session& s, ai::AiService* a)
     : Panel ("trackCreator", "Track creator (experimental)"), session (s),
       workRoot (juce::File::getSpecialLocation (juce::File::tempDirectory)
-                    .getChildFile ("spinus-track-creator-" + juce::Uuid().toString()))
+                    .getChildFile ("spinus-track-creator-" + juce::Uuid().toString())),
+      analyzer (nullptr, AnalysisLibrary (juce::File()), workRoot)
 {
     setHelpText ("Track creator: add songs you like to see what their style has in common");
     intro.setText ("Optional: add a few songs you like, or an album (a folder). Spinus studies what they have in "
@@ -319,9 +262,7 @@ TrackCreator::~TrackCreator()
     songWriter = nullptr; // stops its rendering, before its work folder goes
     partSounds = nullptr; // stops what it runs, before its work folder goes
     *alive = false;
-    *run = false;
-    task = nullptr;
-    preparer = nullptr;
+    analyzer.stop();
     list.setModel (nullptr);
     workRoot.deleteRecursively();
 }
@@ -544,10 +485,7 @@ void TrackCreator::recall()
     showSummary();
 }
 
-juce::File TrackCreator::getWorkFolder (const juce::String& digest) const
-{
-    return workRoot.getChildFile (digest.substring (0, 16));
-}
+juce::File TrackCreator::getWorkFolder (const juce::String& digest) const { return analyzer.getWorkFolder (digest); }
 
 TrackCreator::Reference* TrackCreator::currentReference()
 {
@@ -557,27 +495,7 @@ TrackCreator::Reference* TrackCreator::currentReference()
 //==============================================================================
 int TrackCreator::addReferences (const juce::Array<juce::File>& files)
 {
-    juce::Array<juce::File> songs;
-    for (const auto& file : files)
-    {
-        if (file.isDirectory())
-        {
-            // An album: its songs, and those one folder down (CD 1, CD 2...).
-            juce::Array<juce::File> found;
-            for (const auto& child : file.findChildFiles (juce::File::findFiles, false))
-                found.add (child);
-            for (const auto& folder : file.findChildFiles (juce::File::findDirectories, false))
-                if (! folder.isHidden())
-                    for (const auto& child : folder.findChildFiles (juce::File::findFiles, false))
-                        found.add (child);
-            found.sort();
-            for (const auto& song : found)
-                if (isSongFile (song) && ! song.isHidden())
-                    songs.add (song);
-        }
-        else if (file.existsAsFile() && isSongFile (file))
-            songs.add (file);
-    }
+    const auto songs = ai::songsIn (files);
     int added = 0;
     for (const auto& song : songs)
         if (std::none_of (references.begin(), references.end(),
@@ -649,17 +567,7 @@ void TrackCreator::analyzeAgain()
 
 void TrackCreator::stopCurrent()
 {
-    *run = false;
-    run = std::make_shared<bool> (true);
-    if (service != nullptr && job.isNotEmpty() && job != "starting")
-        service->call ("ai.v1.job.cancel", object ({ { "job", job } }), {});
-    job.clear();
-    task = nullptr;
-    preparer = nullptr;
-    cancelPendingUpdate();
-    if (work != nullptr)
-        work->folder.deleteRecursively();
-    work = nullptr;
+    analyzer.stop();
     current = -1;
 }
 
@@ -679,388 +587,84 @@ void TrackCreator::startNext()
     // Unchanged since its contents were read: they are not read again.
     const bool same = next->digest.isNotEmpty() && next->file.getSize() == next->size &&
                       next->file.getLastModificationTime().toMilliseconds() == next->modified;
-    preparer =
-        std::make_unique<Preparer> (*this, next->file, getLibrary(), workRoot, same ? next->digest : juce::String());
+    ai::SongAnalyzer::Callbacks callbacks;
+    callbacks.step = [this] (const juce::String& words, double progress)
+    {
+        if (auto* reference = currentReference())
+        {
+            reference->status = words == "Preparing..." ? Status::preparing : Status::analyzing;
+            reference->step = words;
+            reference->progress = progress;
+        }
+        list.repaint();
+    };
+    callbacks.read = [this] (const juce::String& digest)
+    {
+        if (auto* reference = currentReference())
+        {
+            reference->digest = digest;
+            reference->size = reference->file.getSize();
+            reference->modified = reference->file.getLastModificationTime().toMilliseconds();
+        }
+    };
+    callbacks.done = [this] (const juce::var& features, bool keptBefore) { finishSong (features, keptBefore); };
+    callbacks.failed = [this] (const juce::String& why) { failSong (why); };
+    callbacks.held = [this] (const ai::SongAnalyzer::Needs& needs) { holdQueue (needs); };
+    callbacks.ran = [this] (const juce::String& method)
+    {
+        // Everything it needs is there.
+        needsText.setText ({}, juce::dontSendNotification);
+        engineButton.setVisible (false);
+        methodsRun.add (method);
+        updateButtons();
+    };
+    callbacks.playing = [this] { return session.isPlaying(); };
+    analyzer.setService (service);
+    analyzer.setLibrary (getLibrary());
+    analyzer.start (next->file, same ? next->digest : juce::String(), std::move (callbacks));
     list.repaint();
     updateButtons();
 }
 
-void TrackCreator::handleAsyncUpdate()
+/** Puts the current song back to waiting and stops: says what is missing (AI, the analysis engine, model files). */
+void TrackCreator::holdQueue (const ai::SongAnalyzer::Needs& needs)
 {
-    auto* reference = currentReference();
-    if (preparer == nullptr || reference == nullptr || reference->status != Status::preparing)
-        return;
-    const auto finished = std::move (preparer);
-    reference->digest = finished->digest;
-    reference->size = reference->file.getSize();
-    reference->modified = reference->file.getLastModificationTime().toMilliseconds();
-    if (finished->features.isObject())
-        return finishSong (finished->features, true);
-    if (finished->result.failed())
-        return failSong (finished->result.getErrorMessage());
-    work = std::make_unique<Work>();
-    work->digest = finished->digest;
-    work->prepared = finished->prepared;
-    work->folder = getWorkFolder (finished->digest);
-    work->entry = finished->entry;
-    work->name = reference->file.getFileName();
-    checkReady ([this] { findTempo(); });
-}
-
-juce::StringArray TrackCreator::neededModels() const
-{
-    return { beatModel, separationModel, "basic_pitch", "drum_transcriber" };
-}
-
-/** AI on, the analysis engine installed and the models downloaded; otherwise says what is missing. */
-void TrackCreator::checkReady (const std::function<void()>& then)
-{
-    if (service == nullptr || ! service->isEnabled())
-    {
+    using What = ai::SongAnalyzer::Needs::What;
+    missing.clear();
+    downloadSize = 0;
+    if (needs.what != What::ai && needs.what != What::service)
+        engineButton.setVisible (needs.what == What::engine);
+    if (needs.what == What::ai)
         needsText.setText ("The Track creator uses AI that runs on this computer: turn on AI in Options > AI.",
                            juce::dontSendNotification);
-        return holdQueue ("AI is off.");
-    }
-    // What the library has already (from the Analyzer, or an earlier time) needs no models.
-    const auto& entry = work->entry;
-    const auto kept = getLibrary().findStems (work->digest, separationModel);
-    const bool allKept =
-        entry["rhythm"].isObject() && ! kept.empty() &&
-        std::all_of (
-            kept.begin(), kept.end(),
-            [&entry] (const auto& stem)
-            {
-                return stem.first == "drums"
-                           ? entry["drums"][separationModel].isArray()
-                           : entry["notes"][juce::Identifier (juce::String (separationModel) + "/" + stem.first)]
-                                 .isArray();
-            });
-    if (allKept)
-        return then();
-    if (auto* reference = currentReference())
+    else if (needs.what == What::engine)
+        needsText.setText ("The Track creator needs the analysis engine (PyTorch) installed first.",
+                           juce::dontSendNotification);
+    else if (needs.what == What::models)
     {
-        reference->status = Status::analyzing;
-        reference->step = "Checking the analysis engine...";
-    }
-    list.repaint();
-    ai::checkAnalysisEngine (
-        *service, run,
-        [this, then] (const ai::EngineCheck& engine)
+        juce::StringArray names;
+        for (const auto& m : needs.models)
         {
-            if (engine.error.isNotEmpty())
-                return holdQueue (engine.error);
-            engineButton.setVisible (! engine.installed);
-            if (! engine.installed)
-            {
-                needsText.setText ("The Track creator needs the analysis engine (PyTorch) installed first.",
-                                   juce::dontSendNotification);
-                return holdQueue ("The analysis engine is not installed.");
-            }
-            beatModel = engine.gpu ? "beat_this_final0" : "beat_this_small0";
-            missing.clear();
-            downloadSize = 0;
-            juce::StringArray names;
-            const auto needed = neededModels();
-            if (auto* models = engine.models["models"].getArray())
-                for (auto& m : *models)
-                    if (needed.contains (m["id"].toString()) && ! (bool)m["downloaded"])
-                    {
-                        missing.push_back ({ m["id"].toString(), m["name"].toString(), (juce::int64)m["size"] });
-                        downloadSize += (juce::int64)m["size"];
-                        names.add (m["name"].toString());
-                    }
-            if (! missing.empty())
-            {
-                const auto megabytes = juce::String (juce::roundToInt ((double)downloadSize / 1e6));
-                needsText.setText ("The Track creator needs " + names.joinIntoString (" and ") +
-                                       " (open-source models made by others, downloaded once, " + megabytes +
-                                       " MB). The Analyzer's Sources and licences says where each comes from.",
-                                   juce::dontSendNotification);
-                downloadButton.setButtonText ("Download (" + megabytes + " MB)");
-                return holdQueue ("Model files are missing.");
-            }
-            needsText.setText ({}, juce::dontSendNotification);
-            updateButtons();
-            then();
-        });
-}
-
-void TrackCreator::holdQueue (const juce::String& why)
-{
+            missing.push_back ({ m.id, m.name, m.size });
+            names.add (m.name);
+        }
+        downloadSize = needs.downloadSize;
+        const auto megabytes = juce::String (juce::roundToInt ((double)downloadSize / 1e6));
+        needsText.setText ("The Track creator needs " + names.joinIntoString (" and ") +
+                               " (open-source models made by others, downloaded once, " + megabytes +
+                               " MB). The Analyzer's Sources and licences says where each comes from.",
+                           juce::dontSendNotification);
+        downloadButton.setButtonText ("Download (" + megabytes + " MB)");
+    }
     if (auto* reference = currentReference())
     {
         reference->status = Status::waiting;
         reference->step.clear();
     }
-    job.clear();
-    work = nullptr; // the decoded song stays in the work folder: not decoded again
     current = -1;
-    status.setText (why, juce::dontSendNotification);
+    status.setText (needs.text, juce::dontSendNotification);
     list.repaint();
     updateButtons();
-}
-
-void TrackCreator::runStep (const juce::String& method, const juce::var& params, const juce::String& words,
-                            const std::function<void (const juce::var&)>& done)
-{
-    if (auto* reference = currentReference())
-    {
-        reference->status = Status::analyzing;
-        reference->step = words;
-        reference->progress = -1.0;
-    }
-    list.repaint();
-    job = "starting";
-    methodsRun.add (method);
-    updateButtons();
-    ai::runJob (
-        *service, method, params, run, [this] (const juce::String& started) { job = started; },
-        [this, done] (const juce::var& result, const juce::String& error)
-        {
-            job.clear();
-            if (error.isNotEmpty())
-                return failSong (error);
-            done (result);
-        },
-        [this] (double doneSoFar, double total, const juce::String& step)
-        {
-            if (auto* reference = currentReference())
-            {
-                reference->progress = total > 0.0 ? doneSoFar / total : -1.0;
-                if (step.isNotEmpty())
-                    reference->step = step + "...";
-            }
-            list.repaint();
-        });
-}
-
-void TrackCreator::runTask (const juce::String& words, BackgroundTask::Work what, const std::function<void()>& then)
-{
-    if (auto* reference = currentReference())
-    {
-        reference->status = Status::analyzing;
-        reference->step = words;
-        reference->progress = -1.0;
-    }
-    list.repaint();
-    task = std::make_unique<BackgroundTask> ("Spinus track creator stems", std::move (what),
-                                             [this, then, token = run] (const juce::Result&)
-                                             {
-                                                 if (*token)
-                                                     then();
-                                             });
-}
-
-void TrackCreator::findTempo()
-{
-    if (const auto& kept = work->entry["rhythm"]; kept.isObject())
-    {
-        work->rhythm = kept;
-        return findKey();
-    }
-    runStep (
-        "ai.v1.analyze.tempo",
-        object ({ { "file", work->prepared.getFullPathName() }, { "cacheFolder", work->folder.getFullPathName() } }),
-        "Finding the beat...",
-        [this] (const juce::var& result)
-        {
-            work->rhythm = result;
-            getLibrary().set (work->digest, work->name, "rhythm", result);
-            findKey();
-        });
-}
-
-void TrackCreator::findKey()
-{
-    if (const auto& kept = work->entry["key"]; kept.isObject())
-    {
-        work->key = kept;
-        return measureLoudness();
-    }
-    runStep ("ai.v1.analyze.key", object ({ { "file", work->prepared.getFullPathName() } }), "Finding the key...",
-             [this] (const juce::var& result)
-             {
-                 work->key = result;
-                 getLibrary().set (work->digest, work->name, "key", result);
-                 measureLoudness();
-             });
-}
-
-void TrackCreator::measureLoudness()
-{
-    if (const auto& kept = work->entry["loudness"]; kept.isObject())
-    {
-        work->loudness = kept;
-        return separate();
-    }
-    juce::Array<juce::var> inserts { object ({ { "name", "song" }, { "file", work->prepared.getFullPathName() } }) };
-    runStep ("ai.v1.mix.analyze", object ({ { "inserts", inserts } }), "Measuring the loudness...",
-             [this] (const juce::var& result)
-             {
-                 work->loudness = result["inserts"]["song"];
-                 getLibrary().set (work->digest, work->name, "loudness", work->loudness);
-                 separate();
-             });
-}
-
-void TrackCreator::separate()
-{
-    // Stems kept from before (here or in the Analyzer, with the same model) are used again.
-    if (! getLibrary().findStems (work->digest, separationModel).empty())
-    {
-        auto restored = std::make_shared<std::map<juce::String, juce::File>>();
-        return runTask (
-            "Using the stems kept before...",
-            [library = getLibrary(), digest = work->digest, folder = work->folder,
-             restored] (const std::function<bool()>& stop)
-            { return library.restoreStems (digest, separationModel, folder, *restored, stop); },
-            [this, restored]
-            {
-                task = nullptr;
-                if (restored->empty())
-                    return failSong ("The stems kept before cannot be read.");
-                work->stems = *restored;
-                for (const auto& [name, file] : work->stems)
-                    work->queue.add (name);
-                checkCount();
-            });
-    }
-    runStep ("ai.v1.stems.separate",
-             object ({ { "file", work->prepared.getFullPathName() },
-                       { "model", separationModel },
-                       { "cacheFolder", work->folder.getFullPathName() },
-                       { "quiet", session.isPlaying() } }),
-             "Separating...",
-             [this] (const juce::var& result)
-             {
-                 if (auto* o = result["stems"].getDynamicObject())
-                     for (auto& property : o->getProperties())
-                     {
-                         work->stems[property.name.toString()] = juce::File (property.value.toString());
-                         work->queue.add (property.name.toString());
-                     }
-                 keepStems();
-             });
-}
-
-void TrackCreator::keepStems()
-{
-    // Kept as FLAC in the library, for the Analyzer and the next time (not needed to go on, if it fails).
-    runTask (
-        "Keeping the stems...",
-        [library = getLibrary(), digest = work->digest, stems = work->stems] (const std::function<bool()>& stop)
-        { return library.keepStems (digest, separationModel, stems, stop); },
-        [this]
-        {
-            task = nullptr;
-            checkCount();
-        });
-}
-
-void TrackCreator::checkCount()
-{
-    const auto& r = work->rhythm;
-    if ((double)r["tempo"] < 140.0 || (int)r["beatsPerBar"] != 4 || r["counted"].isString() ||
-        ! work->stems.contains ("drums"))
-        return transcribeNext();
-    runStep ("ai.v1.analyze.count",
-             object ({ { "file", work->stems["drums"].getFullPathName() },
-                       { "beats", r["beats"] },
-                       { "firstDownbeat", r["firstDownbeat"] },
-                       { "beatsPerBar", r["beatsPerBar"] },
-                       { "tempo", r["tempo"] },
-                       { "cacheFolder", work->folder.getFullPathName() } }),
-             "Checking the tempo...",
-             [this] (const juce::var& result)
-             {
-                 if ((bool)result["slower"] && result["rhythm"].isObject())
-                 {
-                     work->rhythm = result["rhythm"];
-                     getLibrary().set (work->digest, work->name, "rhythm", work->rhythm);
-                 }
-                 transcribeNext();
-             });
-}
-
-void TrackCreator::transcribeNext()
-{
-    if (work->queue.isEmpty())
-        return measureStyle();
-    const auto name = work->queue[0];
-    work->queue.remove (0);
-    const bool drums = name == "drums";
-    const auto notesKey = juce::String (separationModel) + "/" + name;
-    const auto known =
-        drums ? work->entry["drums"][separationModel] : work->entry["notes"][juce::Identifier (notesKey)];
-    if (! drums && known.isArray())
-    {
-        // Found before: nothing to listen to.
-        work->parts->setProperty (name, known);
-        return transcribeNext();
-    }
-    auto params = object (
-        { { "file", work->stems[name].getFullPathName() },
-          { "bass", name == "bass" },
-          { "beats", work->rhythm["beats"] },
-          { "firstDownbeat", work->rhythm["firstDownbeat"].isVoid() ? juce::var (0.0) : work->rhythm["firstDownbeat"] },
-          { "cacheFolder", work->folder.getFullPathName() } });
-    if (drums && known.isArray())
-    {
-        work->drums = known;
-        return transcribeNext();
-    }
-    runStep (drums ? "ai.v1.transcribe.drums" : "ai.v1.transcribe.notes", params,
-             drums ? juce::String ("Listening to the drums...") : "Listening for the notes of the " + name + "...",
-             [this, name, drums, notesKey] (const juce::var& result)
-             {
-                 auto library = getLibrary();
-                 if (drums)
-                 {
-                     work->drums = result["hits"].isArray() ? result["hits"] : juce::var (juce::Array<juce::var>());
-                     library.setIn (work->digest, work->name, "drums", separationModel, work->drums);
-                 }
-                 else
-                 {
-                     const auto seconds =
-                         result["seconds"].isArray() ? result["seconds"] : juce::var (juce::Array<juce::var>());
-                     work->parts->setProperty (name, seconds);
-                     library.setIn (work->digest, work->name, "notes", notesKey, seconds);
-                 }
-                 transcribeNext();
-             });
-}
-
-void TrackCreator::measureStyle()
-{
-    auto* reference = currentReference();
-    const auto& rhythm = work->rhythm;
-    // The stems themselves too: the drums' grid comes from the drum stem, the key and chords also from the rest.
-    auto* stemFiles = new juce::DynamicObject();
-    for (const auto& [name, file] : work->stems)
-        stemFiles->setProperty (name, file.getFullPathName());
-    juce::Array<juce::var> songs { object ({
-        { "name", reference != nullptr ? reference->file.getFileNameWithoutExtension() : juce::String() },
-        { "file", work->prepared.getFullPathName() },
-        { "tempo", rhythm["tempo"] },
-        { "beatsPerBar", rhythm["beatsPerBar"] },
-        { "firstDownbeat", rhythm["firstDownbeat"] },
-        { "beats", rhythm["beats"] },
-        { "downbeats", rhythm["downbeats"] },
-        { "key", work->key },
-        { "loudness", work->loudness },
-        { "parts", juce::var (work->parts.get()) },
-        { "drums", work->drums },
-        { "stems", stemFiles },
-    }) };
-    runStep ("ai.v1.style.summarize", object ({ { "songs", songs } }), "Measuring its style...",
-             [this] (const juce::var& result)
-             {
-                 const auto features = result["perSong"][0];
-                 if (! features.isObject())
-                     return failSong ("The AI service did not say what it measured.");
-                 getLibrary().set (work->digest, work->name, "features", features);
-                 finishSong (features, false);
-             });
 }
 
 void TrackCreator::finishSong (const juce::var& features, bool keptBefore)
@@ -1073,9 +677,6 @@ void TrackCreator::finishSong (const juce::var& features, bool keptBefore)
     reference->status = Status::done;
     reference->step.clear();
     reference->progress = -1.0;
-    if (work != nullptr)
-        work->folder.deleteRecursively(); // the decoded song and its stems as WAV: large, and kept as FLAC
-    work = nullptr;
     current = -1;
     list.repaint();
     remember();
@@ -1090,10 +691,6 @@ void TrackCreator::failSong (const juce::String& why)
         reference->status = Status::failed;
         reference->step = why;
     }
-    if (work != nullptr)
-        work->folder.deleteRecursively();
-    work = nullptr;
-    job.clear();
     current = -1;
     list.repaint();
     startNext(); // on with the others

@@ -1,4 +1,4 @@
-# Let a coding agent work on your project
+#Let a coding agent work on your project
 
 A coding agent on your computer (Claude Code, Codex, Cursor and others that speak MCP) can work on the song open in
 Spinus, while you watch and play it here:
@@ -104,6 +104,12 @@ An agent can list the songs you analyzed (`list_analyzed_songs`) and read what w
 (`song_analysis`): its tempo and where the bars start, key, loudness and, when the Track creator measured it,
 its sections, chords per bar, drum groove, and each part's range and how busy it is. Songs are named by their
 file name only: an agent never learns where they are on your computer.
+
+An agent can also analyze a song itself with `analyze_song`, as the Analyzer and the Track creator do: an audio
+file in the project's folder or your sample folders. It runs in the background on your computer and takes a few
+minutes; the agent asks `analysis_progress` how it is going, then reads the song with `song_analysis`. It needs
+Spinus's AI on, uses the model files you already downloaded (it never downloads any), and doesn't change the
+project. The song then shows as analyzed in the Analyzer and the Track creator too.
 
 The **exact notes and drum hits** the Analyzer heard are not shared unless you tick **Provide full data
 through MCP** at the bottom of the [Analyzer](analyzer.md#sharing-with-coding-agents). Spinus asks first,

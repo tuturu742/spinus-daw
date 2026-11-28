@@ -899,6 +899,7 @@ TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is fo
     // The Analyzer finds the tempo and key and separates (the stand-in Demucs); the stems go into the
     // library as FLAC in the background.
     Analyzer analyzer (a.session, &a.service);
+    analyzer.setMeasuresStyle (false); // the style after the stems has a test of its own
     analyzer.setSize (660, 560);
     REQUIRE (analyzer.analyze (song));
     REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
@@ -964,6 +965,151 @@ TEST_CASE ("Track creator and Analyzer share the analysis library: nothing is fo
     CHECK (analyzer.getStatusText().startsWith ("Done."));
     CHECK (analyzer.getStems().empty());
     CHECK (library.read (digest)["features"].isObject()); // the style stays
+}
+
+namespace
+{
+/** A song the Analyzer has found the tempo and key of and split into 6 stems (the stand-in Demucs), kept in the
+    library, with notes as if Basic Pitch had found them (it is not in the repository). */
+void splitWithNotes (Analyzer& analyzer, const juce::File& song)
+{
+    const auto digest = contentDigest (song);
+    REQUIRE (analyzer.analyze (song));
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    REQUIRE (analyzer.separate (6));
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    auto library = analyzer.getLibrary();
+    REQUIRE (waitFor ([&] { return library.findStems (digest, "htdemucs_6s").size() == 6; }, 30000));
+    library.setIn (digest, {}, "notes", "htdemucs_6s/bass",
+                   juce::JSON::parse (R"([{"start": 0.1, "end": 1.9, "pitch": 45}])"));
+    library.setIn (
+        digest, {}, "notes", "htdemucs_6s/other",
+        juce::JSON::parse (R"([{"start": 0.1, "end": 1.9, "pitch": 57}, {"start": 0.1, "end": 1.9, "pitch": 60},
+                                         {"start": 0.1, "end": 1.9, "pitch": 64}])"));
+    for (const auto* stem : { "vocals", "guitar", "piano" })
+        library.setIn (digest, {}, "notes", "htdemucs_6s/" + juce::String (stem), juce::JSON::parse ("[]"));
+}
+} // namespace
+
+TEST_CASE ("Analyzer: after the stems, the song's style is measured too, for the Track creator and agents",
+           "[ui][ai][trackcreator][analyzer]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    a.service.setEnabled (true);
+    REQUIRE (a.installEngine());
+    a.placeModels();
+    const auto song = makeSong (a.t.root, "Styled Song");
+    const auto digest = contentDigest (song);
+
+    Analyzer analyzer (a.session, &a.service);
+    analyzer.setSize (660, 560);
+    CHECK (analyzer.measuresStyle()); // on until the user unticks it
+    analyzer.setMeasuresStyle (false);
+    splitWithNotes (analyzer, song);
+    const auto library = analyzer.getLibrary();
+    CHECK (! library.read (digest)["features"].isObject()); // unticked: only the stems
+
+    // Ticked: the same song again, continued from its stems, then its style.
+    analyzer.setMeasuresStyle (true);
+    REQUIRE (analyzer.analyze (song));
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 60000));
+    REQUIRE (analyzer.continueFromEarlier());
+    // The drum recogniser learns Spinus's drum sounds the first time: allow for it.
+    REQUIRE (waitFor ([&] { return ! analyzer.isBusy(); }, 240000));
+    INFO (analyzer.getStatusText());
+    CHECK (analyzer.getStatusText().startsWith ("Continued from the earlier analysis. Choose"));
+    CHECK (! analyzer.getStatusText().contains ("not measured"));
+    CHECK (analyzer.getStems().size() == 6); // the stems are there to choose from, as before
+    const auto features = library.read (digest)["features"];
+    CHECK ((int)features["version"] == TrackCreator::analysisVersion);
+    CHECK (features["chords"][0]["roman"].toString() == "i");
+    CHECK (library.read (digest)["loudness"].isObject());
+    CHECK (library.read (digest)["drums"]["htdemucs_6s"].isArray());
+
+    // The Track creator has nothing left to find.
+    TrackCreator creator (a.session, &a.service);
+    REQUIRE (creator.addReferences ({ song }) == 1);
+    REQUIRE (waitFor ([&] { return allSettled (creator); }, 60000));
+    REQUIRE (statusOf (creator, 0) == TrackCreator::Status::done);
+    CHECK (creator.getReferences()[0].keptBefore);
+    CHECK (creator.getMethodsRun().isEmpty());
+
+    // The tick box is remembered.
+    analyzer.setMeasuresStyle (false);
+    Analyzer next (a.session, &a.service);
+    CHECK (! next.measuresStyle());
+}
+
+TEST_CASE ("spinus --analyze: songs analyzed without a window, said as JSON lines, kept in the library",
+           "[ui][ai][trackcreator][cli]")
+{
+    if (ai::AiService::findInstallation().python == juce::File())
+        SKIP ("the AI service's Python environment is not set up (uv sync in ai/)");
+    Analysis a;
+    const auto album = a.t.root.getChildFile ("Album");
+    album.getChildFile ("CD 1").createDirectory();
+    const auto song = makeSong (album.getChildFile ("CD 1"), "Command Song");
+    album.getChildFile ("cover.jpg").replaceWithText ("not a song");
+    const auto digest = contentDigest (song);
+
+    // A folder: its songs, and those one folder down.
+    CHECK (ai::songsIn ({ album }) == juce::Array<juce::File> { song });
+    CHECK (ai::songsIn ({ song, album, a.t.root.getChildFile ("Missing.wav") }) == juce::Array<juce::File> { song });
+
+    juce::Array<juce::var> lines;
+    const auto say = [&lines] (const juce::String& line) { lines.add (juce::JSON::parse (line)); };
+    const auto last = [&lines] { return lines.getLast(); };
+
+    // AI off: nothing is analyzed, and it says what to do.
+    CHECK (ai::analyzeSongs (a.service, { song }, false, say) == 1);
+    CHECK_FALSE ((bool)last()["ok"]);
+    CHECK ((int)last()["failed"] == 1);
+    CHECK (last()["hint"].toString().contains ("Turn on AI"));
+    CHECK (lines[lines.size() - 2]["error"].toString() == "AI is off.");
+
+    // On, with the engine but no model files: it names them, and how to get them.
+    a.service.setEnabled (true);
+    REQUIRE (a.installEngine());
+    lines.clear();
+    CHECK (ai::analyzeSongs (a.service, { song }, false, say) == 1);
+    CHECK (lines[lines.size() - 2]["error"].toString().startsWith ("Model files are missing: "));
+    CHECK (last()["hint"].toString().contains ("--download-models"));
+
+    // With everything there (the stems and notes as if found before): each step is said, then the song.
+    a.placeModels();
+    {
+        Analyzer analyzer (a.session, &a.service);
+        analyzer.setMeasuresStyle (false);
+        splitWithNotes (analyzer, song);
+    }
+    lines.clear();
+    CHECK (ai::analyzeSongs (a.service, { song }, false, say) == 0);
+    juce::StringArray steps;
+    for (const auto& line : lines)
+        if (line.hasProperty ("step"))
+        {
+            CHECK (line["song"].toString() == "Command Song.wav");
+            steps.add (line["step"].toString());
+        }
+    INFO (steps.joinIntoString (" | "));
+    CHECK (steps.contains ("Preparing..."));
+    CHECK (steps.contains ("Measuring its style..."));
+    CHECK (! steps.contains ("Separating...")); // the stems kept before
+    const auto done = lines[lines.size() - 2];
+    CHECK ((bool)done["ok"]);
+    CHECK (done["key"].toString() == AnalysisLibrary::keyOf (digest));
+    CHECK (! done.hasProperty ("analyzedBefore"));
+    CHECK ((bool)last()["ok"]);
+    CHECK ((int)last()["analyzed"] == 1);
+    const auto library = AnalysisLibrary::inAiFolder (a.service.getFolder());
+    CHECK ((int)library.read (digest)["features"]["version"] == ai::SongAnalyzer::featuresVersion);
+
+    // Again: ready at once, from the library.
+    lines.clear();
+    CHECK (ai::analyzeSongs (a.service, { song }, false, say) == 0);
+    CHECK ((bool)lines[lines.size() - 2]["analyzedBefore"]);
 }
 
 TEST_CASE ("Track creator on real songs (a folder named by SPINUS_REALMUSIC_BATCH)", "[.realmusic]")

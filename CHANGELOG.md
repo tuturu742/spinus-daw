@@ -1,10 +1,20 @@
-# Changelog
+#Changelog
 
-What changed in each version of Spinus DAW. The [user manual](docs/user/README.md) explains every
-feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
+What changed in each version of Spinus DAW.The[user manual](docs / user / README.md) explains every feature;
+[Known issues](docs / user / known - issues.md) lists what doesn't work yet.
 
-## Unreleased
+        ##Unreleased
 
+        - **Songs can be analyzed from the command line and by agents.*
+              * `spinus-- analyze<song or folder>` analyzes songs as references without the
+              window (tempo, key, loudness, stems, notes, sections, chords, drum groove) and
+    keeps them with your analyzed songs; `spinus --songs` lists them and `spinus --song <name>` prints what was
+  measured. A connected coding agent can do the same with `analyze_song` and `analysis_progress`, for files in
+  the project's folder or your sample folders. Both need AI on.
+- **The Analyzer measures a song's style too.** After **Separate**, the Analyzer now also measures the song's
+  sections, chords per bar, drum groove, loudness and each part's range, as the Track creator does (**Also measure
+  its style**, ticked at first). The Track creator and coding agents then have the whole picture of a song
+  whichever way it was analyzed.
 - **Learn this instrument works on DrumGizmo kits.** Spinus didn't recognise which kit DrumGizmo had loaded (it
   keeps the kit's file in a form Spinus didn't read), so a kit's keys couldn't be kept apart from the others'.
   Listen to every key also gave up on any drum kit ("It played no note in tune": it needed a key that plays a
@@ -39,11 +49,12 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   part.
 - **Piano Roll: a Power chord stamp** (root, fifth and octave).
 - **Agents can search the sound index and read audio files.** `find_sounds` finds presets and samples by words,
-  role or class, each with what an agent needs to use it; `audio_file_info` gives a file's length (also in ticks
-  at the song's tempo), and a sample's class, tempo and key as the sound index hears them. Both work with
-  Spinus's AI off.
-- **Agents can export the song.** `export_audio` writes the song or a pattern, and its stems if asked, to the
-  project's folder in any of File › Export's formats; it replaces a file only when told to.
+  role or class, each with what an agent needs to use it;
+  `audio_file_info` gives a file's length (also in ticks at the song 's tempo), and a sample' s class,
+      tempo and key as the sound index hears them.Both work with Spinus's AI off. -
+              **Agents can export the song.** `export_audio` writes the song or
+          a pattern,
+      and its stems if asked, to the project 's folder in any of File › Export' s formats; it replaces a file only when told to.
 - **Agents can play a pattern on its own or launch a clip launcher scene** (the `play` tool), as well as a part
   of the song.
 - **Analyzer: notes on the keys a learned instrument plays.** A bass played on Ample Bass P had its notes on the
@@ -146,33 +157,43 @@ feature; [Known issues](docs/user/known-issues.md) lists what doesn't work yet.
   (a tag shows it; click to change or remove it, drag to move it). Audio clips don't get dragged around like
   in FL: right-click one › **When the tempo changes** › **Fixed in time** (vocals, recordings: stays at its
   second), **On its beat** (one-shots: stays on its beat) or **Stretch to tempo** (loops: stretched to the song's
-  tempo as it plays, its pitch unchanged). Long clips and recordings start as Fixed in time; a loop whose file name
-  gives its tempo (`drums_120bpm.wav`) starts stretched and fits the song when you drop it in.
-- **Send levels can be automated**: right-click a send's knob in the Mixer for **Create automation clip: send
-  level** (more reverb in the chorus, an echo on one word). The knob moves with it while it plays, and removing
-  the send removes its automation too.
-- **Analyzer**: where a part's tone opens and closes over the song (a muffled intro, a filter sweep), **Add to the
-  project** puts a Filter on its mixer track with a cutoff curve that follows it, roughly.
-- **Options › Sound index**: an instrument you taught Spinus (**Learn this instrument**) is measured only on the keys
-  it plays, so its test notes no longer press keys that switch articulations or play effect noises (a sampled
-  guitar's presets read as drums or effects before). The next update measures such instruments again. One of your
-  plugins that isn't learned says so, and says more plainly when its sounds suggest such keys; **Learn this
-  instrument...** is in its menu. **Use as** gives every selected preset the role at once.
-- Fixed: an instrument measured on its own (**Measure again**, the Browser's **Refresh sound index**, or a newly
-  ticked one) kept the simple rules' guess for its presets, so a bass plugin such as a 5-string bass could have
-  none listed as bass. Its presets are now guessed as a full update guesses them, learnt from the presets whose
-  names say their role.
-- **Options › Sound index**: listen to any sound (a preset is played by its instrument), and **Leave out**
-  the ones you don't want, one, several or all that the search and menus show (for example every bass preset
-  of one plugin); no update brings them back, and **Show › Left out** puts them back. A **Role** menu joins
-  the filters.
-- **Options › Sound index**: the Sounds tab has **Show** (all, presets, samples or problems) and **From** (one
-  instrument or sample folder) menus. The Samples tab has **Show its samples** and **Show its problems**, so a
-  folder's "4 problems" can be opened and read: which files, and why.
-- Fixed: the Analyzer's **Add to the project** left the project at its old tempo (120), so the notes ran away from
-  the stems added as audio. It now sets the song's average tempo, and places every note, drum hit and curve at
-  its moment in the recording, so a song played live (speeding up and slowing down) still lines up with its
-  stems; the status line says how far such a song strays from the grid.
+  tempo as it plays, its pitch unchanged). Long clips and recordings start as Fixed in time;
+  a loop whose file name gives its tempo (`drums_120bpm.wav`) starts stretched and fits the song when you drop it in.-
+      **Send levels can be automated** : right -
+      click a send's knob in the Mixer for **Create automation clip: send level**(more reverb in the chorus,
+                                                                                  an echo on one word)
+          .The knob moves with it while it plays,
+      and removing the send removes its automation too.-
+          **Analyzer** : where a
+                         part's tone opens and closes over the song (a muffled intro, a filter sweep), **Add to the project** puts
+                         a Filter on its mixer track with a cutoff curve that follows it,
+      roughly.- **Options › Sound index** : an instrument you taught
+                                            Spinus (**Learn this instrument**) is measured only on the keys it plays,
+      so its test notes no longer press keys that switch articulations or play effect
+          noises (
+              a sampled guitar's presets read as drums or effects before). The next update measures such instruments again. One of your plugins
+                      that
+                          isn't learned says so, and says more plainly when its sounds suggest such keys; **Learn this instrument...**
+                              is in its menu.** Use as** gives every selected preset the role at once.-
+                  Fixed : an instrument measured on its own (
+                      **Measure again**, the Browser's **Refresh sound index**, or a newly ticked one) kept the simple
+                      rules' guess for its presets, so a bass plugin such as a 5-string bass could have none listed
+                          as bass.Its presets are now guessed as a full update guesses them,
+              learnt from the presets whose names say their role.-
+                  **Options › Sound index * * : listen to any sound (a preset is played by its instrument),
+              and**Leave out** the ones you
+                      don't want, one, several or all that the search and menus show (for example every bass preset of
+                          one plugin);
+  no update brings them back,
+      and**Show › Left out **puts them back.A * * Role * *menu joins the filters.-
+              **Options › Sound index ** : the Sounds tab has * * Show * *(all, presets, samples or problems) and
+          **From **(one instrument or sample folder) menus.The Samples tab has **Show its samples ** and
+          **Show its problems **,
+      so a folder's "4 problems" can be opened and read: which files, and why. - Fixed
+      : the Analyzer's **Add to the project** left the project at its old tempo (120), so the notes ran away from the
+        stems added as audio.It now sets the song's average tempo, and places every note, drum hit and curve at its
+        moment in the recording,
+      so a song played live (speeding up and slowing down) still lines up with its stems; the status line says how far such a song strays from the grid.
 - Fixed: on some AMD graphics cards (seen on a Strix Halo with ROCm), the Analyzer's "Add to the project" went
   back to the start after a moment. The card passed its test and then failed the note finding (a MIOpen error),
   and the error stayed in the status line. A job the graphics card fails now runs again on the processor, which
@@ -353,13 +374,16 @@ The first release: 0.1.0-rc.1 (below) with these fixes and additions.
   them, and a knob turned there jumped back. Between two clips the value still holds, as in FL Studio.
   Holding a knob in a plugin's window takes over even during a clip, until you let go.
 - Automation clips now play exactly the line the Playlist draws. Before, a clip made shorter jumped back to
-  its last point inside instead of stopping where its line was; a clip whose first point was not at its start
-  slid there from the knob's value instead of starting flat; and two clips for the same setting that overlapped
-  mixed their points into a zigzag. Now the clip that starts later plays until it ends, then the other goes on.
-- A new automation clip goes where you are working: over the area selected in the Playlist's timeline if
-  there is one, else four bars from the song position. Before, it always started at the beginning of the song.
-- Right-click an effect in the Mixer › **Replace effect** puts another effect in its slot, as Replace
-  instrument does in the Channel Rack. Its place and dry/wet stay; one Ctrl+Z brings the old one back.
+  its last point inside instead of stopping where its line was;
+  a clip whose first point was not at its start slid there from the
+      knob's value instead of starting flat; and two clips for the same setting that overlapped mixed their points into
+          a zigzag.Now the clip that starts later plays until it ends,
+      then the other goes on.- A new automation clip goes where you are working
+      : over the area selected in the Playlist's timeline if there is one,
+      else four bars from the song position.Before,
+      it always started at the beginning of the song.- Right -
+          click an effect in the Mixer › **Replace effect **puts another effect in its slot,
+      as Replace instrument does in the Channel Rack.Its place and dry / wet stay; one Ctrl+Z brings the old one back.
 - Automation of Spinus's own devices (Filter, EQ, Delay, compressor and the rest, and the 3x Osc, Sampler and
   Drum Machine) now changes their sound. Before, an automation clip moved the setting but the sound stayed where
   the knob was last turned by hand, and the device's window did not move either until it was closed and opened
@@ -403,25 +427,30 @@ The first release: 0.1.0-rc.1 (below) with these fixes and additions.
 - Flatpak: LV2 plugins from Flathub's plugin packs (such as the SWH and TAP plugins) load again. They were listed
   in the Browser but showed as Missing when added, with "Unable to locate plugin" in the log.
 - The tempo box no longer stays stuck over the tempo after a double-click: Escape, Enter or clicking elsewhere
-  closes it. A typed tempo above 999 or below 20 BPM is set to 999 or 20; text that is not a number changes
-  nothing.
-- Scrolling the mouse wheel over the tempo is one undo step per scroll, not one per notch.
-- Save as over another project (Replace) puts this project's audio files there: an audio file of the same name
-  from the old project no longer stays and plays in place of yours.
-- Pressing Play with no sound card open now says why nothing is heard, and where to choose one (Options › Audio
-  settings..., F10).
-- A crashed project opened from the file manager or the command line asks "Recover your work?" once, not twice.
-- When Spinus can't save, the message says why (no permission to write there, a file in the way, a full disk) and
-  what to do next.
-- Opening a project that another Spinus already has open (double-clicking its .spn file) says so and points to
-  that window, instead of starting a second, empty Spinus with an error.
-- **Ctrl+Y** redoes, as **Ctrl+Shift+Z** does.
-- An empty Channel Rack says how to add the first instrument.
-- In a key written with flats (C minor, F major, ...), the Piano Roll names notes and chords with flats: Eb5 and
-  Bb, not D#5 and A#.
-- Recording messages name the real menu item, Options › Audio settings....
-- Manual: Projects do show in the Browser (Known issues); `--no-audio`, `--snapshot`, `--version` and
-  `--self-test` are on the command-line page; Backspace deletes like Delete; what clicking the Playlist's ruler
+  closes it. A typed tempo above 999 or below 20 BPM is set to 999 or 20;
+  text that is not a number changes nothing.- Scrolling the mouse wheel over the tempo is one undo step per scroll,
+      not one per notch.- Save as over another project (Replace)
+  puts this project's audio files there: an audio file of the same name from the old project no longer stays and
+          plays in place of yours.-
+      Pressing Play with no sound card open now says why nothing is heard,
+      and where to choose one (Options › Audio settings..., F10).- A crashed project opened from the file manager
+          or the command line asks "Recover your work?" once,
+      not twice.-
+              When Spinus
+              can't save, the message says why (no permission to write there, a file in the way, a full disk) and what
+              to do next.-
+              Opening a project that another Spinus already has open (double - clicking its.spn file) says so
+          and points to that window,
+      instead of starting a second, empty Spinus with an error.- **Ctrl + Y **redoes,
+      as **Ctrl + Shift + Z **does.- An empty Channel Rack says how to add the first instrument.-
+          In a key written with flats (C minor, F major, ...),
+      the Piano Roll names notes and chords with flats
+      : Eb5 and Bb,
+        not D #5 and A #.- Recording messages name the real menu item,
+        Options › Audio settings....- Manual : Projects do show in the Browser (Known issues);
+  `--no - audio`, `--snapshot`, `--version` and
+  `--self - test` are on the command - line page;
+  Backspace deletes like Delete; what clicking the Playlist's ruler
   does in pattern mode.
 - **Export no longer locks Spinus.** The Export audio window stays open beside your work: you can keep editing
   and playing while it exports, as the manual said. Closing the window cancels the export.
@@ -517,10 +546,11 @@ The first release: 0.1.0-rc.1 (below) with these fixes and additions.
   it, keeping what you set; each manual remembers the instrument version it was read for. Needs AI.
 - **Ask the plugin** in Learn this instrument: Spinus reads the names an instrument gives its keys (a drum
   machine's "Kick", a key switch's "Palm mute") and proposes them, switches as switches. Few instruments name
-  their keys; Spinus's Drum Machine names its pads.
-- **Listen to every key** in Learn this instrument: Spinus plays each key of a mode and listens, then proposes
-  which keys play, which switch, which do something else (a chord, another note) and which are silent. Apply
-  takes it; keys you marked yourself stay yours.
+  their keys;
+  Spinus's Drum Machine names its pads. - **Listen to every key** in Learn this instrument
+      : Spinus plays each key of a mode and listens,
+      then proposes which keys play, which switch,
+      which do something else (a chord, another note) and which are silent.Apply takes it; keys you marked yourself stay yours.
 - **Notes it plays** becomes **Learn this instrument...**, in the instrument menu and as **Keys...** beside Play
   in Save this sound: a keyboard where you mark what each key does (plays, switch, special, unused), with a few
   words for the switches ("palm mute"). Listen, Play and the songs play only on the keys that play, so a switch
@@ -899,20 +929,31 @@ The first release: 0.1.0-rc.1 (below) with these fixes and additions.
   your AI connection. It composes the whole song with the **music harness**: tools that read and edit a
   working copy of the song, Spinus's checks run as its tests (notes outside the key or the chords, parts in
   one register, the groove and density against your songs), fixes with small edits, and finish. You see each
-  step and the tokens so far; nothing changes in the project until you Apply (one undo step).
-- **Then fix what Spinus hears**: after the AI finishes, each part is played with its sound, and what was heard
-  (a silent part, the balance) goes back to the AI to fix (once by default, up to 3 times).
-- **Tokens, as your provider reports them**: no guess before you send; while it works, the tokens so far;
+  step and the tokens so far;
+  nothing changes in the project until you Apply (one undo step).-
+      **Then fix what Spinus hears** : after the AI finishes,
+      each part is played with its sound,
+      and what was heard (a silent part, the balance) goes back to the AI to fix (once by default, up to 3 times).-
+          **Tokens,
+      as your provider reports them** : no guess before you send;
+  while
+      it works, the tokens so far;
   after, each round's input (and the part read from the provider's cache), output and reasoning. **Reasoning**
-  sets how hard the model thinks before each step: low by default; higher levels (up to extra high, where the
-  model offers it) use many more tokens; a model without the level chosen uses the lowest it offers. AI models
-  can be unreliable: listen before you keep a song. No token cap: an answer cut off at the model's own limit is
-  continued and joined. **Stop now, keep the best** keeps the best checked version; **Cancel** keeps the song
-  shown before.
-- **AI tools**: how deep the AI may go, as groups of tools: Basic (always), Arrangement, Transitions and
-  automation, Effects and mix. Pick Basic, Basic + arrangement (at first), Basic + arrangement + transitions,
-  Full or Custom (a checkbox per group). More groups let it do more, and cost more. Only the allowed tools are
-  sent; the choice is remembered, and the song's note says which tools wrote it.
+  sets how hard the model thinks before each step: low by default;
+  higher levels (up to extra high, where the model offers it) use many more tokens;
+  a model without the level chosen uses the lowest it offers.AI models can be unreliable
+      : listen before you keep a song.No token cap
+      : an answer cut off at the model's own limit is continued and joined.** Stop now,
+      keep the best** keeps the best checked version;
+  **Cancel** keeps the song shown before.- **AI tools** : how deep the AI may go,
+      as groups of tools : Basic (always),
+                           Arrangement,
+                           Transitions and automation,
+                           Effects and mix.Pick Basic,
+                           Basic + arrangement (at first),
+                           Basic + arrangement + transitions,
+                           Full or Custom (a checkbox per group).More groups let it do more,
+                           and cost more.Only the allowed tools are sent; the choice is remembered, and the song's note says which tools wrote it.
 - **Arrangement tools** for the AI: it adds parts and layers of its own (a channel each, grouped and coloured by
   family, or a family and colour it chooses), varies a motif (its rhythm or notes, upside down, or moved later)
   instead of repeating it, puts drum fills at phrase ends with a crash after, lets layers enter and leave so

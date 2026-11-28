@@ -11,6 +11,8 @@ add_library (spinus_core STATIC
     ai/Proposal.h
     ai/ProjectContext.cpp
     ai/ProjectContext.h
+    ai/SongAnalyzer.cpp
+    ai/SongAnalyzer.h
     commands/Command.cpp
     commands/Command.h
     commands/CommandHistory.cpp

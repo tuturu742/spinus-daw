@@ -3,6 +3,7 @@
 #include "core/FileDialog.h"
 #include "Workspace.h"
 #include "ai/AiService.h"
+#include "ai/SongAnalyzer.h"
 #include "session/AnalysisLibrary.h"
 #include "session/Session.h"
 #include "session/SoundIndex.h"
@@ -47,10 +48,7 @@ namespace spinus::ui
     the AI service.
 
     Message thread only (each song is read and decoded on a thread of its own). */
-class TrackCreator final : public Panel,
-                           public juce::FileDragAndDropTarget,
-                           private juce::AsyncUpdater,
-                           private juce::ChangeListener
+class TrackCreator final : public Panel, public juce::FileDragAndDropTarget, private juce::ChangeListener
 {
 public:
     TrackCreator (Session&, ai::AiService*);
@@ -65,7 +63,7 @@ public:
     /** The version of the measured style kept in the library (its `features`); change it with
         spinus_ai.style.FEATURES_VERSION (a test checks they agree), so songs measured by an older Spinus are
         measured again. */
-    static constexpr int analysisVersion = 6;
+    static constexpr int analysisVersion = ai::SongAnalyzer::featuresVersion;
 
     enum class Status
     {
@@ -186,35 +184,17 @@ public:
     void visibilityChanged() override;
 
 private:
-    class Preparer;
     class Rows;
-    struct Work;
 
-    void handleAsyncUpdate() override; // the preparer finished
     void startNext();
-    void checkReady (const std::function<void()>& then);
-    void runStep (const juce::String& method, const juce::var& params, const juce::String& words,
-                  const std::function<void (const juce::var&)>& done);
-    void runTask (const juce::String& words, BackgroundTask::Work, const std::function<void()>& then);
-    void findTempo();
-    void findKey();
-    void measureLoudness();
-    void separate();
-    void keepStems();
-    /** A song counted twice too fast (its snare on one beat of each bar at 140 BPM or more) is counted at half the
-        tempo (ai.v1.analyze.count, as in the Analyzer), then transcribeNext(). */
-    void checkCount();
-    void transcribeNext();
-    void measureStyle();
     void finishSong (const juce::var& features, bool keptBefore);
     void failSong (const juce::String& why);
     /** Puts the current song back to waiting and stops: what is missing (AI, engine, models) is said. */
-    void holdQueue (const juce::String& why);
+    void holdQueue (const ai::SongAnalyzer::Needs&);
     void stopCurrent();
     void summarize();
     void showSummary();
     void updateButtons();
-    juce::StringArray neededModels() const;
     Reference* currentReference();
     void remember() const;
     void forget();
@@ -225,15 +205,9 @@ private:
     Session& session;
     ai::AiService* service = nullptr;
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
-    std::shared_ptr<bool> run = std::make_shared<bool> (true); // the song being analyzed (false: stopped)
 
     std::vector<Reference> references;
     int current = -1; // the song being analyzed
-    std::unique_ptr<Preparer> preparer;
-    std::unique_ptr<BackgroundTask> task; // keeping or restoring the current song's stems
-    std::unique_ptr<Work> work;
-    juce::String job; // the AI service's job for the current step
-    juce::String beatModel;
     struct Missing
     {
         juce::String id, name;
@@ -245,6 +219,7 @@ private:
     juce::String summarized; // the songs (digests) the summary is of
     juce::var summary;
     juce::File workRoot;
+    ai::SongAnalyzer analyzer; // the steps of the song being analyzed
     juce::StringArray methodsRun;
 
     juce::Label intro;
